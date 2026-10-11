@@ -52,8 +52,18 @@ class PatternBuffer:
     def put(self, x: int, y: int, char: str, style: Style | None = None) -> None:
         if 0 <= x < self.cols and 0 <= y < self.rows:
             cell = self.cells[y][x]
+            new = style or Style()
+            if new.bg is None and cell.style.bg is not None:
+                # The cell already sits on a panel. Writing a *word* onto it does
+                # not lift the panel out from under the writing: the text keeps
+                # the background the square had, which is why the words in a
+                # menu read on the panel and not on a stripe of black.
+                new = Style(
+                    fg=new.fg, bg=cell.style.bg, bold=new.bold, dim=new.dim,
+                    reverse=new.reverse,
+                )
             cell.char = char
-            cell.style = style or Style()
+            cell.style = new
 
     def text(self, x: int, y: int, string: str, style: Style | None = None) -> int:
         """Write ``string`` starting at ``x``. Returns the next free column.

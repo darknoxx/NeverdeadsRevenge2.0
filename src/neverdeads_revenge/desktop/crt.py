@@ -21,6 +21,9 @@ GPU driver at all.
 
 from __future__ import annotations
 
+import random
+import time
+
 from dataclasses import dataclass
 
 from PySide6.QtCore import QRect, QSize
@@ -187,7 +190,25 @@ class CrtView(QOpenGLWidget):
         self._linked = False
         self._scale = 1
         self._offset = (0.0, 0.0)
+        #: The glass rattling: a decaying jitter, in pixels, driven by things
+        #: like a wound. Not an effect of the shader -- it warps the *sampling*,
+        #: which is why it lives beside the offset.
+        self._shake_until = 0.0
+        self._shake_span = 0.2
+        self._shake_strength = 0
+        self._rng = random.Random()
         self.setMinimumSize(320, 200)
+
+    def shake(self, strength: int = 6, seconds: float = 0.25) -> None:
+        """Rattle the glass. Repeated calls keep it going, not bigger."""
+        now = time.monotonic()
+        if not self.is_shaking():
+            self._shake_strength = strength
+            self._shake_span = max(seconds, 0.05)
+        self._shake_until = max(self._shake_until, now + seconds)
+
+    def is_shaking(self) -> bool:
+        return time.monotonic() < self._shake_until
 
     # -- the frame ----------------------------------------------------------
     def set_frame(self, image: QImage) -> None:
@@ -207,6 +228,16 @@ class CrtView(QOpenGLWidget):
             (self.size().width() - drawn_w) / 2.0,
             (self.size().height() - drawn_h) / 2.0,
         )
+        now = time.monotonic()
+        if now < self._shake_until:
+            fraction = (self._shake_until - now) / max(self._shake_span, 1e-6)
+            wobble = self._shake_strength * min(1.0, fraction)
+            self._offset = (
+                self._offset[0] + self._rng.uniform(-wobble, wobble),
+                self._offset[1] + self._rng.uniform(-wobble, wobble),
+            )
+        else:
+            self._shake_strength = 0
 
     # -- OpenGL -------------------------------------------------------------
     def initializeGL(self) -> None:

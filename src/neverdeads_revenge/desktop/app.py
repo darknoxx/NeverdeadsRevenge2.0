@@ -14,7 +14,6 @@ fresh press" means when you can finally tell one.
 from __future__ import annotations
 
 import random
-import time
 
 from PySide6.QtCore import QEvent, Qt, QTimer
 from PySide6.QtGui import QColor, QKeyEvent, QPalette
@@ -90,7 +89,11 @@ class DesktopApp(QMainWindow):
         self.view.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
         self.progress = load_meta()
-        self.seed = seed if seed is not None else int(time.time())
+        #: The seed the next run is drawn from, and whether the player pinned it
+        #: with ``--seed``. A pinned seed means the same dungeon every time;
+        #: unpinned, every run is a fresh roll of the dice.
+        self.seed = seed if seed is not None else None
+        self.seed_locked = seed is not None
         self.run = None
         self.screens: list = [TitleScreen()]
         self._buffer: PatternBuffer | None = None
@@ -144,6 +147,7 @@ class DesktopApp(QMainWindow):
         current = self._scale_for(width, height)
         self.zoom = max(1, min(current + delta, self._max_scale(width, height)))
         self._buffer = None
+        self.effects.clear()
         self._remember()
         self.redraw()
 
@@ -176,8 +180,8 @@ class DesktopApp(QMainWindow):
         self.view.set_frame(image)
 
     def _tick(self) -> None:
-        """Advance the pixels, and repaint only while there are any."""
-        if not self.effects.active:
+        """Advance the pixels, and repaint only while anything is moving."""
+        if not self.effects.active and not self.view.is_shaking():
             return
         self.effects.step(0.033)
         self.redraw()
@@ -194,6 +198,7 @@ class DesktopApp(QMainWindow):
 
     def return_to_title(self) -> None:
         self.run = None
+        self.effects.clear()
         self.screens = [TitleScreen()]
         self.redraw()
 
@@ -228,6 +233,11 @@ class DesktopApp(QMainWindow):
         self.push(HeroSelectScreen())
 
     def begin_run(self, hero_key: str) -> None:
+        # A fresh seed per run, unless the player pinned one with --seed. This
+        # used to be one seed for the whole session, which meant every NEW RUN
+        # was the same dungeon wearing yesterday's clothes.
+        if not self.seed_locked:
+            self.seed = random.SystemRandom().randrange(2**32)
         loadout = loadout_from(self.progress)
         self.save_progress()
         missing = tuple(
@@ -239,6 +249,7 @@ class DesktopApp(QMainWindow):
             HEROES[hero_key], self.seed, loadout=loadout, pages=missing
         )
         self._seen_log = 0
+        self.effects.clear()
         self.screens = [GameScreen(self.run)]
         self.redraw()
 

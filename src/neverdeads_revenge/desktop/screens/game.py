@@ -15,6 +15,7 @@ from neverdeads_revenge.game.actions import (
     perform_action,
 )
 from neverdeads_revenge.game.lore import page
+from neverdeads_revenge.game.pace import action_gap
 from neverdeads_revenge.game.state import GameState
 
 from ..keys import KEY_BINDINGS
@@ -94,13 +95,13 @@ class GameScreen(Screen):
         run = self.state
         before = (len(run.log), run.depth, run.level)
         hp = run.player.hp
-        alive = {id(e): e.position for e in run.enemies}
+        gold = run.gold
         gifts = set(run.gifts)
         curses = len(run.curses)
 
         result = perform_action(run, action)
         app.play_after(before)
-        self._effects(app, alive, hp, gifts, curses, before[2])
+        self._effects(app, hp, gold, gifts, curses, before[2])
         self._file_pages(app)
 
         if result.prompt is not None:
@@ -109,26 +110,29 @@ class GameScreen(Screen):
         if result.died or result.escaped:
             self._game_over(app, won=result.escaped)
 
-    def _effects(self, app, alive, hp, gifts, curses, level_before) -> None:
+    def _effects(self, app, hp, gold, gifts, curses, level_before) -> None:
         """The moving pixels: what just happened, thrown at the screen.
 
-        Read off differences rather than hooked into the domain, because the
-        domain has no business knowing a screen exists. What died is whatever
-        was in ``enemies`` before and is not now; a wound is the hero's own
-        health going down; a rule gained is the gift set growing.
+        Read off the differences and off ``state.deaths``, which the domain
+        fills with the exact square a thing stopped moving on. Everything a rule
+        grants or a wound takes is a difference the run notices on its own, so
+        no hook into the domain is needed.
         """
         run = self.state
         fx = app.effects
-        living = {id(enemy) for enemy in run.enemies}
-        for ident, position in alive.items():
-            if ident not in living:
-                fx.blood(position)
+        for position in run.deaths:
+            fx.blood(position)
         if run.player.hp < hp:
             fx.blood(run.player.position, count=8)
+            app.view.shake()
+            if run.over:
+                app.view.shake(strength=10, seconds=0.4)
+        if run.gold > gold:
+            fx.coin(run.player.position)
         if run.level > level_before:
             fx.spark(run.player.position, "bright_white", count=20)
         if run.gifts - gifts:
-            fx.spark(run.player.position, "bright_green", count=24)
+            fx.spark(run.player.position, "bright_green", count=28)
         if len(run.curses) > curses:
             fx.spark(run.player.position, "#c81e1e", count=16)
 
@@ -204,10 +208,3 @@ class GameScreen(Screen):
     def _record(self, app, name: str) -> None:
         app.record_run(self.state, name or "???")
         app.return_to_title()
-
-
-def action_gap(speed: float) -> float:
-    """Seconds between two steps of a held direction, at this speed."""
-    from neverdeads_revenge.game.pace import action_gap as gap
-
-    return gap(speed)

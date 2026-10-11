@@ -31,6 +31,10 @@ class Particle:
     ttl: float
     colour: QColor
     size: int
+    #: This particle's own gravity, because a spark is not made of the same
+    #: stuff as blood: it is light, and it should hang in the air before it
+    #: sinks, not thump straight to the floor with everything else.
+    g: float
 
 
 class Effects:
@@ -49,30 +53,20 @@ class Effects:
     def clear(self) -> None:
         self.particles.clear()
 
-    # -- the two the game asks for -----------------------------------------
+    # -- the three the game asks for ----------------------------------------
     def blood(self, cell, count: int = 22) -> None:
         """A thing came apart. Heavy, red, and it falls."""
-        self.burst(
-            cell,
-            count=count,
-            colour="#c81e1e",
-            speed=70.0,
-            life=0.7,
-            size=2,
-            gravity=220.0,
-        )
+        self.burst(cell, count=count, colour="#c81e1e",
+                   speed=70.0, life=0.7, size=2, gravity=220.0, rise=4.0)
+
+    def coin(self, cell, count: int = 16) -> None:
+        """Money came into the hero's hand. It gleams and drifts up."""
+        self.spark(cell, "#ffb000", count)
 
     def spark(self, cell, colour: str = "bright_green", count: int = 18) -> None:
         """A rule was gained, or a level. Light, and it rises."""
-        self.burst(
-            cell,
-            count=count,
-            colour=colour,
-            speed=45.0,
-            life=0.9,
-            size=1,
-            gravity=-40.0,
-        )
+        self.burst(cell, count=count, colour=colour,
+                   speed=45.0, life=1.0, size=1, gravity=60.0, rise=35.0)
 
     # -- the machine --------------------------------------------------------
     def burst(
@@ -85,8 +79,13 @@ class Effects:
         life: float,
         size: int,
         gravity: float,
+        rise: float = 0.0,
     ) -> None:
-        """Throw ``count`` pixels out of the middle of a cell."""
+        """Throw ``count`` pixels out of the middle of a cell.
+
+        ``rise`` is a bias upward against the scatter, so blood gets a small
+        upward kick before it falls and a spark steps off the floor.
+        """
         cx = (cell[0] + 0.5) * self.cell_w
         cy = (cell[1] + 0.5) * self.cell_h
         tint = QColor(colour)
@@ -101,22 +100,23 @@ class Effects:
                     x=cx + self._rng.uniform(-self.cell_w * 0.5, self.cell_w * 0.5),
                     y=cy + self._rng.uniform(-self.cell_h * 0.5, self.cell_h * 0.5),
                     vx=math.cos(angle) * power,
-                    vy=math.sin(angle) * power + gravity * -0.02,
+                    vy=math.sin(angle) * power - rise,
                     life=span,
                     ttl=span,
                     colour=tint,
                     size=size,
+                    g=gravity,
                 )
             )
 
-    def step(self, dt: float, gravity: float = 220.0) -> None:
+    def step(self, dt: float) -> None:
         """Advance every particle, and drop the dead ones."""
         alive: list[Particle] = []
         for p in self.particles:
             p.life -= dt
             if p.life <= 0.0:
                 continue
-            p.vy += gravity * dt
+            p.vy += p.g * dt
             p.x += p.vx * dt
             p.y += p.vy * dt
             alive.append(p)

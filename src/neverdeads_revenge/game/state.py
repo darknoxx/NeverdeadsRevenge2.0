@@ -217,6 +217,13 @@ class GameState:
     #: draw it. Cleared at the start of every action, which is what makes the
     #: flash last exactly one action and need no timer to end.
     hits: list[Pos] = field(default_factory=list)
+    #: Where things died since the player's last action, for the screen to throw
+    #: its pixels at. Same shape as ``hits`` and the same life: filled by the
+    #: domain, which is the only place that knows where a corpse stopped moving,
+    #: and cleared at the start of every action. A position taken from *before*
+    #: the action is a bullet that lands one square from its target, because the
+    #: thing that died may well have walked on before it did.
+    deaths: list[Pos] = field(default_factory=list)
 
     # -- what the shop sent with you ----------------------------------------
     #

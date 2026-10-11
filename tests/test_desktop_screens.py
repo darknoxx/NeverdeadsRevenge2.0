@@ -264,3 +264,69 @@ def test_the_shop_is_in_sections(app):
     assert "SUPPLIES" in headings
     assert "GEAR" in headings
     assert "AMULETS" in headings
+
+
+# -- the pixels know exactly where the world left them ------------------------
+def test_a_death_leaves_pixels_at_the_exact_square(app):
+    """This was the bug: a position read from *before* the action is a bullet
+    that lands one square from its target, because the thing that died may have
+    walked on before it did. The engine says where it stopped."""
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.game.actors import ENEMIES, make_enemy
+    from neverdeads_revenge.world.tiles import Tile
+
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)
+    state = app.run
+
+    square = (state.player.position[0] + 1, state.player.position[1])
+    state.dungeon_map.set_tile(square, Tile.FLOOR)
+    enemy = make_enemy(ENEMIES["ghoul"], square)
+    enemy.stats.hp = 1
+    enemy.stats.damage = (0, 0)
+    state.enemies = [enemy]
+    state.turn_queue = type(state.turn_queue)([state.player, enemy])
+
+    press(app, Qt.Key.Key_Right, "d")
+
+    assert state.deaths == [square], (
+        f"blood called at {state.deaths}, the square was {square}"
+    )
+
+
+def test_a_tombed_monster_is_not_a_death(app):
+    """One action, one death: the list is cleared with the flash."""
+    from PySide6.QtCore import Qt
+
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)
+    state = app.run
+
+    press(app, Qt.Key.Key_Period, ".")
+    assert state.deaths == [], "waiting produced a corpse"
+
+
+def test_the_glass_rattles_and_settles(app):
+    import time
+
+    app.view.shake(seconds=0.05)
+    assert app.view.is_shaking()
+    time.sleep(0.06)
+    assert not app.view.is_shaking()
+
+
+def test_the_title_takes_any_arrow(app):
+    from PySide6.QtCore import Qt
+
+    screen = app.screens[-1]
+    before = screen.index
+    press(app, Qt.Key.Key_Left, "")
+    after = screen.index
+    assert after != before, "left did not move it"
+
+    screen.index = 0
+    press(app, Qt.Key.Key_Up, "")
+    assert app.screens[-1].index == len(app.screens[-1].items(app)) - 1, (
+        "up did not wrap"
+    )

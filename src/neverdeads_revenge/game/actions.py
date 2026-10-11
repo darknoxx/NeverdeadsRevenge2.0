@@ -290,6 +290,7 @@ def _on_death(state: GameState, enemy: Actor) -> None:
     handful of things it had never mentioned.
     """
     state.kills += 1
+    state.deaths.append(enemy.position)
     _drop_coins(state, enemy)
     if enemy.behaviour == "hunter":
         _hunter_spoils(state, enemy)
@@ -538,6 +539,7 @@ def perform_action(state: GameState, action: Action) -> ActionResult:
     # Everything struck from here on is this action's. Cleared here rather than
     # by the screen, so the flash cannot outlive the turn it belongs to.
     state.hits.clear()
+    state.deaths.clear()
 
     if action is Action.REWIND:
         return _rewind(state)

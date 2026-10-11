@@ -345,3 +345,32 @@ def test_a_spark_rises_and_a_blood_drop_falls(qapp):
     for _ in range(3):
         falling.step(0.033)
     assert any(p.vy > 0 for p in falling.particles), "blood did not fall"
+
+
+def test_a_word_keeps_the_panel_it_sits_on(font):
+    """The bug the menus had: writing over a filled panel lifted the fill out
+    from under the words, which left a stripe of black behind every line."""
+    from neverdeads_revenge.desktop.buffer import PatternBuffer
+    from neverdeads_revenge.desktop.chrome import PANEL
+    from neverdeads_revenge.desktop.theme import Style, parse_style
+
+    buffer = PatternBuffer(10, 4, font)
+    panel = Style(bg=parse_style(PANEL).fg)
+    for x in range(10):
+        buffer.put(x, 1, " ", panel)
+
+    buffer.text(2, 1, "hi", parse_style("red"))
+
+    assert all(cell.style.bg is not None for cell in buffer.cells[1]), (
+        "the words stripped the panel"
+    )
+
+
+def test_the_shake_never_moves_what_is_sampled():
+    from PySide6.QtCore import QSize
+
+    from neverdeads_revenge.desktop.crt import fit_scale
+
+    # The shake warps where the pattern is placed, never how it is sampled --
+    # the scale is the same number shaken or not.
+    assert fit_scale(QSize(1920, 1080), QSize(960, 528)) == 2
