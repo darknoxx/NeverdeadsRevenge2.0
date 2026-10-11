@@ -228,56 +228,47 @@ def test_every_key_maps_to_a_real_verb():
     assert all(isinstance(action, Action) for action in KEY_BINDINGS.values())
 
 
-# -- the zoom -----------------------------------------------------------------
-def test_the_zoom_targets_about_a_hundred_columns(qapp):
-    from neverdeads_revenge.desktop.app import TARGET_COLS, DesktopApp
-
-    app = DesktopApp(seed=1, no_sound=True)
-    scale = app._scale_for(1920, 1080)
-
-    # Two-pixel cells on a 1080p screen: a *zoom into* the field, not a fill of
-    # it. The old fill gave one-pixel cells and a 190-column grid.
-    assert scale == 2
-    app.view.resize(1920, 1080)
-    cols, rows = app._grid_size()
-    assert cols <= TARGET_COLS + 20, f"{cols} columns is not a zoom"
-    assert rows < 30, f"{rows} rows is not a zoom"
-
-
-def test_the_zoom_is_a_whole_number_and_never_exceeds_what_fits(qapp):
+# -- one zoom, and a log with its own face ------------------------------------
+def test_there_is_one_scale_and_it_is_the_big_one(qapp):
+    """One zoom, the big one. A second control would be two dials arguing about
+    the same screen; what keeps the words readable is the log's own smaller
+    face, not a smaller dungeon."""
     from neverdeads_revenge.desktop.app import DesktopApp
 
     app = DesktopApp(seed=1, no_sound=True)
-    for width, height in ((1920, 1080), (2560, 1440), (3840, 2160), (1366, 768)):
-        scale = app._scale_for(width, height)
-        assert scale >= 1
-        assert scale <= app._max_scale(width, height), (width, height)
+    assert app._scale_for(1920, 1080) == 2, "1080p is two-pixel cells or nothing"
+    assert app._scale_for(1366, 768) == 1, "a small laptop is one-pixel cells"
+    assert not hasattr(app, "zoom"), "the zoom came back"
 
 
-def test_zooming_out_gives_back_more_of_the_map(qapp):
-    from neverdeads_revenge.desktop.app import DesktopApp
+def test_the_log_is_a_smaller_face_and_still_clear_of_the_corner(qapp, font, state):
+    """The log is drawn in its own, smaller font straight onto the frame.
 
-    app = DesktopApp(seed=1, no_sound=True)
-    app.view.resize(1920, 1080)
-    zoomed = app._grid_size()
-    app.zoom = 1
-    wider = app._grid_size()
+    The test reads the frame's pixels, because that is where the log lives now:
+    the corner that the vignette darkens has to stay background for about two
+    cells of the log's own size before the first word.
+    """
+    from PySide6.QtGui import QColor, QImage
 
-    assert wider[0] > zoomed[0] and wider[1] > zoomed[1]
+    from neverdeads_revenge.desktop.font import BitmapFont
+    from neverdeads_revenge.desktop.render import paste_log, regions
+    from neverdeads_revenge.desktop.theme import BACKGROUND
 
+    small = BitmapFont(pixel_size=9)
+    cols, rows, cw, ch = 96, 27, font.cell_w, font.cell_h
+    image = QImage(cols * cw, rows * ch, QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(BACKGROUND)
+    paste_log(image, state, cols, rows, cw, ch, small)
 
-def test_the_zoom_is_remembered(qapp, tmp_path, monkeypatch):
-    from neverdeads_revenge.desktop import settings
-    from neverdeads_revenge.desktop.app import DesktopApp
+    area = regions(cols, rows)["log"]
+    left, top = area[0] * cw, area[1] * ch
+    middle_y = top + area[3] * ch // 2
 
-    monkeypatch.setenv("NEVERDEADS_REVENGE_HOME", str(tmp_path))
-    app = DesktopApp(seed=1, no_sound=True)
-    app.view.resize(1920, 1080)
-    app._nudge_zoom(-1)
-
-    written = settings.load_settings()
-    assert written["zoom"] == 1
-    assert written["scanlines"] is True
+    # The first cells of the panel: background, not a word.
+    for x in range(left, left + small.cell_w + 2, 2):
+        assert QColor(image.pixelColor(x, middle_y)) == BACKGROUND, (
+            f"a word within {(x - left) / small.cell_w:.1f} cells of the corner"
+        )
 
 
 # -- the version, the corner, and the pixels ----------------------------------
@@ -290,26 +281,6 @@ def test_the_version_is_drawn_thick():
     assert small, "the block font cannot spell its own version"
     assert len(big) == len(small) * 2
     assert all(len(b) == len(s) * 2 for s, b in zip(small, big))
-
-
-def test_the_log_starts_away_from_the_vignette_corner(font, state):
-    from neverdeads_revenge.desktop.buffer import PatternBuffer
-    from neverdeads_revenge.desktop.render import BOTTOM, draw_game
-
-    buffer = PatternBuffer(100, 34, font)
-    draw_game(buffer, state)
-
-    # The newest line sits somewhere in the bottom row; its first cells are left
-    # blank so the CRT's corner does not eat the start of a combat line.
-    found = False
-    for row in range(buffer.rows - BOTTOM, buffer.rows):
-        if buffer.cells[row][3].char != " ":
-            found = True
-            assert buffer.cells[row][0].char == " "
-            assert buffer.cells[row][1].char == " "
-            assert buffer.cells[row][2].char == " "
-    assert found, "no log line was drawn"
-    assert BOTTOM == 10
 
 
 def test_blood_falls_and_fades(qapp):

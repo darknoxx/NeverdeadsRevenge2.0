@@ -65,7 +65,7 @@ class TitleScreen(Screen):
         self._centre(
             buffer,
             glass_y,
-            "F11 screen   F2 scanlines   F3 bloom   F4 curve   + / - zoom",
+            "F11 screen   F2 scanlines   F3 bloom   F4 curve",
             ASH,
         )
 

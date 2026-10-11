@@ -56,13 +56,11 @@ MIN_ROWS = 24
 #: rather than merely numerous.
 TARGET_COLS = 110
 
-#: The keys that are not the game: the window, the glass, and the zoom.
+#: The keys that are not the game: the window and the glass.
 FULLSCREEN_KEY = Qt.Key.Key_F11
 SCANLINE_KEY = Qt.Key.Key_F2
 BLOOM_KEY = Qt.Key.Key_F3
 GEOMETRY_KEY = Qt.Key.Key_F4
-ZOOM_IN_KEYS = (Qt.Key.Key_Plus, Qt.Key.Key_Equal)
-ZOOM_OUT_KEYS = (Qt.Key.Key_Minus, Qt.Key.Key_Underscore)
 
 
 class DesktopApp(QMainWindow):
@@ -79,10 +77,7 @@ class DesktopApp(QMainWindow):
             bloom=bool(saved.get("bloom", True)),
             geometry=bool(saved.get("geometry", False)),
         )
-        zoom = saved.get("zoom")
-        self.zoom: int | None = (
-            int(zoom) if isinstance(zoom, (int, float)) and zoom >= 1 else None
-        )
+        self.font_small = BitmapFont(pixel_size=11)
 
         self.view = CrtView(self.crt, self)
         self.setCentralWidget(self.view)
@@ -146,26 +141,21 @@ class DesktopApp(QMainWindow):
         return max(1, min(width // (MIN_COLS * cell_w), height // (MIN_ROWS * cell_h)))
 
     def _scale_for(self, width: int, height: int) -> int:
+        """The one scale: the big one.
+
+        There used to be a zoom the player could step, and it was two dials
+        arguing about the same screen. One size here -- the one that lands the
+        grid near :data:`TARGET_COLS` wide, which is a character of two pixels
+        on a 1080p screen whole -- and the log's smaller face is what makes the
+        words keep up with it.
+        """
         ceiling = self._max_scale(width, height)
-        if self.zoom is not None:
-            return max(1, min(self.zoom, ceiling))
         target = max(1, round(width / (TARGET_COLS * self.font.cell_w)))
         return max(1, min(target, ceiling))
-
-    def _nudge_zoom(self, delta: int) -> None:
-        width = max(1, self.view.width())
-        height = max(1, self.view.height())
-        current = self._scale_for(width, height)
-        self.zoom = max(1, min(current + delta, self._max_scale(width, height)))
-        self._buffer = None
-        self.effects.clear()
-        self._remember()
-        self._note_glass(f"ZOOM {self.zoom}x")
 
     def _remember(self) -> None:
         save_settings(
             {
-                "zoom": self.zoom,
                 "scanlines": self.crt.scanlines,
                 "bloom": self.crt.bloom,
                 "geometry": self.crt.geometry,
@@ -187,6 +177,18 @@ class DesktopApp(QMainWindow):
         for screen in self.screens[start:]:
             screen.draw(self._buffer, self)
         image = self._buffer.render()
+        if getattr(self.screens[-1], "log_patch", False) and self.run is not None:
+            from .render import paste_log
+
+            paste_log(
+                image,
+                self.run,
+                self._buffer.cols,
+                self._buffer.rows,
+                self.font.cell_w,
+                self.font.cell_h,
+                self.font_small,
+            )
         self.effects.draw(image)
         self._say_glass(image)
         self.view.set_frame(image)
@@ -406,16 +408,10 @@ class DesktopApp(QMainWindow):
             self.redraw()
 
     def _window_key(self, event: QKeyEvent) -> bool:
-        """Fullscreen, the zoom, and the three glass keys."""
+        """Fullscreen and the three glass keys."""
         key = event.key()
         if key == FULLSCREEN_KEY:
             self.showFullScreen() if not self.isFullScreen() else self.showNormal()
-            return True
-        if key in ZOOM_IN_KEYS:
-            self._nudge_zoom(1)
-            return True
-        if key in ZOOM_OUT_KEYS:
-            self._nudge_zoom(-1)
             return True
         if key == SCANLINE_KEY:
             self.crt.scanlines = not self.crt.scanlines

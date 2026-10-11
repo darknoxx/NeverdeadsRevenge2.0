@@ -45,7 +45,6 @@ window back:
 | key | what it does |
 | --- | --- |
 | `F11` | fullscreen, and back |
-| `+` / `-` | zoom the field in and out |
 | `F2` | scanlines on/off |
 | `F3` | bloom on/off |
 | `F4` | the CRT's curve on/off |
@@ -76,12 +75,12 @@ and then agree to it in the same breath.
 
 ## Size
 
-The zoom is not a font size -- it is how many whole pixels a cell is drawn with.
-The grid aims for about a hundred columns, so on a 1080p screen a cell is two
-pixels and the field fills the display exactly, on a 4K screen four, and on a
-small laptop one. `+` and `-` move it by hand; the game stays legible at every
-step, because the scale is always a whole number and the buffer is centred with
-black bars where the number does not divide.
+One zoom, the big one. The scale lands the grid near a hundred columns, so a
+1080p screen gets a character of two pixels and the field fills the display
+exactly; a 4K screen gets four. There is no dial, because the answer to "the
+words are small" was not a smaller dungeon -- it was giving the **log its own
+smaller face**, drawn straight onto the frame, so the words a player is reading
+in a fight fit in more rows without anything they aim with giving up a pixel.
 
 ## How it is put together
 

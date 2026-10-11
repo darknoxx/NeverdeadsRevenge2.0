@@ -12,6 +12,9 @@ build a buffer and read the cells back without a screen attached.
 
 from __future__ import annotations
 
+from PySide6.QtCore import QRect
+from PySide6.QtGui import QImage, QPainter
+
 from neverdeads_revenge.game.npcs import NPC_COLOR, NPC_GLYPH
 from neverdeads_revenge.game.prologue import legend_rows
 from neverdeads_revenge.game.state import GameState, LogKind
@@ -25,7 +28,7 @@ from neverdeads_revenge.world.items import (
 from neverdeads_revenge.world.tiles import Tile
 
 from .buffer import PatternBuffer
-from .theme import Style, parse_style
+from .theme import BACKGROUND, Style, parse_style
 
 __all__ = [
     "SIDEBAR",
@@ -37,6 +40,7 @@ __all__ = [
     "viewport",
     "screen_point",
     "draw_game",
+    "paste_log",
     "draw_title",
     "hud_lines",
     "marks_names",
@@ -147,12 +151,16 @@ def screen_point(
 
 
 def draw_game(buffer: PatternBuffer, state: GameState) -> None:
-    """The whole play screen: map, sidebar, and the bottom row."""
+    """The whole play screen: map, sidebar, and the bottom row.
+
+    The log is *not* drawn here: it is a smaller face than the rest of the
+    frame, so it is pasted on afterwards by :func:`paste_log`, straight onto the
+    rendered image. What this leaves behind is the panel the log sits on.
+    """
     buffer.clear()
     areas = regions(buffer.cols, buffer.rows)
     _draw_map(buffer, state, areas["map"])
     _draw_sidebar(buffer, state, areas["sidebar"])
-    _draw_log(buffer, state, areas["log"])
     _draw_column(buffer, state, areas["curses"], ("curses",))
     _draw_column(buffer, state, areas["marks"], ("gifts", "effects"))
 
@@ -316,19 +324,45 @@ def log_style(kind: LogKind) -> str:
     return _KIND_STYLES.get(kind, "white")
 
 
-def _draw_log(buffer, state, area) -> None:
-    x0, y0, width, height = area
-    # The newest lines sit at the bottom, so the eye finds them where it left
-    # them. Only as many as fit; the older ones have scrolled away.
-    #
-    # Indented off the left edge on purpose: the CRT's vignette darkens the
-    # corners, and a combat line dying in the bottom-left corner is a line the
-    # player cannot read at the exact moment they need it.
-    visible = state.log[-(height - 2) :]
-    y = y0 + height - 1 - len(visible)
+def paste_log(
+    image, state: GameState, cols: int, rows: int, cell_w: int, cell_h: int, small
+) -> None:
+    """Draw the combat log straight onto a rendered frame.
+
+    The log gets a smaller face than the rest of the frame, and that is the one
+    place a mixed size pays for itself: a battle is words, and words a player is
+    reading while deciding what to press next are worth more of the frame than
+    the ground they are printed on. The smaller face fits more of them into the
+    same ten rows, without shrinking anything the player aims with.
+    """
+    areas = regions(cols, rows)
+    x0, y0, width, height = areas["log"]
+    rect = QRect(x0 * cell_w, y0 * cell_h, width * cell_w, height * cell_h)
+
+    painter = QPainter(image)
+    painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, False)
+    # The log's own panel: drawn solid rather than left to whatever the frame
+    # had underneath, which is nothing at all now that the cells are clear.
+    painter.fillRect(rect, BACKGROUND)
+
+    line_h = small.cell_h
+    lines_fit = max(1, rect.height() // line_h)
+    visible = state.log[-lines_fit:]
+    left = rect.left() + small.cell_w * 2  # still clear of the corner
+    text_w = rect.right() - left - small.cell_w
+    y = rect.bottom() - line_h * len(visible) + 1
     for entry in visible:
-        buffer.text(x0 + 3, y, entry.text[: width - 5], parse_style(log_style(entry.kind)))
-        y += 1
+        style = parse_style(log_style(entry.kind))
+        painter.setPen(style.fg)
+        chars = max(1, text_w // small.cell_w)
+        painter.setFont(small.normal)
+        painter.drawText(
+            QRect(left, y, text_w, line_h + 4),
+            0,
+            entry.text[:chars],
+        )
+        y += line_h
+    painter.end()
 
 
 def _draw_column(buffer, state, area, kinds) -> None:
