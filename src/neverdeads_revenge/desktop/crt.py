@@ -186,6 +186,7 @@ class CrtView(QOpenGLWidget):
         super().__init__(parent)
         self.settings = settings or CrtSettings()
         self._frame: QImage | None = None
+        self._frame_is_new = False
         self._texture: QOpenGLTexture | None = None
         self._program: QOpenGLShaderProgram | None = None
         self._buffer: QOpenGLBuffer | None = None
@@ -217,6 +218,7 @@ class CrtView(QOpenGLWidget):
     def set_frame(self, image: QImage) -> None:
         """Hand over a fresh pattern image and repaint."""
         self._frame = image
+        self._frame_is_new = True
         self.update()
 
     # -- geometry -----------------------------------------------------------
@@ -285,25 +287,27 @@ class CrtView(QOpenGLWidget):
         self._buffer = buffer
 
     def _refresh_texture(self) -> None:
+        """Move the new frame's pixels into GL, quietly.
+
+        The obvious way -- keep one texture and ``setData(image)`` it every
+        frame -- is not quiet: setData re-derives format, size and mip levels
+        on every call, Qt flat-out refuses all three once storage is
+        allocated (QTBUG-64148), and the player reads five warnings a frame
+        in their terminal instead of the dungeon. So: one fresh texture
+        object per new frame, the old one destroyed. The upload happens in
+        both paths; this one we can guarantee to be without protest.
+        """
+        if not self._frame_is_new:
+            return
         frame = self._frame
         if frame is None:
             return
-        if (
-            self._texture is None
-            or self._texture.width() != frame.width()
-            or self._texture.height() != frame.height()
-        ):
-            if self._texture is not None:
-                self._texture.destroy()
-            self._texture = QOpenGLTexture(frame)
-            self._texture.setMinificationFilter(
-                QOpenGLTexture.Filter.Nearest
-            )
-            self._texture.setMagnificationFilter(
-                QOpenGLTexture.Filter.Nearest
-            )
-        else:
-            self._texture.setData(frame)
+        self._frame_is_new = False
+        if self._texture is not None:
+            self._texture.destroy()
+        self._texture = QOpenGLTexture(frame)
+        self._texture.setMinificationFilter(QOpenGLTexture.Filter.Nearest)
+        self._texture.setMagnificationFilter(QOpenGLTexture.Filter.Nearest)
 
     def paintGL(self) -> None:
         gl = self._gl
