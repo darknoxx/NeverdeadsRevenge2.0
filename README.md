@@ -43,12 +43,23 @@ The window and the glass have keys of their own:
 | key | what it does |
 | --- | --- |
 | `F11` | fullscreen, and back |
+| `+` / `-` | zoom the field in and out |
 | `F2` | scanlines on/off |
 | `F3` | bloom on/off |
 | `F4` | the CRT's curve, corners and vignette on/off |
 
 Scanlines and bloom are on at the start; the curve is off, because it is the one
-effect that changes what the picture *is* rather than how it is lit.
+effect that changes what the picture *is* rather than how it is lit. The zoom and
+the three effects are remembered between runs.
+
+## Size
+
+The zoom is not a font size -- it is how many whole pixels a cell is drawn with.
+The grid aims for about a hundred columns, so on a 1080p screen a cell is two
+pixels and the field fills the display exactly, on a 4K screen four, and on a
+small laptop one. `+` and `-` move it by hand; the game stays legible at every
+step, because the scale is always a whole number and the buffer is centred with
+black bars where the number does not divide.
 
 ## How it is put together
 

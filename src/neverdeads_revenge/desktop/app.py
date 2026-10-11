@@ -31,6 +31,7 @@ from .buffer import PatternBuffer
 from .crt import CrtSettings, CrtView
 from .font import BitmapFont
 from .render import draw_game, draw_title
+from .settings import load_settings, save_settings
 
 __all__ = ["DesktopApp", "KEY_BINDINGS"]
 
@@ -68,15 +69,24 @@ KEY_BINDINGS: dict[str, Action] = {
 }
 
 #: How few cells the layout may be squeezed to before the window is simply too
-#: small to hold the game.
+#: small to hold the game. Rows are the tight one: the sidebar needs the HUD
+#: plus the whole legend, and the bottom row takes ten more.
 MIN_COLS = 80
-MIN_ROWS = 30
+MIN_ROWS = 24
 
-#: The keys that are not the game: the window and the glass.
+#: How wide the grid aims to be. The zoom is chosen so the dungeon is about this
+#: many cells across, which is what makes the characters *big* on a big screen
+#: instead of merely numerous -- a 1080p monitor gets two-pixel cells and a
+#: ~100-column grid rather than one-pixel cells and a 190-column one.
+TARGET_COLS = 110
+
+#: The keys that are not the game: the window, the glass, and the zoom.
 FULLSCREEN_KEY = Qt.Key.Key_F11
 SCANLINE_KEY = Qt.Key.Key_F2
 BLOOM_KEY = Qt.Key.Key_F3
 GEOMETRY_KEY = Qt.Key.Key_F4
+ZOOM_IN_KEYS = (Qt.Key.Key_Plus, Qt.Key.Key_Equal)
+ZOOM_OUT_KEYS = (Qt.Key.Key_Minus, Qt.Key.Key_Underscore)
 
 
 class DesktopApp(QMainWindow):
@@ -86,7 +96,17 @@ class DesktopApp(QMainWindow):
         super().__init__()
         self.setWindowTitle("Neverdead's Revenge")
         self.font = BitmapFont()
-        self.crt = CrtSettings()
+
+        saved = load_settings()
+        self.crt = CrtSettings(
+            scanlines=bool(saved.get("scanlines", True)),
+            bloom=bool(saved.get("bloom", True)),
+            geometry=bool(saved.get("geometry", False)),
+        )
+        zoom = saved.get("zoom")
+        #: The chosen pixel scale, or ``None`` to pick one from the window size.
+        self.zoom: int | None = int(zoom) if isinstance(zoom, (int, float)) and zoom >= 1 else None
+
         self.view = CrtView(self.crt, self)
         self.setCentralWidget(self.view)
         self.view.installEventFilter(self)
@@ -119,21 +139,57 @@ class DesktopApp(QMainWindow):
     def _grid_size(self) -> tuple[int, int]:
         """How many cells fit, at the largest whole-number pixel scale.
 
-        The scale is chosen so a character is never a fraction of a pixel: on a
-        1080p screen a cell is two pixels tall and the buffer is half the screen,
-        on a 4K screen four, on a small laptop one. The buffer that comes out is
-        then scaled back up by exactly that number in the CRT pass.
+        The scale is what makes a character big or small, and it is chosen so
+        the grid lands near :data:`TARGET_COLS` wide -- a *zoom into* the field
+        rather than a fill of it. On a 1080p screen that is two-pixel cells and
+        about a hundred columns; on 4K, four-pixel cells and the same grid, so
+        the game looks the same size relative to the eye on both. ``+`` and
+        ``-`` move the scale by hand and the choice is remembered.
         """
         width = max(1, self.view.width())
         height = max(1, self.view.height())
+        scale = self._scale_for(width, height)
         cell_w, cell_h = self.font.cell_w, self.font.cell_h
-        scale = max(
-            1,
-            min(width // (MIN_COLS * cell_w), height // (MIN_ROWS * cell_h)),
-        )
         cols = max(MIN_COLS, width // (cell_w * scale))
         rows = max(MIN_ROWS, height // (cell_h * scale))
         return cols, rows
+
+    def _max_scale(self, width: int, height: int) -> int:
+        """The largest scale at which the minimum layout still fits."""
+        cell_w, cell_h = self.font.cell_w, self.font.cell_h
+        return max(
+            1,
+            min(width // (MIN_COLS * cell_w), height // (MIN_ROWS * cell_h)),
+        )
+
+    def _scale_for(self, width: int, height: int) -> int:
+        """The pixel scale: the chosen one, or one that hits the target width."""
+        ceiling = self._max_scale(width, height)
+        if self.zoom is not None:
+            return max(1, min(self.zoom, ceiling))
+        cell_w = self.font.cell_w
+        target = max(1, round(width / (TARGET_COLS * cell_w)))
+        return max(1, min(target, ceiling))
+
+    def _nudge_zoom(self, delta: int) -> None:
+        """Zoom in or out by one, and remember it."""
+        width = max(1, self.view.width())
+        height = max(1, self.view.height())
+        current = self._scale_for(width, height)
+        self.zoom = max(1, min(current + delta, self._max_scale(width, height)))
+        self._buffer = None  # the grid changes, so the buffer does too
+        self._remember()
+        self.redraw()
+
+    def _remember(self) -> None:
+        save_settings(
+            {
+                "zoom": self.zoom,
+                "scanlines": self.crt.scanlines,
+                "bloom": self.crt.bloom,
+                "geometry": self.crt.geometry,
+            }
+        )
 
     def redraw(self) -> None:
         cols, rows = self._grid_size()
@@ -144,7 +200,8 @@ class DesktopApp(QMainWindow):
             draw_title(
                 self._buffer,
                 "a desktop roguelite",
-                "press any key   ·   F2 scanlines   F3 bloom   F4 curve   F11 fullscreen",
+                "press any key   ·   + / - zoom   ·   F2 scanlines   F3 bloom"
+                "   F4 curve   F11 fullscreen",
             )
         elif self.screen == "game" and self.run is not None:
             draw_game(self._buffer, self.run)
@@ -197,21 +254,30 @@ class DesktopApp(QMainWindow):
             self._game_key(event)
 
     def _window_key(self, event: QKeyEvent) -> bool:
-        """F11 and the three glass keys. Returns whether the key was one."""
+        """Fullscreen, the zoom, and the three glass keys."""
         key = event.key()
         if key == FULLSCREEN_KEY:
             self.showFullScreen() if not self.isFullScreen() else self.showNormal()
             return True
+        if key in ZOOM_IN_KEYS:
+            self._nudge_zoom(1)
+            return True
+        if key in ZOOM_OUT_KEYS:
+            self._nudge_zoom(-1)
+            return True
         if key == SCANLINE_KEY:
             self.crt.scanlines = not self.crt.scanlines
+            self._remember()
             self.view.update()
             return True
         if key == BLOOM_KEY:
             self.crt.bloom = not self.crt.bloom
+            self._remember()
             self.view.update()
             return True
         if key == GEOMETRY_KEY:
             self.crt.geometry = not self.crt.geometry
+            self._remember()
             self.view.update()
             return True
         return False

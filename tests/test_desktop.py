@@ -226,3 +226,55 @@ def test_every_key_maps_to_a_real_verb():
     from neverdeads_revenge.desktop.app import KEY_BINDINGS
 
     assert all(isinstance(action, Action) for action in KEY_BINDINGS.values())
+
+
+# -- the zoom -----------------------------------------------------------------
+def test_the_zoom_targets_about_a_hundred_columns(qapp):
+    from neverdeads_revenge.desktop.app import TARGET_COLS, DesktopApp
+
+    app = DesktopApp(seed=1, no_sound=True)
+    scale = app._scale_for(1920, 1080)
+
+    # Two-pixel cells on a 1080p screen: a *zoom into* the field, not a fill of
+    # it. The old fill gave one-pixel cells and a 190-column grid.
+    assert scale == 2
+    app.view.resize(1920, 1080)
+    cols, rows = app._grid_size()
+    assert cols <= TARGET_COLS + 20, f"{cols} columns is not a zoom"
+    assert rows < 30, f"{rows} rows is not a zoom"
+
+
+def test_the_zoom_is_a_whole_number_and_never_exceeds_what_fits(qapp):
+    from neverdeads_revenge.desktop.app import DesktopApp
+
+    app = DesktopApp(seed=1, no_sound=True)
+    for width, height in ((1920, 1080), (2560, 1440), (3840, 2160), (1366, 768)):
+        scale = app._scale_for(width, height)
+        assert scale >= 1
+        assert scale <= app._max_scale(width, height), (width, height)
+
+
+def test_zooming_out_gives_back_more_of_the_map(qapp):
+    from neverdeads_revenge.desktop.app import DesktopApp
+
+    app = DesktopApp(seed=1, no_sound=True)
+    app.view.resize(1920, 1080)
+    zoomed = app._grid_size()
+    app.zoom = 1
+    wider = app._grid_size()
+
+    assert wider[0] > zoomed[0] and wider[1] > zoomed[1]
+
+
+def test_the_zoom_is_remembered(qapp, tmp_path, monkeypatch):
+    from neverdeads_revenge.desktop import settings
+    from neverdeads_revenge.desktop.app import DesktopApp
+
+    monkeypatch.setenv("NEVERDEADS_REVENGE_HOME", str(tmp_path))
+    app = DesktopApp(seed=1, no_sound=True)
+    app.view.resize(1920, 1080)
+    app._nudge_zoom(-1)
+
+    written = settings.load_settings()
+    assert written["zoom"] == 1
+    assert written["scanlines"] is True
