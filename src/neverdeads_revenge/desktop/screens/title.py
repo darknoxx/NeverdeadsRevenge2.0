@@ -46,14 +46,14 @@ class TitleScreen(Screen):
         nav_y = buffer.rows - 3
         menu_y = buffer.rows - 5
         rule_y = buffer.rows - 6
-        version = render_word("2.0", scale=2 if buffer.rows >= 27 else 1)
+        version = render_word("2.0")
         y = max(0, rule_y - len(art) - len(version) - 2)
 
         for line in art:
             self._centre(buffer, y, line, f"bold {PURPLE}")
             y += 1
         for line in version:
-            self._centre(buffer, y, line, "bold #8b1a1a")
+            self._centre(buffer, y, line, "bold #c81e1e")
             y += 1
         best = app.progress.best_score
         if best and y + 1 < rule_y - 1:

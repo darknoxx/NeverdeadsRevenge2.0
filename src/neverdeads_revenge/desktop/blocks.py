@@ -73,16 +73,17 @@ def render_word(word: str, scale: int = 1) -> list[str]:
     how the version number under the title gets to be as heavy as the name above
     it without a second font.
     """
-    # (glyph rows, whether a gap goes before it). The apostrophe and the dot take
-    # no gap on either side -- they hang off the letter or digit before them,
-    # rather than standing as words of their own.
+    # (glyph rows, whether a gap goes before it). The apostrophe hangs off the
+    # letter before it. Everything else -- the dot included -- is spaced like a
+    # letter: a dot squeezed against digits reads as part of them, which is how
+    # "2.0" once managed to look exactly like "20".
     cells: list[tuple[tuple[str, ...], bool]] = []
     previous = ""
     for char in word.upper():
         if char not in BLOCK:
             continue
-        tight = char in ("'", ".")
-        gap = bool(cells) and not tight and previous not in ("'", ".")
+        tight = char in ("'",)
+        gap = bool(cells) and not tight and previous != "'"
         cells.append((BLOCK[char], gap))
         previous = char
 

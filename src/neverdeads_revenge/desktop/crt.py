@@ -140,15 +140,22 @@ void main() {
 
         if (bloom == 1) {
             // A cheap glow: the bright neighbours, at two radii, added back.
-            // The threshold is what keeps it a phosphor bloom and not a blur --
-            // the walls are dark and stay dark. Held to a whisper: enough to
-            // make a bright cell breathe, not enough to fog the frame.
+            //
+            // It used to be a hard cutoff at half brightness, which is why a
+            // skeleton glowed and a ghoul did not -- phosphor does not work in
+            // steps like that. Now it is a matter of degree: every cell adds
+            // light in proportion to how much light it has above a floor, so
+            // bright things breathe, mid-dark ones (the hero's purple, a
+            // ghoul's green) get a soft breath of their own, and the dark ones
+            // -- floor and rock -- glow only as far as their greyness reaches
+            // anyway, which is the faintest.
             vec3 glow = vec3(0.0);
             for (int i = -2; i <= 2; i++) {
                 for (int j = -2; j <= 2; j++) {
                     vec2 tap = (cell + vec2(float(i), float(j)) * 1.5) / buffer;
                     vec3 c = texture2D(pattern, tap).rgb;
-                    glow += c * step(0.5, luminance(c));
+                    float light = max(0.0, luminance(c) - 0.25);
+                    glow += c * light;
                 }
             }
             colour += glow * 0.045;
