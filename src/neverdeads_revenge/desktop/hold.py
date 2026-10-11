@@ -1,72 +1,36 @@
 """Hold a key to dismiss a screen.
 
-Terminals never report a key going *up*, so "held" cannot be measured directly.
-What they do report is the stream of repeat events a held key produces, and that
-is enough: the fill is a function of the time since the first press, and every
-repeat re-reads it.
+The desktop knows when a key goes *up*, so a hold is settled honestly: presses
+and their repeats advance the fill, a ``KeyRelease`` voids it. What the
+terminal build could only guess -- a tap standing in for a hold -- does not
+need guessing here, and the fallback that counted deliberate taps is gone:
+three quick presses dismiss nothing, because on the desktop a tap is
+measurable and means *not holding*.
 
-There is deliberately no timer. A repeating timer driving the bar was the first
-attempt and it was fragile in a way that took a long time to see: dismissing a
-screen from inside a timer callback left the app never reporting itself idle, so
-``await pilot.pause()`` hung and took the whole test suite with it. The bar
-updates on key events instead, which a held key supplies plenty of -- the
-terminal sends them thirty times a second.
-
-Because the screen closes on the press that finishes the fill, the terminal is
-still repeating the key when the next screen appears. That is handled where it
-lands: ``App.note_key`` spots a repeat and the screens that act on enter ignore
-one. Which is what a player means by "it should only happen on a new press".
+There is still no timer deciding anything. Completion comes from the press
+that crosses the fill, and the redraws that keep the bar visible while it
+fills are only pictures, not decisions.
 """
 
 from __future__ import annotations
 
 import time
 
-__all__ = ["HoldToContinue", "BAR_CELLS", "HOLD_SECONDS", "REPEAT_GAP", "FILTER_GAP"]
+__all__ = ["HoldToContinue", "BAR_CELLS", "HOLD_SECONDS"]
 
 #: How long the key has to be held, in seconds.
 HOLD_SECONDS = 1.0
 
-#: Silence longer than this means the key was released.
+#: Silence longer than this means the key was released -- the fallback rule,
+#: for a release event that failed to arrive (a window stealing focus won't
+#: send one). Comfortably slower than a keyboard's repeat stream.
 RESET_AFTER = 0.25
-
-#: Presses that also count, for terminals with no key repeat.
-FALLBACK_PRESSES = 3
-
-#: The window those presses are counted in.
-FALLBACK_WINDOW = 2.0
 
 #: Cells in the progress bar.
 BAR_CELLS = 10
 
 #: Keys that mean "yes, go on".
 HOLD_KEYS = ("enter", "return")
-
-#: A key arriving this soon after the same key is a repeat, not a new press.
-#:
-#: Comfortably above a terminal's repeat rate and comfortably below how fast
-#: anybody presses a key twice on purpose.
-REPEAT_GAP = 0.15
-
-#: Silence longer than this, while the repeat filter is armed, means the key that
-#: opened the screen has come up.
-#:
-#: Its own constant rather than ``REPEAT_GAP`` for a reason worth spelling out.
-#: The filter is the thing standing between a screen that closes on a *held* key
-#: and the screens after it, and two of them act on the same key: hold enter to
-#: leave the death summary and the name entry that follows is also closed by
-#: enter. So the filter clears only on a gap that is too long to be a repeat --
-#: and a terminal repeats every ~33ms, while a repeat *rate* set slow, a loaded
-#: machine, or events the terminal bundled can put a quarter of a second between
-#: two repeats of the same held key. At ``REPEAT_GAP`` that reads as a new press,
-#: and one held enter then walks the summary, the name entry, the title, the
-#: hero select and into a new run. Measured on this machine, exactly that.
-#:
-#: The same rule the hold itself uses (``RESET_AFTER``): silence longer than a
-#: quarter of a second is a key that came up. So a player on a terminal without
-#: key repeat -- who taps deliberately, about a third of a second apart -- still
-#: gets through, and a repeat stream at 180ms does not.
-FILTER_GAP = 0.25
 
 
 class HoldToContinue:
@@ -81,14 +45,10 @@ class HoldToContinue:
         keys: tuple[str, ...] = HOLD_KEYS,
         seconds: float = HOLD_SECONDS,
         reset_after: float = RESET_AFTER,
-        fallback_presses: int = FALLBACK_PRESSES,
-        fallback_window: float = FALLBACK_WINDOW,
     ) -> None:
         self.keys = keys
         self.seconds = seconds
         self.reset_after = reset_after
-        self.fallback_presses = fallback_presses
-        self.fallback_window = fallback_window
         self._started: float | None = None
         self._presses: list[float] = []
 
@@ -99,21 +59,37 @@ class HoldToContinue:
 
         now = time.monotonic()
         if self._started is not None and self._presses and now - self._presses[-1] > self.reset_after:
-            # A silence this long since the last press means the key came up.
-            # Whatever progress an old hold had banked must go too -- or the
-            # next tap inherits it whole, and a fresh press reads as a
-            # completed hold. (The taps stay listed: the deliberate-presses
-            # judge them on their own gaps.)
+            # A silence this long since the last press means no event told us
+            # the key went up (a window stealing focus does that). Whatever
+            # progress an old hold had banked must go too -- or the next tap
+            # inherits it whole, and a fresh press reads as a completed hold.
             self._started = None
         if self._started is None:
             self._started = now
 
-        self._presses = [t for t in self._presses if now - t <= self.fallback_window]
         self._presses.append(now)
+        return self.progress >= 1.0
 
-        return self.progress >= 1.0 or self._deliberate()
+    def release(self, key: str) -> None:
+        """The key came up. Nothing was held past this; nothing is banked.
+
+        Measured on the desktop from Qt's own ``KeyRelease``, which is why a
+        tap is a tap -- the old terminal fallback that counted deliberate
+        taps cannot happen here and does not exist anymore: three quick
+        presses dismiss nothing.
+        """
+        if key in self.keys and self._started is not None:
+            self._started = None
+            self._presses = []
 
     # -- what the player sees ------------------------------------------------
+    @property
+    def holding(self) -> bool:
+        """True while a press of the key might still be held down."""
+        return self._started is not None and (
+            time.monotonic() - self._last_press <= self.reset_after
+        )
+
     @property
     def progress(self) -> float:
         """How far through the hold, 0.0 to 1.0."""
@@ -134,21 +110,3 @@ class HoldToContinue:
     @property
     def _last_press(self) -> float:
         return self._presses[-1] if self._presses else 0.0
-
-    def _deliberate(self) -> bool:
-        """Enough presses, each after a real pause, to mean somebody is trying.
-
-        Counting *slow gaps* rather than the total span, and that distinction is
-        the whole rule. A span grows as a held key repeats, so a long hold would
-        eventually look deliberate and the bar would never be seen to fill. Slow
-        gaps do not: a held key produces none, and three taps produce two.
-
-        Not "every gap must be slow" either -- one quick press followed by a
-        pause and then two more is plainly somebody trying, and requiring every
-        gap would throw that away for nothing.
-        """
-        if len(self._presses) < self.fallback_presses:
-            return False
-        gaps = [b - a for a, b in zip(self._presses, self._presses[1:])]
-        slow = sum(1 for gap in gaps if gap > self.reset_after)
-        return slow >= self.fallback_presses - 1

@@ -36,3 +36,8 @@ class Screen:
         carry: whether it was an auto-repeat, and the typed character.
         """
         return False
+
+    def key_up(self, name: str, event, app) -> bool:
+        """The key went up. Only the hold screens care; everything else
+        answers a press, never a release."""
+        return False

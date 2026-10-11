@@ -104,6 +104,15 @@ class GameOverScreen(Screen):
             return True
         return True
 
+    def key_up(self, name, event, app) -> bool:
+        # The desktop can see the key come up: a tap is a tap, and nothing a
+        # tap did banks itself. Platforms that synthesise repeats as
+        # press/release pairs pair the release too; those are not a key
+        # coming up.
+        if not event.isAutoRepeat():
+            self.hold.release(name)
+        return True
+
     def finish(self, app, value) -> None:
         app.pop()
         if self.on_done is not None:

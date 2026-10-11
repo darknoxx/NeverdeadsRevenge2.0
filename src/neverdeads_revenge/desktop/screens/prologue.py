@@ -111,6 +111,15 @@ class PrologueScreen(Screen):
             return True
         return True
 
+    def key_up(self, name: str, event, app) -> bool:
+        # The desktop can *see* the key come up, so a tap is a tap: nothing is
+        # banked, and the next press starts an unfilled bar. Platforms that
+        # synthesise repeats as press/release pairs pair the release too;
+        # those are not a key coming up.
+        if not event.isAutoRepeat():
+            self.hold.release(name)
+        return True
+
     def finish(self, app) -> None:
         app.pop()
         if self.on_done is not None:

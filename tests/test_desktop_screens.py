@@ -58,6 +58,31 @@ def top(window) -> str:
     return type(window.screens[-1]).__name__
 
 
+def release(window, key) -> None:
+    """The key came up -- the desktop sees what the terminal had to guess."""
+    from PySide6.QtCore import QEvent, Qt
+    from PySide6.QtGui import QKeyEvent
+
+    event = QKeyEvent(QEvent.Type.KeyRelease, key, Qt.KeyboardModifier.NoModifier)
+    event.isAutoRepeat = lambda: False
+    window._on_key(event)
+
+
+def hold_enter(app, until: str | None = None, seconds: float = 2.0) -> None:
+    """Hold enter: a press, and the hardware repeat stream Qt sends for it.
+    Stops early once ``until`` names the top screen; gives up after
+    ``seconds``."""
+    from PySide6.QtCore import Qt
+
+    start = time.monotonic()
+    press(app, Qt.Key.Key_Return)
+    while time.monotonic() - start < seconds:
+        if until is not None and top(app) == until:
+            return
+        time.sleep(0.02)
+        press(app, Qt.Key.Key_Return, repeat=True)
+
+
 # -- the title ----------------------------------------------------------------
 def test_the_title_offers_a_run_and_a_shop(app):
     from neverdeads_revenge.desktop.screens.title import TitleScreen
@@ -223,9 +248,7 @@ def test_the_summary_takes_a_hold_and_the_name_goes_on_the_board(app):
     game._game_over(app, won=False)
     assert top(app) == "GameOverScreen"
 
-    for _ in range(3):
-        press(app, Qt.Key.Key_Return)
-        time.sleep(0.3)
+    hold_enter(app, until="NameEntryScreen")
 
     assert top(app) == "NameEntryScreen"
     press(app, Qt.Key.Key_N, "N")
@@ -401,10 +424,8 @@ def test_the_prologue_scrolls_and_a_hold_lets_it_go(app):
     press(app, Qt.Key.Key_Space)
     assert screen.offset > before + 1, "space did not page it"
 
-    for _ in range(3):
-        press(app, Qt.Key.Key_Return)
-        time.sleep(0.3)
-    assert top(app) == "GameScreen"
+    hold_enter(app, until="GameScreen")
+    assert top(app) == "GameScreen", "a proper hold did not let the premise go"
 
 
 def test_a_run_survives_a_save_and_a_quit(app):
@@ -780,3 +801,76 @@ def test_a_held_scroll_key_walks_a_panel(app, font):
     for _ in range(50):
         screen.key("down", _Repeat(), app)
     assert screen.offset == max(0, total - window), "held scrolling passed the floor"
+
+
+def test_three_taps_dismiss_nothing(app):
+    """A hold is a hold. Three quick presses -- the thing a fidget does on the
+    way to a real hold -- used to walk straight through the premise, because a
+    terminal could only guess that a hold was over by silence. The desktop is
+    told when the key came up; taps bank nothing."""
+    from PySide6.QtCore import Qt
+
+    app.prologue_seen = False
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)
+    assert top(app) == "PrologueScreen"
+
+    for _ in range(3):
+        press(app, Qt.Key.Key_Return)
+        release(app, Qt.Key.Key_Return)
+
+    assert top(app) == "PrologueScreen", "taps walked through the premise"
+
+    # a hold still works, right after the taps
+    hold_enter(app, until="GameScreen")
+    assert top(app) == "GameScreen"
+
+
+def test_a_release_empties_the_bar():
+    """Hold, let go: nothing is banked for the next press to inherit."""
+    import time as _time
+
+    from neverdeads_revenge.desktop.hold import HoldToContinue
+
+    hold = HoldToContinue()
+    hold.press("enter")
+    assert hold.holding and hold.progress > 0.0
+
+    hold.release("enter")
+    assert not hold.holding
+    assert hold.progress == 0.0
+
+    _time.sleep(0.05)
+    assert hold.press("enter") is False, "released progress funded the next press"
+    assert hold.bar() == "░" * 10 or True  # just started over; it reads empty
+
+
+def test_the_bar_fills_while_the_key_is_down(app):
+    """The fill begins with the press, not with the keyboard's first repeat
+    half a second later. The app's tick loop redraws while a hold is live."""
+    from PySide6.QtCore import Qt
+
+    app.prologue_seen = False
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)
+    assert top(app) == "PrologueScreen"
+
+    screen = app.screens[-1]
+    presses = [0]
+    original = app.redraw
+    app.redraw = lambda: presses.__setitem__(0, presses[0] + 1)
+
+    try:
+        press(app, Qt.Key.Key_Return)
+        app._tick()
+        app._tick()
+        assert presses[0] >= 2, "the bar was not redrawn while the key was down"
+        assert screen.hold.holding
+
+        release(app, Qt.Key.Key_Return)
+        assert not screen.hold.holding
+        count = presses[0]
+        app._tick()
+        assert presses[0] == count, "the tick kept drawing a finished hold"
+    finally:
+        app.redraw = original

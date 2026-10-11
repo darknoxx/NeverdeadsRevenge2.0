@@ -245,9 +245,22 @@ class DesktopApp(QMainWindow):
         """Advance the pixels and expire the glass word.
 
         Repaints only while either of them is alive, which is most of the time
-        nothing at all.
+        nothing at all. A hold counts as alive too: the bar should begin
+        filling from the first frame of the press, not wait for the keyboard's
+        first repeat to arrive, which on Wayland can be a slow half second of
+        a dead bar. The ticks draw only -- completion is still the press that
+        crosses the fill, never a timer callback.
         """
-        if not self.effects.active and not self.view.is_shaking() and self.glass_note is None:
+        holding = any(
+            getattr(screen, "hold", None) is not None and screen.hold.holding
+            for screen in self.screens
+        )
+        if not (
+            holding
+            or self.effects.active
+            or self.view.is_shaking()
+            or self.glass_note is not None
+        ):
             return
         self.effects.step(0.033)
         self.redraw()
@@ -412,12 +425,21 @@ class DesktopApp(QMainWindow):
 
     # -- input --------------------------------------------------------------
     def eventFilter(self, obj, event):  # noqa: N802 - Qt's spelling
-        if event.type() == QEvent.Type.KeyPress and obj is self.view:
+        if obj is self.view and event.type() in (QEvent.Type.KeyPress, QEvent.Type.KeyRelease):
             self._on_key(event)
             return True
         return super().eventFilter(obj, event)
 
     def _on_key(self, event: QKeyEvent) -> None:
+        if event.type() == QEvent.Type.KeyRelease:
+            # The terminal build had to *guess* a release from silence, and
+            # every heuristic built on that guess was AL territory. Qt hands
+            # over the key going up; the holds want it expelled: without the
+            # ending a tap is indistinguishable from a hold.
+            name = self._key_name(event)
+            if name and self.screens:
+                self.screens[-1].key_up(name, event, self)
+            return
         if self._window_key(event):
             return
         name = self._key_name(event)
