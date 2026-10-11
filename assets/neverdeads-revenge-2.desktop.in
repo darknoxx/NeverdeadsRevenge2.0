@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=@NAME@
+GenericName=Roguelite
+Comment=The same dungeon as the terminal game, rendered as a CRT
+Exec=@EXEC@
+Icon=@SLUG@
+# The game is windowed: it opens its own CRT fullscreen and takes the keys in
+# there, so no terminal is asked for and none is wanted.
+Categories=Game;RolePlaying;
+Keywords=roguelite;roguelike;crt;desktop;pyside6;game;
+StartupNotify=false
