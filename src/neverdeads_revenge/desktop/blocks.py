@@ -42,6 +42,13 @@ BLOCK: dict[str, tuple[str, ...]] = {
     # outer strokes solid to the floor -- it is an M with a bar through it.
     "W": ("█   █", "█   █", "█ █ █", "█ █ █", " █ █ "),
     "Y": ("█   █", "█   █", " █ █ ", "  █  ", "  █  "),
+    # The two digits the version needs, and the dot between them. Five by five
+    # like the letters, so "2.0" is the same weight as the name above it.
+    "0": (" ███ ", "█   █", "█   █", "█   █", " ███ "),
+    "2": (" ████", "█   █", "   █ ", "  █  ", "█████"),
+    # One column wide and one row tall, sitting on the floor of the cell. No gap
+    # either side, like the apostrophe: it hangs off the digit before it.
+    ".": (" ", " ", " ", " ", "█"),
     # One column wide and two rows tall, sitting high. In a five-wide cell it
     # floated so far from the letter before it that it read as a stray mark
     # rather than a possessive, and the name looked misspelled. Cells are not
@@ -55,30 +62,44 @@ LETTER_GAP = " "
 ROWS = 5
 
 
-def render_word(word: str) -> list[str]:
+def render_word(word: str, scale: int = 1) -> list[str]:
     """Draw ``word`` in the block font, one string per row.
 
     Unknown characters are skipped rather than raising: the alternative is a
     screen that refuses to load because someone typed a letter the font does not
     have, and a title screen is the worst place to find that out.
+
+    ``scale`` blows each block up into ``scale`` by ``scale`` blocks, which is
+    how the version number under the title gets to be as heavy as the name above
+    it without a second font.
     """
-    # (glyph rows, whether a gap goes before it). The apostrophe takes no gap on
-    # either side -- it is punctuation hanging off the letter, not a letter.
+    # (glyph rows, whether a gap goes before it). The apostrophe hangs off the
+    # letter before it. Everything else -- the dot included -- is spaced like a
+    # letter: a dot squeezed against digits reads as part of them, which is how
+    # "2.0" once managed to look exactly like "20".
     cells: list[tuple[tuple[str, ...], bool]] = []
     previous = ""
     for char in word.upper():
         if char not in BLOCK:
             continue
-        gap = bool(cells) and char != "'" and previous != "'"
+        tight = char in ("'",)
+        gap = bool(cells) and not tight and previous != "'"
         cells.append((BLOCK[char], gap))
         previous = char
 
     if not cells:
         return []
-    return [
+    rows = [
         "".join((LETTER_GAP if gap else "") + glyph[row] for glyph, gap in cells)
         for row in range(ROWS)
     ]
+    if scale <= 1:
+        return rows
+    big: list[str] = []
+    for row in rows:
+        wide = "".join(char * scale for char in row)
+        big.extend([wide] * scale)
+    return big
 
 
 def render_letter(char: str, style: str = "") -> str:

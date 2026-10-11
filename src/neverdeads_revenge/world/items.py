@@ -5,10 +5,9 @@ generator has to place them, and the generator must not import the game layer.
 An item is world content -- it exists on the map and can be seen, walked over and
 picked up -- while what a *drink* does to your health is a game rule.
 
-Right now everything is a healing draught. That is not a placeholder: a run has
-one resource that runs out, health, and one way to get it back. Anything else
-that could be found on the floor (a weapon, a scroll, a map) needs systems that
-do not exist yet.
+There are draughts, weapons, armour and amulets: the full shelf the shop sells
+and the floors scatter. Anything new that could be found on the floor takes its
+place in the same tables, and its *effect* stays a game-layer rule.
 """
 
 from __future__ import annotations

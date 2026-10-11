@@ -21,6 +21,9 @@ GPU driver at all.
 
 from __future__ import annotations
 
+import random
+import time
+
 from dataclasses import dataclass
 
 from PySide6.QtCore import QRect, QSize
@@ -65,17 +68,22 @@ class CrtSettings:
             self.geometry = True
 
 
-def fit_scale(widget: QSize, buffer: QSize, minimum: float = 0.5) -> int:
-    """The largest whole number that fits ``buffer`` inside ``widget``.
+def fit_scale(widget: QSize, buffer: QSize, minimum: float = 0.5) -> float:
+    """The largest scale that fits ``buffer`` inside ``widget``.
 
-    A whole number, always, unless the window is too small to hold the buffer
-    even once -- then the buffer is scaled down fractionally, because a game
-    that cannot be seen is worse than a game that is slightly soft.
+    A whole number when the buffer fits once or more. Smaller -- down to
+    ``minimum`` and no further, because soft beats invisible -- when the
+    window is too small to hold the buffer even once.
     """
     if buffer.width() <= 0 or buffer.height() <= 0:
-        return 1
+        return 1.0
     scale = min(widget.width() // buffer.width(), widget.height() // buffer.height())
-    return max(int(minimum) if scale < 1 else scale, 1)
+    if scale >= 1:
+        return float(scale)
+    fraction = min(
+        widget.width() / buffer.width(), widget.height() / buffer.height()
+    )
+    return max(fraction, minimum)
 
 
 _VERTEX = """
@@ -137,17 +145,25 @@ void main() {
 
         if (bloom == 1) {
             // A cheap glow: the bright neighbours, at two radii, added back.
-            // The threshold is what keeps it a phosphor bloom and not a blur --
-            // the walls are dark and stay dark.
+            //
+            // It used to be a hard cutoff at half brightness, which is why a
+            // skeleton glowed and a ghoul did not -- phosphor does not work in
+            // steps like that. Now it is a matter of degree: every cell adds
+            // light in proportion to how much light it has above a floor, so
+            // bright things breathe, mid-dark ones (the hero's purple, a
+            // ghoul's green) get a soft breath of their own, and the dark ones
+            // -- floor and rock -- glow only as far as their greyness reaches
+            // anyway, which is the faintest.
             vec3 glow = vec3(0.0);
             for (int i = -2; i <= 2; i++) {
                 for (int j = -2; j <= 2; j++) {
                     vec2 tap = (cell + vec2(float(i), float(j)) * 1.5) / buffer;
                     vec3 c = texture2D(pattern, tap).rgb;
-                    glow += c * step(0.45, luminance(c));
+                    float light = max(0.0, luminance(c) - 0.25);
+                    glow += c * light;
                 }
             }
-            colour += glow * 0.09;
+            colour += glow * 0.045;
         }
 
         if (scanlines == 1) {
@@ -157,15 +173,10 @@ void main() {
             float dark = row < 1.0 ? 0.72 : 1.0;
             colour *= mix(1.0, dark, 0.85);
         }
-
-        if (geometry == 1) {
-            // A tube is dimmer at the corners and does not quite reach them.
-            vec2 centred = (screen / resolution) * 2.0 - 1.0;
-            float r2 = dot(centred, centred);
-            colour *= 1.0 - 0.25 * r2;
-            float edge = max(abs(centred.x), abs(centred.y));
-            colour *= 1.0 - smoothstep(0.92, 1.0, edge);
-        }
+        // The edge darkening -- the vignette -- is off for now, on trial, so
+        // the curve above can be judged on its own. It lives where it was: a
+        // radial dim over the frame, plus a smoothstep mask on the last few
+        // pixels, both inside `geometry == 1`.
     }
 
     gl_FragColor = vec4(colour, 1.0);
@@ -180,19 +191,39 @@ class CrtView(QOpenGLWidget):
         super().__init__(parent)
         self.settings = settings or CrtSettings()
         self._frame: QImage | None = None
+        self._frame_is_new = False
         self._texture: QOpenGLTexture | None = None
         self._program: QOpenGLShaderProgram | None = None
         self._buffer: QOpenGLBuffer | None = None
         self._gl = None
         self._linked = False
-        self._scale = 1
+        self._scale = 1.0
         self._offset = (0.0, 0.0)
+        #: The glass rattling: a decaying jitter, in pixels, driven by things
+        #: like a wound. Not an effect of the shader -- it warps the *sampling*,
+        #: which is why it lives beside the offset.
+        self._shake_until = 0.0
+        self._shake_span = 0.2
+        self._shake_strength = 0
+        self._rng = random.Random()
         self.setMinimumSize(320, 200)
+
+    def shake(self, strength: int = 6, seconds: float = 0.25) -> None:
+        """Rattle the glass. Repeated calls keep it going, not bigger."""
+        now = time.monotonic()
+        if not self.is_shaking():
+            self._shake_strength = strength
+            self._shake_span = max(seconds, 0.05)
+        self._shake_until = max(self._shake_until, now + seconds)
+
+    def is_shaking(self) -> bool:
+        return time.monotonic() < self._shake_until
 
     # -- the frame ----------------------------------------------------------
     def set_frame(self, image: QImage) -> None:
         """Hand over a fresh pattern image and repaint."""
         self._frame = image
+        self._frame_is_new = True
         self.update()
 
     # -- geometry -----------------------------------------------------------
@@ -207,6 +238,16 @@ class CrtView(QOpenGLWidget):
             (self.size().width() - drawn_w) / 2.0,
             (self.size().height() - drawn_h) / 2.0,
         )
+        now = time.monotonic()
+        if now < self._shake_until:
+            fraction = (self._shake_until - now) / max(self._shake_span, 1e-6)
+            wobble = self._shake_strength * min(1.0, fraction)
+            self._offset = (
+                self._offset[0] + self._rng.uniform(-wobble, wobble),
+                self._offset[1] + self._rng.uniform(-wobble, wobble),
+            )
+        else:
+            self._shake_strength = 0
 
     # -- OpenGL -------------------------------------------------------------
     def initializeGL(self) -> None:
@@ -251,25 +292,31 @@ class CrtView(QOpenGLWidget):
         self._buffer = buffer
 
     def _refresh_texture(self) -> None:
+        """Move the new frame's pixels into GL, quietly.
+
+        The obvious way -- keep one texture and ``setData(image)`` it every
+        frame -- is not quiet: setData re-derives format, size and mip levels
+        on every call, Qt flat-out refuses all three once storage is
+        allocated (QTBUG-64148), and the player reads five warnings a frame
+        in their terminal instead of the dungeon. So: one fresh texture
+        object per new frame, the old one destroyed. The upload happens in
+        both paths; this one we can guarantee to be without protest.
+        """
+        if not self._frame_is_new:
+            return
         frame = self._frame
         if frame is None:
             return
-        if (
-            self._texture is None
-            or self._texture.width() != frame.width()
-            or self._texture.height() != frame.height()
-        ):
-            if self._texture is not None:
-                self._texture.destroy()
-            self._texture = QOpenGLTexture(frame)
-            self._texture.setMinificationFilter(
-                QOpenGLTexture.Filter.Nearest
-            )
-            self._texture.setMagnificationFilter(
-                QOpenGLTexture.Filter.Nearest
-            )
-        else:
-            self._texture.setData(frame)
+        self._frame_is_new = False
+        if self._texture is not None:
+            self._texture.destroy()
+        self._texture = QOpenGLTexture(frame)
+        self._texture.setMinificationFilter(QOpenGLTexture.Filter.Nearest)
+        self._texture.setMagnificationFilter(QOpenGLTexture.Filter.Nearest)
+        # The bloom taps drift up to three pattern-pixels past a cell; without
+        # this a bright line on one edge bleeds back in the opposite one
+        # (Qt's default wrap is Repeat), and the letterbox shows it.
+        self._texture.setWrapMode(QOpenGLTexture.WrapMode.ClampToEdge)
 
     def paintGL(self) -> None:
         gl = self._gl
@@ -333,11 +380,13 @@ class CrtView(QOpenGLWidget):
         self._recompute()
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
+        # A fractional scale is possible now, so the target is a properly
+        # rounded rectangle rather than a scaled width the rect cannot hold.
         target = QRect(
-            int(self._offset[0]),
-            int(self._offset[1]),
-            self._frame.width() * self._scale,
-            self._frame.height() * self._scale,
+            round(self._offset[0]),
+            round(self._offset[1]),
+            round(self._frame.width() * self._scale),
+            round(self._frame.height() * self._scale),
         )
         painter.drawImage(target, self._frame)
         if self.settings.scanlines:

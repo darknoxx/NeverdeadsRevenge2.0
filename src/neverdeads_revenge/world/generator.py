@@ -369,7 +369,8 @@ def generate_floor(
     spawn_points = rng.shuffled(candidates)[:enemy_budget]
 
     # The hunter, sometimes, on ground nothing else is standing on. Placed
-    # before the loot so its cell is kept clear the same way the spring's is.
+    # before the spring, the npcs and the loot so that the spring's tile rule
+    # and the exclusions passed down can keep its cell clear.
     hunter = None
     chance = hunter_chance(depth)
     if chance and rng.chance(chance):
@@ -381,15 +382,25 @@ def generate_floor(
     _scatter_decor(rng, dungeon_map, rooms, count=len(dungeon_map.walkable_positions()) // 18)
 
     # The spring before the loot, so that the loot's "plain floor only" rule
-    # keeps it clear without a second exclusion list.
-    spring = _place_spring(rng, dungeon_map, candidates, exit_pos, depth)
+    # keeps it clear without a second exclusion list. The hunter is handed
+    # down as ground the spring may not stand on.
+    spring = _place_spring(
+        rng, dungeon_map, candidates, exit_pos, depth,
+        avoid=(hunter,) if hunter is not None else (),
+    )
 
     # Somebody, sometimes. Placed before the loot so the loot's plain-floor rule
-    # keeps their cell clear the same way it keeps the spring's.
-    npcs = _place_npcs(rng, dungeon_map, candidates, exit_pos, depth, npc_keys)
+    # keeps their cell clear the same way it keeps the spring's -- and the
+    # hunter's cell is not theirs to stand on either. Immutable people: an
+    # item under an npc is one nobody can ever pick up.
+    npcs = _place_npcs(
+        rng, dungeon_map, candidates, exit_pos, depth, npc_keys,
+        avoid=(hunter,) if hunter is not None else (),
+    )
 
     # Loot last, and on whatever is still plain floor. Placing it after the decor
-    # means an item can never be swallowed by a patch of grass.
+    # means an item can never be swallowed by a patch of grass, and after the
+    # npcs means an item can never be swallowed by a person.
     items = _scatter_loot(
         rng,
         dungeon_map,
@@ -399,6 +410,7 @@ def generate_floor(
         filled_slots,
         gift_keys,
         page_keys,
+        blocked=tuple(pos for pos, _ in npcs),
     )
 
     return GeneratedFloor(
@@ -421,12 +433,15 @@ def _place_spring(
     candidates: list[Pos],
     exit_pos: Pos,
     depth: int,
+    avoid: tuple[Pos, ...] = (),
 ) -> Pos | None:
     """Put a cleansing spring somewhere reachable, or decide not to.
 
-    Never on the first floor and never on the exit. The first floor is the one
-    floor where nobody can be carrying anything worth washing off, and a spring
-    standing on the way out is a spring the player has to choose to walk past.
+    Never on the first floor and never on the exit, and never under somebody
+    who is placed before: ``avoid`` carries the hunter's cell down. The first
+    floor is the one floor where nobody can be carrying anything worth washing
+    off, and a spring standing on the way out is a spring the player has to
+    choose to walk past.
     """
     if depth < 2 or not rng.chance(SPRING_CHANCE):
         return None
@@ -434,7 +449,7 @@ def _place_spring(
     spots = [
         pos
         for pos in candidates
-        if pos != exit_pos and dungeon_map.tile_at(pos) is Tile.FLOOR
+        if pos != exit_pos and pos not in avoid and dungeon_map.tile_at(pos) is Tile.FLOOR
     ]
     if not spots:
         return None
@@ -451,11 +466,13 @@ def _place_npcs(
     exit_pos: Pos,
     depth: int,
     npc_keys: tuple[str, ...],
+    avoid: tuple[Pos, ...] = (),
 ) -> list[tuple[Pos, str]]:
     """Stand somebody about, if this floor has anybody and anywhere to put them.
 
-    Never on the exit: a conversation standing on the way out is a conversation
-    the player has to walk past twice.
+    Never on the exit -- a conversation standing on the way out is a
+    conversation the player has to walk past twice -- and never on the hunter,
+    who is handed down in ``avoid``.
     """
     if not npc_keys:
         return []
@@ -466,6 +483,7 @@ def _place_npcs(
             pos
             for pos in candidates
             if pos != exit_pos
+            and pos not in avoid
             and dungeon_map.tile_at(pos) is Tile.FLOOR
             and all(pos != taken for taken, _ in placed)
         ]
@@ -484,21 +502,29 @@ def _scatter_loot(
     filled_slots: tuple[str, ...] = (),
     gift_keys: tuple[str, ...] = (),
     page_keys: tuple[int, ...] = (),
+    blocked: tuple[Pos, ...] = (),
 ) -> dict[Pos, GroundItem]:
+
     """Drop the floor's draughts, equipment and chests.
 
     Items may land under a monster. That is deliberate: a potion you have to
     fight for is more interesting than one lying in an empty room, and the
-    player can always kill the occupant and come back. What they may *not* do is
-    land on the player's own room -- ``candidates`` already excludes it -- or on
-    the exit.
+    player can always kill the occupant and come back. What they may *not* do
+    is land on the player's own room -- ``candidates`` already excludes it --
+    on the exit, or on an npc: a person blocking a floor item does not fight,
+    cannot be spent, and would be a piece of loot hidden somewhere the game
+    never gives back. ``blocked`` carries the npc cells down for that.
 
     ``curse_keys`` is passed in rather than imported: the generator places a
     chest holding *a* curse and does not need to know what any of them do. The
     game layer owns the meanings, ``world/`` owns the furniture.
     """
     placed: dict[Pos, GroundItem] = {}
-    open_floor = [pos for pos in candidates if dungeon_map.tile_at(pos) is Tile.FLOOR]
+    open_floor = [
+        pos
+        for pos in candidates
+        if pos not in blocked and dungeon_map.tile_at(pos) is Tile.FLOOR
+    ]
     if not open_floor:
         return placed
 

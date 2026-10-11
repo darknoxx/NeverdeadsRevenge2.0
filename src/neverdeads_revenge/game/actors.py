@@ -129,6 +129,19 @@ class Trait(Enum):
         return self.value
 
     @property
+    def title(self) -> str:
+        """What the grant *is called* for the hero it belongs to.
+
+        One mechanic shared by three heroes was played three ways, and "REVENGE"
+        told each of them nothing: Noxx's tide and Yeti's fortress and
+        Walkyrion's blade are different things to play around, so each of them
+        calls its own. The word `REVENGE` still names the *system* -- the score,
+        the amulets that touch it -- but a panel a player reads from says the
+        name.
+        """
+        return REVENGE_TITLES[self]
+
+    @property
     def cap(self) -> int:
         return REVENGE_MAX_STACKS[self]
 
@@ -138,6 +151,15 @@ class Trait(Enum):
         if self is Trait.SPEED:
             return f"+{amount:.1f} speed"
         return f"+{int(amount)} {self.value}"
+
+
+#: What each grant is called by the hero who uses it: BLACK TIDE for Noxx,
+#: FROZEN FORTRESS for Yeti, AURAL BLADE for Walkyrion.
+REVENGE_TITLES: dict["Trait", str] = {
+    Trait.SPEED: "BLACK TIDE",
+    Trait.ARMOUR: "FROZEN FORTRESS",
+    Trait.DAMAGE: "AURAL BLADE",
+}
 
 
 #: How much a single stack of REVENGE grants, per trait.

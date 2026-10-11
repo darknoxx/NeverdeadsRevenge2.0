@@ -3,7 +3,7 @@
 Between the shop's permanent upgrades and the floor's own numbers there was
 nothing that grew *during* a run except equipment, and equipment arrives in
 jumps and is over by floor four. A run is ten floors long and the monsters get
-26% harder on each of them; something has to keep up, and it should be the hero.
+22.5% harder on each of them; something has to keep up, and it should be the hero.
 So kills teach.
 
 A level is a small package of stats -- small enough that three or four of them
@@ -40,7 +40,7 @@ __all__ = [
 
 #: Kills that buy one level.
 #:
-#: Four, and the number is doing two jobs. The floors hold ``7 + depth`` monsters,
+#: Four, and the number is doing two jobs. The floors hold ``8 + depth`` monsters,
 #: so a floor you clear is two or three levels -- fast enough that the reward for
 #: fighting arrives while the fight still matters. And it makes the *deep* floors
 #: the ones that teach fastest, which is the right way round: the run should

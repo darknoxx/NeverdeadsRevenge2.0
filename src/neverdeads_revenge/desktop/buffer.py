@@ -52,8 +52,18 @@ class PatternBuffer:
     def put(self, x: int, y: int, char: str, style: Style | None = None) -> None:
         if 0 <= x < self.cols and 0 <= y < self.rows:
             cell = self.cells[y][x]
+            new = style or Style()
+            if new.bg is None and cell.style.bg is not None:
+                # The cell already sits on a panel. Writing a *word* onto it does
+                # not lift the panel out from under the writing: the text keeps
+                # the background the square had, which is why the words in a
+                # menu read on the panel and not on a stripe of black.
+                new = Style(
+                    fg=new.fg, bg=cell.style.bg, bold=new.bold, dim=new.dim,
+                    reverse=new.reverse, italic=new.italic,
+                )
             cell.char = char
-            cell.style = style or Style()
+            cell.style = new
 
     def text(self, x: int, y: int, string: str, style: Style | None = None) -> int:
         """Write ``string`` starting at ``x``. Returns the next free column.
@@ -102,13 +112,24 @@ class PatternBuffer:
         top = y * self.font.cell_h
         width = len(run) * self.font.cell_w
 
+        # A cell's own background, if it has one. This is how a menu panel is
+        # opaque: the box fills its inside with a colour before anything is
+        # written on it, so the dungeon cannot show through.
+        if style.bg is not None:
+            painter.fillRect(QRect(left, top, width, self.font.cell_h), style.bg)
+
         if style.reverse:
             painter.fillRect(QRect(left, top, width, self.font.cell_h), style.fg)
-            painter.setPen(BACKGROUND)
+            painter.setPen(style.bg if style.bg is not None else BACKGROUND)
         else:
             painter.setPen(self._ink(style))
 
-        painter.setFont(self.font.bold if style.bold else self.font.normal)
+        if style.italic:
+            painter.setFont(
+                self.font.bold_italic if style.bold else self.font.italic
+            )
+        else:
+            painter.setFont(self.font.bold if style.bold else self.font.normal)
         text = "".join(cell.char for cell in run)
         # ``TextDontClip`` off, and a rect one row taller than the cell: a glyph
         # with a descender hangs below the baseline, and clipping it to the cell

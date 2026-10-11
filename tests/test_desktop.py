@@ -113,21 +113,17 @@ def test_the_sidebar_runs_the_whole_height_and_the_bottom_does_not():
     assert side_w == SIDEBAR
 
 
-def test_the_columns_sit_inside_the_bottom_row():
-    from neverdeads_revenge.desktop.render import (
-        CURSES_WIDTH,
-        MARKS_WIDTH,
-        regions,
-    )
+def test_the_log_owns_the_whole_bottom_strip():
+    """The columns moved into the sidebar; the log is what the bottom strip is."""
+    from neverdeads_revenge.desktop.render import BOTTOM, regions
 
     areas = regions(100, 34)
-    log_x, _, log_w, _ = areas["log"]
-    curses_x, _, curses_w, _ = areas["curses"]
-    marks_x, _, marks_w, _ = areas["marks"]
+    log_x, _, log_w, log_h = areas["log"]
 
-    assert log_x == 0 and log_w + CURSES_WIDTH + MARKS_WIDTH == areas["bottom"][2]
-    assert curses_x == log_w and curses_w == CURSES_WIDTH
-    assert marks_x == log_w + CURSES_WIDTH and marks_w == MARKS_WIDTH
+    assert set(areas) == {"map", "sidebar", "bottom", "log"}
+    assert log_x == 0
+    assert log_w == areas["bottom"][2], "the log filled the strip"
+    assert log_h == BOTTOM
 
 
 # -- the content --------------------------------------------------------------
@@ -144,9 +140,11 @@ def test_the_hud_says_who_and_where(state):
 def test_the_hud_grows_a_revenge_line_only_when_there_are_stacks(state):
     from neverdeads_revenge.desktop.render import hud_lines
 
-    assert not any("REVENGE" in line for line, _ in hud_lines(state))
+    # The grant has a name per hero: Noxx's is the BLACK TIDE, not the system's
+    # word for the mechanic.
+    assert not any("BLACK TIDE" in line for line, _ in hud_lines(state))
     state.revenge_stacks = 2
-    assert any("REVENGE" in line for line, _ in hud_lines(state))
+    assert any("BLACK TIDE" in line for line, _ in hud_lines(state))
 
 
 def test_the_log_kind_picks_the_colour(state):
@@ -202,11 +200,14 @@ def test_the_scale_is_a_whole_number():
 
 
 def test_a_tiny_window_still_shows_the_game():
+    """A window too small to hold the pattern once prefactors it down (to the
+    readable floor) instead of clipping half the frame at 1x -- the old rule
+    returned 1 and cut the map's right off."""
     from PySide6.QtCore import QSize
 
     from neverdeads_revenge.desktop.crt import fit_scale
 
-    assert fit_scale(QSize(320, 200), QSize(960, 528)) == 1
+    assert fit_scale(QSize(320, 200), QSize(960, 528)) == 0.5
 
 
 # -- the keys -----------------------------------------------------------------
@@ -228,53 +229,120 @@ def test_every_key_maps_to_a_real_verb():
     assert all(isinstance(action, Action) for action in KEY_BINDINGS.values())
 
 
-# -- the zoom -----------------------------------------------------------------
-def test_the_zoom_targets_about_a_hundred_columns(qapp):
-    from neverdeads_revenge.desktop.app import TARGET_COLS, DesktopApp
-
-    app = DesktopApp(seed=1, no_sound=True)
-    scale = app._scale_for(1920, 1080)
-
-    # Two-pixel cells on a 1080p screen: a *zoom into* the field, not a fill of
-    # it. The old fill gave one-pixel cells and a 190-column grid.
-    assert scale == 2
-    app.view.resize(1920, 1080)
-    cols, rows = app._grid_size()
-    assert cols <= TARGET_COLS + 20, f"{cols} columns is not a zoom"
-    assert rows < 30, f"{rows} rows is not a zoom"
-
-
-def test_the_zoom_is_a_whole_number_and_never_exceeds_what_fits(qapp):
+# -- one zoom, and a log with its own face ------------------------------------
+def test_there_is_one_scale_and_it_is_the_big_one(qapp):
+    """One zoom, the big one. A second control would be two dials arguing about
+    the same screen; what keeps the words readable is the log's own smaller
+    face, not a smaller dungeon."""
     from neverdeads_revenge.desktop.app import DesktopApp
 
     app = DesktopApp(seed=1, no_sound=True)
-    for width, height in ((1920, 1080), (2560, 1440), (3840, 2160), (1366, 768)):
-        scale = app._scale_for(width, height)
-        assert scale >= 1
-        assert scale <= app._max_scale(width, height), (width, height)
+    assert app._scale_for(1920, 1080) == 2, "1080p is two-pixel cells or nothing"
+    assert app._scale_for(1366, 768) == 1, "a small laptop is one-pixel cells"
+    assert not hasattr(app, "zoom"), "the zoom came back"
 
 
-def test_zooming_out_gives_back_more_of_the_map(qapp):
-    from neverdeads_revenge.desktop.app import DesktopApp
+def test_the_log_is_a_smaller_face_and_still_clear_of_the_corner(qapp, font, state):
+    """The log is drawn in its own, smaller font straight onto the frame.
 
-    app = DesktopApp(seed=1, no_sound=True)
-    app.view.resize(1920, 1080)
-    zoomed = app._grid_size()
-    app.zoom = 1
-    wider = app._grid_size()
+    The test reads the frame's pixels, because that is where the log lives now:
+    the corner that the vignette darkens has to stay background for about two
+    cells of the log's own size before the first word.
+    """
+    from PySide6.QtGui import QColor, QImage
 
-    assert wider[0] > zoomed[0] and wider[1] > zoomed[1]
+    from neverdeads_revenge.desktop.font import BitmapFont
+    from neverdeads_revenge.desktop.render import paste_log, regions
+    from neverdeads_revenge.desktop.theme import BACKGROUND
+
+    small = BitmapFont(pixel_size=9)
+    cols, rows, cw, ch = 96, 27, font.cell_w, font.cell_h
+    image = QImage(cols * cw, rows * ch, QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(BACKGROUND)
+    paste_log(image, state, cols, rows, cw, ch, small)
+
+    area = regions(cols, rows)["log"]
+    left, top = area[0] * cw, area[1] * ch
+    middle_y = top + area[3] * ch // 2
+
+    # The first cells of the panel: background, not a word.
+    for x in range(left, left + small.cell_w + 2, 2):
+        assert QColor(image.pixelColor(x, middle_y)) == BACKGROUND, (
+            f"a word within {(x - left) / small.cell_w:.1f} cells of the corner"
+        )
 
 
-def test_the_zoom_is_remembered(qapp, tmp_path, monkeypatch):
-    from neverdeads_revenge.desktop import settings
-    from neverdeads_revenge.desktop.app import DesktopApp
+# -- the version, the corner, and the pixels ----------------------------------
+def test_the_version_is_drawn_thick():
+    from neverdeads_revenge.desktop.blocks import render_word
 
-    monkeypatch.setenv("NEVERDEADS_REVENGE_HOME", str(tmp_path))
-    app = DesktopApp(seed=1, no_sound=True)
-    app.view.resize(1920, 1080)
-    app._nudge_zoom(-1)
+    small = render_word("2.0")
+    big = render_word("2.0", scale=2)
 
-    written = settings.load_settings()
-    assert written["zoom"] == 1
-    assert written["scanlines"] is True
+    assert small, "the block font cannot spell its own version"
+    assert len(big) == len(small) * 2
+    assert all(len(b) == len(s) * 2 for s, b in zip(small, big))
+
+
+def test_blood_falls_and_fades(qapp):
+    from PySide6.QtGui import QImage
+
+    from neverdeads_revenge.desktop.effects import Effects
+
+    effects = Effects(10, 20)
+    assert not effects.active
+
+    effects.blood((3, 3))
+    assert effects.active
+    # It paints onto a frame without complaint.
+    image = QImage(100, 100, QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(0)
+    effects.draw(image)
+
+    for _ in range(120):
+        effects.step(0.033)
+    assert not effects.active, "the pixels never went away"
+
+
+def test_a_spark_rises_and_a_blood_drop_falls(qapp):
+    from neverdeads_revenge.desktop.effects import Effects
+
+    rising = Effects(10, 20)
+    rising.spark((3, 3))
+    rising.step(0.033)
+    assert any(p.vy < 0 for p in rising.particles), "a spark did not rise"
+
+    falling = Effects(10, 20)
+    falling.blood((3, 3))
+    for _ in range(3):
+        falling.step(0.033)
+    assert any(p.vy > 0 for p in falling.particles), "blood did not fall"
+
+
+def test_a_word_keeps_the_panel_it_sits_on(font):
+    """The bug the menus had: writing over a filled panel lifted the fill out
+    from under the words, which left a stripe of black behind every line."""
+    from neverdeads_revenge.desktop.buffer import PatternBuffer
+    from neverdeads_revenge.desktop.chrome import PANEL
+    from neverdeads_revenge.desktop.theme import Style, parse_style
+
+    buffer = PatternBuffer(10, 4, font)
+    panel = Style(bg=parse_style(PANEL).fg)
+    for x in range(10):
+        buffer.put(x, 1, " ", panel)
+
+    buffer.text(2, 1, "hi", parse_style("red"))
+
+    assert all(cell.style.bg is not None for cell in buffer.cells[1]), (
+        "the words stripped the panel"
+    )
+
+
+def test_the_shake_never_moves_what_is_sampled():
+    from PySide6.QtCore import QSize
+
+    from neverdeads_revenge.desktop.crt import fit_scale
+
+    # The shake warps where the pattern is placed, never how it is sampled --
+    # the scale is the same number shaken or not.
+    assert fit_scale(QSize(1920, 1080), QSize(960, 528)) == 2

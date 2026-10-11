@@ -1,40 +1,36 @@
 """Hold a key to dismiss a screen.
 
-Terminals never report a key going *up*, so "held" cannot be measured directly.
-What they do report is the stream of repeat events a held key produces, and that
-is enough: the fill is a function of the time since the first press, and every
-repeat re-reads it.
+The fill is wall-clock time from the first press: pauses inside the hold do
+not restart it, because on this desktop a "hold" does not arrive as a steady
+stream -- a Wayland compositor may lift the key and hand the repeats back
+later, and the terminal-era idea of counting presses could never tell that
+from somebody tapping.
 
-There is deliberately no timer. A repeating timer driving the bar was the first
-attempt and it was fragile in a way that took a long time to see: dismissing a
-screen from inside a timer callback left the app never reporting itself idle, so
-``await pilot.pause()`` hung and took the whole test suite with it. The bar
-updates on key events instead, which a held key supplies plenty of -- the
-terminal sends them thirty times a second.
+Taps are settled by their own length. A press that is down briefly and never
+repeats is a tap; releasing it banks nothing. A press that is down for a
+repeat delay and repeats away is a hold, whatever the composites between its
+events look like. Long silence (longer than the hold itself) means nothing
+could still be down -- a focus-thieving window swallowed the events -- and
+the fill goes cold.
 
-Because the screen closes on the press that finishes the fill, the terminal is
-still repeating the key when the next screen appears. That is handled where it
-lands: ``App.note_key`` spots a repeat and the screens that act on enter ignore
-one. Which is what a player means by "it should only happen on a new press".
+Completion comes from the press that crosses the fill, never from a timer.
+The redraw ticks only paint; they decide nothing.
 """
 
 from __future__ import annotations
 
 import time
 
-__all__ = ["HoldToContinue", "BAR_CELLS", "HOLD_SECONDS", "REPEAT_GAP", "FILTER_GAP"]
+__all__ = ["HoldToContinue", "BAR_CELLS", "HOLD_SECONDS"]
 
 #: How long the key has to be held, in seconds.
 HOLD_SECONDS = 1.0
 
-#: Silence longer than this means the key was released.
-RESET_AFTER = 0.25
-
-#: Presses that also count, for terminals with no key repeat.
-FALLBACK_PRESSES = 3
-
-#: The window those presses are counted in.
-FALLBACK_WINDOW = 2.0
+#: A press shorter than this, that never repeated, is a tap: a tap banks
+#: nothing, so tapping -- even quickly -- can never walk through. A held
+#: key's down is at least a repeat delay long; nothing trustworthy lives
+#: between those two lengths.
+TAP_SECONDS = 0.18
 
 #: Cells in the progress bar.
 BAR_CELLS = 10
@@ -42,106 +38,102 @@ BAR_CELLS = 10
 #: Keys that mean "yes, go on".
 HOLD_KEYS = ("enter", "return")
 
-#: A key arriving this soon after the same key is a repeat, not a new press.
-#:
-#: Comfortably above a terminal's repeat rate and comfortably below how fast
-#: anybody presses a key twice on purpose.
-REPEAT_GAP = 0.15
-
-#: Silence longer than this, while the repeat filter is armed, means the key that
-#: opened the screen has come up.
-#:
-#: Its own constant rather than ``REPEAT_GAP`` for a reason worth spelling out.
-#: The filter is the thing standing between a screen that closes on a *held* key
-#: and the screens after it, and two of them act on the same key: hold enter to
-#: leave the death summary and the name entry that follows is also closed by
-#: enter. So the filter clears only on a gap that is too long to be a repeat --
-#: and a terminal repeats every ~33ms, while a repeat *rate* set slow, a loaded
-#: machine, or events the terminal bundled can put a quarter of a second between
-#: two repeats of the same held key. At ``REPEAT_GAP`` that reads as a new press,
-#: and one held enter then walks the summary, the name entry, the title, the
-#: hero select and into a new run. Measured on this machine, exactly that.
-#:
-#: The same rule the hold itself uses (``RESET_AFTER``): silence longer than a
-#: quarter of a second is a key that came up. So a player on a terminal without
-#: key repeat -- who taps deliberately, about a third of a second apart -- still
-#: gets through, and a repeat stream at 180ms does not.
-FILTER_GAP = 0.25
-
 
 class HoldToContinue:
     """Watches one key and says when it has been held long enough.
 
-    Owned by a screen. The screen feeds it presses and dismisses when
-    :meth:`press` returns True -- there is nothing to tick.
+    Owned by a screen. The screen feeds it presses (repeat-flagged where the
+    platform says so) and releases; the screen dismisses when :meth:`press`
+    returns True.
     """
 
     def __init__(
         self,
         keys: tuple[str, ...] = HOLD_KEYS,
         seconds: float = HOLD_SECONDS,
-        reset_after: float = RESET_AFTER,
-        fallback_presses: int = FALLBACK_PRESSES,
-        fallback_window: float = FALLBACK_WINDOW,
+        tap_seconds: float = TAP_SECONDS,
     ) -> None:
         self.keys = keys
         self.seconds = seconds
-        self.reset_after = reset_after
-        self.fallback_presses = fallback_presses
-        self.fallback_window = fallback_window
-        self._started: float | None = None
-        self._presses: list[float] = []
+        self.tap_seconds = tap_seconds
+        self._started: float | None = None  # the fill's origin: the first press
+        self._last_press = 0.0
+        self._down_from: float | None = None  # when the current down began
+        self._down_repeated = False  # did the current down repeat yet?
+        self._releases_in_fill = 0  # lifts that stood unbought inside one fill
 
-    def press(self, key: str) -> bool:
+    def press(self, key: str, repeat: bool = False) -> bool:
         """Record a press of ``key``. True when the screen should go."""
         if key not in self.keys:
             return False
 
         now = time.monotonic()
+        if self._started is not None and now - self._last_press > self.seconds:
+            # A gap longer than the hold itself: nothing could still be down,
+            # regardless of what events say. Whatever fill there was is cold,
+            # and the next press starts an entirely new bargain.
+            self._started = None
+            self._releases_in_fill = 0
         if self._started is None:
             self._started = now
+            self._releases_in_fill = 0
+        if not repeat:
+            self._down_from = now
+            self._down_repeated = False
+        else:
+            self._down_repeated = True
+        self._last_press = now
+        return self.progress >= 1.0
 
-        self._presses = [t for t in self._presses if now - t <= self.fallback_window]
-        self._presses.append(now)
+    def release(self, key: str) -> None:
+        """The key came up. This settles what the down *was*.
 
-        return self.progress >= 1.0 or self._deliberate()
+        A short press that never repeated was somebody tapping: a tap is not
+        a hold, and it banks nothing. A long down -- or one that repeated --
+        was the hold, and it keeps its fill right through its own release:
+        the compositor may be about to hand the repeats back.
+
+        The compositor lifts the key once. A *second* release inside one fill
+        is not a compositor, it is a hand -- deliberate half-second taps that
+        banked the first press would otherwise be able to add up to a hold
+        they never held. The second release discharges the whole bank.
+        """
+        if key not in self.keys:
+            return
+        if self._down_from is not None:
+            down = time.monotonic() - self._down_from
+            if down < self.tap_seconds and not self._down_repeated:
+                self._started = None
+            elif self._releases_in_fill:
+                # The second one, wrecked out: taps cannot add up through
+                # banking, and no compositor lifts twice.
+                self._started = None
+                self._releases_in_fill = 0
+            else:
+                self._releases_in_fill += 1
+            self._down_from = None
+            self._down_repeated = False
 
     # -- what the player sees ------------------------------------------------
+    @property
+    def holding(self) -> bool:
+        """True while the fill is alive enough to paint."""
+        return self._started is not None and (
+            time.monotonic() - self._last_press <= self.seconds
+        )
+
     @property
     def progress(self) -> float:
         """How far through the hold, 0.0 to 1.0."""
         if self._started is None:
             return 0.0
-        # A gap this long means the key came up, and the next press starts over.
-        if time.monotonic() - self._last_press > self.reset_after:
+        now = time.monotonic()
+        if now - self._last_press > self.seconds:
             self._started = None
             return 0.0
-        return min(1.0, (time.monotonic() - self._started) / self.seconds)
+        return min(1.0, (now - self._started) / self.seconds)
 
     def bar(self) -> str:
         """The bar as plain text; the screen decides how to colour it."""
         filled = round(self.progress * BAR_CELLS)
         return "█" * filled + "░" * (BAR_CELLS - filled)
-
-    # -- internals -----------------------------------------------------------
-    @property
-    def _last_press(self) -> float:
-        return self._presses[-1] if self._presses else 0.0
-
-    def _deliberate(self) -> bool:
-        """Enough presses, each after a real pause, to mean somebody is trying.
-
-        Counting *slow gaps* rather than the total span, and that distinction is
-        the whole rule. A span grows as a held key repeats, so a long hold would
-        eventually look deliberate and the bar would never be seen to fill. Slow
-        gaps do not: a held key produces none, and three taps produce two.
-
-        Not "every gap must be slow" either -- one quick press followed by a
-        pause and then two more is plainly somebody trying, and requiring every
-        gap would throw that away for nothing.
-        """
-        if len(self._presses) < self.fallback_presses:
-            return False
-        gaps = [b - a for a, b in zip(self._presses, self._presses[1:])]
-        slow = sum(1 for gap in gaps if gap > self.reset_after)
-        return slow >= self.fallback_presses - 1

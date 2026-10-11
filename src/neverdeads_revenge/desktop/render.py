@@ -12,6 +12,9 @@ build a buffer and read the cells back without a screen attached.
 
 from __future__ import annotations
 
+from PySide6.QtCore import QRect
+from PySide6.QtGui import QImage, QPainter
+
 from neverdeads_revenge.game.npcs import NPC_COLOR, NPC_GLYPH
 from neverdeads_revenge.game.prologue import legend_rows
 from neverdeads_revenge.game.state import GameState, LogKind
@@ -19,22 +22,26 @@ from neverdeads_revenge.world.generator import ESCAPE_DEPTH
 from neverdeads_revenge.world.items import (
     AMULET_GLYPH,
     ARMOUR_GLYPH,
+    CHEST_GLYPH,
     ITEMS,
     WEAPON_GLYPH,
 )
 from neverdeads_revenge.world.tiles import Tile
 
 from .buffer import PatternBuffer
-from .theme import Style, parse_style
+from .chrome import ASH, rule
+from .theme import BACKGROUND, Style, parse_style
 
 __all__ = [
     "SIDEBAR",
     "BOTTOM",
-    "CURSES_WIDTH",
-    "MARKS_WIDTH",
     "HUD_WIDTH",
     "regions",
+    "viewport",
+    "screen_point",
     "draw_game",
+    "paste_log",
+    "paste_sidebar",
     "draw_title",
     "hud_lines",
     "marks_names",
@@ -43,11 +50,8 @@ __all__ = [
 
 #: The sidebar is a fixed strip, exactly as wide as the terminal's.
 SIDEBAR = 34
-#: The bottom row's height: the log and the two columns.
-BOTTOM = 10
-#: The two columns beside the log, widths unchanged from the terminal build.
-CURSES_WIDTH = 16
-MARKS_WIDTH = 22
+#: The bottom row's height: the log, pasted smaller, and nothing else.
+BOTTOM = 7
 #: What the HUD wraps at, inside the sidebar's content box.
 HUD_WIDTH = SIDEBAR - 4
 
@@ -66,7 +70,7 @@ _KIND_STYLES: dict[LogKind, str] = {
 #: The frame a column is drawn in, and its headings. Matches ``marks.py``.
 _STYLE_BY_GROUP = {
     "curses": "red",
-    "gifts": "green",
+    "gifts": "bright_green",
     "effects": "cyan",
     "statuses": "yellow",
 }
@@ -84,54 +88,91 @@ _BAR_CELLS = 12
 
 # -- layout -------------------------------------------------------------------
 def regions(cols: int, rows: int) -> dict[str, tuple[int, int, int, int]]:
-    """The rectangles, in cells: map, sidebar, bottom, log, curses, marks.
+    """The rectangles, in cells: map, sidebar, and the log strip under the map.
 
-    The sidebar runs the full height on the right, and the bottom row sits under
-    the *map* rather than under everything -- exactly the split ``app.tcss``
-    drew. A bottom row that ran under the sidebar would put the columns on top
-    of the legend, which is what the first draft of this did.
+    The sidebar runs the full height on the right and owns everything on it --
+    the stats, a rule, the curses, gifts and effects, another rule, and the
+    legend. The bottom strip under the map is the log's alone; the columns used
+    to share it and moved into the sidebar, which is why their width constants
+    are gone.
     """
     map_w = max(1, cols - SIDEBAR)
     map_h = max(1, rows - BOTTOM)
     bottom_y = map_h
-    log_w = max(1, map_w - CURSES_WIDTH - MARKS_WIDTH)
     return {
         "map": (0, 0, map_w, map_h),
         "sidebar": (map_w, 0, SIDEBAR, rows),
         "bottom": (0, bottom_y, map_w, BOTTOM),
-        "log": (0, bottom_y, log_w, BOTTOM),
-        "curses": (log_w, bottom_y, CURSES_WIDTH, BOTTOM),
-        "marks": (log_w + CURSES_WIDTH, bottom_y, MARKS_WIDTH, BOTTOM),
+        "log": (0, bottom_y, map_w, BOTTOM),
     }
 
 
 # -- the map ------------------------------------------------------------------
+def viewport(state: GameState, map_w: int, map_h: int) -> tuple[int, int, int, int]:
+    """The dungeon window the map shows: ``(left, top, view_w, view_h)``.
+
+    One function for it and not three, because the map draws from it and the
+    effects have to land on what the map drew.
+    """
+    dungeon = state.dungeon_map
+    view_w = min(map_w, dungeon.width)
+    view_h = min(map_h, dungeon.height)
+    left = max(0, min(state.player.position[0] - view_w // 2, dungeon.width - view_w))
+    top = max(0, min(state.player.position[1] - view_h // 2, dungeon.height - view_h))
+    return left, top, view_w, view_h
+
+
+def screen_point(
+    state: GameState,
+    position,
+    cols: int,
+    rows: int,
+    cell_w: int,
+    cell_h: int,
+) -> tuple[float, float] | None:
+    """The centre of a dungeon square, as buffer pixels -- or ``None``.
+
+    The buffer is the *camera*, not the dungeon: a square at `(38, 9)` is
+    somewhere else on the screen unless the camera happens to say so. Every
+    moving pixel needs this translation, and everything that skipped it drew in
+    the wrong place (which is exactly what the blood did).
+    """
+    areas = regions(cols, rows)
+    map_w, map_h = areas["map"][2], areas["map"][3]
+    left, top, view_w, view_h = viewport(state, map_w, map_h)
+    x, y = position
+    if not (left <= x < left + view_w and top <= y < top + view_h):
+        return None
+    return ((x - left + 0.5) * cell_w, (y - top + 0.5) * cell_h)
+
+
 def draw_game(buffer: PatternBuffer, state: GameState) -> None:
-    """The whole play screen: map, sidebar, and the bottom row."""
+    """The whole play screen: map, sidebar, and the bottom strip.
+
+    The log is *not* drawn here: it is a smaller face than the rest of the
+    frame, so it is pasted on afterwards by :func:`paste_log`, straight onto the
+    rendered image. What this leaves behind is the panel the log sits on.
+    """
     buffer.clear()
     areas = regions(buffer.cols, buffer.rows)
     _draw_map(buffer, state, areas["map"])
     _draw_sidebar(buffer, state, areas["sidebar"])
-    _draw_log(buffer, state, areas["log"])
-    _draw_column(buffer, state, areas["curses"], ("curses",))
-    _draw_column(buffer, state, areas["marks"], ("gifts", "effects"))
 
 
 def _draw_map(buffer, state, area) -> None:
     x0, y0, width, height = area
     dungeon = state.dungeon_map
-    view_w = min(width, dungeon.width)
-    view_h = min(height, dungeon.height)
-    left = max(0, min(state.player.position[0] - view_w // 2, dungeon.width - view_w))
-    top = max(0, min(state.player.position[1] - view_h // 2, dungeon.height - view_h))
+    left, top, view_w, view_h = viewport(state, width, height)
 
     for y in range(view_h):
         for x in range(view_w):
             position = (left + x, top + y)
             glyph, style = _cell_content(position, state)
             if position in state.hits:
-                style = parse_style(f"{style} reverse") if isinstance(style, str) else style
-            buffer.put(x0 + x, y0 + y, glyph, style if isinstance(style, Style) else parse_style(style))
+                # A square something struck this turn flashes in reverse --
+                # parsed onto the cell's own style, so the wall stays a wall.
+                style = parse_style("reverse", style)
+            buffer.put(x0 + x, y0 + y, glyph, style)
 
 
 def _cell_content(position, state: GameState) -> tuple[str, Style]:
@@ -170,29 +211,115 @@ def _cell_content(position, state: GameState) -> tuple[str, Style]:
 
 # -- the sidebar --------------------------------------------------------------
 def _draw_sidebar(buffer, state, area) -> None:
+    """The HUD in the big face, then a rule, and nothing else.
+
+    Everything under that rule belongs to the small face -- the glance groups
+    and the legend -- which is pasted straight onto the frame afterwards
+    (:func:`paste_sidebar`). The old blank row between stats and rule is gone
+    too: a rule drawn directly under the last stat stands closer than a
+    paragraph gap, and the panel was half air.
+    """
     x0, y0, width, height = area
     y = y0
     for text, style in hud_lines(state):
         buffer.text(x0 + 1, y, text[: width - 2], parse_style(style))
         y += 1
-    y += 1
-    for glyph, text in legend_rows(state.depth, state.hero):
-        if glyph:
-            buffer.put(x0 + 1, y, glyph, parse_style(_legend_colour(glyph)))
-        buffer.text(x0 + 3, y, text[: width - 4], parse_style("grey70"))
-        y += 1
-        if y >= y0 + height:
+    rule(buffer, x0 + 1, y, width - 2, ASH)
+
+
+def small_face_top(state) -> int:
+    """The sidebar row the small face starts on: right under the rule."""
+    return len(hud_lines(state)) + 1
+
+
+def paste_sidebar(image, state, cols, rows, cell_w, cell_h, small) -> None:
+    """Everything under the HUD's rule, in one small face.
+
+    The glance groups first -- lower case now, they were shouting in a panel
+    meant for a glance, and the small face has no room for headlines anyway --
+    then a thin rule, then the legend. All of it measured from the same top row
+    the drawing above hands over, so the two can never drift apart.
+    """
+    areas = regions(cols, rows)
+    sx, sy, sw, _sh = areas["sidebar"]
+
+    painter = QPainter(image)
+    dim = parse_style("grey30").fg
+    top = (sy + small_face_top(state)) * cell_h
+    left = sx * cell_w + small.cell_w
+    text_x = left + small.cell_w * 2  # one cell for a glyph, one for air under it
+    text_w = (sx + sw) * cell_w - text_x - small.cell_w
+    chars = max(1, text_w // small.cell_w)
+
+    def draw(text: str, x: int, y: int, fg) -> None:
+        painter.setFont(small.normal)
+        painter.setPen(fg)
+        painter.drawText(QRect(x, y, text_w + small.cell_w, small.cell_h + 4), 0, text)
+
+    y = top
+    # The glance groups.
+    for kind in ("curses", "gifts", "effects", "statuses"):
+        if y + small.cell_h > rows * cell_h:
             break
+        draw(kind, left, y, dim)
+        y += small.cell_h
+        names = marks_names(state, kind)
+        if names:
+            for name in names:
+                if y + small.cell_h > rows * cell_h:
+                    break
+                draw(name[:chars], text_x, y, parse_style(_STYLE_BY_GROUP[kind]).fg)
+                y += small.cell_h
+        else:
+            draw("-", text_x, y, dim)
+            y += small.cell_h
+    y += small.cell_h // 3  # air between the groups and the legend
+    if y < rows * cell_h:
+        painter.setPen(dim)
+        painter.drawLine(left, y, (sx + sw) * cell_w - small.cell_w, y)
+        y += (small.cell_h * 3) // 2
+    # The legend.
+    for glyph, text in legend_rows(state.depth, state.hero):
+        if y + small.cell_h > rows * cell_h:
+            break
+        if glyph:
+            draw(glyph, left, y, parse_style(_legend_colour(glyph)).fg)
+            draw(text[:chars], text_x, y, parse_style("grey70").fg)
+        elif text:
+            draw(text[:chars], left, y, parse_style("grey70").fg)
+        y += small.cell_h
+    painter.end()
 
 
 def _legend_colour(glyph: str) -> str:
+    """The colour a legend row's glyph is drawn in.
+
+    The same colour the *map* draws the same glyph in, and one walker for each
+    family the map has: the people, the monsters, then the ground -- a spring
+    and its water colour, not a grey -- and only then the things lying there.
+    Ask an item last, because several things share a glyph's word and the map's
+    answer is the one a legend row is promising.
+    """
     from neverdeads_revenge.game.actors import ENEMIES
+    from neverdeads_revenge.world.items import CHEST_COLOR, COIN_COLOR, COIN_GLYPH
+    from neverdeads_revenge.world.tiles import Tile
 
     if glyph == NPC_GLYPH:
         return NPC_COLOR
+    if glyph == COIN_GLYPH:
+        # A coin is not in the item table: it is made, not rolled, and its
+        # colour is a constant the map has been using all along.
+        return COIN_COLOR
+    if glyph == CHEST_GLYPH:
+        return CHEST_COLOR
     for template in ENEMIES.values():
         if template.glyph == glyph:
             return template.color
+    for tile in Tile:
+        if tile.glyph == glyph:
+            # Terrain first for the spring and the stairs, which the item table
+            # never hears about.
+            return tile.color
     for item in ITEMS.values():
         if item.glyph == glyph:
             return item.color
@@ -230,9 +357,13 @@ def hud_lines(state: GameState) -> list[tuple[str, str]]:
     lines.append((f"{speed}  ARM {player.armor}  EVA {player.evasion}", "bold white"))
 
     if state.revenge_stacks:
+        # Name the grant by its own name, not by the system's: BLACK TIDE means
+        # a different thing to play around than FROZEN FORTRESS, and neither is
+        # just "revenge". And the ceiling with it, because the ceiling is
+        # invisible otherwise.
         lines.append(
             (
-                f"REVENGE x{state.revenge_stacks}/{player.trait.cap}  "
+                f"{player.trait.title} x{state.revenge_stacks}/{player.trait.cap}  "
                 f"{player.trait.describe(state.revenge_stacks)}",
                 "bold green",
             )
@@ -279,40 +410,49 @@ def log_style(kind: LogKind) -> str:
     return _KIND_STYLES.get(kind, "white")
 
 
-def _draw_log(buffer, state, area) -> None:
-    x0, y0, width, height = area
-    # The newest lines sit at the bottom, so the eye finds them where it left
-    # them. Only as many as fit; the older ones have scrolled away.
-    visible = state.log[-(height - 2) :]
-    y = y0 + height - 1 - len(visible)
+def paste_log(
+    image, state: GameState, cols: int, rows: int, cell_w: int, cell_h: int, small
+) -> None:
+    """Draw the combat log straight onto a rendered frame.
+
+    The log gets a smaller face than the rest of the frame, and that is the one
+    place a mixed size pays for itself: a battle is words, and words a player is
+    reading while deciding what to press next are worth more of the frame than
+    the ground they are printed on. The smaller face fits more of them into the
+    same ten rows, without shrinking anything the player aims with.
+    """
+    areas = regions(cols, rows)
+    x0, y0, width, height = areas["log"]
+    # Aligned with the columns beside it: their headings sit one row into the
+    # bottom strip, so the log starts there too and shares its floor line with
+    # them. A couple of its rows go for it, and the three panels sit on one top
+    # line instead of two.
+    rect = QRect(x0 * cell_w, (y0 + 1) * cell_h, width * cell_w, (height - 1) * cell_h)
+
+    painter = QPainter(image)
+    painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, False)
+    # The log's own panel: drawn solid rather than left to whatever the frame
+    # had underneath, which is nothing at all now that the cells are clear.
+    painter.fillRect(rect, BACKGROUND)
+
+    line_h = small.cell_h
+    lines_fit = max(1, rect.height() // line_h)
+    visible = state.log[-lines_fit:]
+    left = rect.left() + small.cell_w * 2  # still clear of the corner
+    text_w = rect.right() - left - small.cell_w
+    y = rect.bottom() - line_h * len(visible) + 1
     for entry in visible:
-        buffer.text(x0 + 1, y, entry.text[: width - 2], parse_style(log_style(entry.kind)))
-        y += 1
-
-
-def _draw_column(buffer, state, area, kinds) -> None:
-    x0, y0, width, height = area
-    y = y0 + 1
-    budget = height - 2
-    shown = 0
-    for kind in kinds:
-        if shown >= budget:
-            break
-        buffer.text(x0 + 1, y, kind.upper(), parse_style("dim"))
-        y += 1
-        shown += 1
-        names = marks_names(state, kind)
-        if not names:
-            buffer.put(x0 + 1, y, "-", parse_style("dim"))
-            y += 1
-            shown += 1
-            continue
-        for name in names:
-            if shown >= budget:
-                break
-            buffer.text(x0 + 1, y, name[: width - 2], parse_style(_STYLE_BY_GROUP[kind]))
-            y += 1
-            shown += 1
+        style = parse_style(log_style(entry.kind))
+        painter.setPen(style.fg)
+        chars = max(1, text_w // small.cell_w)
+        painter.setFont(small.normal)
+        painter.drawText(
+            QRect(left, y, text_w, line_h + 4),
+            0,
+            entry.text[:chars],
+        )
+        y += line_h
+    painter.end()
 
 
 def marks_names(state: GameState, kind: str) -> list[str]:

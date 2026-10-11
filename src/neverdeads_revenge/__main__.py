@@ -42,6 +42,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.sound_log:
         os.environ["NEVERDEADS_REVENGE_SOUND_LOG"] = args.sound_log
 
+    # Wayland's input-method plumbing logs a protest at every surface change
+    # ("trying to disable a surface nothing is focused on") -- a known Qt
+    # quirk, and pure noise for a game that does all of its own input
+    # handling. Silenced before Qt starts; nothing else in qt.qpa is muted.
+    from PySide6.QtCore import QLoggingCategory
+
+    QLoggingCategory.setFilterRules("qt.qpa.wayland.textinput=false\n")
+
     if args.testrun:
         from .persistence import grant_test_save
 

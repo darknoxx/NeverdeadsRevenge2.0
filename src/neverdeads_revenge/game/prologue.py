@@ -20,7 +20,14 @@ from __future__ import annotations
 from ..game.actors import ENEMIES, HEROES, Hero, scale_template
 from ..game.npcs import NPC_GLYPH
 from ..world.generator import ESCAPE_DEPTH
-from ..world.items import CHEST_GLYPH, COIN_GLYPH, ITEMS
+from ..world.items import (
+    AMULET_GLYPH,
+    ARMOUR_GLYPH,
+    CHEST_GLYPH,
+    COIN_GLYPH,
+    ITEMS,
+    WEAPON_GLYPH,
+)
 from ..world.tiles import Tile
 
 __all__ = [
@@ -52,11 +59,8 @@ PROLOGUE_TITLE = "Death is not the end. You were not granted even that."
 #: axe."), and it only works because the line before it is long. Nothing explains
 #: a mechanic; mechanics are explained when they are met.
 #:
-#: The line lengths are load-bearing. The pane does not scroll (any key dismisses
-#: the screen, so a player who needed to scroll could not), which means the story
-#: has to fit a 34-row terminal. Most lines are kept under 70 characters so they
-#: occupy one row each; the three that run long do so on purpose, for the beat
-#: they land on. ``tests/test_ui.py`` asserts the whole thing still fits.
+#: Line lengths stay under the width the desktop prologue wraps itself at, and
+#: the three that run longer do so on purpose, for the beat they land on.
 PROLOGUE: tuple[str, ...] = (
     "The last thing you remember is Karpas. The pass in the mountains, the mud, "
     "the cold coming up through your boots.",
@@ -119,12 +123,17 @@ def item_legend() -> list[tuple[str, str]]:
         if template.chest_only or template.slot is not None:
             continue
         rows.append((template.glyph, f"{template.name}, heals {template.heal}"))
+    # The worn things get a row *each* now. They used to share one row of
+    # glyphs -- three separate rows cost the terminal sidebar a row it did not
+    # have -- but a shared row could only carry one colour, and the three are
+    # three different things on the map: the map tells them apart by colour, so
+    # the legend has to.
+    #
     # The order the glyphs are first declared in, so the row matches the order
     # the map's own reference lists them in.
-    worn = " ".join(
-        dict.fromkeys(t.glyph for t in ITEMS.values() if t.slot is not None)
-    )
-    rows.append((worn, "weapon, armour, amulet"))
+    rows.append((WEAPON_GLYPH, "weapon"))
+    rows.append((ARMOUR_GLYPH, "armour"))
+    rows.append((AMULET_GLYPH, "amulet"))
     rows.append((CHEST_GLYPH, "a chest, and a price"))
     # The chronicle is deliberately *not* here, and the reason is what this
     # panel is for: everything else on it is a thing to avoid or a thing to
