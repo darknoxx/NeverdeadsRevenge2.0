@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from neverdeads_revenge.game.gifts import gift_by_key
 from neverdeads_revenge.game.lore import PAGE_COUNT, numeral
-from neverdeads_revenge.game.shop import ShopError, build_stock, buy, describe_item
+from neverdeads_revenge.game.shop import ShopError, WILD_OFFERS, build_stock, buy, describe_item
 from neverdeads_revenge.world.items import ITEMS
 
 from ..chrome import ASH, BONE, BLOOD, PURPLE, box, menu, rule
@@ -107,13 +107,34 @@ class HelpScreen(_Panel):
 
 
 class PackScreen(_Panel):
-    """What is being carried."""
+    """What is being carried -- a small box this time.
+
+    The pack holds draughts and nothing else, so a shelf the size of the
+    chronicle is a statement about the inventory the game does not have. Its
+    own draw, modest width and content-driven height, the scroll kept for the
+    pockets a hoarder grows into.
+    """
 
     title = "THE PACK"
 
     def __init__(self, state) -> None:
         super().__init__()
         self.state = state
+
+    def draw(self, buffer, app) -> None:
+        body = self.lines(app)
+        width = min(buffer.cols - 8, 46)
+        height = min(buffer.rows - 2, max(len(body) + 6, 8))
+        x, y = (buffer.cols - width) // 2, (buffer.rows - height) // 2
+        box(buffer, x, y, width, height, title=self.title, border=BLOOD, fill=True)
+        window = height - 4
+        self._body_size = (len(body), window)
+        self.offset = max(0, min(self.offset, max(0, len(body) - window)))
+        for i, (text, style) in enumerate(body[self.offset : self.offset + window]):
+            buffer.text(x + 3, y + 2 + i, text[: width - 6], parse_style(style))
+        rule(buffer, x + 1, y + height - 2, width - 2, ASH)
+        more = "  ▼" if self.offset + window < len(body) else ""
+        buffer.text(x + 3, y + height - 1, (self.hint + more)[: width - 6], parse_style(ASH))
 
     def lines(self, app) -> list[tuple[str, str]]:
         counts: dict[str, int] = {}
@@ -141,7 +162,22 @@ class CharacterScreen(_Panel):
         super().__init__()
         self.state = state
 
+    def _detail(self, text: str, app) -> list[str]:
+        """A rule's fine print, wrapped to the sheet's own width, indented
+        under the name it explains. One long line truncated at the frame was
+        the difference between a rule and a rumour."""
+        from .dialogs import wrap
+
+        buffer = app._buffer
+        cols = buffer.cols if buffer is not None else 96
+        room = max(16, min(cols - 4, 74) - 6 - 10)
+        return wrap(text, room)
+
     def lines(self, app) -> list[tuple[str, str]]:
+
+        def detail(text: str) -> list[tuple[str, str]]:
+            return [(f"          {piece}", ASH) for piece in self._detail(text, app)]
+
         p = self.state.player
         low, high = p.damage_range
         rows = [
@@ -162,20 +198,34 @@ class CharacterScreen(_Panel):
                 rows.append((f"  {slot:<7} —", ASH))
             else:
                 rows.append((f"  {slot:<7} {item.name}", BONE))
-                rows.append((f"          {describe_item(ITEMS[item.item_id])}", ASH))
+                rows.extend(detail(describe_item(ITEMS[item.item_id])))
         if self.state.gifts:
             rows.append(("", ""))
-            rows.append(("GIFTS", f"bold green"))
+            rows.append(("GIFTS", "bold green"))
             for key in sorted(self.state.gifts):
                 gift = gift_by_key(key)
-                if gift is not None:
-                    rows.append((f"  {gift.name}", "green"))
-                    rows.append((f"          {gift.blurb}", ASH))
+                if gift is None:
+                    continue
+                rows.append((f"  {gift.name}", "green"))
+                rows.extend(detail(gift.blurb))
+        if self.state.wilds:
+            # The run's own bargains: the same pitch-and-catch the shop read
+            # out when they were sold, because a deal whose terms disappear
+            # after one visit is not a deal the player can honour.
+            rows.append(("", ""))
+            rows.append(("EFFECTS", "bold yellow"))
+            for key in sorted(self.state.wilds):
+                offer = WILD_OFFERS.get(key)
+                if offer is None:
+                    continue
+                rows.append((f"  {offer.name}", "yellow"))
+                rows.extend(detail(f"{offer.pitch}; {offer.catch}"))
         if self.state.curses:
             rows.append(("", ""))
             rows.append(("CURSES", "bold red"))
             for curse in self.state.curses:
                 rows.append((f"  {curse.name}", "red"))
+                rows.extend(detail(curse.price))
         return rows
 
 
@@ -359,6 +409,10 @@ class ShopScreen(Screen):
             except ShopError as refusal:
                 self.message = str(refusal)
             else:
+                # The till has a bell. A purchase that makes no noise feels
+                # like it never happened, and the second-guesser walks back
+                # through the shelves counting.
+                app.play("coin")
                 app.save_progress()
                 self._restock(app)
             return True

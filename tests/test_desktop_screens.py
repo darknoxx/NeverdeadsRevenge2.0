@@ -1169,3 +1169,140 @@ def test_nothing_is_hidden_under_immutable_things():
         "no seed reaching depth 10 ever met the hunter; hunter_chance "
         f"at depth 10 is {hunter_chance(10)}"
     )
+
+
+
+
+
+
+# -- what the dark handed over reads like it does -----------------------------
+def test_the_sheet_says_what_curses_gifts_and_effects_do(app):
+    """The sheet was a list of names: a curse on the wall with no price in
+    sight. Now every name carries the sentence that names its shape."""
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.desktop.screens.menus import CharacterScreen
+    from neverdeads_revenge.game.curses import CURSES
+    from neverdeads_revenge.game.gifts import GIFTS
+
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)
+    state = app.run
+    curse = next(iter(CURSES.values()))
+    gift = GIFTS["momentum"]
+    forgotten = list(state.curses)
+    state.curses = [curse]
+    state.gifts.add(gift.key)
+    state.wilds.add("greed")
+
+    lines = CharacterScreen(state).lines(app)
+    # Detail lines are wrapped under their name with the 10-space indent; peel
+    # the indent and join with spaces so a sentence can be asserted as itself
+    # rather than as its wrapping.
+    sheet = " ".join(
+        text.replace("          ", "", 1) for text, _ in lines if text
+    )
+
+    assert curse.name in sheet, "the curse went unnamed"
+    assert curse.price in sheet, "the curse has no price with it"
+    assert gift.name in sheet, "the gift went unnamed"
+    assert gift.blurb in sheet, "the gift has no rule with it"
+    assert "coins are worth double" in sheet, "the bargain's tune is unsung"
+    assert "everything below is a fifth tougher" in sheet, "its catch went missing"
+
+    state.curses = forgotten
+    state.gifts.discard(gift.key)
+    state.wilds.discard("greed")
+
+
+def test_the_pack_is_a_small_window(app, font):
+    """The pack holds draughts and nothing else; a shelf drawn over the whole
+    glass for three lines of it was working the room too hard."""
+    from neverdeads_revenge.desktop.buffer import PatternBuffer
+    from neverdeads_revenge.desktop.screens.menus import PackScreen
+
+    class _Pack:
+        inventory: list = []
+
+    screen = PackScreen(_Pack())
+    buffer = PatternBuffer(70, 30, font)
+    screen.draw(buffer, app)
+
+    widest = 0
+    for row in buffer.cells:
+        chars = "".join(cell.char for cell in row)
+        if "THE PACK" in chars:
+            inked = [i for i, char in enumerate(chars) if char != " "]
+            widest = inked[-1] - inked[0] + 1
+    assert 0 < widest <= 46, f"the pack still spans {widest} columns"
+
+
+def test_equipment_announces_itself_on_pickup(app):
+    """Picking up a blade said one log line and was gone; for a roll that
+    trades one sword for another, there is no reading what arrived twice."""
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.world.items import ITEMS, make_item
+
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)
+    state = app.run
+    state.dungeon_map.add_item(state.player.position, make_item(ITEMS["tooth"]))
+
+    press(app, Qt.Key.Key_Return)  # enter on the ground: taken
+    assert top(app) == "InfoScreen", "the pickup stayed in the log"
+    body = app.screens[-1]._body().lower()
+    assert "the rusted tooth" in body, "the blade went unnamed"
+    assert "+1 damage" in body, "the blade's shape went unsaid"
+    assert f"{type(app).__name__}" != "never", "sanity"
+
+    press(app, Qt.Key.Key_Return)  # read, then back to the dark
+    assert top(app) == "GameScreen"
+
+
+def test_a_chest_curse_reads_itself_out(app):
+    """A chest asks before it charges; when the answer buys a curse, the
+    curse's own sentence opens a page instead of scrolling past in four turns."""
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.game.curses import CURSES
+    from neverdeads_revenge.world.items import make_chest
+
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)
+    state = app.run
+    curse_key = next(iter(CURSES))
+    state.dungeon_map.add_item(state.player.position, make_chest(curse_key, None))
+
+    press(app, Qt.Key.Key_Return)  # the chest asks
+    assert top(app) == "ChestScreen"
+    press(app, Qt.Key.Key_Enter)  # open it: the price is paid
+    assert top(app) == "InfoScreen", "the curse scrolled away unread"
+    body = app.screens[-1]._body().lower()
+    assert CURSES[curse_key].name.lower() in body, "the curse went unnamed"
+    assert CURSES[curse_key].price.lower()[:16] in body, "the price went unsaid"
+    press(app, Qt.Key.Key_Return)
+    assert top(app) == "GameScreen"
+
+
+def test_the_shop_bell_rings_on_a_purchase(app):
+    """The till has a bell. A purchase that makes no noise is a purchase the
+    second-guesser walks back to count again."""
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.desktop.screens.menus import ShopScreen
+
+    played: list[str] = []
+    original = app.play
+    app.play = lambda name=None: played.append(name if name else "coin")  # type: ignore[assignment]
+
+    try:
+        app.push(ShopScreen())
+        app.progress.gold = 200
+        app.redraw()
+        press(app, Qt.Key.Key_Enter)  # buy the first shelf line
+        press(app, Qt.Key.Key_Escape)  # leave the shop again
+    finally:
+        app.play = original
+
+    assert "coin" in played, "a purchase happened in silence"

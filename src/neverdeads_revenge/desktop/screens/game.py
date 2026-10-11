@@ -105,6 +105,8 @@ class GameScreen(Screen):
         gold = run.gold
         gifts = set(run.gifts)
         curses = len(run.curses)
+        curse_keys = {curse.key for curse in run.curses}
+        equipment = dict(run.player.equipment)
 
         result = perform_action(run, action)
         app.play_after(before)
@@ -116,6 +118,59 @@ class GameScreen(Screen):
             return
         if result.died or result.escaped:
             self._game_over(app, won=result.escaped)
+            return
+        self._announce(
+            app,
+            gifts,
+            curse_keys,
+            equipment,
+        )
+
+    def _announce(self, app, gifts_before, curse_keys_before, equipment_before) -> None:
+        """Read out what just arrived: the pickup dialog.
+
+        The log scrolls in four turns and the sidebar is decoration, so a thing
+        whose shape is its own price gets a page: a blade picked up says what
+        it is and what it does, a curse says its sentence, a gift says its
+        rule. Old enders are skipped -- there is no more dark left to yell
+        into once the run is over.
+        """
+        from neverdeads_revenge.game.gifts import gift_by_key
+        from neverdeads_revenge.game.shop import describe_item
+        from neverdeads_revenge.world.items import ITEMS
+
+        from .dialogs import InfoScreen
+
+        run = self.state
+        for key in sorted(run.gifts - gifts_before):
+            gift = gift_by_key(key)
+            if gift is not None:
+                app.push(InfoScreen("A GIFT", gift.name, gift.blurb))
+        for curse in run.curses:
+            if curse.key in curse_keys_before:
+                continue
+            # The curse's own price is the sentence the chest dialog reads;
+            # the modifier list is the fine print where one exists.
+            text = curse.price
+            extra = ", ".join(curse.modifiers.describe())
+            if extra:
+                text = f"{text}. {extra}."
+            app.push(InfoScreen("A CURSE", curse.name, text))
+        for slot, item in run.player.equipment.items():
+            worn = equipment_before.get(slot)
+            if worn is not None and worn.item_id == item.item_id:
+                continue
+            template = ITEMS.get(item.item_id)
+            if template is None:
+                continue
+            article = "AN" if template.kind in ("armour", "amulet") else "A"
+            app.push(
+                InfoScreen(
+                    f"{article} {template.kind.upper()}",
+                    item.name,
+                    describe_item(template),
+                )
+            )
 
     def _effects(self, app, hp, gold, gifts, curses, level_before) -> None:
         """The moving pixels: what just happened, thrown at the screen.
@@ -172,10 +227,21 @@ class GameScreen(Screen):
             return
         app.play("chest")
         action = Action.OPEN_CHEST if answer == OPEN else Action.TAKE_FAME
-        result = perform_action(self.state, action)
-        app.play_after((len(self.state.log), self.state.depth, self.state.level))
+        run = self.state
+        gifts_before = set(run.gifts)
+        curse_keys_before = {curse.key for curse in run.curses}
+        equipment_before = dict(run.player.equipment)
+        result = perform_action(run, action)
+        app.play_after((len(run.log), run.depth, run.level))
         if result.died or result.escaped:
             self._game_over(app, won=result.escaped)
+            return
+        self._announce(
+            app,
+            gifts_before,
+            curse_keys_before,
+            equipment_before,
+        )
 
     def _file_pages(self, app) -> None:
         """Bank a found page at once, and open it.
