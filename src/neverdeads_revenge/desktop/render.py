@@ -40,7 +40,7 @@ __all__ = [
     "screen_point",
     "draw_game",
     "paste_log",
-    "paste_legend",
+    "paste_sidebar",
     "draw_title",
     "hud_lines",
     "marks_names",
@@ -208,101 +208,82 @@ def _cell_content(position, state: GameState) -> tuple[str, Style]:
 
 # -- the sidebar --------------------------------------------------------------
 def _draw_sidebar(buffer, state, area) -> None:
-    """The HUD in the big face, then a rule, then what is on you, then a rule.
+    """The HUD in the big face, then a rule, and nothing else.
 
-    Everything below the second rule belongs to the legend, which is pasted on
-    afterwards in the log's own smaller face (:func:`paste_legend`) -- which is
-    why the drawing stops where it does, and why :func:`sidebar_layout` has to
-    agree with it row for row.
+    Everything under that rule belongs to the small face -- the glance groups
+    and the legend -- which is pasted straight onto the frame afterwards
+    (:func:`paste_sidebar`). The old blank row between stats and rule is gone
+    too: a rule drawn directly under the last stat stands closer than a
+    paragraph gap, and the panel was half air.
     """
     x0, y0, width, height = area
     y = y0
     for text, style in hud_lines(state):
         buffer.text(x0 + 1, y, text[: width - 2], parse_style(style))
         y += 1
-    y += 1  # a blank row, as always under the HUD
-    rule(buffer, x0 + 1, y, width - 2, ASH)
-    y += 1
-    for kind in ("curses", "gifts", "effects"):
-        y = _draw_mark_group(buffer, state, x0 + 2, y, width - 3, kind)
     rule(buffer, x0 + 1, y, width - 2, ASH)
 
 
-def _draw_mark_group(buffer, state, x: int, y: int, width: int, kind: str) -> int:
-    """One glance group, its heading and its names. Returns the next free row."""
-    buffer.text(x, y, kind.upper()[:width], parse_style("dim"))
-    y += 1
-    names = marks_names(state, kind)
-    if not names:
-        buffer.put(x, y, "-", parse_style("dim"))
-        return y + 1
-    for name in names:
-        buffer.text(x, y, name[:width], parse_style(_STYLE_BY_GROUP[kind]))
-        y += 1
-    return y
+def small_face_top(state) -> int:
+    """The sidebar row the small face starts on: right under the rule."""
+    return len(hud_lines(state)) + 1
 
 
-def marks_rows(state) -> int:
-    """How many rows the glance groups take in the sidebar.
+def paste_sidebar(image, state, cols, rows, cell_w, cell_h, small) -> None:
+    """Everything under the HUD's rule, in one small face.
 
-    This and :func:`_draw_mark_group` are the same question asked twice, of the
-    same names, and it is what tells the legend where it may begin without
-    either of them measuring the screen differently.
-    """
-    total = 0
-    for kind in ("curses", "gifts", "effects"):
-        total += 1  # the heading
-        names = marks_names(state, kind)
-        total += len(names) if names else 1  # the names, or the dash
-    return total
-
-
-def sidebar_layout(state) -> int:
-    """The sidebar row the legend starts on.
-
-    The HUD's lines, the blank row under them, a rule, the glance groups and a
-    second rule -- the legend begins under the last of it, and shares this
-   	counting with the drawing above by reading both off the same functions.
-    """
-    return len(hud_lines(state)) + 1 + 1 + marks_rows(state) + 1
-
-
-def paste_legend(
-    image, state: GameState, cols: int, rows: int, cell_w: int, cell_h: int, small
-) -> None:
-    """Draw the legend straight onto a rendered frame, in the log's own face.
-
-    The same trade the log made: the legend is a reference the player glances
-    at, so it gets the smaller face and reads more of what the dungeon is
-    rather than less. The HUD above it stays big -- it is the panel a fight is
-    read from, not one glanced at.
+    The glance groups first -- lower case now, they were shouting in a panel
+    meant for a glance, and the small face has no room for headlines anyway --
+    then a thin rule, then the legend. All of it measured from the same top row
+    the drawing above hands over, so the two can never drift apart.
     """
     areas = regions(cols, rows)
-    sx, sy, sw, sh = areas["sidebar"]
+    sx, sy, sw, _sh = areas["sidebar"]
 
     painter = QPainter(image)
-    top = (sy + sidebar_layout(state)) * cell_h
+    dim = parse_style("grey30").fg
+    top = (sy + small_face_top(state)) * cell_h
     left = sx * cell_w + small.cell_w
-    glyph_x = left
-    text_x = left + small.cell_w * 2
+    text_x = left + small.cell_w * 2  # one cell for a glyph, one for air under it
     text_w = (sx + sw) * cell_w - text_x - small.cell_w
+    chars = max(1, text_w // small.cell_w)
+
+    def draw(text: str, x: int, y: int, fg) -> None:
+        painter.setFont(small.normal)
+        painter.setPen(fg)
+        painter.drawText(QRect(x, y, text_w + small.cell_w, small.cell_h + 4), 0, text)
+
     y = top
+    # The glance groups.
+    for kind in ("curses", "gifts", "effects"):
+        if y + small.cell_h > rows * cell_h:
+            break
+        draw(kind, left, y, dim)
+        y += small.cell_h
+        names = marks_names(state, kind)
+        if names:
+            for name in names:
+                if y + small.cell_h > rows * cell_h:
+                    break
+                draw(name[:chars], text_x, y, parse_style(_STYLE_BY_GROUP[kind]).fg)
+                y += small.cell_h
+        else:
+            draw("-", text_x, y, dim)
+            y += small.cell_h
+    y += small.cell_h // 3  # air between the groups and the legend
+    if y < rows * cell_h:
+        painter.setPen(dim)
+        painter.drawLine(left, y, (sx + sw) * cell_w - small.cell_w, y)
+        y += (small.cell_h * 3) // 2
+    # The legend.
     for glyph, text in legend_rows(state.depth, state.hero):
         if y + small.cell_h > rows * cell_h:
             break
         if glyph:
-            style = parse_style(_legend_colour(glyph))
-            painter.setFont(small.normal)
-            painter.setPen(style.fg)
-            painter.drawText(QRect(glyph_x, y, small.cell_w * 2, small.cell_h + 4), 0, glyph)
-            painter.setFont(small.normal)
-            painter.setPen(parse_style("grey70").fg)
-            chars = max(1, text_w // small.cell_w)
-            painter.drawText(QRect(text_x, y, text_w, small.cell_h + 4), 0, text[:chars])
+            draw(glyph, left, y, parse_style(_legend_colour(glyph)).fg)
+            draw(text[:chars], text_x, y, parse_style("grey70").fg)
         elif text:
-            legend_rule = parse_style("grey30").fg
-            painter.setPen(legend_rule)
-            painter.drawLine(left, y + small.cell_h // 2, (sx + sw) * cell_w - small.cell_w, y + small.cell_h // 2)
+            draw(text[:chars], left, y, parse_style("grey70").fg)
         y += small.cell_h
     painter.end()
 

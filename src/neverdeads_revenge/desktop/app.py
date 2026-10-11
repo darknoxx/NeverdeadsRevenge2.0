@@ -178,7 +178,7 @@ class DesktopApp(QMainWindow):
             screen.draw(self._buffer, self)
         image = self._buffer.render()
         if getattr(self.screens[-1], "smaller_face", False) and self.run is not None:
-            from .render import paste_legend, paste_log
+            from .render import paste_log, paste_sidebar
 
             paste_log(
                 image,
@@ -189,7 +189,7 @@ class DesktopApp(QMainWindow):
                 self.font.cell_h,
                 self.font_small,
             )
-            paste_legend(
+            paste_sidebar(
                 image,
                 self.run,
                 self._buffer.cols,
