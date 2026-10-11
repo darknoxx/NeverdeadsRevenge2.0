@@ -31,6 +31,9 @@ def app(qapp):
 
     window = DesktopApp(seed=3, no_sound=True)
     window.view.resize(1280, 800)
+    # The premise is not the subject of most of these tests; the one that needs
+    # it turns it back on itself.
+    window.prologue_seen = True
     window.redraw()
     return window
 
@@ -346,3 +349,103 @@ def test_the_title_takes_side_arrows_and_no_others(app):
     press(app, Qt.Key.Key_Up)
     down = screen.index
     assert up == down == 1, "up and down moved a sideways menu"
+
+
+# -- the premise, and the run that survives the terminal being closed ---------
+def test_the_prologue_shows_once_per_session(app):
+    """Once, between the choice and the floor -- and never twice, because a
+    premise told twice is a toll."""
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.desktop.screens.prologue import PrologueScreen
+
+    app.prologue_seen = False
+    press(app, Qt.Key.Key_Return)  # new run
+    press(app, Qt.Key.Key_Return)  # the hero: noxx
+
+    assert top(app) == "PrologueScreen"
+    press(app, Qt.Key.Key_Escape)  # skipping is allowed
+
+    assert top(app) == "GameScreen"
+
+    press(app, Qt.Key.Key_Escape)  # pause
+    press(app, Qt.Key.Key_Q, "q")  # quit to title, asked first
+    press(app, Qt.Key.Key_Y, "y")
+
+    press(app, Qt.Key.Key_Return)  # a second run
+    press(app, Qt.Key.Key_Return)
+    assert top(app) == "GameScreen", "the premise was told twice"
+
+
+def test_the_prologue_scrolls_and_a_hold_lets_it_go(app):
+    from PySide6.QtCore import Qt
+
+    import time
+
+    app.prologue_seen = False
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)
+    assert top(app) == "PrologueScreen"
+
+    screen = app.screens[-1]
+    before = screen.offset
+    press(app, Qt.Key.Key_Down)
+    assert screen.offset > before, "the story did not move"
+    press(app, Qt.Key.Key_Space)
+    assert screen.offset > before + 1, "space did not page it"
+
+    for _ in range(3):
+        press(app, Qt.Key.Key_Return)
+        time.sleep(0.3)
+    assert top(app) == "GameScreen"
+
+
+def test_a_run_survives_a_save_and_a_quit(app):
+    """Save and quit is the whole reason the pause's `s` is a `s`.
+
+    The slot holds the run; picking it up consumes it; and what comes back is
+    the run that was put down -- the floor, the health, the turn count.
+    """
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.desktop.screens.title import TitleScreen
+
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)  # into the run
+    state = app.run
+    state.player.stats.hp -= 3
+    depth, hp, turns, steps = state.depth, state.player.hp, state.total_turns, state.player.steps
+
+    press(app, Qt.Key.Key_Escape)  # pause
+    press(app, Qt.Key.Key_S, "s")  # save and quit
+    assert top(app) == "TitleScreen"
+    assert app.has_saved_run()
+    assert "c" in [key for key, _ in TitleScreen().items(app)], \
+        "the title did not offer the run back"
+
+    press(app, Qt.Key.Key_C, "c")  # continue
+    assert top(app) == "GameScreen"
+    assert app.run.depth == depth
+    assert app.run.player.hp == hp
+    assert app.run.total_turns == turns
+    assert app.run.player.steps == steps
+    assert not app.has_saved_run(), "the slot was not consumed"
+
+
+def test_a_run_saved_by_an_old_build_costs_the_run_and_not_the_game(app):
+    """A slot that cannot be read is refused, cleared, and the title offers a
+    new run rather than a crash."""
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.persistence import save_run
+
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Escape)  # pause...
+    press(app, Qt.Key.Key_Q, "q")  # ...and back to the title (the run is not saved)
+    press(app, Qt.Key.Key_Y, "y")
+    save_run({"version": 99, "hero": "noxx"})
+
+    press(app, Qt.Key.Key_C, "c")
+    assert top(app) == "TitleScreen", "a rubbish slot opened the dungeon"
+    assert not app.has_saved_run(), "the rubbish slot was not cleared"

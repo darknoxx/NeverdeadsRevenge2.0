@@ -91,6 +91,7 @@ class DesktopApp(QMainWindow):
         self.seed = seed if seed is not None else None
         self.seed_locked = seed is not None
         self.run = None
+        self.prologue_seen = False
         self.screens: list = [TitleScreen()]
         self._buffer: PatternBuffer | None = None
         self._grid = (0, 0)
@@ -298,6 +299,15 @@ class DesktopApp(QMainWindow):
         self.push(HeroSelectScreen())
 
     def begin_run(self, hero_key: str) -> None:
+        if not self.prologue_seen:
+            # The premise, told once, between the choice and the floor. A held
+            # enter lets it go; escape skips it; and every run after the first
+            # starts without it being repeated.
+            self.prologue_seen = True
+            from .screens.prologue import PrologueScreen
+
+            self.push(PrologueScreen(on_done=lambda: self.begin_run(hero_key)))
+            return
         # A fresh seed per run, unless the player pinned one with --seed. This
         # used to be one seed for the whole session, which meant every NEW RUN
         # was the same dungeon wearing yesterday's clothes.
