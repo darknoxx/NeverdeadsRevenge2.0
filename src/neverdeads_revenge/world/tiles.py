@@ -40,12 +40,12 @@ class Tile(Enum):
 
     @property
     def color(self) -> str:
-        """A Rich/Textual colour name for the glyph."""
+        """A colour name for the glyph, as the renderer's palette knows it."""
         return _COLORS[self]
 
     @property
     def background(self) -> str:
-        """A Rich/Textual background colour name."""
+        """A background colour name for the glyph."""
         return _BACKGROUNDS[self]
 
     @property

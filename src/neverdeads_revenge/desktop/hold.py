@@ -60,6 +60,7 @@ class HoldToContinue:
         self._last_press = 0.0
         self._down_from: float | None = None  # when the current down began
         self._down_repeated = False  # did the current down repeat yet?
+        self._releases_in_fill = 0  # lifts that stood unbought inside one fill
 
     def press(self, key: str, repeat: bool = False) -> bool:
         """Record a press of ``key``. True when the screen should go."""
@@ -69,10 +70,13 @@ class HoldToContinue:
         now = time.monotonic()
         if self._started is not None and now - self._last_press > self.seconds:
             # A gap longer than the hold itself: nothing could still be down,
-            # regardless of what events say. Whatever fill there was is cold.
+            # regardless of what events say. Whatever fill there was is cold,
+            # and the next press starts an entirely new bargain.
             self._started = None
+            self._releases_in_fill = 0
         if self._started is None:
             self._started = now
+            self._releases_in_fill = 0
         if not repeat:
             self._down_from = now
             self._down_repeated = False
@@ -88,6 +92,11 @@ class HoldToContinue:
         a hold, and it banks nothing. A long down -- or one that repeated --
         was the hold, and it keeps its fill right through its own release:
         the compositor may be about to hand the repeats back.
+
+        The compositor lifts the key once. A *second* release inside one fill
+        is not a compositor, it is a hand -- deliberate half-second taps that
+        banked the first press would otherwise be able to add up to a hold
+        they never held. The second release discharges the whole bank.
         """
         if key not in self.keys:
             return
@@ -95,6 +104,13 @@ class HoldToContinue:
             down = time.monotonic() - self._down_from
             if down < self.tap_seconds and not self._down_repeated:
                 self._started = None
+            elif self._releases_in_fill:
+                # The second one, wrecked out: taps cannot add up through
+                # banking, and no compositor lifts twice.
+                self._started = None
+                self._releases_in_fill = 0
+            else:
+                self._releases_in_fill += 1
             self._down_from = None
             self._down_repeated = False
 

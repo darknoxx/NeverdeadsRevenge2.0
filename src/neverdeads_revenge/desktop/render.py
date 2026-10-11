@@ -169,8 +169,10 @@ def _draw_map(buffer, state, area) -> None:
             position = (left + x, top + y)
             glyph, style = _cell_content(position, state)
             if position in state.hits:
-                style = parse_style(f"{style} reverse") if isinstance(style, str) else style
-            buffer.put(x0 + x, y0 + y, glyph, style if isinstance(style, Style) else parse_style(style))
+                # A square something struck this turn flashes in reverse --
+                # parsed onto the cell's own style, so the wall stays a wall.
+                style = parse_style("reverse", style)
+            buffer.put(x0 + x, y0 + y, glyph, style)
 
 
 def _cell_content(position, state: GameState) -> tuple[str, Style]:
@@ -256,7 +258,7 @@ def paste_sidebar(image, state, cols, rows, cell_w, cell_h, small) -> None:
 
     y = top
     # The glance groups.
-    for kind in ("curses", "gifts", "effects"):
+    for kind in ("curses", "gifts", "effects", "statuses"):
         if y + small.cell_h > rows * cell_h:
             break
         draw(kind, left, y, dim)

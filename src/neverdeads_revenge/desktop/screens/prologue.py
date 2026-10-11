@@ -31,8 +31,8 @@ _SCROLL_STEP: dict[str, int | None] = {
     "space": 6,
     "up": -2,
     "pageup": -6,
-    "home": 0,
-    "end": 0,
+    "home": None,
+    "end": None,
 }
 
 _FILLED = PURPLE

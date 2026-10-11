@@ -61,11 +61,10 @@ COUNTS_FAVOUR_EVERY = 13
 #: What the second mouth can hold on the first floor, plus one for every floor
 #: below it.
 #:
-#: It was a flat four. A flat four is reached by the second draught on floor
-#: three and then does nothing at all for the rest of the run -- and armour is a
-#: flat subtraction, so what it is worth depends entirely on what is hitting
-#: you. The cap has to move with the depth, the same way the monsters do, or the
-#: amulet is a floor-three trinket wearing a strong-tier price.
+#: armour is a flat subtraction, so what the cap is worth depends entirely on
+#: what is hitting you, and what hits you scales with the depth. The cap moves
+#: with the depth the same way the monsters do, or the amulet is a floor-N
+#: trinket wearing a strong-tier price.
 SECOND_MOUTH_BASE = 3
 
 
@@ -1186,9 +1185,9 @@ def _take_fame(state: GameState) -> ActionResult:
     the board and the board is the only fame there is, which is the joke.
 
     There is no ceiling on it and there does not need to be one -- a chest is
-    only ever placed for a curse the player has not already paid, so the six
-    curses are the ceiling. Taking all six is nearly a death sentence, and that
-    is the shape the wager should have.
+    only ever placed for a curse the player has not already paid, so the
+    thirteen curses are the ceiling. Taking all thirteen is nearly a death
+    sentence, and that is the shape the wager should have.
     """
     chest = state.dungeon_map.item_at(state.player.position)
     if chest is None or chest.kind != "chest":
@@ -1197,20 +1196,32 @@ def _take_fame(state: GameState) -> ActionResult:
     state.dungeon_map.remove_item(state.player.position)
 
     curse = curse_by_key(chest.curse)
-    if curse is not None and not any(c.key == curse.key for c in state.curses):
+    new_price = curse is not None and not any(
+        c.key == curse.key for c in state.curses
+    )
+    if new_price:
         state.add_curse(curse)
+    else:
+        # A price the wraith already charged is not fame in the bank: the
+        # wager pays out for courage, and this player is not paying. The
+        # old version read +1 fame on the shared multiplier either way.
+        state.say(
+            "The price was already paid, elsewhere. This wager pays nothing.",
+            LogKind.PLAIN,
+        )
 
-    state.fame += 1
-    state.say(
-        "You take the curse and leave the blade where it lies. "
-        "The dark will remember your name.",
-        LogKind.GOOD,
-    )
-    state.say(
-        f"FAME {state.fame}: this run is worth "
-        f"{state.score_multiplier:.2f}x.",
-        LogKind.GOOD,
-    )
+    if new_price:
+        state.fame += 1
+        state.say(
+            "You take the curse and leave the blade where it lies. "
+            "The dark will remember your name.",
+            LogKind.GOOD,
+        )
+        state.say(
+            f"FAME {state.fame}: this run is worth "
+            f"{state.score_multiplier:.2f}x.",
+            LogKind.GOOD,
+        )
 
     # A turn, like opening it. The bargain lands either way.
     state.turn += 1

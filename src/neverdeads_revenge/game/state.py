@@ -245,9 +245,11 @@ class GameState:
     #: floor is built, spent by the first blow that reaches you.
     ward_ready: bool = False
     #: MOMENTUM: consecutive steps taken in one direction, and which direction
-    #: that was. The walk loads it, the next blow spends it, and a turn resets
-    #: it. Per floor, like revenge -- a charge carried down the stairs would be
-    #: a charge for a fight that has not happened yet.
+    #: that was. The walk loads it, the next blow spends it, and a WAIT clears
+    #: it (deliberately only a WAIT: quaffing or opening a lid spends that
+    #: floor's turns without giving the walk away). Per floor, like revenge --
+    #: a charge carried down the stairs would be a charge for a fight that has
+    #: not happened yet.
     momentum: int = 0
     momentum_direction: Direction | None = None
     #: THE DEBT OF BLOOD: what the hero has been made to bleed since the last
@@ -341,10 +343,10 @@ class GameState:
 
         A chest whose price you have already paid is not a bargain, it is a lie:
         the dialog reads the price out and nothing further happens. Duplicates
-        were reachable and common -- fifteen chests over a run, drawn from six
-        curses -- and they were worse than a lie, because two of the six stack
-        when repeated and four do not, so the same second curse could be a
-        sentence or a no-op depending on which one it was.
+        were reachable and common -- fifteen chests over a run, drawn from
+        thirteen curses -- and they were worse than a lie, because some of the
+        thirteen stack when repeated and the rest do not, so the same second
+        curse could be a sentence or a no-op depending on which one it was.
 
         Handed to the floor generator, which knows nothing about curses beyond
         their names, and used by the wraith's touch for the same reason. An
@@ -976,18 +978,18 @@ def start_run(
         set(pages) if pages is not None else set(range(1, PAGE_COUNT + 1))
     )
 
-    # The floor first, because the hero does not exist until it is built and
-    # everything below changes the hero.
-    state.build_floor(1)
+    # The hero is made first, so the shop's parcel lands on a hero; the floor
+    # is built second, so its dice roll knowing what the hero carries. The
+    # ordering used to be backwards: the pact's curse never touched floor one
+    # (COMPANY rented its shapes that floor), and a floor-one chest would
+    # offer the very curse the pact had just charged for.
+    state.player = make_hero(hero, (0, 0))  # placed on the floor built below
 
     permanent = loadout.upgrades or (upgrades or {})
     _apply_upgrades(state, permanent)
     _apply_pending(state, loadout.pending)
     _apply_wilds(state, loadout.wilds)
-    # The floor is already built, so anything the loadout changed about the
-    # monsters or the amulet has to be applied to it now.
-    state.toughen_enemies()
-    state.arm_amulets()
+    state.build_floor(1)
     return state
 
 
@@ -1051,6 +1053,12 @@ def _apply_wilds(state: GameState, keys) -> None:
         state.wilds.add(key)
 
         if key == "blind_box":
+            # Deliberately the *whole* table, not the floor's own: the box is
+            # the wildcard that can pay out something from the deep. Chest-only
+            # pieces carry a default weight of 1.0, so roughly one box in five
+            # is a strong-tier piece -- which is why it costs near what the
+            # wager's good face does. Change this to a floor-weighted roll and
+            # the box becomes a mop; note it if you tune it.
             template = state.rng.choice_weighted(
                 [(t, t.weight) for t in ITEMS.values()]
             )

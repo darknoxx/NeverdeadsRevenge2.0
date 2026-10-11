@@ -189,6 +189,7 @@ class PageScreen(_Dialog):
         width = min(buffer.cols - 6, 72)
         body = wrap(self._body(), width - 6)
         height = min(buffer.rows - 2, 22)
+        self._span = (len(body), height - 4)
         x, y = (buffer.cols - width) // 2, (buffer.rows - height) // 2
         box(buffer, x, y, width, height, title=self.title, border=BLOOD, fill=True)
         window = body[self.offset : self.offset + height - 4]
@@ -201,8 +202,11 @@ class PageScreen(_Dialog):
     def key(self, name, event, app) -> bool:
         if event.isAutoRepeat():
             return True
+        total, window = getattr(self, "_span", (0, 0))
+        floor = max(0, total - window)
         if name in ("down", "j", "s"):
-            self.offset += 1
+            if floor:
+                self.offset = min(self.offset + 1, floor)
             return True
         if name in ("up", "k", "w"):
             self.offset = max(0, self.offset - 1)

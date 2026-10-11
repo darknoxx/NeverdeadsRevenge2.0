@@ -41,6 +41,8 @@ class BitmapFont:
         self.family = family or self._first_available()
         self.normal = self._make(bold=False)
         self.bold = self._make(bold=True)
+        self.italic = self._make(bold=False, italic=True)
+        self.bold_italic = self._make(bold=True, italic=True)
         metrics = QFontMetrics(self.normal)
         #: Width of one cell. ``maxWidth`` rather than the width of "M": a
         #: monospace face answers the same number for both, and the one that
@@ -59,10 +61,11 @@ class BitmapFont:
                 return name
         return FAMILIES[-1]
 
-    def _make(self, bold: bool) -> QFont:
+    def _make(self, bold: bool, italic: bool = False) -> QFont:
         font = QFont(self.family)
         font.setPixelSize(self.pixel_size)
         font.setBold(bold)
+        font.setItalic(italic)
         font.setFixedPitch(True)
         font.setStyleStrategy(QFont.StyleStrategy.NoAntialias)
         font.setHintingPreference(QFont.HintingPreference.PreferFullHinting)

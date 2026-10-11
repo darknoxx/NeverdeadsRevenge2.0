@@ -906,3 +906,266 @@ def test_the_wayland_silence_does_not_tear_the_hold():
     hold.release("enter")  # immediate: a short down
     _time.sleep(0.4)
     assert hold.press("enter") is False, "a tap's bank paid the next press"
+
+
+
+
+
+
+# -- glass notes reach the frame, and the paint follows a release ---------------
+def test_a_glass_note_is_on_the_screen(app):
+    """The F2/F3/F4 notes were written into the pattern buffer after the image
+    had already been rendered -- invisible, all of it, and a player who looked
+    for the words was right not to find them."""
+    from PySide6.QtCore import Qt
+
+    press(app, Qt.Key.Key_F2)
+    row = "".join(cell.char for cell in app._buffer.cells[1])
+    assert "SCANLINES" in row, "the glass said nothing"
+
+
+def test_a_release_repaints_the_hold_screen(app):
+    """Aborting a fill used to leave the last painted bar frozen on the glass:
+    the release voided the hold, nothing considered that fact worth a paint,
+    and nothing else happened to force one either."""
+    from PySide6.QtCore import Qt
+
+    app.prologue_seen = False
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)
+    assert top(app) == "PrologueScreen"
+
+    paints = [0]
+    original = app.redraw
+    app.redraw = lambda: paints.__setitem__(0, paints[0] + 1)
+    try:
+        press(app, Qt.Key.Key_Return)  # start a fill
+        before = paints[0]
+        release(app, Qt.Key.Key_Return)  # abort it
+        assert paints[0] > before, "the aborted bar stayed on the glass"
+    finally:
+        app.redraw = original
+
+
+def test_the_mute_note_survives_a_restart(app):
+    """The pause remembers the sound is off across restarts, as the audio
+    module always claimed it did."""
+    app.progress.muted = True
+    app.save_progress()
+
+    from neverdeads_revenge.desktop.app import DesktopApp
+
+    fresh = DesktopApp(seed=5, no_sound=False)
+    assert fresh.sfx.muted, "the saved silence was not restored"
+    fresh.close()
+
+
+# -- screens that scroll now land somewhere sane --------------------------------
+def test_the_prologue_jumps_with_home_and_end(app):
+    from PySide6.QtCore import Qt
+
+    app.prologue_seen = False
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)
+    screen = app.screens[-1]
+
+    press(app, Qt.Key.Key_End)
+    assert screen.offset > 0, "end did not jump to the bottom"
+
+    press(app, Qt.Key.Key_Home)
+    assert screen.offset == 0, "home did not jump to the top"
+
+
+def test_the_page_stops_at_its_floor(app, font):
+    from neverdeads_revenge.desktop.buffer import PatternBuffer
+    from neverdeads_revenge.desktop.screens.dialogs import PageScreen
+
+    screen = PageScreen(3, "There is no way back. " * 60)
+    buffer = PatternBuffer(70, 30, font)
+    screen.draw(buffer, app)
+    total, window = screen._span
+    assert window < total, "the page has no overflow to test against"
+
+    # Pages answer one gesture, never a repeat stream -- so this walks with
+    # plain presses and expects the clamp to hold through all of them.
+    for _ in range(80):
+        screen.key("down", _FakeEvent(), app)
+    assert screen.offset == max(0, total - window), "the page scrolled into blank"
+    for _ in range(80):
+        screen.key("up", _FakeEvent(), app)
+    assert screen.offset == 0
+
+
+def test_the_title_shrugs_off_a_stale_cursor(app):
+    """The item list can shrink under a title that stays put; enter must not
+    walk off the end of it and pick whatever used to sit at that index."""
+    from PySide6.QtCore import Qt
+
+    screen = app.screens[-1]
+    screen.index = 99
+    press(app, Qt.Key.Key_Enter)
+    assert top(app) == "TitleScreen", "a stale index did something"
+
+
+def test_fit_scale_falls_back_to_a_fraction():
+    from PySide6.QtCore import QSize
+
+    from neverdeads_revenge.desktop.crt import fit_scale
+
+    big = QSize(960, 640)
+    small = QSize(160, 120)
+    assert fit_scale(big, QSize(240, 160)) == 4.0, "whole scales stopped being whole"
+    scale = fit_scale(small, QSize(960, 640))
+    assert isinstance(scale, float) and scale == 0.5, "the fraction never came back"
+
+
+def test_struck_cells_flash_in_reverse(font):
+    """state.hits is filled every action and cleared the turn after; the map
+    drew the same thing either way. The flash is the visual half of a hit."""
+    from neverdeads_revenge.desktop.buffer import PatternBuffer
+
+    from neverdeads_revenge.desktop.render import _draw_map, regions, viewport
+    from neverdeads_revenge.game.actors import HEROES
+    from neverdeads_revenge.game.state import start_run
+
+    state = start_run(HEROES["noxx"], 3)
+    square = state.player.position
+    area = regions(40, 16)["map"]
+    left, top, _, _ = viewport(state, area[2], area[3])
+
+    plain_buffer = PatternBuffer(40, 16, font)
+    _draw_map(plain_buffer, state, area)
+    plain = plain_buffer.cells[square[1] - top][square[0] - left]
+
+    state.hits = [square]
+    struck_buffer = PatternBuffer(40, 16, font)
+    _draw_map(struck_buffer, state, area)
+    struck = struck_buffer.cells[square[1] - top][square[0] - left]
+
+    assert not plain.style.reverse and struck.style.reverse, "the flash never lit"
+
+
+def test_the_sidebar_knows_the_statuses(app):
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.desktop.render import marks_names
+
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)
+    state = app.run
+    state.player.statuses["poison"] = 3
+    names = marks_names(state, "statuses")
+    assert names and "3" in names[0], "the status column stayed empty"
+    state.player.statuses.pop("poison")
+
+
+# -- one compositor lift banks; a second is a hand --------------------------------
+def test_the_second_release_discharges_the_bank():
+    """Deliberate half-second taps would otherwise add up through banking:
+    the first release inside a fill is bridgeable (the compositor lifts once),
+    and a second is a hand, which voids the whole bank."""
+    import time as _time
+
+    from neverdeads_revenge.desktop.hold import HoldToContinue
+
+    hold = HoldToContinue()
+    hold.press("enter")
+    _time.sleep(0.4)
+    hold.release("enter")  # the compositor's lift: banked
+    assert hold.progress >= 0.4
+
+    hold.press("enter")
+    _time.sleep(0.4)
+    hold.release("enter")  # a second lift: nobody's compositor did that
+    assert hold.progress == 0.0, "long taps added up through the bank"
+
+
+# -- the floor knows what the hero carries ----------------------------------------
+def test_floor_one_knows_the_parcel():
+    """This ran backwards: floor 1 was generated before the shop's parcel
+    landed, so a pact's COMPANY curse rented no shapes that floor and a
+    floor-one chest could offer back the very curse the pact just charged."""
+    from neverdeads_revenge.game.actors import HEROES
+    from neverdeads_revenge.game.state import start_run
+
+    class _Loadout:
+        # The pact is one of the WILD OFFERS, so into ``wilds`` it goes; the
+        # supplies list fits anything else a shop has talked the player into.
+        pending: list[str] = []
+        wilds: list[str] = ["pact"]
+        upgrades: dict = {}
+
+    state = start_run(HEROES["noxx"], 11, loadout=_Loadout())
+
+    keys = {curse.key for curse in state.curses}
+    assert keys, "the pact never settled a curse"
+    if "company" in keys:
+        assert len(state.enemies) >= 9, "COMPANY left its floor-one shapes unrented"
+
+    chest_curses = []
+    for pos in state.dungeon_map.walkable_positions():
+        item = state.dungeon_map.item_at(pos)
+        if item is not None and getattr(item, "kind", None) == "chest" and item.curse:
+            chest_curses.append(item.curse)
+    assert all(curse not in keys for curse in chest_curses), (
+        "a chest offered a curse the pact had just charged for"
+    )
+
+
+def test_the_wild_shelf_is_filled_on_first_visit(app):
+    """A fresh book rolls no wild shelf until a run ends -- so the very first
+    visit to the shop had an empty rotation, exactly when a new player looks."""
+    from neverdeads_revenge.desktop.screens.menus import ShopScreen
+
+    app.progress.wild_stock = []
+    ShopScreen()._restock(app)
+    assert app.progress.wild_stock, "the first visit had no wilds at all"
+
+
+# -- the generator's promises are kept --------------------------------------------
+def test_nothing_is_hidden_under_immutable_things():
+    """Loot under an npc is loot the game cannot ever give back, and an npc on
+    the hunter's cell is twice the ambush. The generator claims neither can
+    happen; now the tests do too, floor after floor, deep enough to meet."""
+    from neverdeads_revenge.game.actors import HEROES
+    from neverdeads_revenge.game.state import start_run
+
+    from neverdeads_revenge.world.generator import hunter_chance
+
+    checked_hunter = 0
+    for seed in range(1, 13):
+        state = start_run(HEROES["noxx"], seed)
+        for depth in range(2, 11):
+            built = state.build_floor(depth)
+            npc_positions = {npc.position for npc in state.npcs}
+            item_positions = {
+                pos
+                for pos in built.map.walkable_positions()
+                if built.map.item_at(pos) is not None
+            }
+            assert not (npc_positions & item_positions), (
+                f"seed {seed} depth {depth}: an item lies under a person"
+            )
+            hunter = next(
+                (
+                    enemy
+                    for enemy in state.enemies
+                    if enemy.name == "hunter"  # not "the hunter"; see the table
+                ),
+                None,
+            )
+            if hunter is not None:
+                checked_hunter += 1
+                assert hunter.position not in npc_positions, (
+                    f"seed {seed} depth {depth}: the hunter shared an npc's cell"
+                )
+                if built.spring is not None:
+                    assert built.spring != hunter.position, (
+                        f"seed {seed} depth {depth}: the spring stood under the hunter"
+                    )
+                assert all(pos != hunter.position for pos, _ in built.npcs)
+        del state
+    assert checked_hunter > 0, (
+        "no seed reaching depth 10 ever met the hunter; hunter_chance "
+        f"at depth 10 is {hunter_chance(10)}"
+    )

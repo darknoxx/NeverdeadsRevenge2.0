@@ -96,7 +96,10 @@ class DesktopApp(QMainWindow):
         self._buffer: PatternBuffer | None = None
         self._grid = (0, 0)
         self._seen_log = 0
-        self.sfx = Sfx(muted=no_sound)
+        self.sfx = Sfx(muted=no_sound or self.progress.muted)
+        # If the session gives up entirely the meta record must hear of it, or
+        # the next toggle writes the give-up back down as unmuted.
+        self.sfx.on_mute = self._sound_gave_up
         #: The moving pixels. Their own layer, drawn over the still frame.
         self.effects = Effects(self.font.cell_w, self.font.cell_h)
         #: A word about the glass, said for a moment: what a toggle key just did.
@@ -177,6 +180,7 @@ class DesktopApp(QMainWindow):
                 start = index
         for screen in self.screens[start:]:
             screen.draw(self._buffer, self)
+        self._say_glass()
         image = self._buffer.render()
         if getattr(self.screens[-1], "smaller_face", False) and self.run is not None:
             from .render import paste_log, paste_sidebar
@@ -200,14 +204,16 @@ class DesktopApp(QMainWindow):
                 self.font_small,
             )
         self.effects.draw(image)
-        self._say_glass(image)
         self.view.set_frame(image)
 
-    def _say_glass(self, image) -> None:
+    def _say_glass(self) -> None:
         """Say what a glass key just did, for as long as it takes to read.
 
-        Drawn over whatever is on the screen, because the toggle is about the
-        glass and the glass is on everything.
+        Written into the pattern buffer *before* it renders: the words are
+        literally part of the frame, which is also why the screen can flash
+        them with nothing timing it. The earlier version wrote into the buffer
+        after the image had been rendered -- invisible, and this is the
+        polite way of putting it.
         """
         if self.glass_note is None:
             return
@@ -403,6 +409,11 @@ class DesktopApp(QMainWindow):
         self.progress.muted = self.sfx.muted
         self.save_progress()
 
+    def _sound_gave_up(self, muted: bool) -> None:
+        """The audio session quit on its own; the record has to agree."""
+        self.progress.muted = muted
+        self.save_progress()
+
     # -- sound --------------------------------------------------------------
     def play(self, name: str | None) -> None:
         if name:
@@ -433,12 +444,15 @@ class DesktopApp(QMainWindow):
     def _on_key(self, event: QKeyEvent) -> None:
         if event.type() == QEvent.Type.KeyRelease:
             # The terminal build had to *guess* a release from silence, and
-            # every heuristic built on that guess was AL territory. Qt hands
-            # over the key going up; the holds want it expelled: without the
-            # ending a tap is indistinguishable from a hold.
+            # every heuristic built on that guess was ours instead. Qt hands
+            # over the key going up; the holds want it voided: without the
+            # release a tap is indistinguishable from a hold. A True return
+            # means the hold changed under the key -- a fillaborting, most
+            # likely -- so the paint must follow it, or the bar freezes half
+            # drawn on the glass.
             name = self._key_name(event)
-            if name and self.screens:
-                self.screens[-1].key_up(name, event, self)
+            if name and self.screens and self.screens[-1].key_up(name, event, self):
+                self.redraw()
             return
         if self._window_key(event):
             return

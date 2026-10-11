@@ -68,17 +68,22 @@ class CrtSettings:
             self.geometry = True
 
 
-def fit_scale(widget: QSize, buffer: QSize, minimum: float = 0.5) -> int:
-    """The largest whole number that fits ``buffer`` inside ``widget``.
+def fit_scale(widget: QSize, buffer: QSize, minimum: float = 0.5) -> float:
+    """The largest scale that fits ``buffer`` inside ``widget``.
 
-    A whole number, always, unless the window is too small to hold the buffer
-    even once -- then the buffer is scaled down fractionally, because a game
-    that cannot be seen is worse than a game that is slightly soft.
+    A whole number when the buffer fits once or more. Smaller -- down to
+    ``minimum`` and no further, because soft beats invisible -- when the
+    window is too small to hold the buffer even once.
     """
     if buffer.width() <= 0 or buffer.height() <= 0:
-        return 1
+        return 1.0
     scale = min(widget.width() // buffer.width(), widget.height() // buffer.height())
-    return max(int(minimum) if scale < 1 else scale, 1)
+    if scale >= 1:
+        return float(scale)
+    fraction = min(
+        widget.width() / buffer.width(), widget.height() / buffer.height()
+    )
+    return max(fraction, minimum)
 
 
 _VERTEX = """
@@ -192,7 +197,7 @@ class CrtView(QOpenGLWidget):
         self._buffer: QOpenGLBuffer | None = None
         self._gl = None
         self._linked = False
-        self._scale = 1
+        self._scale = 1.0
         self._offset = (0.0, 0.0)
         #: The glass rattling: a decaying jitter, in pixels, driven by things
         #: like a wound. Not an effect of the shader -- it warps the *sampling*,
@@ -308,6 +313,10 @@ class CrtView(QOpenGLWidget):
         self._texture = QOpenGLTexture(frame)
         self._texture.setMinificationFilter(QOpenGLTexture.Filter.Nearest)
         self._texture.setMagnificationFilter(QOpenGLTexture.Filter.Nearest)
+        # The bloom taps drift up to three pattern-pixels past a cell; without
+        # this a bright line on one edge bleeds back in the opposite one
+        # (Qt's default wrap is Repeat), and the letterbox shows it.
+        self._texture.setWrapMode(QOpenGLTexture.WrapMode.ClampToEdge)
 
     def paintGL(self) -> None:
         gl = self._gl
@@ -371,11 +380,13 @@ class CrtView(QOpenGLWidget):
         self._recompute()
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
+        # A fractional scale is possible now, so the target is a properly
+        # rounded rectangle rather than a scaled width the rect cannot hold.
         target = QRect(
-            int(self._offset[0]),
-            int(self._offset[1]),
-            self._frame.width() * self._scale,
-            self._frame.height() * self._scale,
+            round(self._offset[0]),
+            round(self._offset[1]),
+            round(self._frame.width() * self._scale),
+            round(self._frame.height() * self._scale),
         )
         painter.drawImage(target, self._frame)
         if self.settings.scanlines:

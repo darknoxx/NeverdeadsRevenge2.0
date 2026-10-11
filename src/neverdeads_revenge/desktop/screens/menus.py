@@ -84,7 +84,7 @@ class HelpScreen(_Panel):
     """The controls and the terrain reference."""
 
     title = "CONTROLS & REFERENCE"
-    hint = "↑↓ scroll   any key closes"
+    hint = "↑↓ scroll   esc closes"
 
     def lines(self, app) -> list[tuple[str, str]]:
         from neverdeads_revenge.game.prologue import terrain_help
@@ -98,7 +98,7 @@ class HelpScreen(_Panel):
             ("MENU      escape", BONE),
             ("", ""),
             ("THE GLASS", f"bold {PURPLE}"),
-            ("F11 fullscreen   +/- zoom   F2 scanlines   F3 bloom   F4 curve", ASH),
+            ("F11 fullscreen   F2 scanlines   F3 bloom   F4 curve", ASH),
             ("", ""),
             ("THE DUNGEON", f"bold {PURPLE}"),
         ]
@@ -244,6 +244,19 @@ class ShopScreen(Screen):
         self.offset = 0
 
     def _restock(self, app) -> None:
+        # A fresh book has never rolled its wild shelf, because the shelf only
+        # rerolls after a run ends -- so the very first visit would offer no
+        # wilds at all, exactly when a new player is looking at the shop.
+        # One roll, here, fills it; afterwards the rotation owns itself. The
+        # dice are session dice, the same shape record_run uses: this choice
+        # must not ride on the run's seed.
+        if not app.progress.wild_stock:
+            import random
+
+            from neverdeads_revenge.core.rng import Rng
+
+            app.progress.reroll_wilds(Rng(random.SystemRandom().randrange(2**32)))
+            app.save_progress()
         self.offers = build_stock(app.progress)
         self.index = max(0, min(self.index, len(self.offers) - 1))
 

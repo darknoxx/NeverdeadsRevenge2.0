@@ -55,17 +55,19 @@ NAMED: dict[str, tuple[int, int, int]] = {
 _BOLD = {"bold", "b"}
 _DIM = {"dim", "d"}
 _REVERSE = {"reverse", "reversed", "r"}
+_ITALIC = {"italic", "i"}
 
 
 @dataclass(frozen=True, slots=True)
 class Style:
-    """A foreground, an optional background, and three flags."""
+    """A foreground, an optional background, and four flags."""
 
     fg: QColor = field(default_factory=lambda: QColor(FOREGROUND))
     bg: QColor | None = None
     bold: bool = False
     dim: bool = False
     reverse: bool = False
+    italic: bool = False
 
 
 def _colour(word: str) -> QColor | None:
@@ -93,6 +95,7 @@ def parse_style(text: str, base: Style | None = None) -> Style:
     style = base or Style()
     fg = style.fg
     bold, dim, reverse = style.bold, style.dim, style.reverse
+    italic = style.italic
     for word in text.replace(",", " ").split():
         word = word.lower()
         if word in _BOLD:
@@ -101,10 +104,12 @@ def parse_style(text: str, base: Style | None = None) -> Style:
             dim = True
         elif word in _REVERSE:
             reverse = True
+        elif word in _ITALIC:
+            italic = True
         elif word == "on" or word == "not":
             continue
         else:
             colour = _colour(word)
             if colour is not None:
                 fg = colour
-    return Style(fg=fg, bold=bold, dim=dim, reverse=reverse)
+    return Style(fg=fg, bold=bold, dim=dim, reverse=reverse, italic=italic)

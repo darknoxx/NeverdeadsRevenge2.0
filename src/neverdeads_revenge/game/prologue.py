@@ -59,11 +59,8 @@ PROLOGUE_TITLE = "Death is not the end. You were not granted even that."
 #: axe."), and it only works because the line before it is long. Nothing explains
 #: a mechanic; mechanics are explained when they are met.
 #:
-#: The line lengths are load-bearing. The pane does not scroll (any key dismisses
-#: the screen, so a player who needed to scroll could not), which means the story
-#: has to fit a 34-row terminal. Most lines are kept under 70 characters so they
-#: occupy one row each; the three that run long do so on purpose, for the beat
-#: they land on. ``tests/test_ui.py`` asserts the whole thing still fits.
+#: Line lengths stay under the width the desktop prologue wraps itself at, and
+#: the three that run longer do so on purpose, for the beat they land on.
 PROLOGUE: tuple[str, ...] = (
     "The last thing you remember is Karpas. The pass in the mountains, the mud, "
     "the cold coming up through your boots.",

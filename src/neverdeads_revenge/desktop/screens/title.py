@@ -109,6 +109,11 @@ class TitleScreen(Screen):
             self.index = (self.index + 1) % len(items)
             return True
         if name == "enter":
+            # An index is only as good as the list it pointed into: the items
+            # can shrink under a screen that stays put, and enter -- unlike the
+            # arrows -- did not revalidate.
+            if self.index >= len(items):
+                return True
             self._choose(items[self.index][0], app)
             return True
         # A letter picks its line outright, the way the terminal title did.

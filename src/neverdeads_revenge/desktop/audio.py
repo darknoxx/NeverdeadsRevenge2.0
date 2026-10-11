@@ -302,6 +302,10 @@ class Sfx:
         self._device: Any = None
         #: Failures in a row, so a hiccup does not silence the session.
         self._failures = 0
+        #: Told, with the new flag, when the session gives up entirely -- the
+        #: caller keeps its own record straight (and does not re-persist the
+        #: give-up as unmuted with the next toggle). Set once, at startup.
+        self.on_mute = None
         self._debug = os.environ.get(DEBUG_ENV)
         self._queue: queue.Queue[str | None] = queue.Queue()
         self._thread: threading.Thread | None = self._spawn_worker()
@@ -430,10 +434,12 @@ class Sfx:
 
     # -- the device ----------------------------------------------------------
     def _open_stream(self) -> None:
-        """Open the device once, in a thread of its own.
+        """Open the device once.
 
-        Raises nothing. A machine with no audio is a game that is silent, and
-        the fact is worth one line in the sound log if there is one.
+        Called synchronously from :meth:`__init__` and from unmuting, on
+        whatever thread does that. Raises nothing. A machine with no audio is
+        a game that is silent, and the fact is worth one line in the sound
+        log if there is one.
         """
         if self._device is not None:
             return
@@ -502,6 +508,13 @@ class Sfx:
         self._failures += 1
         if self._failures >= GIVE_UP_AFTER:
             self._muted = True
+            if self.on_mute is not None:
+                try:
+                    self.on_mute(True)
+                except Exception:
+                    # The record keeping failing is not a sound problem, and
+                    # neither is worth a crash.
+                    pass
 
     # -- the sounds ----------------------------------------------------------
     def _clip(self, name: str) -> Clip | None:

@@ -60,7 +60,7 @@ class PatternBuffer:
                 # menu read on the panel and not on a stripe of black.
                 new = Style(
                     fg=new.fg, bg=cell.style.bg, bold=new.bold, dim=new.dim,
-                    reverse=new.reverse,
+                    reverse=new.reverse, italic=new.italic,
                 )
             cell.char = char
             cell.style = new
@@ -124,7 +124,12 @@ class PatternBuffer:
         else:
             painter.setPen(self._ink(style))
 
-        painter.setFont(self.font.bold if style.bold else self.font.normal)
+        if style.italic:
+            painter.setFont(
+                self.font.bold_italic if style.bold else self.font.italic
+            )
+        else:
+            painter.setFont(self.font.bold if style.bold else self.font.normal)
         text = "".join(cell.char for cell in run)
         # ``TextDontClip`` off, and a rect one row taller than the cell: a glyph
         # with a descender hangs below the baseline, and clipping it to the cell

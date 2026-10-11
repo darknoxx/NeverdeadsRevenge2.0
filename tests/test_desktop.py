@@ -200,11 +200,14 @@ def test_the_scale_is_a_whole_number():
 
 
 def test_a_tiny_window_still_shows_the_game():
+    """A window too small to hold the pattern once prefactors it down (to the
+    readable floor) instead of clipping half the frame at 1x -- the old rule
+    returned 1 and cut the map's right off."""
     from PySide6.QtCore import QSize
 
     from neverdeads_revenge.desktop.crt import fit_scale
 
-    assert fit_scale(QSize(320, 200), QSize(960, 528)) == 1
+    assert fit_scale(QSize(320, 200), QSize(960, 528)) == 0.5
 
 
 # -- the keys -----------------------------------------------------------------
