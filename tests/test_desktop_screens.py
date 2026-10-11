@@ -26,6 +26,13 @@ def qapp():
 
 
 @pytest.fixture
+def font(qapp):
+    from neverdeads_revenge.desktop.font import BitmapFont
+
+    return BitmapFont()
+
+
+@pytest.fixture
 def app(qapp):
     from neverdeads_revenge.desktop.app import DesktopApp
 
@@ -586,3 +593,104 @@ def test_an_old_hold_cannot_cash_itself_in():
 
     _time.sleep(1.05)  # long enough to be a release, long enough for 1.0s
     assert hold.press("enter") is False, "a stale hold spent itself in one tap"
+
+
+# -- a menu cursor walks its window, and dead lists do not pretend to scroll ---
+def test_the_shelf_cursor_walks_inside_the_window(app):
+    """The house style for menus: the cursor moves through the visible rows,
+    and the shelf only shifts when the cursor reaches an edge. The old
+    stateless formula parked the cursor on the bottom edge and dragged the
+    list, so going back up scrolled the shelf under a polished-in cursor."""
+    from PySide6.QtCore import Qt
+
+    press(app, Qt.Key.Key_S, "s")  # the shop
+    screen = app.screens[-1]
+
+    total, window = screen._body_size
+    assert window < total, "the shelf has no overflow to test against"
+
+    def cursor_row():
+        return next(
+            n for n, row in enumerate(screen._rows(70)) if row[2] == screen.index
+        )
+
+    # every press skips its own detail line, so walk until the cursor sits on
+    # the window's bottom edge
+    while cursor_row() < window - 1:
+        press(app, Qt.Key.Key_Down)
+    assert screen.offset == 0, "the shelf moved before the cursor reached its edge"
+
+    press(app, Qt.Key.Key_Down)  # the edge: the window now lives with the shift
+    press(app, Qt.Key.Key_Down)
+    assert cursor_row() == screen.offset + window - 1, (
+        "a walking cursor was not pinned at the window's bottom edge"
+    )
+
+    # and back up: the cursor climbs -- critically, the shelf holds still
+    # while it does (that was the complaint), each step inside the window.
+    pinned = screen.offset
+    top_row = cursor_row()
+    while screen.index > 0:
+        press(app, Qt.Key.Key_Up)
+        row = cursor_row()
+        assert screen.offset <= row < screen.offset + window, "the cursor left its window"
+        top_row = min(top_row, row)
+    assert screen.offset <= pinned, "going up dragged the shelf upward too"
+    assert cursor_row() == top_row, "the cursor never reached its own top row"
+    assert screen.offset == 0, "the shelf did not give back its rows"
+
+    press(app, Qt.Key.Key_Escape)
+
+
+class _FakeEvent:
+    def isAutoRepeat(self) -> bool:
+        return False
+
+
+def test_the_pack_of_two_items_does_not_scroll(app, font):
+    from neverdeads_revenge.desktop.buffer import PatternBuffer
+    from neverdeads_revenge.desktop.screens.menus import PackScreen
+    from neverdeads_revenge.world.items import ITEMS, make_item
+
+    class _Pack:
+        inventory = [make_item(ITEMS["potion"]), make_item(ITEMS["potion"])]
+
+    screen = PackScreen(_Pack())
+    buffer = PatternBuffer(70, 30, font)
+    screen.draw(buffer, app)
+    total, window = screen._body_size
+
+    assert total <= window, "two items overflowed a 30-row page"
+    for _ in range(6):
+        screen.key("down", _FakeEvent(), app)
+    assert screen.offset == 0, "a list that fits still scrolled"
+
+    for _ in range(6):
+        screen.key("up", _FakeEvent(), app)
+    assert screen.offset == 0
+
+
+def test_a_long_list_stops_at_its_floor(app, font):
+    from neverdeads_revenge.desktop.buffer import PatternBuffer
+    from neverdeads_revenge.desktop.screens.menus import PackScreen
+    from neverdeads_revenge.world.items import ITEMS, make_item
+
+    class _Pack:
+        inventory = [make_item(ITEMS[key]) for key in list(ITEMS)[:14]]
+
+    screen = PackScreen(_Pack())
+    buffer = PatternBuffer(70, 30, font)
+    screen.draw(buffer, app)
+    total, window = screen._body_size
+    assert window < total, "the pack has no overflow to test against"
+
+    for _ in range(total + 10):
+        screen.key("down", _FakeEvent(), app)
+    assert screen.offset == max(0, total - window), "the floor scrolled past the end"
+
+    screen.key("up", _FakeEvent(), app)
+    assert screen.offset == max(0, total - window) - 1
+
+    for _ in range(total + 10):
+        screen.key("up", _FakeEvent(), app)
+    assert screen.offset == 0

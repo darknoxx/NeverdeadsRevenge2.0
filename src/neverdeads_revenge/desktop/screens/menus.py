@@ -35,6 +35,10 @@ class _Panel(Screen):
 
     def __init__(self) -> None:
         self.offset = 0
+        # The list's size and the visible window, as of the last draw: the
+        # key handler needs them to refuse scrolling a list that does not
+        # overflow, with no dead travel at the floor.
+        self._body_size = (0, 0)
 
     def lines(self, app) -> list[tuple[str, str]]:
         return []
@@ -45,18 +49,23 @@ class _Panel(Screen):
         x, y = (buffer.cols - width) // 2, (buffer.rows - height) // 2
         box(buffer, x, y, width, height, title=self.title, border=BLOOD, fill=True)
         body = self.lines(app)
-        window = body[self.offset : self.offset + height - 4]
-        for i, (text, style) in enumerate(window):
+        window = height - 4
+        self._body_size = (len(body), window)
+        self.offset = max(0, min(self.offset, max(0, len(body) - window)))
+        for i, (text, style) in enumerate(body[self.offset : self.offset + window]):
             buffer.text(x + 3, y + 2 + i, text[: width - 6], parse_style(style))
         rule(buffer, x + 1, y + height - 2, width - 2, ASH)
-        more = "  ▼" if self.offset + height - 4 < len(body) else ""
+        more = "  ▼" if self.offset + window < len(body) else ""
         buffer.text(x + 3, y + height - 1, (self.hint + more)[: width - 6], parse_style(ASH))
 
     def key(self, name, event, app) -> bool:
         if event.isAutoRepeat():
             return True
+        total, window = self._body_size
+        floor = max(0, total - window)
         if name in ("down", "j", "s"):
-            self.offset += 1
+            if floor:
+                self.offset = min(self.offset + 1, floor)
             return True
         if name in ("up", "k", "w"):
             self.offset = max(0, self.offset - 1)
@@ -228,6 +237,7 @@ class ShopScreen(Screen):
         self.index = 0
         self.message = ""
         self.offers = []
+        self.offset = 0
 
     def _restock(self, app) -> None:
         self.offers = build_stock(app.progress)
@@ -276,10 +286,24 @@ class ShopScreen(Screen):
 
         rows = self._rows(width)
         window = height - 6
+        self._body_size = (len(rows), window)
         selected = next((n for n, row in enumerate(rows) if row[2] == self.index), 0)
-        offset = max(0, selected - window + 1)
-        offset = min(offset, max(0, len(rows) - window))
-        for n, (text, style, _offer) in enumerate(rows[offset : offset + window]):
+        # The house style for a menu cursor: it walks *inside* the window, and
+        # the window only shifts when the cursor reaches one of its edges. The
+        # old stateless formula (offset = selected - window + 1) parked the
+        # cursor on the bottom edge and dragged the list under it, so going
+        # back up scrolled the shelf while the cursor stood still.
+        self.offset = max(0, min(self.offset, max(0, len(rows) - window)))
+        if selected < window:
+            # The cursor is back inside the first screenful, and the window
+            # sits open at the top -- the rest state. Anything else leaves the
+            # shelf clung to the bottom of the list after walking back up.
+            self.offset = 0
+        elif selected < self.offset:
+            self.offset = selected
+        elif selected >= self.offset + window:
+            self.offset = selected - window + 1
+        for n, (text, style, _offer) in enumerate(rows[self.offset : self.offset + window]):
             buffer.text(x + 3, y + 3 + n, text[: width - 6], parse_style(style))
 
         rule(buffer, x + 1, y + height - 3, width - 2, ASH)
