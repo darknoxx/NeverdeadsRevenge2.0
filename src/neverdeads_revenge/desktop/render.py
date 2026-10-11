@@ -215,19 +215,63 @@ def _cell_content(position, state: GameState) -> tuple[str, Style]:
 
 # -- the sidebar --------------------------------------------------------------
 def _draw_sidebar(buffer, state, area) -> None:
+    """The HUD, in the big face, and nothing else.
+
+    The legend that used to follow it is pasted on afterwards in the log's own
+    smaller face (:func:`paste_legend`); what this leaves is the room the HUD
+    owns, and the rest is the legend's panel.
+    """
     x0, y0, width, height = area
     y = y0
     for text, style in hud_lines(state):
         buffer.text(x0 + 1, y, text[: width - 2], parse_style(style))
         y += 1
-    y += 1
+
+
+def sidebar_layout(state) -> int:
+    """How many rows of the sidebar the HUD spends, plus the one blank row
+    between it and whatever is under it."""
+    return len(hud_lines(state)) + 1
+
+
+def paste_legend(
+    image, state: GameState, cols: int, rows: int, cell_w: int, cell_h: int, small
+) -> None:
+    """Draw the legend straight onto a rendered frame, in the log's own face.
+
+    The same trade the log made: the legend is a reference the player glances
+    at, so it gets the smaller face and reads more of what the dungeon is
+    rather than less. The HUD above it stays big -- it is the panel a fight is
+    read from, not one glanced at.
+    """
+    areas = regions(cols, rows)
+    sx, sy, sw, sh = areas["sidebar"]
+
+    painter = QPainter(image)
+    top = (sy + sidebar_layout(state)) * cell_h
+    left = sx * cell_w + small.cell_w
+    glyph_x = left
+    text_x = left + small.cell_w * 2
+    text_w = (sx + sw) * cell_w - text_x - small.cell_w
+    y = top
     for glyph, text in legend_rows(state.depth, state.hero):
-        if glyph:
-            buffer.put(x0 + 1, y, glyph, parse_style(_legend_colour(glyph)))
-        buffer.text(x0 + 3, y, text[: width - 4], parse_style("grey70"))
-        y += 1
-        if y >= y0 + height:
+        if y + small.cell_h > rows * cell_h:
             break
+        if glyph:
+            style = parse_style(_legend_colour(glyph))
+            painter.setFont(small.normal)
+            painter.setPen(style.fg)
+            painter.drawText(QRect(glyph_x, y, small.cell_w * 2, small.cell_h + 4), 0, glyph)
+            painter.setFont(small.normal)
+            painter.setPen(parse_style("grey70").fg)
+            chars = max(1, text_w // small.cell_w)
+            painter.drawText(QRect(text_x, y, text_w, small.cell_h + 4), 0, text[:chars])
+        elif text:
+            legend_rule = parse_style("grey30").fg
+            painter.setPen(legend_rule)
+            painter.drawLine(left, y + small.cell_h // 2, (sx + sw) * cell_w - small.cell_w, y + small.cell_h // 2)
+        y += small.cell_h
+    painter.end()
 
 
 def _legend_colour(glyph: str) -> str:
@@ -337,7 +381,11 @@ def paste_log(
     """
     areas = regions(cols, rows)
     x0, y0, width, height = areas["log"]
-    rect = QRect(x0 * cell_w, y0 * cell_h, width * cell_w, height * cell_h)
+    # Aligned with the columns beside it: their headings sit one row into the
+    # bottom strip, so the log starts there too and shares its floor line with
+    # them. A couple of its rows go for it, and the three panels sit on one top
+    # line instead of two.
+    rect = QRect(x0 * cell_w, (y0 + 1) * cell_h, width * cell_w, (height - 1) * cell_h)
 
     painter = QPainter(image)
     painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, False)

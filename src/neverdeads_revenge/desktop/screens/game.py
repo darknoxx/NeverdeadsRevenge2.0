@@ -39,11 +39,12 @@ REWIND = "rewind"
 class GameScreen(Screen):
     """The run, drawn and played.
 
-    ``log_patch`` says the frame this screen owns wants the combat log pasted on
-    afterwards in its own smaller face -- see :meth:`DesktopApp.redraw`.
+    ``smaller_face`` says the frame this screen owns wants the log and the
+    legend pasted on afterwards in their own smaller face -- see
+    :meth:`DesktopApp.redraw`.
     """
 
-    log_patch = True
+    smaller_face = True
 
     def __init__(self, state: GameState) -> None:
         self.state = state

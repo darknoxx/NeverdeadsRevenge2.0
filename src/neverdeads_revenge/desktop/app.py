@@ -177,10 +177,19 @@ class DesktopApp(QMainWindow):
         for screen in self.screens[start:]:
             screen.draw(self._buffer, self)
         image = self._buffer.render()
-        if getattr(self.screens[-1], "log_patch", False) and self.run is not None:
-            from .render import paste_log
+        if getattr(self.screens[-1], "smaller_face", False) and self.run is not None:
+            from .render import paste_legend, paste_log
 
             paste_log(
+                image,
+                self.run,
+                self._buffer.cols,
+                self._buffer.rows,
+                self.font.cell_w,
+                self.font.cell_h,
+                self.font_small,
+            )
+            paste_legend(
                 image,
                 self.run,
                 self._buffer.cols,
