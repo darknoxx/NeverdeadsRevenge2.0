@@ -52,6 +52,26 @@ Scanlines and bloom are on at the start; the curve is off, because it is the one
 effect that changes what the picture *is* rather than how it is lit. The zoom and
 the three effects are remembered between runs.
 
+## The menus
+
+Every menu is drawn from the same three pieces -- a blood-red double frame, a
+heading, and a list with one line lit -- so a player who has read one of them
+recognises the next.
+
+| screen | key |
+| --- | --- |
+| the title | `↑↓` choose, `enter` take, or `n` new run · `c` continue · `s` shop · `h` scores · `l` chronicle · `q` quit |
+| choose a hero | `←→` (or `h`/`l`) choose, `enter` begin |
+| pause | `r`/`esc` resume, `s` save and quit, `q` quit to title, `m` sound |
+| the shop | `↑↓` choose, `enter` buy, `esc` leave |
+| the tally | hold `enter` to go on, `r` to take the ending back (with the hour) |
+| the name | letters and digits, `backspace`, `enter` to keep |
+
+The dungeon keeps its keys throughout: `c` opens the sheet, `i` the pack, `?` the
+reference, `esc` the pause. A dialog never answers its own opening press -- Qt
+tells the game when a key is being held, so a held `enter` cannot open a chest
+and then agree to it in the same breath.
+
 ## Size
 
 The zoom is not a font size -- it is how many whole pixels a cell is drawn with.

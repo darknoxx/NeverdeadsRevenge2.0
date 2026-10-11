@@ -1,72 +1,49 @@
 """The window, the input, and the loop.
 
-The systems underneath do the thinking; this owns the three things a screen
-owns: what is showing, what a key means, and when to redraw. It is deliberately
-small -- a screen stack of one string, a key table, and a call to the renderer --
-because everything interesting is either in ``game/`` or in ``render.py``.
+The systems underneath do the thinking; this owns the screen stack, the progress
+on disk, and the moment a key becomes a verb. A screen is a small object with a
+``draw`` and a ``key``; the app is the thing that knows what is on top and where
+a run goes when it ends.
 
-Qt reports key *repeats* directly (``isAutoRepeat``), which the terminal could
-never do: a terminal only ever sent the stream. So the two rules the terminal
-approximated are exact here. A held direction is allowed through, no faster than
-the hero's own pace. Every other key ignores repeats outright, which is what
-"only on a new press" means when you can finally tell.
+Qt reports key *repeats* directly, which a terminal could not, so the two rules
+the terminal approximated are exact here: a held direction moves at the hero's
+own pace, and every dialog ignores a repeat outright -- which is what "only on a
+fresh press" means when you can finally tell one.
 """
 
 from __future__ import annotations
 
+import random
 import time
 
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QColor, QKeyEvent, QPalette
 from PySide6.QtWidgets import QMainWindow
 
-from neverdeads_revenge.game.actions import Action, perform_action
+from neverdeads_revenge.core.rng import Rng
 from neverdeads_revenge.game.actors import HEROES
-from neverdeads_revenge.game.pace import action_gap
-from neverdeads_revenge.game.state import GameState, start_run
-from neverdeads_revenge.persistence import load_meta
+from neverdeads_revenge.game.lore import PAGE_COUNT
+from neverdeads_revenge.game.savegame import dump, load
+from neverdeads_revenge.game.shop import loadout_from
+from neverdeads_revenge.game.state import RunState, start_run
+from neverdeads_revenge.persistence import (
+    clear_run,
+    load_meta,
+    load_run,
+    save_meta,
+    save_run,
+)
 
 from .audio import Sfx, loudest_kind, sound_for_kind
 from .buffer import PatternBuffer
 from .crt import CrtSettings, CrtView
 from .font import BitmapFont
-from .render import draw_game, draw_title
+from .keys import KEY_BINDINGS
+from .screens.game import GameScreen
+from .screens.title import TitleScreen
 from .settings import load_settings, save_settings
 
 __all__ = ["DesktopApp", "KEY_BINDINGS"]
-
-#: What a key means in the dungeon. The terminal build's table, kept as the
-#: same dictionary of human key names to domain verbs so the two cannot drift
-#: about what ``k`` does.
-KEY_BINDINGS: dict[str, Action] = {
-    "up": Action.MOVE_NORTH,
-    "k": Action.MOVE_NORTH,
-    "w": Action.MOVE_NORTH,
-    "down": Action.MOVE_SOUTH,
-    "j": Action.MOVE_SOUTH,
-    "s": Action.MOVE_SOUTH,
-    "left": Action.MOVE_WEST,
-    "h": Action.MOVE_WEST,
-    "a": Action.MOVE_WEST,
-    "right": Action.MOVE_EAST,
-    "l": Action.MOVE_EAST,
-    "d": Action.MOVE_EAST,
-    "y": Action.MOVE_NW,
-    "u": Action.MOVE_NE,
-    "b": Action.MOVE_SW,
-    "n": Action.MOVE_SE,
-    "home": Action.MOVE_NW,
-    "pageup": Action.MOVE_NE,
-    "end": Action.MOVE_SW,
-    "pagedown": Action.MOVE_SE,
-    ".": Action.WAIT,
-    "space": Action.WAIT,
-    "i": Action.INVENTORY,
-    "q": Action.QUAFF,
-    "r": Action.REWIND,
-    ">": Action.DESCEND,
-    "enter": Action.INTERACT,
-}
 
 #: How few cells the layout may be squeezed to before the window is simply too
 #: small to hold the game. Rows are the tight one: the sidebar needs the HUD
@@ -74,10 +51,8 @@ KEY_BINDINGS: dict[str, Action] = {
 MIN_COLS = 80
 MIN_ROWS = 24
 
-#: How wide the grid aims to be. The zoom is chosen so the dungeon is about this
-#: many cells across, which is what makes the characters *big* on a big screen
-#: instead of merely numerous -- a 1080p monitor gets two-pixel cells and a
-#: ~100-column grid rather than one-pixel cells and a 190-column one.
+#: How wide the grid aims to be, so the characters are *big* on a big screen
+#: rather than merely numerous.
 TARGET_COLS = 110
 
 #: The keys that are not the game: the window, the glass, and the zoom.
@@ -90,7 +65,7 @@ ZOOM_OUT_KEYS = (Qt.Key.Key_Minus, Qt.Key.Key_Underscore)
 
 
 class DesktopApp(QMainWindow):
-    """The whole desktop game: one window, one view, one state."""
+    """The whole desktop game: one window, one view, a stack of screens."""
 
     def __init__(self, *, seed: int | None = None, no_sound: bool = False) -> None:
         super().__init__()
@@ -104,21 +79,21 @@ class DesktopApp(QMainWindow):
             geometry=bool(saved.get("geometry", False)),
         )
         zoom = saved.get("zoom")
-        #: The chosen pixel scale, or ``None`` to pick one from the window size.
-        self.zoom: int | None = int(zoom) if isinstance(zoom, (int, float)) and zoom >= 1 else None
+        self.zoom: int | None = (
+            int(zoom) if isinstance(zoom, (int, float)) and zoom >= 1 else None
+        )
 
         self.view = CrtView(self.crt, self)
         self.setCentralWidget(self.view)
         self.view.installEventFilter(self)
         self.view.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
-        self.meta = load_meta()
+        self.progress = load_meta()
         self.seed = seed if seed is not None else int(time.time())
-        self.screen = "title"
-        self.run: GameState | None = None
+        self.run = None
+        self.screens: list = [TitleScreen()]
         self._buffer: PatternBuffer | None = None
         self._grid = (0, 0)
-        self._last_action: dict[str, float] = {}
         self._seen_log = 0
         self.sfx = Sfx(muted=no_sound)
 
@@ -137,15 +112,7 @@ class DesktopApp(QMainWindow):
         self.redraw()
 
     def _grid_size(self) -> tuple[int, int]:
-        """How many cells fit, at the largest whole-number pixel scale.
-
-        The scale is what makes a character big or small, and it is chosen so
-        the grid lands near :data:`TARGET_COLS` wide -- a *zoom into* the field
-        rather than a fill of it. On a 1080p screen that is two-pixel cells and
-        about a hundred columns; on 4K, four-pixel cells and the same grid, so
-        the game looks the same size relative to the eye on both. ``+`` and
-        ``-`` move the scale by hand and the choice is remembered.
-        """
+        """How many cells fit, at the largest whole-number pixel scale."""
         width = max(1, self.view.width())
         height = max(1, self.view.height())
         scale = self._scale_for(width, height)
@@ -155,29 +122,22 @@ class DesktopApp(QMainWindow):
         return cols, rows
 
     def _max_scale(self, width: int, height: int) -> int:
-        """The largest scale at which the minimum layout still fits."""
         cell_w, cell_h = self.font.cell_w, self.font.cell_h
-        return max(
-            1,
-            min(width // (MIN_COLS * cell_w), height // (MIN_ROWS * cell_h)),
-        )
+        return max(1, min(width // (MIN_COLS * cell_w), height // (MIN_ROWS * cell_h)))
 
     def _scale_for(self, width: int, height: int) -> int:
-        """The pixel scale: the chosen one, or one that hits the target width."""
         ceiling = self._max_scale(width, height)
         if self.zoom is not None:
             return max(1, min(self.zoom, ceiling))
-        cell_w = self.font.cell_w
-        target = max(1, round(width / (TARGET_COLS * cell_w)))
+        target = max(1, round(width / (TARGET_COLS * self.font.cell_w)))
         return max(1, min(target, ceiling))
 
     def _nudge_zoom(self, delta: int) -> None:
-        """Zoom in or out by one, and remember it."""
         width = max(1, self.view.width())
         height = max(1, self.view.height())
         current = self._scale_for(width, height)
         self.zoom = max(1, min(current + delta, self._max_scale(width, height)))
-        self._buffer = None  # the grid changes, so the buffer does too
+        self._buffer = None
         self._remember()
         self.redraw()
 
@@ -196,43 +156,152 @@ class DesktopApp(QMainWindow):
         if self._buffer is None or (cols, rows) != self._grid:
             self._buffer = PatternBuffer(cols, rows, self.font)
             self._grid = (cols, rows)
-        if self.screen == "title":
-            draw_title(
-                self._buffer,
-                "a desktop roguelite",
-                "press any key   ·   + / - zoom   ·   F2 scanlines   F3 bloom"
-                "   F4 curve   F11 fullscreen",
-            )
-        elif self.screen == "game" and self.run is not None:
-            draw_game(self._buffer, self.run)
+        self._buffer.clear()
+        for screen in self.screens:
+            screen.draw(self._buffer, self)
         self.view.set_frame(self._buffer.render())
 
-    # -- the game -----------------------------------------------------------
-    def begin(self) -> None:
-        """Start a run and show it."""
-        self.run = start_run(HEROES["noxx"], self.seed)
+    # -- the stack ----------------------------------------------------------
+    def push(self, screen) -> None:
+        self.screens.append(screen)
+        self.redraw()
+
+    def pop(self) -> None:
+        if len(self.screens) > 1:
+            self.screens.pop()
+        self.redraw()
+
+    def return_to_title(self) -> None:
+        self.run = None
+        self.screens = [TitleScreen()]
+        self.redraw()
+
+    # -- progress -----------------------------------------------------------
+    def save_progress(self) -> None:
+        try:
+            save_meta(self.progress)
+        except OSError:
+            pass
+
+    def has_saved_run(self) -> bool:
+        return load_run() is not None
+
+    def record_run(self, state, name: str = "") -> int:
+        self.progress.record_run(
+            depth=state.depth,
+            score=state.score,
+            kills=state.kills,
+            gold=state.gold,
+            won=state.run_state is RunState.ESCAPED,
+            name=name,
+            hero=state.hero.key,
+        )
+        self.progress.reroll_wilds(Rng(random.SystemRandom().randrange(2**32)))
+        self.save_progress()
+        return self.progress.best_score
+
+    # -- navigation ---------------------------------------------------------
+    def open_hero_select(self) -> None:
+        from .screens.hero_select import HeroSelectScreen
+
+        self.push(HeroSelectScreen())
+
+    def begin_run(self, hero_key: str) -> None:
+        loadout = loadout_from(self.progress)
+        self.save_progress()
+        missing = tuple(
+            number
+            for number in range(1, PAGE_COUNT + 1)
+            if number not in self.progress.pages
+        )
+        self.run = start_run(
+            HEROES[hero_key], self.seed, loadout=loadout, pages=missing
+        )
         self._seen_log = 0
-        self.screen = "game"
+        self.screens = [GameScreen(self.run)]
         self.redraw()
 
-    def _play_new_sounds(self) -> None:
+    def continue_run(self) -> None:
+        payload = load_run()
+        if not payload:
+            return
+        try:
+            state = load(payload)
+        except Exception:
+            clear_run()
+            return
+        clear_run()
+        self.run = state
+        self._seen_log = len(state.log)
+        self.screens = [GameScreen(state)]
+        self.redraw()
+
+    def open_shop(self) -> None:
+        from .screens.menus import ShopScreen
+
+        self.push(ShopScreen())
+
+    def open_scoreboard(self) -> None:
+        from .screens.menus import ScoreboardScreen
+
+        self.push(ScoreboardScreen())
+
+    def open_chronicle(self) -> None:
+        from .screens.menus import ChronicleScreen
+
+        self.push(ChronicleScreen())
+
+    def save_and_quit(self) -> None:
+        if self.run is not None:
+            save_run(dump(self.run))
+        self.return_to_title()
+
+    def quit_requested(self) -> None:
+        from .screens.dialogs import ConfirmScreen
+
+        self.push(
+            ConfirmScreen(
+                "QUIT NEVERDEAD'S REVENGE?",
+                "The dungeon will still be here when you come back.",
+                on_done=lambda yes: self.close() if yes else None,
+            )
+        )
+
+    def confirm_quit_to_title(self) -> None:
+        from .screens.dialogs import ConfirmScreen
+
+        self.push(
+            ConfirmScreen(
+                "QUIT TO THE TITLE?",
+                "The run does not come back. It is not written down.",
+                on_done=lambda yes: self.return_to_title() if yes else None,
+            )
+        )
+
+    def toggle_sound(self) -> None:
+        self.sfx.toggle()
+        self.progress.muted = self.sfx.muted
+        self.save_progress()
+
+    # -- sound --------------------------------------------------------------
+    def play(self, name: str | None) -> None:
+        if name:
+            self.sfx.play(name)
+
+    def play_after(self, before: tuple[int, int, int]) -> None:
+        """Make the noise the last thing that happened deserves."""
         run = self.run
-        if run is None:
+        if run is None or run.over:
             return
-        fresh = run.log[self._seen_log :]
-        self._seen_log = len(run.log)
-        kind = loudest_kind(entry.kind for entry in fresh)
-        if kind is not None:
-            name = sound_for_kind(kind)
-            if name is not None:
-                self.sfx.play(name)
-
-    def _act(self, action: Action) -> None:
-        if self.run is None:
+        before_log, before_depth, before_level = before
+        if run.depth != before_depth:
+            self.play("stairs")
             return
-        perform_action(self.run, action)
-        self._play_new_sounds()
-        self.redraw()
+        if run.level != before_level:
+            self.play("level")
+            return
+        kind = loudest_kind(entry.kind for entry in run.log[before_log:])
+        self.play(sound_for_kind(kind) if kind is not None else None)
 
     # -- input --------------------------------------------------------------
     def eventFilter(self, obj, event):  # noqa: N802 - Qt's spelling
@@ -244,14 +313,11 @@ class DesktopApp(QMainWindow):
     def _on_key(self, event: QKeyEvent) -> None:
         if self._window_key(event):
             return
-        if self.screen == "title":
-            if event.key() == Qt.Key.Key_Escape:
-                self.close()
-            elif not event.isAutoRepeat():
-                self.begin()
+        name = self._key_name(event)
+        if name is None:
             return
-        if self.screen == "game":
-            self._game_key(event)
+        if self.screens and self.screens[-1].key(name, event, self):
+            self.redraw()
 
     def _window_key(self, event: QKeyEvent) -> bool:
         """Fullscreen, the zoom, and the three glass keys."""
@@ -282,35 +348,9 @@ class DesktopApp(QMainWindow):
             return True
         return False
 
-    def _game_key(self, event: QKeyEvent) -> None:
-        if event.key() == Qt.Key.Key_Escape:
-            self.screen = "title"
-            self.redraw()
-            return
-
-        name = self._key_name(event)
-        action = KEY_BINDINGS.get(name)
-        if action is None:
-            return
-
-        if action.direction.name != "NONE":
-            # A held direction is one gesture, so its repeats are allowed -- but
-            # no faster than the hero's own pace, which is what stops a held key
-            # from turning a fight into an unreadable blur.
-            if event.isAutoRepeat():
-                speed = self.run.player.speed if self.run else 1.0
-                now = time.monotonic()
-                if now - self._last_action.get(name, 0.0) < action_gap(speed):
-                    return
-            self._last_action[name] = time.monotonic()
-        elif event.isAutoRepeat():
-            return  # every other key acts only on a fresh press
-
-        self._act(action)
-
     @staticmethod
-    def _key_name(event: QKeyEvent) -> str:
-        """The name the key table uses for this event."""
+    def _key_name(event: QKeyEvent) -> str | None:
+        """The name the key tables use for this event, or ``None``."""
         named = {
             Qt.Key.Key_Up: "up",
             Qt.Key.Key_Down: "down",
@@ -323,8 +363,12 @@ class DesktopApp(QMainWindow):
             Qt.Key.Key_Space: "space",
             Qt.Key.Key_Return: "enter",
             Qt.Key.Key_Enter: "enter",
+            Qt.Key.Key_Escape: "escape",
+            Qt.Key.Key_Backspace: "backspace",
+            Qt.Key.Key_Delete: "delete",
+            Qt.Key.Key_F1: "f1",
         }
         if event.key() in named:
             return named[event.key()]
         text = event.text()
-        return text.lower() if text else ""
+        return text.lower() if text else None
