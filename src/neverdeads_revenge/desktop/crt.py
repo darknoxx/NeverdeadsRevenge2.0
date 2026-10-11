@@ -23,8 +23,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from PySide6.QtCore import QSize
-from PySide6.QtGui import QImage, QOpenGLFunctions, QVector2D
+from PySide6.QtCore import QRect, QSize
+from PySide6.QtGui import QColor, QImage, QOpenGLFunctions, QPainter, QVector2D
 from PySide6.QtOpenGL import (
     QOpenGLBuffer,
     QOpenGLShader,
@@ -183,6 +183,8 @@ class CrtView(QOpenGLWidget):
         self._texture: QOpenGLTexture | None = None
         self._program: QOpenGLShaderProgram | None = None
         self._buffer: QOpenGLBuffer | None = None
+        self._gl = None
+        self._linked = False
         self._scale = 1
         self._offset = (0.0, 0.0)
         self.setMinimumSize(320, 200)
@@ -220,7 +222,13 @@ class CrtView(QOpenGLWidget):
         )
         program.bindAttributeLocation("position", 0)
         program.bindAttributeLocation("uv", 1)
-        program.link()
+        self._linked = program.link()
+        if not self._linked:
+            # No shader, no CRT -- but not a black window. ``paintGL`` falls back
+            # to QPainter and draws the frame crisp, which is the whole game with
+            # the glass switched off.
+            self._program = None
+            return
         self._program = program
 
         # A fullscreen quad as a triangle strip: clip-space corners, and the
@@ -267,7 +275,10 @@ class CrtView(QOpenGLWidget):
         gl = self._gl
         gl.glClearColor(0.0, 0.0, 0.0, 1.0)
         gl.glClear(GL_COLOR_BUFFER_BIT)
-        if self._frame is None or self._program is None or self._buffer is None:
+        if self._frame is None:
+            return
+        if self._program is None or self._buffer is None:
+            self._paint_software()
             return
 
         self._recompute()
@@ -310,3 +321,27 @@ class CrtView(QOpenGLWidget):
 
     def resizeGL(self, width: int, height: int) -> None:
         self._recompute()
+
+    def _paint_software(self) -> None:
+        """The fallback: the frame, crisp, with scanlines if they are on.
+
+        Reached only when the shader would not link -- an old driver, a machine
+        with no GPU -- and deliberately plain. The integer scale and the
+        letterbox still hold, because those are arithmetic and not a shader;
+        what is lost is the bloom and the curve, which need one.
+        """
+        self._recompute()
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
+        target = QRect(
+            int(self._offset[0]),
+            int(self._offset[1]),
+            self._frame.width() * self._scale,
+            self._frame.height() * self._scale,
+        )
+        painter.drawImage(target, self._frame)
+        if self.settings.scanlines:
+            painter.setPen(QColor(0, 0, 0, 120))
+            for y in range(target.top(), target.bottom() + 1, 2):
+                painter.drawLine(target.left(), y, target.right(), y)
+        painter.end()
