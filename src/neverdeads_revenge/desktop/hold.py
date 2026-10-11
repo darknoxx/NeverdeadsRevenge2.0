@@ -98,6 +98,13 @@ class HoldToContinue:
             return False
 
         now = time.monotonic()
+        if self._started is not None and self._presses and now - self._presses[-1] > self.reset_after:
+            # A silence this long since the last press means the key came up.
+            # Whatever progress an old hold had banked must go too -- or the
+            # next tap inherits it whole, and a fresh press reads as a
+            # completed hold. (The taps stay listed: the deliberate-presses
+            # judge them on their own gaps.)
+            self._started = None
         if self._started is None:
             self._started = now
 

@@ -428,12 +428,16 @@ class DesktopApp(QMainWindow):
 
     def _window_key(self, event: QKeyEvent) -> bool:
         """Fullscreen and the three glass keys."""
-        # Glass toggles answer a press, not a held key: F2 held down would
-        # flip the scanlines thirty times a second and save the setting
-        # thirty times a second with it.
-        if event.isAutoRepeat():
-            return True
         key = event.key()
+        # Glass toggles answer a press, not a held key: F2 held down would
+        # flip the scanlines thirty times a second and rewrite the settings
+        # with it. But ONLY the glass keys are swallowed here -- a returned
+        # True for *every* repeat would starve the hold screens, which live
+        # precisely on those repeats. That was the bug: a held enter on the
+        # prologue fed the bar once and then hit this wall, and nothing
+        # happened until the key came up and went down again.
+        if event.isAutoRepeat():
+            return key in (FULLSCREEN_KEY, SCANLINE_KEY, BLOOM_KEY, GEOMETRY_KEY)
         if key == FULLSCREEN_KEY:
             self.showFullScreen() if not self.isFullScreen() else self.showNormal()
             return True

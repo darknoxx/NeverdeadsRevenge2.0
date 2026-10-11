@@ -550,3 +550,39 @@ def test_what_the_purse_cannot_reach_reads_as_closed(app):
     assert priced, "nothing was in reach of a full purse"
     text, style, _ = rows[screen.offers.index(priced[0])]
     assert style == f"bold {BONE}", "an offer in reach hid in the ash"
+
+
+def test_a_held_enter_reads_through_the_repeat_stream(app):
+    """The hold lives on auto-repeat events; eating repeats anywhere above the
+    screens starves it (and that bug ate them at the window layer). One press,
+    then the hardware stream Qt really sends -- the screen must go."""
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.desktop.screens.prologue import PrologueScreen
+
+    app.prologue_seen = False
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)
+    assert top(app) == "PrologueScreen"
+
+    start = time.monotonic()
+    press(app, Qt.Key.Key_Return)
+    while time.monotonic() - start < 1.6 and top(app) == "PrologueScreen":
+        time.sleep(0.033)
+        press(app, Qt.Key.Key_Return, repeat=True)
+
+    assert top(app) == "GameScreen", "a held enter starved at the window"
+
+
+def test_an_old_hold_cannot_cash_itself_in():
+    """A hold interrupted long enough for the key to come up banks nothing:
+    the next tap starts a fresh hold instead of inheriting a full bar."""
+    import time as _time
+
+    from neverdeads_revenge.desktop.hold import HoldToContinue
+
+    hold = HoldToContinue()
+    assert hold.press("enter") is False
+
+    _time.sleep(1.05)  # long enough to be a release, long enough for 1.0s
+    assert hold.press("enter") is False, "a stale hold spent itself in one tap"
