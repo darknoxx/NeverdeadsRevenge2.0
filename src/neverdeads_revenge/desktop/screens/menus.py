@@ -59,7 +59,11 @@ class _Panel(Screen):
         buffer.text(x + 3, y + height - 1, (self.hint + more)[: width - 6], parse_style(ASH))
 
     def key(self, name, event, app) -> bool:
-        if event.isAutoRepeat():
+        # Held scroll keys walk the list at the keyboard's pace, like in the
+        # terminal; repeats of everything else must not answer (a held enter
+        # that opened this screen must not close it from underneath).
+        moving = name in ("up", "k", "w", "down", "j", "s")
+        if event.isAutoRepeat() and not moving:
             return True
         total, window = self._body_size
         floor = max(0, total - window)
@@ -321,15 +325,20 @@ class ShopScreen(Screen):
         )
 
     def key(self, name, event, app) -> bool:
-        if event.isAutoRepeat():
+        # The scroll keys are allowed to be held (a held key scrolls the shelf
+        # at the keyboard's repeat pace, as in the terminal) -- repeats of
+        # everything else, a held enter among it, are refused.
+        moving = name in ("up", "k", "down", "j")
+        if event.isAutoRepeat() and not moving:
             return True
         if not self.offers:
             self._restock(app)
         if name in ("up", "k"):
-            self.index = (self.index - 1) % max(1, len(self.offers))
+            self.index = max(0, self.index - 1)  # stop at the top, no loop
             return True
         if name in ("down", "j"):
-            self.index = (self.index + 1) % max(1, len(self.offers))
+            # ...and at the bottom of the shelf.
+            self.index = min(max(0, len(self.offers) - 1), self.index + 1)
             return True
         if name == "enter" and self.offers:
             try:

@@ -703,3 +703,80 @@ def test_a_long_list_stops_at_its_floor(app, font):
     for _ in range(total + 10):
         screen.key("up", _FakeEvent(), app)
     assert screen.offset == 0
+
+
+def test_the_shelf_stops_at_its_ends(app):
+    """A list walks to its ends and stops; it does not loop, because the offer
+    you wanted to pass was before the one you now cannot see."""
+    from PySide6.QtCore import Qt
+
+    press(app, Qt.Key.Key_S, "s")  # the shop
+    screen = app.screens[-1]
+
+    press(app, Qt.Key.Key_Up)  # the top: already the first offer
+    assert screen.index == 0
+
+    for _ in range(100):
+        press(app, Qt.Key.Key_Down)
+    last = screen.index
+    assert last == len(screen.offers) - 1, "down did not reach the shelf's end"
+
+    press(app, Qt.Key.Key_Down)
+    assert screen.index == last, "the bottom looped the shelf to its head"
+
+    for _ in range(100):
+        press(app, Qt.Key.Key_Up)
+    assert screen.index == 0
+
+    press(app, Qt.Key.Key_Up)
+    assert screen.index == 0, "the top looped the shelf to its foot"
+    press(app, Qt.Key.Key_Escape)
+
+
+def test_a_held_scroll_key_walks_the_list(app):
+    """Only the scroll keys accept a held key: repeats of everything else --
+    most of all a held enter -- answer nothing."""
+    from PySide6.QtCore import Qt
+
+    press(app, Qt.Key.Key_S, "s")  # the shop
+    screen = app.screens[-1]
+    gold = app.progress.gold
+
+    for _ in range(6):
+        press(app, Qt.Key.Key_Down, repeat=True)
+    assert screen.index >= 3, "a held scroll key did not walk the list"
+
+    for _ in range(6):
+        press(app, Qt.Key.Key_Up, repeat=True)
+    assert screen.index == 0, "a held scroll key did not walk back"
+
+    press(app, Qt.Key.Key_Down)
+    for _ in range(4):
+        press(app, Qt.Key.Key_Enter, repeat=True)  # a held enter must not buy
+    assert app.progress.gold == gold, "a held enter spent gold"
+    press(app, Qt.Key.Key_Escape)
+
+
+def test_a_held_scroll_key_walks_a_panel(app, font):
+    from neverdeads_revenge.desktop.buffer import PatternBuffer
+    from neverdeads_revenge.desktop.screens.menus import PackScreen
+    from neverdeads_revenge.world.items import ITEMS, make_item
+
+    class _LongPack:
+        inventory = [make_item(ITEMS[key]) for key in list(ITEMS)[:14]]
+
+    screen = PackScreen(_LongPack())
+    buffer = PatternBuffer(70, 30, font)
+    screen.draw(buffer, app)
+    total, window = screen._body_size
+
+    class _Repeat:
+        def isAutoRepeat(self) -> bool:
+            return True
+
+    for _ in range(8):
+        screen.key("down", _Repeat(), app)
+    assert screen.offset > 0, "a held scroll key did not walk the panel"
+    for _ in range(50):
+        screen.key("down", _Repeat(), app)
+    assert screen.offset == max(0, total - window), "held scrolling passed the floor"
