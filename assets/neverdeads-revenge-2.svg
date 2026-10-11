@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <title>Neverdead's Revenge</title>
+  <rect x="8" y="8" width="240" height="240" rx="52" fill="#121212"/>
+  <rect x="9.5" y="9.5" width="237" height="237" rx="50.5" fill="none" stroke="#2a2a2a" stroke-width="3"/>
+  <rect x="76" y="24" width="104" height="13" fill="#e8e4dc"/>
+  <rect x="50" y="37" width="156" height="13" fill="#e8e4dc"/>
+  <rect x="37" y="50" width="182" height="13" fill="#e8e4dc"/>
+  <rect x="24" y="63" width="208" height="13" fill="#e8e4dc"/>
+  <rect x="24" y="76" width="208" height="13" fill="#e8e4dc"/>
+  <rect x="24" y="89" width="26" height="13" fill="#e8e4dc"/>
+  <rect x="89" y="89" width="78" height="13" fill="#e8e4dc"/>
+  <rect x="206" y="89" width="26" height="13" fill="#e8e4dc"/>
+  <rect x="24" y="102" width="26" height="13" fill="#e8e4dc"/>
+  <rect x="89" y="102" width="78" height="13" fill="#e8e4dc"/>
+  <rect x="206" y="102" width="26" height="13" fill="#e8e4dc"/>
+  <rect x="24" y="115" width="26" height="13" fill="#e8e4dc"/>
+  <rect x="89" y="115" width="78" height="13" fill="#e8e4dc"/>
+  <rect x="206" y="115" width="26" height="13" fill="#e8e4dc"/>
+  <rect x="24" y="128" width="208" height="13" fill="#e8e4dc"/>
+  <rect x="24" y="141" width="91" height="13" fill="#e8e4dc"/>
+  <rect x="141" y="141" width="91" height="13" fill="#e8e4dc"/>
+  <rect x="24" y="154" width="91" height="13" fill="#e8e4dc"/>
+  <rect x="141" y="154" width="91" height="13" fill="#e8e4dc"/>
+  <rect x="37" y="167" width="182" height="13" fill="#e8e4dc"/>
+  <rect x="50" y="180" width="156" height="13" fill="#e8e4dc"/>
+  <rect x="50" y="193" width="156" height="13" fill="#e8e4dc"/>
+  <rect x="50" y="206" width="26" height="13" fill="#e8e4dc"/>
+  <rect x="89" y="206" width="13" height="13" fill="#e8e4dc"/>
+  <rect x="115" y="206" width="26" height="13" fill="#e8e4dc"/>
+  <rect x="154" y="206" width="13" height="13" fill="#e8e4dc"/>
+  <rect x="180" y="206" width="26" height="13" fill="#e8e4dc"/>
+  <rect x="50" y="219" width="26" height="13" fill="#e8e4dc"/>
+  <rect x="89" y="219" width="13" height="13" fill="#e8e4dc"/>
+  <rect x="115" y="219" width="26" height="13" fill="#e8e4dc"/>
+  <rect x="154" y="219" width="13" height="13" fill="#e8e4dc"/>
+  <rect x="180" y="219" width="26" height="13" fill="#e8e4dc"/>
+  <rect x="50" y="89" width="39" height="13" fill="#a855f7"/>
+  <rect x="167" y="89" width="39" height="13" fill="#a855f7"/>
+  <rect x="50" y="102" width="39" height="13" fill="#a855f7"/>
+  <rect x="167" y="102" width="39" height="13" fill="#a855f7"/>
+  <rect x="50" y="115" width="39" height="13" fill="#a855f7"/>
+  <rect x="167" y="115" width="39" height="13" fill="#a855f7"/>
+</svg>

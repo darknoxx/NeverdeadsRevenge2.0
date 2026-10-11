@@ -129,6 +129,19 @@ the wall clock, a release ends it, and taps never sneak through.
 ## Getting started
 
 ```sh
+./install.sh
+```
+
+The installer does **whatever is missing**: it creates a `.venv` in this
+directory, installs the game and its dependencies into it, checks the imports
+(PySide6/miniaudio), and on Linux adds the game to the applications menu --
+with a real icon, no sudo, nothing outside `$HOME`. Run it again any time; it
+reuses what is already there. `--dry-run`, `--no-desktop`, `--python PATH` and
+`--uninstall` are supported.
+
+The long way, if you prefer doing it by hand:
+
+```sh
 python3 -m venv .venv
 ./.venv/bin/pip install -e '.[dev]'
 ./ndr2
