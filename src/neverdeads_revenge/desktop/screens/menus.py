@@ -184,21 +184,31 @@ class ScoreboardScreen(_Panel):
 
 
 class ChronicleScreen(_Panel):
-    """The pages found, and the holes."""
+    """The book: every page found, written out in full.
+
+    It used to show one line per page, which made it a shelf of unread spines.
+    A chronicle is for *reading* -- so each found page carries its whole text,
+    wrapped, under its heading, and the still-missing ones say so.
+    """
 
     title = "THE CHRONICLE"
 
     def lines(self, app) -> list[tuple[str, str]]:
         from neverdeads_revenge.game.lore import page
 
+        from .dialogs import wrap
+
         rows: list[tuple[str, str]] = []
         found = 0
         for number in range(1, PAGE_COUNT + 1):
             if number in app.progress.pages:
                 found += 1
-                text = page(number) or ""
-                first = text.strip().splitlines()[0] if text.strip() else ""
-                rows.append((f"PAGE {numeral(number):<8} {first[:40]}", BONE))
+                text = (page(number) or "").strip()
+                first = text.splitlines()[0] if text else ""
+                rows.append((f"PAGE {numeral(number):<8} {first[:40]}", f"bold {BONE}"))
+                for line in wrap(text, 60):
+                    rows.append((f"      {line}", BONE))
+                rows.append(("", ""))
             else:
                 rows.append((f"PAGE {numeral(number):<8} ——— unread", ASH))
         rows.insert(0, (f"{found} of {PAGE_COUNT} found", f"bold {PURPLE}"))

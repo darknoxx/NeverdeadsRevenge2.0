@@ -113,21 +113,17 @@ def test_the_sidebar_runs_the_whole_height_and_the_bottom_does_not():
     assert side_w == SIDEBAR
 
 
-def test_the_columns_sit_inside_the_bottom_row():
-    from neverdeads_revenge.desktop.render import (
-        CURSES_WIDTH,
-        MARKS_WIDTH,
-        regions,
-    )
+def test_the_log_owns_the_whole_bottom_strip():
+    """The columns moved into the sidebar; the log is what the bottom strip is."""
+    from neverdeads_revenge.desktop.render import BOTTOM, regions
 
     areas = regions(100, 34)
-    log_x, _, log_w, _ = areas["log"]
-    curses_x, _, curses_w, _ = areas["curses"]
-    marks_x, _, marks_w, _ = areas["marks"]
+    log_x, _, log_w, log_h = areas["log"]
 
-    assert log_x == 0 and log_w + CURSES_WIDTH + MARKS_WIDTH == areas["bottom"][2]
-    assert curses_x == log_w and curses_w == CURSES_WIDTH
-    assert marks_x == log_w + CURSES_WIDTH and marks_w == MARKS_WIDTH
+    assert set(areas) == {"map", "sidebar", "bottom", "log"}
+    assert log_x == 0
+    assert log_w == areas["bottom"][2], "the log filled the strip"
+    assert log_h == BOTTOM
 
 
 # -- the content --------------------------------------------------------------

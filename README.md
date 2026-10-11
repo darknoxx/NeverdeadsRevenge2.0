@@ -79,8 +79,9 @@ One zoom, the big one. The scale lands the grid near a hundred columns, so a
 1080p screen gets a character of two pixels and the field fills the display
 exactly; a 4K screen gets four. There is no dial, because the answer to "the
 words are small" was not a smaller dungeon -- it was giving the **log its own
-smaller face**, drawn straight onto the frame, so the words a player is reading
-in a fight fit in more rows without anything they aim with giving up a pixel.
+smaller face**, drawn straight onto the frame, and the **legend** with it. The
+curses, gifts and effects live in the sidebar now, under the stats, above a
+rule; the legend sits under another. The bottom strip is the log's alone.
 
 ## How it is put together
 
@@ -92,7 +93,7 @@ src/neverdeads_revenge/
     font.py     a monospaced cell, drawn without antialiasing
     buffer.py   the grid of characters -> an image
     crt.py      the shader: integer scaling, scanlines, bloom, geometry
-    render.py   the map, sidebar, log and columns, as cells
+    render.py   the map, the sidebar and the log strip, as cells
     app.py      the window, the keys, and the loop
 ```
 

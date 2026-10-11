@@ -28,19 +28,19 @@ from neverdeads_revenge.world.items import (
 from neverdeads_revenge.world.tiles import Tile
 
 from .buffer import PatternBuffer
+from .chrome import ASH, rule
 from .theme import BACKGROUND, Style, parse_style
 
 __all__ = [
     "SIDEBAR",
     "BOTTOM",
-    "CURSES_WIDTH",
-    "MARKS_WIDTH",
     "HUD_WIDTH",
     "regions",
     "viewport",
     "screen_point",
     "draw_game",
     "paste_log",
+    "paste_legend",
     "draw_title",
     "hud_lines",
     "marks_names",
@@ -49,11 +49,8 @@ __all__ = [
 
 #: The sidebar is a fixed strip, exactly as wide as the terminal's.
 SIDEBAR = 34
-#: The bottom row's height: the log and the two columns.
-BOTTOM = 10
-#: The two columns beside the log, widths unchanged from the terminal build.
-CURSES_WIDTH = 16
-MARKS_WIDTH = 22
+#: The bottom row's height: the log, pasted smaller, and nothing else.
+BOTTOM = 7
 #: What the HUD wraps at, inside the sidebar's content box.
 HUD_WIDTH = SIDEBAR - 4
 
@@ -90,24 +87,22 @@ _BAR_CELLS = 12
 
 # -- layout -------------------------------------------------------------------
 def regions(cols: int, rows: int) -> dict[str, tuple[int, int, int, int]]:
-    """The rectangles, in cells: map, sidebar, bottom, log, curses, marks.
+    """The rectangles, in cells: map, sidebar, and the log strip under the map.
 
-    The sidebar runs the full height on the right, and the bottom row sits under
-    the *map* rather than under everything -- exactly the split ``app.tcss``
-    drew. A bottom row that ran under the sidebar would put the columns on top
-    of the legend, which is what the first draft of this did.
+    The sidebar runs the full height on the right and owns everything on it --
+    the stats, a rule, the curses, gifts and effects, another rule, and the
+    legend. The bottom strip under the map is the log's alone; the columns used
+    to share it and moved into the sidebar, which is why their width constants
+    are gone.
     """
     map_w = max(1, cols - SIDEBAR)
     map_h = max(1, rows - BOTTOM)
     bottom_y = map_h
-    log_w = max(1, map_w - CURSES_WIDTH - MARKS_WIDTH)
     return {
         "map": (0, 0, map_w, map_h),
         "sidebar": (map_w, 0, SIDEBAR, rows),
         "bottom": (0, bottom_y, map_w, BOTTOM),
-        "log": (0, bottom_y, log_w, BOTTOM),
-        "curses": (log_w, bottom_y, CURSES_WIDTH, BOTTOM),
-        "marks": (log_w + CURSES_WIDTH, bottom_y, MARKS_WIDTH, BOTTOM),
+        "log": (0, bottom_y, map_w, BOTTOM),
     }
 
 
@@ -151,7 +146,7 @@ def screen_point(
 
 
 def draw_game(buffer: PatternBuffer, state: GameState) -> None:
-    """The whole play screen: map, sidebar, and the bottom row.
+    """The whole play screen: map, sidebar, and the bottom strip.
 
     The log is *not* drawn here: it is a smaller face than the rest of the
     frame, so it is pasted on afterwards by :func:`paste_log`, straight onto the
@@ -161,8 +156,6 @@ def draw_game(buffer: PatternBuffer, state: GameState) -> None:
     areas = regions(buffer.cols, buffer.rows)
     _draw_map(buffer, state, areas["map"])
     _draw_sidebar(buffer, state, areas["sidebar"])
-    _draw_column(buffer, state, areas["curses"], ("curses",))
-    _draw_column(buffer, state, areas["marks"], ("gifts", "effects"))
 
 
 def _draw_map(buffer, state, area) -> None:
@@ -215,23 +208,63 @@ def _cell_content(position, state: GameState) -> tuple[str, Style]:
 
 # -- the sidebar --------------------------------------------------------------
 def _draw_sidebar(buffer, state, area) -> None:
-    """The HUD, in the big face, and nothing else.
+    """The HUD in the big face, then a rule, then what is on you, then a rule.
 
-    The legend that used to follow it is pasted on afterwards in the log's own
-    smaller face (:func:`paste_legend`); what this leaves is the room the HUD
-    owns, and the rest is the legend's panel.
+    Everything below the second rule belongs to the legend, which is pasted on
+    afterwards in the log's own smaller face (:func:`paste_legend`) -- which is
+    why the drawing stops where it does, and why :func:`sidebar_layout` has to
+    agree with it row for row.
     """
     x0, y0, width, height = area
     y = y0
     for text, style in hud_lines(state):
         buffer.text(x0 + 1, y, text[: width - 2], parse_style(style))
         y += 1
+    y += 1  # a blank row, as always under the HUD
+    rule(buffer, x0 + 1, y, width - 2, ASH)
+    y += 1
+    for kind in ("curses", "gifts", "effects"):
+        y = _draw_mark_group(buffer, state, x0 + 2, y, width - 3, kind)
+    rule(buffer, x0 + 1, y, width - 2, ASH)
+
+
+def _draw_mark_group(buffer, state, x: int, y: int, width: int, kind: str) -> int:
+    """One glance group, its heading and its names. Returns the next free row."""
+    buffer.text(x, y, kind.upper()[:width], parse_style("dim"))
+    y += 1
+    names = marks_names(state, kind)
+    if not names:
+        buffer.put(x, y, "-", parse_style("dim"))
+        return y + 1
+    for name in names:
+        buffer.text(x, y, name[:width], parse_style(_STYLE_BY_GROUP[kind]))
+        y += 1
+    return y
+
+
+def marks_rows(state) -> int:
+    """How many rows the glance groups take in the sidebar.
+
+    This and :func:`_draw_mark_group` are the same question asked twice, of the
+    same names, and it is what tells the legend where it may begin without
+    either of them measuring the screen differently.
+    """
+    total = 0
+    for kind in ("curses", "gifts", "effects"):
+        total += 1  # the heading
+        names = marks_names(state, kind)
+        total += len(names) if names else 1  # the names, or the dash
+    return total
 
 
 def sidebar_layout(state) -> int:
-    """How many rows of the sidebar the HUD spends, plus the one blank row
-    between it and whatever is under it."""
-    return len(hud_lines(state)) + 1
+    """The sidebar row the legend starts on.
+
+    The HUD's lines, the blank row under them, a rule, the glance groups and a
+    second rule -- the legend begins under the last of it, and shares this
+   	counting with the drawing above by reading both off the same functions.
+    """
+    return len(hud_lines(state)) + 1 + 1 + marks_rows(state) + 1
 
 
 def paste_legend(
@@ -411,31 +444,6 @@ def paste_log(
         )
         y += line_h
     painter.end()
-
-
-def _draw_column(buffer, state, area, kinds) -> None:
-    x0, y0, width, height = area
-    y = y0 + 1
-    budget = height - 2
-    shown = 0
-    for kind in kinds:
-        if shown >= budget:
-            break
-        buffer.text(x0 + 2, y, kind.upper(), parse_style("dim"))
-        y += 1
-        shown += 1
-        names = marks_names(state, kind)
-        if not names:
-            buffer.put(x0 + 2, y, "-", parse_style("dim"))
-            y += 1
-            shown += 1
-            continue
-        for name in names:
-            if shown >= budget:
-                break
-            buffer.text(x0 + 2, y, name[: width - 3], parse_style(_STYLE_BY_GROUP[kind]))
-            y += 1
-            shown += 1
 
 
 def marks_names(state: GameState, kind: str) -> list[str]:
