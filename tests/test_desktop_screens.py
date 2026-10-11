@@ -889,8 +889,9 @@ def test_the_wayland_lift_before_a_repeat_does_not_tear_the_hold():
     """The user saw a bar fill, empty itself, and fill again to the end. What
     happened between the fills: a Wayland compositor announces its repeat
     phase by lifting the key -- an honest-looking release -- and pressing it
-    again immediately as repeats. A hold must not read that lift as the end.
-    Only a press flagged as a repeat redeems the lift; nothing else does."""
+    again immediately, *unflagged*, as plain presses on this machine. A hold
+    must not read the lift as the end, whatever the presses after it claim
+    about themselves: the timing decides, not the flag."""
     import time as _time
 
     from neverdeads_revenge.desktop.hold import HoldToContinue
@@ -899,7 +900,8 @@ def test_the_wayland_lift_before_a_repeat_does_not_tear_the_hold():
     hold.press("enter")
     hold.release("enter")  # the compositor lifts the key before repeating
 
-    assert hold.press("enter", repeat=True) is False, "the hold read as finished"
+    # ...and presses again a frame later, with no distinguishing flag:
+    assert hold.press("enter") is False, "the hold read as finished"
     assert hold.holding, "the repeat press did not redeem the lift"
     assert hold.progress > 0.0, "the fill was thrown away mid-hold"
 
@@ -908,10 +910,16 @@ def test_the_wayland_lift_before_a_repeat_does_not_tear_the_hold():
     deadline = time.monotonic() + 0.8
     while time.monotonic() < deadline:
         _time.sleep(0.05)
-        hold.press("enter", repeat=True)
+        hold.press("enter")
     assert hold.progress >= 0.8
 
-    # a lift that gets no repeat behind it is still a key going up
+    # a lift that gets no press behind it is still a key going up
     hold.release("enter")
     _time.sleep(0.3)
     assert hold.progress == 0.0, "an unfollowed lift banked itself"
+
+    # and a real, late press after a lift starts a fresh hold from zero
+    hold.press("enter")
+    hold.release("enter")
+    _time.sleep(0.4)  # past the grace, before the next press
+    assert hold.press("enter") is False, "a stale bank paid the next tap"

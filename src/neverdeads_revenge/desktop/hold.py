@@ -69,23 +69,29 @@ class HoldToContinue:
         self._last_press = 0.0
 
     def press(self, key: str, repeat: bool = False) -> bool:
-        """Record a press of ``key``. True when the screen should go."""
+        """Record a press of ``key``. True when the screen should go.
+
+        ``repeat`` is kept in the call shape for honesty, but not trusted: on
+        some compositors the repeat presses arrive as plain presses with no
+        flag on them. The timing does the work instead -- a press close behind
+        a lift is the repeat phase, whatever it is labelled.
+        """
         if key not in self.keys:
             return False
 
         now = time.monotonic()
         if self._released_at is not None:
-            if repeat:
-                # The Wayland lift-and-repeat: the key was lifted and pressed
-                # again as a repeat. The hold lives on, fill included.
+            if now - self._released_at <= self.release_grace:
+                # A press this soon behind a lift is the compositor repeating
+                # -- flagged or not. The hold lives on, fill included.
                 self._released_at = None
             else:
-                # A press that is not a repeat is somebody's finger: whatever
-                # the old hold banked, it starts over.
+                # The lift was real and stood for the whole grace: the key
+                # went up, and nothing is banked.
                 self._started = None
                 self._released_at = None
         if self._started is not None and now - self._last_press > self.reset_after:
-            # No event ended the hold (a window stole focus) and the silence
+            # No event ended the hold (a window stole focus), but the silence
             # has gone on too long to be a repeat stream's.
             self._started = None
         if self._started is None:
