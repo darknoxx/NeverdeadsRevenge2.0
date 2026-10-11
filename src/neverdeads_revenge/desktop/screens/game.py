@@ -93,8 +93,14 @@ class GameScreen(Screen):
     def _do(self, action: Action, app) -> None:
         run = self.state
         before = (len(run.log), run.depth, run.level)
+        hp = run.player.hp
+        alive = {id(e): e.position for e in run.enemies}
+        gifts = set(run.gifts)
+        curses = len(run.curses)
+
         result = perform_action(run, action)
         app.play_after(before)
+        self._effects(app, alive, hp, gifts, curses, before[2])
         self._file_pages(app)
 
         if result.prompt is not None:
@@ -102,6 +108,29 @@ class GameScreen(Screen):
             return
         if result.died or result.escaped:
             self._game_over(app, won=result.escaped)
+
+    def _effects(self, app, alive, hp, gifts, curses, level_before) -> None:
+        """The moving pixels: what just happened, thrown at the screen.
+
+        Read off differences rather than hooked into the domain, because the
+        domain has no business knowing a screen exists. What died is whatever
+        was in ``enemies`` before and is not now; a wound is the hero's own
+        health going down; a rule gained is the gift set growing.
+        """
+        run = self.state
+        fx = app.effects
+        living = {id(enemy) for enemy in run.enemies}
+        for ident, position in alive.items():
+            if ident not in living:
+                fx.blood(position)
+        if run.player.hp < hp:
+            fx.blood(run.player.position, count=8)
+        if run.level > level_before:
+            fx.spark(run.player.position, "bright_white", count=20)
+        if run.gifts - gifts:
+            fx.spark(run.player.position, "bright_green", count=24)
+        if len(run.curses) > curses:
+            fx.spark(run.player.position, "#c81e1e", count=16)
 
     def _ask(self, result, app) -> None:
         if result.prompt_kind == "spring":

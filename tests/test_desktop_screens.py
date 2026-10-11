@@ -236,3 +236,31 @@ def test_a_run_that_escaped_is_recorded_as_won(app):
     game._game_over(app, won=True)
 
     assert top(app) == "GameOverScreen"
+
+
+# -- opaque panels, and a shop with a shelf ----------------------------------
+def test_a_menu_covers_the_screen_under_it(app):
+    from PySide6.QtCore import Qt
+
+    # The title is drawn with block art; the shop is not.
+    def has_block_art() -> bool:
+        return any(cell.char == "█" for row in app._buffer.cells for cell in row)
+
+    assert has_block_art(), "the title should be up"
+    app.progress.gold = 100
+    press(app, Qt.Key.Key_S, "s")
+
+    assert top(app) == "ShopScreen"
+    assert not has_block_art(), "the menu let the screen behind it show through"
+
+
+def test_the_shop_is_in_sections(app):
+    from neverdeads_revenge.desktop.screens.menus import ShopScreen
+
+    screen = ShopScreen()
+    screen._restock(app)
+    headings = [row[0] for row in screen._rows(70) if row[2] is None and row[0].isupper()]
+
+    assert "SUPPLIES" in headings
+    assert "GEAR" in headings
+    assert "AMULETS" in headings

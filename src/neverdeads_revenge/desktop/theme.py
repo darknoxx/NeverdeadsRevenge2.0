@@ -59,9 +59,10 @@ _REVERSE = {"reverse", "reversed", "r"}
 
 @dataclass(frozen=True, slots=True)
 class Style:
-    """A foreground and three flags. The whole of what a cell can be."""
+    """A foreground, an optional background, and three flags."""
 
     fg: QColor = field(default_factory=lambda: QColor(FOREGROUND))
+    bg: QColor | None = None
     bold: bool = False
     dim: bool = False
     reverse: bool = False

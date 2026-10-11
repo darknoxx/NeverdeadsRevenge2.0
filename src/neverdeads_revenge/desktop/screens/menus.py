@@ -43,7 +43,7 @@ class _Panel(Screen):
         width = min(buffer.cols - 4, 74)
         height = min(buffer.rows - 2, 26)
         x, y = (buffer.cols - width) // 2, (buffer.rows - height) // 2
-        box(buffer, x, y, width, height, title=self.title, border=BLOOD)
+        box(buffer, x, y, width, height, title=self.title, border=BLOOD, fill=True)
         body = self.lines(app)
         window = body[self.offset : self.offset + height - 4]
         for i, (text, style) in enumerate(window):
@@ -220,24 +220,45 @@ class ShopScreen(Screen):
         self.offers = build_stock(app.progress)
         self.index = max(0, min(self.index, len(self.offers) - 1))
 
+    def _rows(self, width: int) -> list[tuple[str, str, int | None]]:
+        """The shelf as lines: a heading per section, then a line per offer.
+
+        Sectioned the way the terminal shop was, because a flat list of
+        twenty-three things with prices is a spreadsheet. The third element is
+        the offer a line belongs to, or ``None`` for a heading and a detail
+        line -- which is what lets the cursor step over the headings.
+        """
+        rows: list[tuple[str, str, int | None]] = []
+        section = None
+        for i, offer in enumerate(self.offers):
+            if offer.section != section:
+                section = offer.section
+                rows.append((section, f"bold {PURPLE}", None))
+            chosen = i == self.index
+            tag = "►" if chosen else " "
+            price = "maxed" if offer.maxed else f"{offer.price}g"
+            style = f"bold {BONE}" if chosen else (ASH if offer.maxed else BONE)
+            rows.append((f"{tag} {offer.label:<26}{price:>7}", style, i))
+            rows.append((f"      {offer.detail}", ASH, None))
+        return rows
+
     def draw(self, buffer, app) -> None:
         if not self.offers:
             self._restock(app)
         width = min(buffer.cols - 4, 74)
         height = min(buffer.rows - 2, 24)
         x, y = (buffer.cols - width) // 2, (buffer.rows - height) // 2
-        box(buffer, x, y, width, height, title="THE SHOP", border=BLOOD)
+        box(buffer, x, y, width, height, title="THE SHOP", border=BLOOD, fill=True)
         buffer.text(x + 3, y + 1, f"Gold {app.progress.gold}", parse_style(f"bold {PURPLE}"))
 
-        window = self.offers[: height - 6]
-        for i, offer in enumerate(window):
-            chosen = i == self.index
-            tag = "►" if chosen else " "
-            price = "maxed" if offer.maxed else f"{offer.price}g"
-            style = f"bold {BONE}" if chosen else (ASH if offer.maxed else BONE)
-            line = f"{tag} {offer.label:<28}{price:>7}"
-            buffer.text(x + 3, y + 3 + i, line[: width - 6], parse_style(style))
-            buffer.text(x + 7, y + 3 + i + 1, offer.detail[: width - 10], parse_style(ASH))
+        rows = self._rows(width)
+        window = height - 6
+        selected = next((n for n, row in enumerate(rows) if row[2] == self.index), 0)
+        offset = max(0, selected - window + 1)
+        offset = min(offset, max(0, len(rows) - window))
+        for n, (text, style, _offer) in enumerate(rows[offset : offset + window]):
+            buffer.text(x + 3, y + 3 + n, text[: width - 6], parse_style(style))
+
         rule(buffer, x + 1, y + height - 3, width - 2, ASH)
         if self.message:
             buffer.text(x + 3, y + height - 2, self.message[: width - 6], parse_style("bold red"))

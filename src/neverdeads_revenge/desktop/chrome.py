@@ -34,6 +34,10 @@ BONE = "#c8c8c8"
 ASH = "grey30"
 #: Noxx's own colour, kept for his name and the title.
 PURPLE = "#a855f7"
+#: The inside of a panel, and the field a modal sits on. Two shades of the same
+#: dark, so a menu reads as a layer rather than as a hole.
+PANEL = "#15151f"
+PANEL_DEEP = "#08080c"
 
 _CORNER = {
     "tl": "╔", "tr": "╗", "bl": "╚", "br": "╝",
@@ -50,17 +54,23 @@ def box(
     height: int,
     title: str | None = None,
     border: str = BLOOD,
+    fill: bool = False,
 ) -> None:
-    """A double-ruled box, optionally titled on its top rule.
+    """A double-ruled box, optionally titled and optionally opaque.
 
     Double-ruled rather than single, because a terminal that can draw a box is
     the one place a game gets to look like a piece of hardware, and the DOS era
-    never used a thin line when a fat one would do.
+    never used a thin line when a fat one would do. ``fill`` gives the inside a
+    background, which is what keeps a menu from being a window onto the dungeon.
     """
     if width < 4 or height < 2:
         return
     style = parse_style(border)
-    dim = parse_style(ASH)
+    if fill:
+        panel = Style(bg=parse_style(PANEL).fg)
+        for j in range(y + 1, y + height - 1):
+            for i in range(x + 1, x + width - 1):
+                buffer.put(i, j, " ", panel)
     buffer.put(x, y, _CORNER["tl"], style)
     buffer.put(x + width - 1, y, _CORNER["tr"], style)
     buffer.put(x, y + height - 1, _CORNER["bl"], style)

@@ -102,9 +102,15 @@ class PatternBuffer:
         top = y * self.font.cell_h
         width = len(run) * self.font.cell_w
 
+        # A cell's own background, if it has one. This is how a menu panel is
+        # opaque: the box fills its inside with a colour before anything is
+        # written on it, so the dungeon cannot show through.
+        if style.bg is not None:
+            painter.fillRect(QRect(left, top, width, self.font.cell_h), style.bg)
+
         if style.reverse:
             painter.fillRect(QRect(left, top, width, self.font.cell_h), style.fg)
-            painter.setPen(BACKGROUND)
+            painter.setPen(style.bg if style.bg is not None else BACKGROUND)
         else:
             painter.setPen(self._ink(style))
 

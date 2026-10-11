@@ -45,7 +45,7 @@ class HeroSelectScreen(Screen):
         width = min(buffer.cols - 8, 76)
         height = min(buffer.rows - 4, 22)
         x, y = (buffer.cols - width) // 2, (buffer.rows - height) // 2
-        box(buffer, x, y, width, height, title="CHOOSE", border=BLOOD)
+        box(buffer, x, y, width, height, title="CHOOSE", border=BLOOD, fill=True)
 
         rows = _stat_rows(hero) if hero is not None else []
         stats_top = y + height - len(rows) - 2 if rows else y + height - 3

@@ -66,7 +66,7 @@ _KIND_STYLES: dict[LogKind, str] = {
 #: The frame a column is drawn in, and its headings. Matches ``marks.py``.
 _STYLE_BY_GROUP = {
     "curses": "red",
-    "gifts": "green",
+    "gifts": "bright_green",
     "effects": "cyan",
     "statuses": "yellow",
 }
@@ -283,10 +283,14 @@ def _draw_log(buffer, state, area) -> None:
     x0, y0, width, height = area
     # The newest lines sit at the bottom, so the eye finds them where it left
     # them. Only as many as fit; the older ones have scrolled away.
+    #
+    # Indented off the left edge on purpose: the CRT's vignette darkens the
+    # corners, and a combat line dying in the bottom-left corner is a line the
+    # player cannot read at the exact moment they need it.
     visible = state.log[-(height - 2) :]
     y = y0 + height - 1 - len(visible)
     for entry in visible:
-        buffer.text(x0 + 1, y, entry.text[: width - 2], parse_style(log_style(entry.kind)))
+        buffer.text(x0 + 3, y, entry.text[: width - 5], parse_style(log_style(entry.kind)))
         y += 1
 
 
@@ -298,19 +302,19 @@ def _draw_column(buffer, state, area, kinds) -> None:
     for kind in kinds:
         if shown >= budget:
             break
-        buffer.text(x0 + 1, y, kind.upper(), parse_style("dim"))
+        buffer.text(x0 + 2, y, kind.upper(), parse_style("dim"))
         y += 1
         shown += 1
         names = marks_names(state, kind)
         if not names:
-            buffer.put(x0 + 1, y, "-", parse_style("dim"))
+            buffer.put(x0 + 2, y, "-", parse_style("dim"))
             y += 1
             shown += 1
             continue
         for name in names:
             if shown >= budget:
                 break
-            buffer.text(x0 + 1, y, name[: width - 2], parse_style(_STYLE_BY_GROUP[kind]))
+            buffer.text(x0 + 2, y, name[: width - 3], parse_style(_STYLE_BY_GROUP[kind]))
             y += 1
             shown += 1
 

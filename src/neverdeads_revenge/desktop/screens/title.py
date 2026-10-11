@@ -8,14 +8,11 @@ so the menu, the keys and the drawing cannot disagree about what is on it.
 from __future__ import annotations
 
 from ..blocks import render_word
-from ..chrome import ASH, BONE, BLOOD, PURPLE, box, menu
+from ..chrome import ASH, BONE, BLOOD, PURPLE, rule
 from ..theme import parse_style
 from .base import Screen
 
-__all__ = ["TitleScreen", "TAGLINE"]
-
-#: The line under the name. The premise, not the genre.
-TAGLINE = "death was not granted to him"
+__all__ = ["TitleScreen"]
 
 
 class TitleScreen(Screen):
@@ -37,32 +34,50 @@ class TitleScreen(Screen):
         return items
 
     def draw(self, buffer, app) -> None:
-        from ..render import draw_title
-
         buffer.clear()
         art = render_word("NEVERDEAD'S") + render_word("REVENGE")
-        top = max(1, (buffer.rows - (len(art) + 14)) // 2)
-        y = top
+        version = render_word("2.0", scale=2)
+        items = self.items(app)
+
+        # Everything the title has to hold, laid out from the top so the big
+        # version number cannot push the menu off the bottom of a 27-row grid.
+        best = app.progress.best_score
+        block = len(art) + len(version) + 2 + (1 if best else 0) + 3
+        y = max(0, (buffer.rows - block) // 2)
+
         for line in art:
-            x = max(0, (buffer.cols - len(line)) // 2)
-            buffer.text(x, y, line, parse_style(f"bold {PURPLE}"))
+            self._centre(buffer, y, line, f"bold {PURPLE}")
+            y += 1
+        for line in version:
+            self._centre(buffer, y, line, "bold #8b1a1a")
             y += 1
         y += 1
-        self._centre(buffer, y, TAGLINE, "bold " + BONE)
-        y += 1
-        best = app.progress.best_score
         if best:
             self._centre(buffer, y, f"best {best}", ASH)
-        y += 2
+            y += 1
+        y += 1
 
-        items = self.items(app)
-        width = max(len(label) for _, label in items) + 12
-        x = max(0, (buffer.cols - width) // 2)
-        box(buffer, x, y, width, len(items) + 2, border=BLOOD)
-        menu(buffer, x + 3, y + 1, items, self.index)
+        rule(buffer, 2, y, buffer.cols - 4, BLOOD)
+        y += 1
+        self._menu_line(buffer, y, items, self.index)
+        self._centre(buffer, buffer.rows - 2, "↑↓ choose   enter take   esc quit", ASH)
 
-        hint = "↑↓ choose   enter take   esc quit"
-        self._centre(buffer, buffer.rows - 2, hint, ASH)
+    def _menu_line(self, buffer, y, items, index) -> None:
+        """The menu as one line, the chosen entry lit and bracketed.
+
+        A line rather than a box, because the title's own art is ten rows and
+        the version number is ten more: on a 27-row grid a boxed menu is a menu
+        that falls off the screen. The choices are all still one keypress away.
+        """
+        texts = [
+            f"[{label}]" if i == index else label for i, (_key, label) in enumerate(items)
+        ]
+        x = max(0, (buffer.cols - len("   ".join(texts))) // 2)
+        for i, (_key, _label) in enumerate(items):
+            chosen = i == index
+            style = parse_style(f"bold {BONE}") if chosen else parse_style(ASH)
+            buffer.text(x, y, texts[i], style)
+            x += len(texts[i]) + 3
 
     @staticmethod
     def _centre(buffer, y: int, text: str, style: str) -> None:

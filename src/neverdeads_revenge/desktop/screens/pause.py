@@ -35,7 +35,7 @@ class PauseScreen(Screen):
         width = 34
         height = len(items) + 4
         x, y = (buffer.cols - width) // 2, (buffer.rows - height) // 2
-        box(buffer, x, y, width, height, title="PAUSED", border=BLOOD)
+        box(buffer, x, y, width, height, title="PAUSED", border=BLOOD, fill=True)
         menu(buffer, x + 3, y + 2, items, self.index)
 
     def key(self, name, event, app) -> bool:

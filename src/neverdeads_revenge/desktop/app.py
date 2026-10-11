@@ -16,7 +16,7 @@ from __future__ import annotations
 import random
 import time
 
-from PySide6.QtCore import QEvent, Qt
+from PySide6.QtCore import QEvent, Qt, QTimer
 from PySide6.QtGui import QColor, QKeyEvent, QPalette
 from PySide6.QtWidgets import QMainWindow
 
@@ -37,6 +37,7 @@ from neverdeads_revenge.persistence import (
 from .audio import Sfx, loudest_kind, sound_for_kind
 from .buffer import PatternBuffer
 from .crt import CrtSettings, CrtView
+from .effects import Effects
 from .font import BitmapFont
 from .keys import KEY_BINDINGS
 from .screens.game import GameScreen
@@ -96,6 +97,11 @@ class DesktopApp(QMainWindow):
         self._grid = (0, 0)
         self._seen_log = 0
         self.sfx = Sfx(muted=no_sound)
+        #: The moving pixels. Their own layer, drawn over the still frame.
+        self.effects = Effects(self.font.cell_w, self.font.cell_h)
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._tick)
+        self._timer.start(33)
 
         palette = self.palette()
         palette.setColor(QPalette.ColorRole.Window, QColor("#000000"))
@@ -157,9 +163,24 @@ class DesktopApp(QMainWindow):
             self._buffer = PatternBuffer(cols, rows, self.font)
             self._grid = (cols, rows)
         self._buffer.clear()
-        for screen in self.screens:
+        # An opaque modal: nothing under it is drawn. A menu is a panel, not a
+        # window onto the dungeon, so the topmost modal starts the stack.
+        start = 0
+        for index, screen in enumerate(self.screens):
+            if getattr(screen, "modal", False):
+                start = index
+        for screen in self.screens[start:]:
             screen.draw(self._buffer, self)
-        self.view.set_frame(self._buffer.render())
+        image = self._buffer.render()
+        self.effects.draw(image)
+        self.view.set_frame(image)
+
+    def _tick(self) -> None:
+        """Advance the pixels, and repaint only while there are any."""
+        if not self.effects.active:
+            return
+        self.effects.step(0.033)
+        self.redraw()
 
     # -- the stack ----------------------------------------------------------
     def push(self, screen) -> None:

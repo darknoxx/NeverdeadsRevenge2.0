@@ -64,7 +64,7 @@ class _Dialog(Screen):
         body = wrap(self._body(), width - 6)
         height = min(buffer.rows - 2, len(body) + 6)
         x, y = (buffer.cols - width) // 2, (buffer.rows - height) // 2
-        box(buffer, x, y, width, height, title=self.title, border=BLOOD)
+        box(buffer, x, y, width, height, title=self.title, border=BLOOD, fill=True)
         for i, line in enumerate(body[: height - 4]):
             buffer.text(x + 3, y + 2 + i, line, parse_style(BONE))
         rule(buffer, x + 1, y + height - 2, width - 2, ASH)
@@ -190,7 +190,7 @@ class PageScreen(_Dialog):
         body = wrap(self._body(), width - 6)
         height = min(buffer.rows - 2, 22)
         x, y = (buffer.cols - width) // 2, (buffer.rows - height) // 2
-        box(buffer, x, y, width, height, title=self.title, border=BLOOD)
+        box(buffer, x, y, width, height, title=self.title, border=BLOOD, fill=True)
         window = body[self.offset : self.offset + height - 4]
         for i, line in enumerate(window):
             buffer.text(x + 3, y + 2 + i, line, parse_style(BONE))

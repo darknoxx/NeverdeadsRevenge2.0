@@ -278,3 +278,70 @@ def test_the_zoom_is_remembered(qapp, tmp_path, monkeypatch):
     written = settings.load_settings()
     assert written["zoom"] == 1
     assert written["scanlines"] is True
+
+
+# -- the version, the corner, and the pixels ----------------------------------
+def test_the_version_is_drawn_thick():
+    from neverdeads_revenge.desktop.blocks import render_word
+
+    small = render_word("2.0")
+    big = render_word("2.0", scale=2)
+
+    assert small, "the block font cannot spell its own version"
+    assert len(big) == len(small) * 2
+    assert all(len(b) == len(s) * 2 for s, b in zip(small, big))
+
+
+def test_the_log_starts_away_from_the_vignette_corner(font, state):
+    from neverdeads_revenge.desktop.buffer import PatternBuffer
+    from neverdeads_revenge.desktop.render import BOTTOM, draw_game
+
+    buffer = PatternBuffer(100, 34, font)
+    draw_game(buffer, state)
+
+    # The newest line sits somewhere in the bottom row; its first cells are left
+    # blank so the CRT's corner does not eat the start of a combat line.
+    found = False
+    for row in range(buffer.rows - BOTTOM, buffer.rows):
+        if buffer.cells[row][3].char != " ":
+            found = True
+            assert buffer.cells[row][0].char == " "
+            assert buffer.cells[row][1].char == " "
+            assert buffer.cells[row][2].char == " "
+    assert found, "no log line was drawn"
+    assert BOTTOM == 10
+
+
+def test_blood_falls_and_fades(qapp):
+    from PySide6.QtGui import QImage
+
+    from neverdeads_revenge.desktop.effects import Effects
+
+    effects = Effects(10, 20)
+    assert not effects.active
+
+    effects.blood((3, 3))
+    assert effects.active
+    # It paints onto a frame without complaint.
+    image = QImage(100, 100, QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(0)
+    effects.draw(image)
+
+    for _ in range(120):
+        effects.step(0.033)
+    assert not effects.active, "the pixels never went away"
+
+
+def test_a_spark_rises_and_a_blood_drop_falls(qapp):
+    from neverdeads_revenge.desktop.effects import Effects
+
+    rising = Effects(10, 20)
+    rising.spark((3, 3))
+    rising.step(0.033)
+    assert any(p.vy < 0 for p in rising.particles), "a spark did not rise"
+
+    falling = Effects(10, 20)
+    falling.blood((3, 3))
+    for _ in range(3):
+        falling.step(0.033)
+    assert any(p.vy > 0 for p in falling.particles), "blood did not fall"

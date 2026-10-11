@@ -70,7 +70,7 @@ class GameOverScreen(Screen):
         height = len(lines) + 8
         x, y = (buffer.cols - width) // 2, max(0, (buffer.rows - height) // 2)
         title = "VICTORY" if self.won else "YOU DIED"
-        box(buffer, x, y, width, height, title=title, border=BLOOD)
+        box(buffer, x, y, width, height, title=title, border=BLOOD, fill=True)
         for i, (text, style) in enumerate(lines):
             buffer.text(x + 3, y + 2 + i, text[: width - 6], parse_style(style))
         rule(buffer, x + 1, y + height - 3, width - 2, ASH)
@@ -119,7 +119,7 @@ class NameEntryScreen(Screen):
         width = 40
         height = 9
         x, y = (buffer.cols - width) // 2, (buffer.rows - height) // 2
-        box(buffer, x, y, width, height, title="ENTER YOUR NAME", border=BLOOD)
+        box(buffer, x, y, width, height, title="ENTER YOUR NAME", border=BLOOD, fill=True)
         buffer.text(x + 3, y + 2, f"for a score of {self.score}", parse_style(ASH))
         cells = []
         for i in range(SLOTS):
