@@ -826,27 +826,21 @@ def test_three_taps_dismiss_nothing(app):
     assert top(app) == "GameScreen"
 
 
-def test_a_release_empties_the_bar():
-    """Hold, let go: nothing is banked for the next press to inherit. The
-    lift is pending for a moment first -- that is what keeps a Wayland
-    compositor's lift-and-repeat from tearing a hold in half -- and then,
-    unfollowed, it gathers nothing."""
+def test_a_tap_banks_nothing():
+    """The tap rule the desktop can afford *and* must afford: a press that is
+    down briefly and never repeated is a tap, and its release banks nothing.
+    No gap heuristic has to separate it from a slow keyboard."""
     import time as _time
 
     from neverdeads_revenge.desktop.hold import HoldToContinue
 
     hold = HoldToContinue()
     hold.press("enter")
-    assert hold.holding and hold.progress > 0.0
-
+    _time.sleep(0.05)  # a short, unrepeated press
     hold.release("enter")
-    assert hold.holding, "a pending lift is not yet a release"
 
-    _time.sleep(0.3)  # longer than the release grace: the key went up
-    assert not hold.holding
-    assert hold.progress == 0.0
-
-    assert hold.press("enter") is False, "released progress funded the next press"
+    assert hold.progress == 0.0, "a tap spent itself into the fill"
+    assert hold.press("enter") is False, "the next press inherited the tap"
 
 
 def test_the_bar_fills_while_the_key_is_down(app):
@@ -871,55 +865,44 @@ def test_the_bar_fills_while_the_key_is_down(app):
         assert presses[0] >= 2, "the bar was not redrawn while the key was down"
         assert screen.hold.holding
 
-        release(app, Qt.Key.Key_Return)
-        app._tick()  # the lift is pending: still worth a picture
+        release(app, Qt.Key.Key_Return)  # short, unrepeated: a tap
+        assert not screen.hold.holding, "a tap kept the tick painting"
         count = presses[0]
-
-        import time as _time
-
-        _time.sleep(0.3)  # past the grace: the key went up for good
-        assert not screen.hold.holding
         app._tick()
         assert presses[0] == count, "the tick kept drawing a finished hold"
     finally:
         app.redraw = original
 
 
-def test_the_wayland_lift_before_a_repeat_does_not_tear_the_hold():
-    """The user saw a bar fill, empty itself, and fill again to the end. What
-    happened between the fills: a Wayland compositor announces its repeat
-    phase by lifting the key -- an honest-looking release -- and pressing it
-    again immediately, *unflagged*, as plain presses on this machine. A hold
-    must not read the lift as the end, whatever the presses after it claim
-    about themselves: the timing decides, not the flag."""
+def test_the_wayland_silence_does_not_tear_the_hold():
+    """The user saw a bar fill, vanish in full, and fill again -- on one
+    pressed key. What a Wayland compositor does between them: it lifts the
+    key at its repeat delay (an honest-looking release, long enough not to be
+    a tap) and hands the repeats back *later*, past any gap the terminal-era
+    press-counting could survive. The desktop renders the fill from the wall
+    clock instead: silence inside a hold is composition noise, not the end of
+    it."""
     import time as _time
 
     from neverdeads_revenge.desktop.hold import HoldToContinue
 
     hold = HoldToContinue()
-    hold.press("enter")
-    hold.release("enter")  # the compositor lifts the key before repeating
+    hold.press("enter")  # the fill starts
+    _time.sleep(0.35)  # the repeat delay
+    hold.release("enter")  # the compositor lifts the key: too long to be a tap
+    _time.sleep(0.25)  # ...and its repeats come back late
 
-    # ...and presses again a frame later, with no distinguishing flag:
-    assert hold.press("enter") is False, "the hold read as finished"
-    assert hold.holding, "the repeat press did not redeem the lift"
-    assert hold.progress > 0.0, "the fill was thrown away mid-hold"
+    assert hold.press("enter") is False, "the fill read as finished early"
+    assert hold.progress >= 0.55, "the fill restarted instead of bridging"
 
-    # and the fill continues over the repeat stream: no second starting line.
-    # The stream keeps coming every ~33ms, as a keyboard does.
-    deadline = time.monotonic() + 0.8
-    while time.monotonic() < deadline:
-        _time.sleep(0.05)
+    # the stream then carries it the rest of the way, calm and unbroken
+    while hold.progress < 1.0:
+        _time.sleep(0.02)
         hold.press("enter")
-    assert hold.progress >= 0.8
+    assert hold.press("enter") is True, "the held, bridged hold did not dismiss"
 
-    # a lift that gets no press behind it is still a key going up
-    hold.release("enter")
-    _time.sleep(0.3)
-    assert hold.progress == 0.0, "an unfollowed lift banked itself"
-
-    # and a real, late press after a lift starts a fresh hold from zero
+    # a lift that stands alone -- short, unrepeated -- is still a tap
     hold.press("enter")
-    hold.release("enter")
-    _time.sleep(0.4)  # past the grace, before the next press
-    assert hold.press("enter") is False, "a stale bank paid the next tap"
+    hold.release("enter")  # immediate: a short down
+    _time.sleep(0.4)
+    assert hold.press("enter") is False, "a tap's bank paid the next press"
