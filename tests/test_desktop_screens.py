@@ -626,18 +626,27 @@ def test_the_shelf_cursor_walks_inside_the_window(app):
         "a walking cursor was not pinned at the window's bottom edge"
     )
 
-    # and back up: the cursor climbs -- critically, the shelf holds still
-    # while it does (that was the complaint), each step inside the window.
+    # and back up, in the mirror image of the walk down: the cursor climbs
+    # and the shelf holds still until the top edge; tied to the edge, the
+    # window follows it one cursor-stride at a time -- never a jump -- and
+    # the whole thing ends in the rest state, shelf open at the heading.
     pinned = screen.offset
-    top_row = cursor_row()
+    saw_pin = False
     while screen.index > 0:
+        before = screen.offset
         press(app, Qt.Key.Key_Up)
         row = cursor_row()
         assert screen.offset <= row < screen.offset + window, "the cursor left its window"
-        top_row = min(top_row, row)
-    assert screen.offset <= pinned, "going up dragged the shelf upward too"
-    assert cursor_row() == top_row, "the cursor never reached its own top row"
-    assert screen.offset == 0, "the shelf did not give back its rows"
+        assert screen.offset <= before, "going up dragged the shelf the wrong way"
+        assert screen.offset in (before, row) or (
+            screen.offset == 0 and row <= 2
+        ), "the shelf jumped instead of following"
+        if screen.offset != before:
+            saw_pin = True
+        pinned = min(pinned, screen.offset)
+
+    assert saw_pin, "the window never followed the cursor at the top edge"
+    assert screen.offset == 0 and cursor_row() <= 2, "no rest state at the top"
 
     press(app, Qt.Key.Key_Escape)
 

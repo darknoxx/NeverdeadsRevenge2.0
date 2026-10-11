@@ -294,12 +294,16 @@ class ShopScreen(Screen):
         # cursor on the bottom edge and dragged the list under it, so going
         # back up scrolled the shelf while the cursor stood still.
         self.offset = max(0, min(self.offset, max(0, len(rows) - window)))
-        if selected < window:
-            # The cursor is back inside the first screenful, and the window
-            # sits open at the top -- the rest state. Anything else leaves the
-            # shelf clung to the bottom of the list after walking back up.
+        if selected <= next((n for n, row in enumerate(rows) if row[2] is not None), 0):
+            # The cursor is back on the first offer of the list: the window
+            # sits open at the top, heading and all. Anything else leaves the
+            # shelf clung to wherever the walk stopped.
             self.offset = 0
         elif selected < self.offset:
+            # The cursor has crossed the window's top edge: pin it there and
+            # let the window come with it, the exact mirror of the bottom
+            # edge. A press moves the cursor its own stride, so the window
+            # moves the same stride -- never a jump.
             self.offset = selected
         elif selected >= self.offset + window:
             self.offset = selected - window + 1
