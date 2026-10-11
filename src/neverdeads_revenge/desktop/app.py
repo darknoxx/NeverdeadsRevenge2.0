@@ -428,6 +428,11 @@ class DesktopApp(QMainWindow):
 
     def _window_key(self, event: QKeyEvent) -> bool:
         """Fullscreen and the three glass keys."""
+        # Glass toggles answer a press, not a held key: F2 held down would
+        # flip the scanlines thirty times a second and save the setting
+        # thirty times a second with it.
+        if event.isAutoRepeat():
+            return True
         key = event.key()
         if key == FULLSCREEN_KEY:
             self.showFullScreen() if not self.isFullScreen() else self.showNormal()

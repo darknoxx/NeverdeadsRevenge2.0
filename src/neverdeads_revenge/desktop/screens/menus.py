@@ -248,9 +248,19 @@ class ShopScreen(Screen):
                 section = offer.section
                 rows.append((section, f"bold {PURPLE}", None))
             chosen = i == self.index
-            tag = "►" if chosen else " "
+            # What the player cannot afford, or what is already taken in full,
+            # is closed: ash, with the reason next to the price. A row a player
+            # cannot act on should not read as a thing on offer.
             price = "maxed" if offer.maxed else f"{offer.price}g"
-            style = f"bold {BONE}" if chosen else (ASH if offer.maxed else BONE)
+            if not offer.affordable:
+                price = f"{offer.price}g (out of reach)"
+                style = ASH
+            elif offer.maxed:
+                price = "maxed"
+                style = ASH
+            else:
+                style = f"bold {BONE}" if chosen else BONE
+            tag = "►" if chosen else " "
             rows.append((f"{tag} {offer.label:<26}{price:>7}", style, i))
             rows.append((f"      {offer.detail}", ASH, None))
         return rows

@@ -87,10 +87,15 @@ class GameOverScreen(Screen):
 
     def key(self, name, event, app) -> bool:
         if name == "escape":
-            self.finish(app, None)
+            # One gesture: a held escape from the screen before this one must
+            # not close the tally before a word of it is read. The hold's own
+            # repeats are a different matter -- they *are* the hold.
+            if not event.isAutoRepeat():
+                self.finish(app, None)
             return True
         if name == "r" and self.can_rewind:
-            self.finish(app, REWIND)
+            if not event.isAutoRepeat():
+                self.finish(app, REWIND)
             return True
         if name in ("enter", "return"):
             # Repeats are fed on purpose: the hold *is* the repeats.

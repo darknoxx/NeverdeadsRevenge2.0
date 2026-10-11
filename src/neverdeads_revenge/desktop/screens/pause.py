@@ -39,6 +39,10 @@ class PauseScreen(Screen):
         menu(buffer, x + 3, y + 2, items, self.index)
 
     def key(self, name, event, app) -> bool:
+        # One gesture per menu line: a held r would pop, a held m would flip the
+        # sound thirty times a second.
+        if event.isAutoRepeat():
+            return True
         items = self.items(app)
         if name in ("up", "k"):
             self.index = (self.index - 1) % len(items)

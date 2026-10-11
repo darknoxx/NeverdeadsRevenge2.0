@@ -99,7 +99,10 @@ class PrologueScreen(Screen):
                 self.offset = max(0, min(self.offset + step, max(0, total - shown)))
             return True
         if name == "escape":
-            self.finish(app)
+            # Skipping is allowed -- on a press, not on a thirtieth of a
+            # second. The hold's own repeats stay: they *are* the hold.
+            if not event.isAutoRepeat():
+                self.finish(app)
             return True
         if name in ("enter", "return"):
             # Repeats are the hold's food; nothing else here acts on them.

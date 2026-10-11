@@ -449,3 +449,104 @@ def test_a_run_saved_by_an_old_build_costs_the_run_and_not_the_game(app):
     press(app, Qt.Key.Key_C, "c")
     assert top(app) == "TitleScreen", "a rubbish slot opened the dungeon"
     assert not app.has_saved_run(), "the rubbish slot was not cleared"
+
+
+# -- a held key is one press, not thirty --------------------------------------
+def test_the_title_answers_a_press_and_not_a_stream(app):
+    """Qt hands us real auto-repeats. That is a gift the terminal build never
+    had, so nothing here should need the FILTER_GAP hack again -- but a repeat
+    that slips into a menu is a shop that opens itself."""
+    from PySide6.QtCore import Qt
+
+    press(app, Qt.Key.Key_S, "s", repeat=True)
+    assert top(app) == "TitleScreen", "a repeated key opened the shop"
+
+    press(app, Qt.Key.Key_S, "s")
+    assert top(app) == "ShopScreen"
+
+
+def test_a_held_enter_cannot_begin_the_run_from_the_choice(app):
+    from PySide6.QtCore import Qt
+
+    press(app, Qt.Key.Key_N, "n")  # hero select
+    press(app, Qt.Key.Key_Return, repeat=True)
+
+    assert top(app) == "HeroSelectScreen", "the confirm key confirmed itself"
+
+    press(app, Qt.Key.Key_Return)
+    assert top(app) == "GameScreen"
+
+
+def test_the_pause_backup_answers_one_gesture(app):
+    from PySide6.QtCore import Qt
+
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)  # into the run
+    press(app, Qt.Key.Key_Escape)  # ...
+
+    press(app, Qt.Key.Key_Q, "q", repeat=True)
+    assert top(app) == "PauseScreen", "a repeated key answered the pause"
+    press(app, Qt.Key.Key_M, "m", repeat=True)
+    assert top(app) == "PauseScreen", "a repeated key flipped the sound"
+
+    press(app, Qt.Key.Key_Q, "q")
+    assert top(app) == "ConfirmScreen"
+
+
+def test_the_prologue_skips_on_a_press_never_on_a_repeat(app):
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.desktop.screens.prologue import PrologueScreen
+
+    app.prologue_seen = False
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)
+    assert top(app) == "PrologueScreen"
+
+    press(app, Qt.Key.Key_Escape, repeat=True)
+    assert top(app) == "PrologueScreen", "the premise was skipped mid-sentence"
+
+    press(app, Qt.Key.Key_Escape)
+    assert top(app) == "GameScreen"
+
+
+def test_the_glass_toggles_answer_a_press(app):
+    """Held F2 would flip the scanlines -- and rewrite the settings file --
+    thirty times a second."""
+    from PySide6.QtCore import Qt
+
+    before = app.crt.scanlines
+
+    press(app, Qt.Key.Key_F2, repeat=True)
+    assert app.crt.scanlines == before, "a held F2 flickered the glass"
+
+    press(app, Qt.Key.Key_F2)
+    assert app.crt.scanlines != before
+
+
+# -- what the purse cannot reach is ash ---------------------------------------
+def test_what_the_purse_cannot_reach_reads_as_closed(app):
+    """An offer a player cannot act on should not sit on the shelf looking
+    like the rest: ash, with the reason next to the price."""
+    from neverdeads_revenge.desktop.chrome import ASH, BONE
+    from neverdeads_revenge.desktop.screens.menus import ShopScreen
+
+    screen = ShopScreen()
+    app.progress.gold = 0
+    screen._restock(app)
+    rows = {offer_index: row for row in screen._rows(70) if (offer_index := row[2]) is not None}
+
+    priced = [o for o in screen.offers if o.price > 0 and not o.maxed]
+    assert priced, "the shop priced nothing over nothing"
+    for offer in priced:
+        text, style, _ = rows[screen.offers.index(offer)]
+        assert style == ASH, f"{offer.label} looked affordable to a broke purse"
+        assert "(out of reach)" in text, f"{offer.label} did not say why"
+
+    app.progress.gold = 999
+    screen._restock(app)
+    rows = {offer_index: row for row in screen._rows(70) if (offer_index := row[2]) is not None}
+    priced = [o for o in screen.offers if o.price > 0 and not o.maxed and o.affordable]
+    assert priced, "nothing was in reach of a full purse"
+    text, style, _ = rows[screen.offers.index(priced[0])]
+    assert style == f"bold {BONE}", "an offer in reach hid in the ash"

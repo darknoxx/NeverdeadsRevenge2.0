@@ -93,6 +93,11 @@ class TitleScreen(Screen):
 
     # -- input --------------------------------------------------------------
     def key(self, name: str, event, app) -> bool:
+        # Menüs answer one press, not every thirtieth of a second: a key held
+        # from the screen before this one must not open its shop on the way
+        # past, and a key held *here* does not cycle the shelf.
+        if event.isAutoRepeat():
+            return True
         items = self.items(app)
         # Strictly a line read sideways: left and right move it. Up and down say
         # nothing, which is the whole point of "only the keys a line understands"

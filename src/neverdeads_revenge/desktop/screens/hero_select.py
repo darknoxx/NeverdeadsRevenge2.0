@@ -82,6 +82,10 @@ class HeroSelectScreen(Screen):
         buffer.text(x, y, text, parse_style(style))
 
     def key(self, name: str, event, app) -> bool:
+        # One gesture, one motion -- and above all one confirm: a held enter
+        # that opened this screen must not begin the run on its next repeat.
+        if event.isAutoRepeat():
+            return True
         if name in ("left", "h", "a"):
             self.index = (self.index - 1) % len(self.slots)
             return True
