@@ -18,6 +18,7 @@ __all__ = [
     "SpringScreen",
     "NpcScreen",
     "PageScreen",
+    "InfoScreen",
     "OPEN",
     "FAME",
 ]
@@ -162,6 +163,32 @@ class NpcScreen(_Dialog):
 
     def _body(self) -> str:
         return self.line
+
+    def key(self, name, event, app) -> bool:
+        if event.isAutoRepeat():
+            return True
+        self.finish(app, None)
+        return True
+
+
+class InfoScreen(_Dialog):
+    """What the dark just handed over: a name, and what it does.
+
+    Everything a run catches whose shape is its own price -- a blade picked
+    up, a curse left in you, a gift the dark decided you need -- gets one of
+    these, because a log line scrolls away and a note in the sidebar is a
+    decoration. One box, one page, read with one press.
+    """
+
+    def __init__(self, title: str, name: str, text: str) -> None:
+        super().__init__()
+        self.title = title
+        self._name = name
+        self._text = text
+        self.hint = "enter  back to the dark"
+
+    def _body(self) -> str:
+        return f"{self._name}\n\n{self._text}"
 
     def key(self, name, event, app) -> bool:
         if event.isAutoRepeat():
