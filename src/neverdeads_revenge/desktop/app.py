@@ -179,6 +179,22 @@ class DesktopApp(QMainWindow):
         self.effects.draw(image)
         self.view.set_frame(image)
 
+    def screen_point(self, position) -> tuple[float, float] | None:
+        """The pixel centre of a dungeon square on the current frame, if it is
+        on the screen."""
+        if self._buffer is None or self.run is None:
+            return None
+        from .render import screen_point as to_screen
+
+        return to_screen(
+            self.run,
+            position,
+            self._buffer.cols,
+            self._buffer.rows,
+            self.font.cell_w,
+            self.font.cell_h,
+        )
+
     def _tick(self) -> None:
         """Advance the pixels, and repaint only while anything is moving."""
         if not self.effects.active and not self.view.is_shaking():

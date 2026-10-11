@@ -87,13 +87,13 @@ class TitleScreen(Screen):
     # -- input --------------------------------------------------------------
     def key(self, name: str, event, app) -> bool:
         items = self.items(app)
-        # The menu is a line, so any arrow moves it: up and down said the same
-        # thing before the menu went sideways, and "only the vertical ones"
-        # would be a rule about geometry that costs nothing and reads wrong.
-        if name in ("up", "k", "w"):
+        # Strictly a line read sideways: left and right move it. Up and down say
+        # nothing, which is the whole point of "only the keys a line understands"
+        # -- before this, every arrow was welcome and the answer was chaos.
+        if name == "left":
             self.index = (self.index - 1) % len(items)
             return True
-        if name in ("down", "left", "right", "j"):
+        if name == "right":
             self.index = (self.index + 1) % len(items)
             return True
         if name == "enter":

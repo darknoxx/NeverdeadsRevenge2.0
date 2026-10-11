@@ -114,27 +114,35 @@ class GameScreen(Screen):
         """The moving pixels: what just happened, thrown at the screen.
 
         Read off the differences and off ``state.deaths``, which the domain
-        fills with the exact square a thing stopped moving on. Everything a rule
-        grants or a wound takes is a difference the run notices on its own, so
-        no hook into the domain is needed.
+        fills with the exact square a thing stopped moving on. Every square is
+        then translated through the camera, because the buffer is not the
+        dungeon -- a player at (38, 9) is drawn wherever the camera says, and a
+        particle that skipped that step drew in the wrong place, every time.
         """
         run = self.state
         fx = app.effects
+
         for position in run.deaths:
-            fx.blood(position)
+            point = app.screen_point(position)
+            if point is not None:
+                fx.blood(point)
+
+        here = app.screen_point(run.player.position)
+        if here is None:
+            return
         if run.player.hp < hp:
-            fx.blood(run.player.position, count=8)
+            fx.blood(here, count=8)
             app.view.shake()
             if run.over:
                 app.view.shake(strength=10, seconds=0.4)
         if run.gold > gold:
-            fx.coin(run.player.position)
+            fx.coin(here)
         if run.level > level_before:
-            fx.spark(run.player.position, "bright_white", count=20)
+            fx.spark(here, "bright_white", count=20)
         if run.gifts - gifts:
-            fx.spark(run.player.position, "bright_green", count=28)
+            fx.spark(here, "bright_green", count=28)
         if len(run.curses) > curses:
-            fx.spark(run.player.position, "#c81e1e", count=16)
+            fx.spark(here, "#c81e1e", count=16)
 
     def _ask(self, result, app) -> None:
         if result.prompt_kind == "spring":

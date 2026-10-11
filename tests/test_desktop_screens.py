@@ -268,9 +268,10 @@ def test_the_shop_is_in_sections(app):
 
 # -- the pixels know exactly where the world left them ------------------------
 def test_a_death_leaves_pixels_at_the_exact_square(app):
-    """This was the bug: a position read from *before* the action is a bullet
-    that lands one square from its target, because the thing that died may have
-    walked on before it did. The engine says where it stopped."""
+    """This was the bug, twice over: a position read from *before* the action is
+    a bullet that lands one square from its target, and a dungeon coordinate
+    drawn straight into the buffer is one camera-width off. The engine says
+    where it stopped; the camera says where that is on the screen."""
     from PySide6.QtCore import Qt
 
     from neverdeads_revenge.game.actors import ENEMIES, make_enemy
@@ -294,6 +295,17 @@ def test_a_death_leaves_pixels_at_the_exact_square(app):
         f"blood called at {state.deaths}, the square was {square}"
     )
 
+    # The square is one to the right of the hero, and the hero is the centre of
+    # the camera: so the blood has to be one cell right of centre, not wherever
+    # the raw dungeon coordinate would fall.
+    point = app.screen_point(square)
+    assert point is not None
+    assert app.effects.particles, "nothing was thrown"
+    for particle in app.effects.particles:
+        assert abs(particle.x - point[0]) <= app.font.cell_w, (
+            f"particle at x={particle.x:.0f}, the square is at {point[0]:.0f}"
+        )
+
 
 def test_a_tombed_monster_is_not_a_death(app):
     """One action, one death: the list is cleared with the flash."""
@@ -316,17 +328,21 @@ def test_the_glass_rattles_and_settles(app):
     assert not app.view.is_shaking()
 
 
-def test_the_title_takes_any_arrow(app):
+def test_the_title_takes_side_arrows_and_no_others(app):
+    """The menu is a line, so left and right are its keys and that is all."""
     from PySide6.QtCore import Qt
 
     screen = app.screens[-1]
     before = screen.index
-    press(app, Qt.Key.Key_Left, "")
-    after = screen.index
-    assert after != before, "left did not move it"
+    press(app, Qt.Key.Key_Left)
+    assert screen.index != before, "left did not move it"
 
-    screen.index = 0
-    press(app, Qt.Key.Key_Up, "")
-    assert app.screens[-1].index == len(app.screens[-1].items(app)) - 1, (
-        "up did not wrap"
-    )
+    screen.index = len(screen.items(app)) - 1
+    press(app, Qt.Key.Key_Right)
+    assert screen.index == 0, "right did not wrap"
+
+    screen.index = 1
+    up = screen.index
+    press(app, Qt.Key.Key_Up)
+    down = screen.index
+    assert up == down == 1, "up and down moved a sideways menu"

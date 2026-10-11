@@ -54,24 +54,29 @@ class Effects:
         self.particles.clear()
 
     # -- the three the game asks for ----------------------------------------
-    def blood(self, cell, count: int = 22) -> None:
-        """A thing came apart. Heavy, red, and it falls."""
-        self.burst(cell, count=count, colour="#c81e1e",
-                   speed=70.0, life=0.7, size=2, gravity=220.0, rise=4.0)
+    def blood(self, point, count: int = 22) -> None:
+        """A thing came apart. Heavy, red, and it falls.
 
-    def coin(self, cell, count: int = 16) -> None:
-        """Money came into the hero's hand. It gleams and drifts up."""
-        self.spark(cell, "#ffb000", count)
+        ``point`` is the centre of the square it died on, already translated to
+        buffer pixels by :func:`~neverdeads_revenge.desktop.render.screen_point`.
+        """
+        self.burst_at(point[0], point[1], count=count, colour="#c81e1e",
+                      speed=70.0, life=0.7, size=2, gravity=220.0, rise=4.0)
 
-    def spark(self, cell, colour: str = "bright_green", count: int = 18) -> None:
+    def coin(self, point, count: int = 16) -> None:
+        """Money came into the hero's hand. It gleams and drifts."""
+        self.spark(point, "#ffb000", count)
+
+    def spark(self, point, colour: str = "bright_green", count: int = 18) -> None:
         """A rule was gained, or a level. Light, and it rises."""
-        self.burst(cell, count=count, colour=colour,
-                   speed=45.0, life=1.0, size=1, gravity=60.0, rise=35.0)
+        self.burst_at(point[0], point[1], count=count, colour=colour,
+                      speed=45.0, life=1.0, size=1, gravity=60.0, rise=35.0)
 
     # -- the machine --------------------------------------------------------
-    def burst(
+    def burst_at(
         self,
-        cell,
+        x: float,
+        y: float,
         *,
         count: int,
         colour: str,
@@ -81,24 +86,22 @@ class Effects:
         gravity: float,
         rise: float = 0.0,
     ) -> None:
-        """Throw ``count`` pixels out of the middle of a cell.
+        """Throw ``count`` pixels at ``(x, y)``, in buffer pixels.
 
         ``rise`` is a bias upward against the scatter, so blood gets a small
         upward kick before it falls and a spark steps off the floor.
         """
-        cx = (cell[0] + 0.5) * self.cell_w
-        cy = (cell[1] + 0.5) * self.cell_h
         tint = QColor(colour)
         for _ in range(count):
             angle = self._rng.uniform(0.0, math.tau)
             power = speed * self._rng.uniform(0.35, 1.0)
             span = life * self._rng.uniform(0.6, 1.15)
-            # Scattered out of the cell rather than born at its centre, so the
-            # very first frame already reads as a burst and not as a dot.
+            # Scattered around the point rather than born at it, so the very
+            # first frame already reads as a burst and not as a dot.
             self.particles.append(
                 Particle(
-                    x=cx + self._rng.uniform(-self.cell_w * 0.5, self.cell_w * 0.5),
-                    y=cy + self._rng.uniform(-self.cell_h * 0.5, self.cell_h * 0.5),
+                    x=x + self._rng.uniform(-self.cell_w * 0.5, self.cell_w * 0.5),
+                    y=y + self._rng.uniform(-self.cell_h * 0.5, self.cell_h * 0.5),
                     vx=math.cos(angle) * power,
                     vy=math.sin(angle) * power - rise,
                     life=span,

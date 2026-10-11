@@ -34,6 +34,8 @@ __all__ = [
     "MARKS_WIDTH",
     "HUD_WIDTH",
     "regions",
+    "viewport",
+    "screen_point",
     "draw_game",
     "draw_title",
     "hud_lines",
@@ -106,6 +108,44 @@ def regions(cols: int, rows: int) -> dict[str, tuple[int, int, int, int]]:
 
 
 # -- the map ------------------------------------------------------------------
+def viewport(state: GameState, map_w: int, map_h: int) -> tuple[int, int, int, int]:
+    """The dungeon window the map shows: ``(left, top, view_w, view_h)``.
+
+    One function for it and not three, because the map draws from it and the
+    effects have to land on what the map drew.
+    """
+    dungeon = state.dungeon_map
+    view_w = min(map_w, dungeon.width)
+    view_h = min(map_h, dungeon.height)
+    left = max(0, min(state.player.position[0] - view_w // 2, dungeon.width - view_w))
+    top = max(0, min(state.player.position[1] - view_h // 2, dungeon.height - view_h))
+    return left, top, view_w, view_h
+
+
+def screen_point(
+    state: GameState,
+    position,
+    cols: int,
+    rows: int,
+    cell_w: int,
+    cell_h: int,
+) -> tuple[float, float] | None:
+    """The centre of a dungeon square, as buffer pixels -- or ``None``.
+
+    The buffer is the *camera*, not the dungeon: a square at `(38, 9)` is
+    somewhere else on the screen unless the camera happens to say so. Every
+    moving pixel needs this translation, and everything that skipped it drew in
+    the wrong place (which is exactly what the blood did).
+    """
+    areas = regions(cols, rows)
+    map_w, map_h = areas["map"][2], areas["map"][3]
+    left, top, view_w, view_h = viewport(state, map_w, map_h)
+    x, y = position
+    if not (left <= x < left + view_w and top <= y < top + view_h):
+        return None
+    return ((x - left + 0.5) * cell_w, (y - top + 0.5) * cell_h)
+
+
 def draw_game(buffer: PatternBuffer, state: GameState) -> None:
     """The whole play screen: map, sidebar, and the bottom row."""
     buffer.clear()
@@ -120,10 +160,7 @@ def draw_game(buffer: PatternBuffer, state: GameState) -> None:
 def _draw_map(buffer, state, area) -> None:
     x0, y0, width, height = area
     dungeon = state.dungeon_map
-    view_w = min(width, dungeon.width)
-    view_h = min(height, dungeon.height)
-    left = max(0, min(state.player.position[0] - view_w // 2, dungeon.width - view_w))
-    top = max(0, min(state.player.position[1] - view_h // 2, dungeon.height - view_h))
+    left, top, view_w, view_h = viewport(state, width, height)
 
     for y in range(view_h):
         for x in range(view_w):
