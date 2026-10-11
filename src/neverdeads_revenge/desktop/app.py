@@ -14,6 +14,7 @@ fresh press" means when you can finally tell one.
 from __future__ import annotations
 
 import random
+import time
 
 from PySide6.QtCore import QEvent, Qt, QTimer
 from PySide6.QtGui import QColor, QKeyEvent, QPalette
@@ -102,6 +103,9 @@ class DesktopApp(QMainWindow):
         self.sfx = Sfx(muted=no_sound)
         #: The moving pixels. Their own layer, drawn over the still frame.
         self.effects = Effects(self.font.cell_w, self.font.cell_h)
+        #: A word about the glass, said for a moment: what a toggle key just did.
+        self.glass_note: tuple[str, float] | None = None
+        self._asked_fullscreen = False
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
         self._timer.start(33)
@@ -114,6 +118,13 @@ class DesktopApp(QMainWindow):
     # -- the frame ----------------------------------------------------------
     def showEvent(self, event) -> None:  # noqa: N802 - Qt's spelling
         super().showEvent(event)
+        # The dungeon is a CRT, and a CRT shows one thing: the whole screen. The
+        # player asked for this to be how the game opens; F11 still gives it up.
+        # Asked once, because going fullscreen emits its own show event and a
+        # recursion would be a fight about who is in charge.
+        if not self._asked_fullscreen and not self.isFullScreen():
+            self._asked_fullscreen = True
+            self.showFullScreen()
         self.redraw()
 
     def resizeEvent(self, event) -> None:  # noqa: N802 - Qt's spelling
@@ -149,7 +160,7 @@ class DesktopApp(QMainWindow):
         self._buffer = None
         self.effects.clear()
         self._remember()
-        self.redraw()
+        self._note_glass(f"ZOOM {self.zoom}x")
 
     def _remember(self) -> None:
         save_settings(
@@ -177,7 +188,30 @@ class DesktopApp(QMainWindow):
             screen.draw(self._buffer, self)
         image = self._buffer.render()
         self.effects.draw(image)
+        self._say_glass(image)
         self.view.set_frame(image)
+
+    def _say_glass(self, image) -> None:
+        """Say what a glass key just did, for as long as it takes to read.
+
+        Drawn over whatever is on the screen, because the toggle is about the
+        glass and the glass is on everything.
+        """
+        if self.glass_note is None:
+            return
+        note, until = self.glass_note
+        if time.monotonic() > until:
+            self.glass_note = None
+            return
+        from .theme import parse_style
+        from .chrome import BONE
+
+        x = max(0, (self._buffer.cols - len(note)) // 2)
+        self._buffer.text(x, 1, note, parse_style(f"bold {BONE}"))
+
+    def _note_glass(self, note: str) -> None:
+        self.glass_note = (note, time.monotonic() + 2.0)
+        self.redraw()
 
     def screen_point(self, position) -> tuple[float, float] | None:
         """The pixel centre of a dungeon square on the current frame, if it is
@@ -196,8 +230,12 @@ class DesktopApp(QMainWindow):
         )
 
     def _tick(self) -> None:
-        """Advance the pixels, and repaint only while anything is moving."""
-        if not self.effects.active and not self.view.is_shaking():
+        """Advance the pixels and expire the glass word.
+
+        Repaints only while either of them is alive, which is most of the time
+        nothing at all.
+        """
+        if not self.effects.active and not self.view.is_shaking() and self.glass_note is None:
             return
         self.effects.step(0.033)
         self.redraw()
@@ -382,17 +420,17 @@ class DesktopApp(QMainWindow):
         if key == SCANLINE_KEY:
             self.crt.scanlines = not self.crt.scanlines
             self._remember()
-            self.view.update()
+            self._note_glass(f"SCANLINES {'ON' if self.crt.scanlines else 'OFF'}")
             return True
         if key == BLOOM_KEY:
             self.crt.bloom = not self.crt.bloom
             self._remember()
-            self.view.update()
+            self._note_glass(f"BLOOM {'ON' if self.crt.bloom else 'OFF'}")
             return True
         if key == GEOMETRY_KEY:
             self.crt.geometry = not self.crt.geometry
             self._remember()
-            self.view.update()
+            self._note_glass(f"CRT CURVE {'ON' if self.crt.geometry else 'OFF'}")
             return True
         return False
 

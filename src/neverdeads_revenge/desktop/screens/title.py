@@ -36,14 +36,18 @@ class TitleScreen(Screen):
     def draw(self, buffer, app) -> None:
         buffer.clear()
         art = render_word("NEVERDEAD'S") + render_word("REVENGE")
-        version = render_word("2.0", scale=2)
         items = self.items(app)
 
-        # Everything the title has to hold, laid out from the top so the big
-        # version number cannot push the menu off the bottom of a 27-row grid.
-        best = app.progress.best_score
-        block = len(art) + len(version) + 2 + (1 if best else 0) + 3
-        y = max(0, (buffer.rows - block) // 2)
+        # Laid out from the *bottom*: the rules and the hint lines are what a
+        # player reads most, so they get their rows first and the big art makes
+        # do with what is left. The version number is only twice its weight when
+        # the screen can carry both it and the lines below.
+        glass_y = buffer.rows - 2
+        nav_y = buffer.rows - 3
+        menu_y = buffer.rows - 5
+        rule_y = buffer.rows - 6
+        version = render_word("2.0", scale=2 if buffer.rows >= 27 else 1)
+        y = max(0, rule_y - len(art) - len(version) - 2)
 
         for line in art:
             self._centre(buffer, y, line, f"bold {PURPLE}")
@@ -51,16 +55,19 @@ class TitleScreen(Screen):
         for line in version:
             self._centre(buffer, y, line, "bold #8b1a1a")
             y += 1
-        y += 1
-        if best:
+        best = app.progress.best_score
+        if best and y + 1 < rule_y - 1:
             self._centre(buffer, y, f"best {best}", ASH)
-            y += 1
-        y += 1
 
-        rule(buffer, 2, y, buffer.cols - 4, BLOOD)
-        y += 1
-        self._menu_line(buffer, y, items, self.index)
-        self._centre(buffer, buffer.rows - 2, "↑↓ choose   enter take   esc quit", ASH)
+        rule(buffer, 2, rule_y, buffer.cols - 4, BLOOD)
+        self._menu_line(buffer, menu_y, items, self.index)
+        self._centre(buffer, nav_y, "←→ choose   enter take   esc quit", ASH)
+        self._centre(
+            buffer,
+            glass_y,
+            "F11 screen   F2 scanlines   F3 bloom   F4 curve   + / - zoom",
+            ASH,
+        )
 
     def _menu_line(self, buffer, y, items, index) -> None:
         """The menu as one line, the chosen entry lit and bracketed.
