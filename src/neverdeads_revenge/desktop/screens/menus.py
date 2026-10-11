@@ -135,7 +135,11 @@ class CharacterScreen(_Panel):
             (f"{p.name}  {self.state.hero.title}", f"bold {p.color}"),
             (f"HP {p.hp}/{p.max_hp}   DMG {low}-{high}   CRT {p.crit_chance:.0%}", BONE),
             (f"SPD {p.speed:.2f}   ARM {p.armor}   EVA {p.evasion}   ACC {p.accuracy}", BONE),
-            (f"REVENGE {self.state.revenge_stacks}/{p.trait.cap}  {p.trait.describe(self.state.revenge_stacks)}", "green"),
+            (
+                f"{p.trait.title} {self.state.revenge_stacks}/{p.trait.cap}  "
+                f"{p.trait.describe(self.state.revenge_stacks)}",
+                "green",
+            ),
             ("", ""),
         ]
         rows.append(("WORN", f"bold {PURPLE}"))
@@ -204,8 +208,7 @@ class ChronicleScreen(_Panel):
             if number in app.progress.pages:
                 found += 1
                 text = (page(number) or "").strip()
-                first = text.splitlines()[0] if text else ""
-                rows.append((f"PAGE {numeral(number):<8} {first[:40]}", f"bold {BONE}"))
+                rows.append((f"PAGE {numeral(number)}", f"bold {BONE}"))
                 for line in wrap(text, 60):
                     rows.append((f"      {line}", BONE))
                 rows.append(("", ""))

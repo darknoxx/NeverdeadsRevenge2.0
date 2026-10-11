@@ -22,6 +22,7 @@ from neverdeads_revenge.world.generator import ESCAPE_DEPTH
 from neverdeads_revenge.world.items import (
     AMULET_GLYPH,
     ARMOUR_GLYPH,
+    CHEST_GLYPH,
     ITEMS,
     WEAPON_GLYPH,
 )
@@ -289,13 +290,34 @@ def paste_sidebar(image, state, cols, rows, cell_w, cell_h, small) -> None:
 
 
 def _legend_colour(glyph: str) -> str:
+    """The colour a legend row's glyph is drawn in.
+
+    The same colour the *map* draws the same glyph in, and one walker for each
+    family the map has: the people, the monsters, then the ground -- a spring
+    and its water colour, not a grey -- and only then the things lying there.
+    Ask an item last, because several things share a glyph's word and the map's
+    answer is the one a legend row is promising.
+    """
     from neverdeads_revenge.game.actors import ENEMIES
+    from neverdeads_revenge.world.items import CHEST_COLOR, COIN_COLOR, COIN_GLYPH
+    from neverdeads_revenge.world.tiles import Tile
 
     if glyph == NPC_GLYPH:
         return NPC_COLOR
+    if glyph == COIN_GLYPH:
+        # A coin is not in the item table: it is made, not rolled, and its
+        # colour is a constant the map has been using all along.
+        return COIN_COLOR
+    if glyph == CHEST_GLYPH:
+        return CHEST_COLOR
     for template in ENEMIES.values():
         if template.glyph == glyph:
             return template.color
+    for tile in Tile:
+        if tile.glyph == glyph:
+            # Terrain first for the spring and the stairs, which the item table
+            # never hears about.
+            return tile.color
     for item in ITEMS.values():
         if item.glyph == glyph:
             return item.color
@@ -333,9 +355,13 @@ def hud_lines(state: GameState) -> list[tuple[str, str]]:
     lines.append((f"{speed}  ARM {player.armor}  EVA {player.evasion}", "bold white"))
 
     if state.revenge_stacks:
+        # Name the grant by its own name, not by the system's: BLACK TIDE means
+        # a different thing to play around than FROZEN FORTRESS, and neither is
+        # just "revenge". And the ceiling with it, because the ceiling is
+        # invisible otherwise.
         lines.append(
             (
-                f"REVENGE x{state.revenge_stacks}/{player.trait.cap}  "
+                f"{player.trait.title} x{state.revenge_stacks}/{player.trait.cap}  "
                 f"{player.trait.describe(state.revenge_stacks)}",
                 "bold green",
             )

@@ -140,9 +140,11 @@ def test_the_hud_says_who_and_where(state):
 def test_the_hud_grows_a_revenge_line_only_when_there_are_stacks(state):
     from neverdeads_revenge.desktop.render import hud_lines
 
-    assert not any("REVENGE" in line for line, _ in hud_lines(state))
+    # The grant has a name per hero: Noxx's is the BLACK TIDE, not the system's
+    # word for the mechanic.
+    assert not any("BLACK TIDE" in line for line, _ in hud_lines(state))
     state.revenge_stacks = 2
-    assert any("REVENGE" in line for line, _ in hud_lines(state))
+    assert any("BLACK TIDE" in line for line, _ in hud_lines(state))
 
 
 def test_the_log_kind_picks_the_colour(state):

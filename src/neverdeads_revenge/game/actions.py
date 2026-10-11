@@ -330,11 +330,12 @@ def _on_death(state: GameState, enemy: Actor) -> None:
     gain = 1 + (1 if state.has_passive("long_hunger") else 0)
     state.revenge_stacks = apply_revenge(player, before + gain)
     if state.revenge_stacks > before:
-        # Say what it actually granted, not what it granted back when the game
-        # had one hero. "REVENGE 3: +3 armour" is the whole point of the trait
-        # belonging to the hero.
+        # Say what it actually granted, and say it by its own name: the tide,
+        # the fortress and the blade are three grants wearing one word. Note the
+        # `title` on the trait -- "REVENGE" still names the system, this names
+        # the grant.
         state.say(
-            f"REVENGE {state.revenge_stacks}: "
+            f"{player.trait.title} {state.revenge_stacks}: "
             f"{player.trait.describe(state.revenge_stacks)}.",
             LogKind.GOOD,
         )
