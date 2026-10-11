@@ -106,7 +106,7 @@ class PrologueScreen(Screen):
             return True
         if name in ("enter", "return"):
             # Repeats are the hold's food; nothing else here acts on them.
-            if self.hold.press(name):
+            if self.hold.press(name, event.isAutoRepeat()):
                 self.finish(app)
             return True
         return True

@@ -827,7 +827,10 @@ def test_three_taps_dismiss_nothing(app):
 
 
 def test_a_release_empties_the_bar():
-    """Hold, let go: nothing is banked for the next press to inherit."""
+    """Hold, let go: nothing is banked for the next press to inherit. The
+    lift is pending for a moment first -- that is what keeps a Wayland
+    compositor's lift-and-repeat from tearing a hold in half -- and then,
+    unfollowed, it gathers nothing."""
     import time as _time
 
     from neverdeads_revenge.desktop.hold import HoldToContinue
@@ -837,12 +840,13 @@ def test_a_release_empties_the_bar():
     assert hold.holding and hold.progress > 0.0
 
     hold.release("enter")
+    assert hold.holding, "a pending lift is not yet a release"
+
+    _time.sleep(0.3)  # longer than the release grace: the key went up
     assert not hold.holding
     assert hold.progress == 0.0
 
-    _time.sleep(0.05)
     assert hold.press("enter") is False, "released progress funded the next press"
-    assert hold.bar() == "░" * 10 or True  # just started over; it reads empty
 
 
 def test_the_bar_fills_while_the_key_is_down(app):
@@ -868,9 +872,46 @@ def test_the_bar_fills_while_the_key_is_down(app):
         assert screen.hold.holding
 
         release(app, Qt.Key.Key_Return)
-        assert not screen.hold.holding
+        app._tick()  # the lift is pending: still worth a picture
         count = presses[0]
+
+        import time as _time
+
+        _time.sleep(0.3)  # past the grace: the key went up for good
+        assert not screen.hold.holding
         app._tick()
         assert presses[0] == count, "the tick kept drawing a finished hold"
     finally:
         app.redraw = original
+
+
+def test_the_wayland_lift_before_a_repeat_does_not_tear_the_hold():
+    """The user saw a bar fill, empty itself, and fill again to the end. What
+    happened between the fills: a Wayland compositor announces its repeat
+    phase by lifting the key -- an honest-looking release -- and pressing it
+    again immediately as repeats. A hold must not read that lift as the end.
+    Only a press flagged as a repeat redeems the lift; nothing else does."""
+    import time as _time
+
+    from neverdeads_revenge.desktop.hold import HoldToContinue
+
+    hold = HoldToContinue()
+    hold.press("enter")
+    hold.release("enter")  # the compositor lifts the key before repeating
+
+    assert hold.press("enter", repeat=True) is False, "the hold read as finished"
+    assert hold.holding, "the repeat press did not redeem the lift"
+    assert hold.progress > 0.0, "the fill was thrown away mid-hold"
+
+    # and the fill continues over the repeat stream: no second starting line.
+    # The stream keeps coming every ~33ms, as a keyboard does.
+    deadline = time.monotonic() + 0.8
+    while time.monotonic() < deadline:
+        _time.sleep(0.05)
+        hold.press("enter", repeat=True)
+    assert hold.progress >= 0.8
+
+    # a lift that gets no repeat behind it is still a key going up
+    hold.release("enter")
+    _time.sleep(0.3)
+    assert hold.progress == 0.0, "an unfollowed lift banked itself"

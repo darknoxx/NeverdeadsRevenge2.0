@@ -99,7 +99,7 @@ class GameOverScreen(Screen):
             return True
         if name in ("enter", "return"):
             # Repeats are fed on purpose: the hold *is* the repeats.
-            if self.hold.press(name):
+            if self.hold.press(name, event.isAutoRepeat()):
                 self.finish(app, None)
             return True
         return True
