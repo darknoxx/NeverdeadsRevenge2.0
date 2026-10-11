@@ -37,8 +37,10 @@ build had:
 The dungeon is played with the keys it always was: the arrows or `hjkl` (and
 `yubn` for the diagonals) to move, `.` to wait, `enter` to interact, `q` to
 drink, `i` for the pack, `>` for the stairs, `r` to take the borrowed hour back.
+The title menu is read sideways: `←→` choose, `enter` take.
 
-The window and the glass have keys of their own:
+The game **opens fullscreen** -- a CRT is one screen -- and `F11` gives the
+window back:
 
 | key | what it does |
 | --- | --- |
@@ -46,7 +48,7 @@ The window and the glass have keys of their own:
 | `+` / `-` | zoom the field in and out |
 | `F2` | scanlines on/off |
 | `F3` | bloom on/off |
-| `F4` | the CRT's curve, corners and vignette on/off |
+| `F4` | the CRT's curve on/off |
 
 Scanlines and bloom are on at the start; the curve is off, because it is the one
 effect that changes what the picture *is* rather than how it is lit. The zoom and

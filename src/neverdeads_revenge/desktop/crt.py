@@ -141,16 +141,17 @@ void main() {
         if (bloom == 1) {
             // A cheap glow: the bright neighbours, at two radii, added back.
             // The threshold is what keeps it a phosphor bloom and not a blur --
-            // the walls are dark and stay dark.
+            // the walls are dark and stay dark. Held to a whisper: enough to
+            // make a bright cell breathe, not enough to fog the frame.
             vec3 glow = vec3(0.0);
             for (int i = -2; i <= 2; i++) {
                 for (int j = -2; j <= 2; j++) {
                     vec2 tap = (cell + vec2(float(i), float(j)) * 1.5) / buffer;
                     vec3 c = texture2D(pattern, tap).rgb;
-                    glow += c * step(0.45, luminance(c));
+                    glow += c * step(0.5, luminance(c));
                 }
             }
-            colour += glow * 0.09;
+            colour += glow * 0.045;
         }
 
         if (scanlines == 1) {
@@ -160,15 +161,10 @@ void main() {
             float dark = row < 1.0 ? 0.72 : 1.0;
             colour *= mix(1.0, dark, 0.85);
         }
-
-        if (geometry == 1) {
-            // A tube is dimmer at the corners and does not quite reach them.
-            vec2 centred = (screen / resolution) * 2.0 - 1.0;
-            float r2 = dot(centred, centred);
-            colour *= 1.0 - 0.25 * r2;
-            float edge = max(abs(centred.x), abs(centred.y));
-            colour *= 1.0 - smoothstep(0.92, 1.0, edge);
-        }
+        // The edge darkening -- the vignette -- is off for now, on trial, so
+        // the curve above can be judged on its own. It lives where it was: a
+        // radial dim over the frame, plus a smoothstep mask on the last few
+        // pixels, both inside `geometry == 1`.
     }
 
     gl_FragColor = vec4(colour, 1.0);
