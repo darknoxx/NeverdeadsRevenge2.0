@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=@NAME@
+GenericName=Terminal Roguelite
+Comment=A terminal roguelite about Noxx and his revenge
+Exec=@EXEC@
+Icon=@SLUG@
+# The game is a TUI: without this the desktop would try to run it with no
+# terminal attached and nothing would appear to happen.
+Terminal=true
+Categories=Game;RolePlaying;
+Keywords=roguelite;roguelike;terminal;tui;textual;game;
+StartupNotify=false

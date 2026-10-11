@@ -1,0 +1,379 @@
+"""What the game looks like, drawn into a pattern buffer.
+
+This is the port of the terminal screens' *content* -- the map, the sidebar, the
+log, the two columns -- into cells. The layout is the same one ``app.tcss``
+described, in cells: the map takes what is left, the sidebar is a fixed strip
+down the right, and the bottom row is the log and the two columns.
+
+Kept as plain functions taking a buffer and a state, with no widget and no
+window anywhere, for one reason: this is the part worth testing, and a test can
+build a buffer and read the cells back without a screen attached.
+"""
+
+from __future__ import annotations
+
+from neverdeads_revenge.game.npcs import NPC_COLOR, NPC_GLYPH
+from neverdeads_revenge.game.prologue import legend_rows
+from neverdeads_revenge.game.state import GameState, LogKind
+from neverdeads_revenge.world.generator import ESCAPE_DEPTH
+from neverdeads_revenge.world.items import (
+    AMULET_GLYPH,
+    ARMOUR_GLYPH,
+    ITEMS,
+    WEAPON_GLYPH,
+)
+from neverdeads_revenge.world.tiles import Tile
+
+from .buffer import PatternBuffer
+from .theme import Style, parse_style
+
+__all__ = [
+    "SIDEBAR",
+    "BOTTOM",
+    "CURSES_WIDTH",
+    "MARKS_WIDTH",
+    "HUD_WIDTH",
+    "regions",
+    "draw_game",
+    "draw_title",
+    "hud_lines",
+    "marks_names",
+    "log_style",
+]
+
+#: The sidebar is a fixed strip, exactly as wide as the terminal's.
+SIDEBAR = 34
+#: The bottom row's height: the log and the two columns.
+BOTTOM = 10
+#: The two columns beside the log, widths unchanged from the terminal build.
+CURSES_WIDTH = 16
+MARKS_WIDTH = 22
+#: What the HUD wraps at, inside the sidebar's content box.
+HUD_WIDTH = SIDEBAR - 4
+
+#: LogKind -> style, the same mapping the terminal log used.
+_KIND_STYLES: dict[LogKind, str] = {
+    LogKind.PLAIN: "white",
+    LogKind.COMBAT: "bright_white",
+    LogKind.CRIT: "bold yellow",
+    LogKind.DAMAGE: "orange1",
+    LogKind.GOOD: "bold green",
+    LogKind.BAD: "bold red",
+    LogKind.SYSTEM: "bold cyan",
+    LogKind.COIN: "bold yellow",
+}
+
+#: The frame a column is drawn in, and its headings. Matches ``marks.py``.
+_STYLE_BY_GROUP = {
+    "curses": "red",
+    "gifts": "green",
+    "effects": "cyan",
+    "statuses": "yellow",
+}
+
+#: The glyph the sidebar lists each slot with. The map's own alphabet.
+_SLOT_GLYPH = {
+    "weapon": WEAPON_GLYPH,
+    "armour": ARMOUR_GLYPH,
+    "amulet": AMULET_GLYPH,
+}
+_SLOT_ORDER = ("weapon", "armour", "amulet")
+_SHORT_NAME = 12
+_BAR_CELLS = 12
+
+
+# -- layout -------------------------------------------------------------------
+def regions(cols: int, rows: int) -> dict[str, tuple[int, int, int, int]]:
+    """The rectangles, in cells: map, sidebar, bottom, log, curses, marks.
+
+    The sidebar runs the full height on the right, and the bottom row sits under
+    the *map* rather than under everything -- exactly the split ``app.tcss``
+    drew. A bottom row that ran under the sidebar would put the columns on top
+    of the legend, which is what the first draft of this did.
+    """
+    map_w = max(1, cols - SIDEBAR)
+    map_h = max(1, rows - BOTTOM)
+    bottom_y = map_h
+    log_w = max(1, map_w - CURSES_WIDTH - MARKS_WIDTH)
+    return {
+        "map": (0, 0, map_w, map_h),
+        "sidebar": (map_w, 0, SIDEBAR, rows),
+        "bottom": (0, bottom_y, map_w, BOTTOM),
+        "log": (0, bottom_y, log_w, BOTTOM),
+        "curses": (log_w, bottom_y, CURSES_WIDTH, BOTTOM),
+        "marks": (log_w + CURSES_WIDTH, bottom_y, MARKS_WIDTH, BOTTOM),
+    }
+
+
+# -- the map ------------------------------------------------------------------
+def draw_game(buffer: PatternBuffer, state: GameState) -> None:
+    """The whole play screen: map, sidebar, and the bottom row."""
+    buffer.clear()
+    areas = regions(buffer.cols, buffer.rows)
+    _draw_map(buffer, state, areas["map"])
+    _draw_sidebar(buffer, state, areas["sidebar"])
+    _draw_log(buffer, state, areas["log"])
+    _draw_column(buffer, state, areas["curses"], ("curses",))
+    _draw_column(buffer, state, areas["marks"], ("gifts", "effects"))
+
+
+def _draw_map(buffer, state, area) -> None:
+    x0, y0, width, height = area
+    dungeon = state.dungeon_map
+    view_w = min(width, dungeon.width)
+    view_h = min(height, dungeon.height)
+    left = max(0, min(state.player.position[0] - view_w // 2, dungeon.width - view_w))
+    top = max(0, min(state.player.position[1] - view_h // 2, dungeon.height - view_h))
+
+    for y in range(view_h):
+        for x in range(view_w):
+            position = (left + x, top + y)
+            glyph, style = _cell_content(position, state)
+            if position in state.hits:
+                style = parse_style(f"{style} reverse") if isinstance(style, str) else style
+            buffer.put(x0 + x, y0 + y, glyph, style if isinstance(style, Style) else parse_style(style))
+
+
+def _cell_content(position, state: GameState) -> tuple[str, Style]:
+    """One map cell: an actor, else loot, else the glass, else terrain.
+
+    The port of ``map_view._cell_content``: same order, same rules, including
+    WHAT THE DARK KNOWS seeing through walls and THE HUNGRY ROAD's red comma.
+    """
+    dungeon = state.dungeon_map
+    visible = dungeon.is_visible(position)
+
+    actor = state.actor_at(position)
+    if actor is not None:
+        if visible:
+            return actor.glyph, parse_style(f"bold {actor.color}")
+        if actor.kind.name == "ENEMY" and state.has_gift("dark_knows"):
+            return actor.glyph, parse_style(actor.color)
+
+    item = dungeon.item_at(position)
+    if item is not None and visible:
+        return item.glyph, parse_style(f"bold {item.color}")
+
+    if visible and position in state.trail:
+        return ",", parse_style("red")
+
+    tile = dungeon.display_tile(position)
+    if visible:
+        return tile.glyph, parse_style(tile.color)
+    if dungeon.is_explored(position) and (
+        tile.blocks_movement
+        or tile in (Tile.STAIRS_DOWN, Tile.RIFT, Tile.SPRING)
+    ):
+        return tile.glyph, parse_style("grey30")
+    return " ", Style()
+
+
+# -- the sidebar --------------------------------------------------------------
+def _draw_sidebar(buffer, state, area) -> None:
+    x0, y0, width, height = area
+    y = y0
+    for text, style in hud_lines(state):
+        buffer.text(x0 + 1, y, text[: width - 2], parse_style(style))
+        y += 1
+    y += 1
+    for glyph, text in legend_rows(state.depth, state.hero):
+        if glyph:
+            buffer.put(x0 + 1, y, glyph, parse_style(_legend_colour(glyph)))
+        buffer.text(x0 + 3, y, text[: width - 4], parse_style("grey70"))
+        y += 1
+        if y >= y0 + height:
+            break
+
+
+def _legend_colour(glyph: str) -> str:
+    from neverdeads_revenge.game.actors import ENEMIES
+
+    if glyph == NPC_GLYPH:
+        return NPC_COLOR
+    for template in ENEMIES.values():
+        if template.glyph == glyph:
+            return template.color
+    for item in ITEMS.values():
+        if item.glyph == glyph:
+            return item.color
+    return "grey70"
+
+
+def hud_lines(state: GameState) -> list[tuple[str, str]]:
+    """The HUD, as ``(text, style)`` lines. The port of ``Hud.redraw``.
+
+    Returned as lines rather than drawn, so a test can read the sidebar without
+    a screen -- the same reason ``legend_rows`` is a function in the engine.
+    """
+    player = state.player
+    lines: list[tuple[str, str]] = []
+
+    lines.append((f"{player.glyph} {player.name}", f"bold {player.color}"))
+    lines.append((state.hero.title, "dim"))
+
+    ratio = player.hp / player.max_hp if player.max_hp else 0.0
+    filled = max(0, min(_BAR_CELLS, round(ratio * _BAR_CELLS)))
+    bar_colour = "green" if ratio > 0.5 else "yellow" if ratio > 0.25 else "red"
+    lines.append(
+        (
+            "HP  " + "█" * filled + "░" * (_BAR_CELLS - filled) + f"  {player.hp}/{player.max_hp}",
+            bar_colour,
+        )
+    )
+
+    low, high = player.damage_range
+    lines.append((f"DMG {low}-{high}  CRT {player.crit_chance:.0%}", "bold white"))
+
+    speed = f"SPD {player.speed:.2f}"
+    if player.speed_bonus:
+        speed += f"+{player.speed_bonus:.1f}"
+    lines.append((f"{speed}  ARM {player.armor}  EVA {player.evasion}", "bold white"))
+
+    if state.revenge_stacks:
+        lines.append(
+            (
+                f"REVENGE x{state.revenge_stacks}/{player.trait.cap}  "
+                f"{player.trait.describe(state.revenge_stacks)}",
+                "bold green",
+            )
+        )
+
+    gear = []
+    for slot in ("weapon", "armour"):
+        item = player.equipment.get(slot)
+        name = item.name.split()[-1][:_SHORT_NAME] if item else "—"
+        gear.append(f"{_SLOT_GLYPH[slot]} {name}")
+    lines.append(("  ".join(gear), "bold white"))
+    amulet = player.equipment.get("amulet")
+    amulet_name = amulet.name.split()[-1][:_SHORT_NAME] if amulet else "—"
+    lines.append((f"{_SLOT_GLYPH['amulet']} {amulet_name}", "bold white"))
+
+    score = f"Floor {state.depth}/{ESCAPE_DEPTH}  Score {state.score}"
+    if state.fame:
+        score += f"  x{state.score_multiplier:.2f}"
+    lines.append((score, "bold cyan"))
+
+    if state.rewind_ready:
+        lines.append(("r take the hour back", "bold green"))
+    if state.at_the_rift:
+        lines.append(("The rift hums.", "bold bright_cyan"))
+
+    potions = sum(1 for item in state.inventory if item.heal > 0)
+    draughts = f"Gold {state.gold}   Draughts {potions}"
+    if potions:
+        draughts += " q"
+    lines.append((draughts, "bold yellow"))
+
+    lines.append(
+        (
+            f"Kills {state.kills}  Turns {state.total_turns}  Lv {state.level}",
+            "bold green",
+        )
+    )
+    return lines
+
+
+# -- the bottom row -----------------------------------------------------------
+def log_style(kind: LogKind) -> str:
+    """The style a log line is drawn in, by what kind of line it is."""
+    return _KIND_STYLES.get(kind, "white")
+
+
+def _draw_log(buffer, state, area) -> None:
+    x0, y0, width, height = area
+    # The newest lines sit at the bottom, so the eye finds them where it left
+    # them. Only as many as fit; the older ones have scrolled away.
+    visible = state.log[-(height - 2) :]
+    y = y0 + height - 1 - len(visible)
+    for entry in visible:
+        buffer.text(x0 + 1, y, entry.text[: width - 2], parse_style(log_style(entry.kind)))
+        y += 1
+
+
+def _draw_column(buffer, state, area, kinds) -> None:
+    x0, y0, width, height = area
+    y = y0 + 1
+    budget = height - 2
+    shown = 0
+    for kind in kinds:
+        if shown >= budget:
+            break
+        buffer.text(x0 + 1, y, kind.upper(), parse_style("dim"))
+        y += 1
+        shown += 1
+        names = marks_names(state, kind)
+        if not names:
+            buffer.put(x0 + 1, y, "-", parse_style("dim"))
+            y += 1
+            shown += 1
+            continue
+        for name in names:
+            if shown >= budget:
+                break
+            buffer.text(x0 + 1, y, name[: width - 2], parse_style(_STYLE_BY_GROUP[kind]))
+            y += 1
+            shown += 1
+
+
+def marks_names(state: GameState, kind: str) -> list[str]:
+    """The names in one column group, in the order the sheet prints them."""
+    from neverdeads_revenge.game.gifts import gift_by_key
+    from neverdeads_revenge.game.shop import WILD_OFFERS
+    from neverdeads_revenge.game.statuses import status_by_key
+
+    if kind == "curses":
+        return [curse.name for curse in state.curses]
+    if kind == "gifts":
+        names = []
+        for key in sorted(state.gifts):
+            gift = gift_by_key(key)
+            if gift is not None:
+                names.append(gift.name)
+        return names
+    if kind == "statuses":
+        names = []
+        for key, turns in state.player.statuses.items():
+            status = status_by_key(key)
+            if status is not None:
+                names.append(f"{status.name} {turns}")
+        return names
+    if kind == "effects":
+        names = []
+        for key in sorted(state.wilds):
+            offer = WILD_OFFERS.get(key)
+            if offer is not None:
+                names.append(offer.name)
+        if state.rewind_ready:
+            names.append("the borrowed hour")
+        if state.shrouded:
+            names.append("the borrowed face")
+        if state.momentum:
+            names.append(f"momentum {state.momentum}")
+        if state.blood_debt:
+            names.append(f"a debt of {state.blood_debt}")
+        if state.has_gift("last_breath") and state.cornered:
+            names.append("the last breath")
+        if state.salt_ward:
+            names.append("the salt circle")
+        return names
+    return []
+
+
+# -- the title ----------------------------------------------------------------
+def draw_title(buffer: PatternBuffer, subtitle: str, hint: str) -> None:
+    """The title screen: the name in the block font, and a line under it."""
+    from .blocks import render_word
+
+    buffer.clear()
+    art = render_word("NEVERDEAD'S")
+    art += render_word("REVENGE")
+    top = max(1, (buffer.rows - (len(art) * 2 + 6)) // 2)
+    y = top
+    for line in art:
+        x = max(0, (buffer.cols - len(line)) // 2)
+        buffer.text(x, y, line, parse_style("bold #a855f7"))
+        y += 1
+    y += 2
+    buffer.text(max(0, (buffer.cols - len(subtitle)) // 2), y, subtitle, parse_style("grey70"))
+    y += 2
+    buffer.text(max(0, (buffer.cols - len(hint)) // 2), y, hint, parse_style("white"))

@@ -1,0 +1,15 @@
+# The virtualenv is built per machine, never committed.
+.venv/
+
+# Bytecode.
+__pycache__/
+*.py[cod]
+
+# A clone starts with nothing: no scores, no run in progress, no backup.
+meta.json
+meta.json.bak
+run.json
+
+# Editor and OS noise.
+*.swp
+.DS_Store

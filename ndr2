@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Launcher for Neverdead's Revenge 2.0.
+set -euo pipefail
+
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+python="$here/.venv/bin/python"
+
+if [[ ! -x "$python" ]]; then
+    echo "No virtualenv found. Run:" >&2
+    echo "  python3 -m venv .venv && ./.venv/bin/pip install -e '.[dev]'" >&2
+    exit 1
+fi
+
+exec "$python" -m neverdeads_revenge "$@"
