@@ -1410,3 +1410,29 @@ def test_f_gives_in_when_the_gate_allows(app):
         assert top(app) == "GameScreen"
     finally:
         app.play = original
+
+
+def test_the_voids_glass_closes_with_the_shadow():
+    """The reveal is drawn, not remembered: a wall across the floor is shown
+    while Atritas walks, and gone the moment he sinks back -- even though
+    nobody ever walked there."""
+    from neverdeads_revenge.desktop.render import _cell_content
+    from neverdeads_revenge.game.actions import Action, perform_action
+    from neverdeads_revenge.game.actors import HEROES
+    from neverdeads_revenge.game.state import start_run
+    from neverdeads_revenge.world.tiles import Tile
+
+    state = start_run(HEROES["noxx"], 3, ultimate_level=1)
+    far = (state.dungeon_map.width - 2, state.dungeon_map.height - 2)
+    state.dungeon_map.set_tile(far, Tile.WALL)
+
+    perform_action(state, Action.ULTIMATE)
+    glyph, _ = _cell_content(far, state)
+    assert glyph == Tile.WALL.glyph, "the glass showed nothing"
+
+    for _ in range(40):
+        perform_action(state, Action.WAIT)
+    assert state.atritas is None
+
+    glyph, _ = _cell_content(far, state)
+    assert glyph == " ", "the glass outlived the shadow"

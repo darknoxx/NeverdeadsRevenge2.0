@@ -244,6 +244,14 @@ class GameState:
     atritas: Actor | None = None
     #: Turns left before Atritas sinks back into the dark.
     atritas_turns_left: int = 0
+    #: THE SIGHT. While Atritas walks, the whole floor is shown -- every wall,
+    #: every corner, whether or not the hero has been there. It is *drawn*
+    #: open, not *known* open: nothing here makes a monster act (that is
+    #: ``visible``), and it is deliberately not written into ``explored``,
+    #: because the dark showing you something is not the same as you having
+    #: seen it. When the shadow leaves, the walls close back over what the
+    #: hero never actually walked.
+    void_sight: bool = False
     #: Yeti's bastion, while it stands. Same shape of life as the shadow: not
     #: an enemy, not in the queue, kept by its own clock -- and the one thing
     #: on the floor every monster would rather bite than the hero.
@@ -817,6 +825,7 @@ class GameState:
         # whatever the last one sent stays with the floor it was asked on.
         self.atritas = None
         self.atritas_turns_left = 0
+        self.void_sight = False
         self.fortress = None
         self.fortress_turns_left = 0
         self.sight_penalty = 0

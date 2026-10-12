@@ -232,7 +232,9 @@ def _cell_content(position, state: GameState) -> tuple[str, Style]:
     tile = dungeon.display_tile(position)
     if visible:
         return tile.glyph, parse_style(tile.color)
-    if dungeon.is_explored(position) and (
+    if (
+        dungeon.is_explored(position) or state.void_sight
+    ) and (
         tile.blocks_movement
         or tile in (Tile.STAIRS_DOWN, Tile.RIFT, Tile.SPRING)
     ):

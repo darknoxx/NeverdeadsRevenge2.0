@@ -1265,16 +1265,16 @@ def _summon_void(state: GameState) -> ActionResult:
     state.atritas = make_atritas(spot, state.level, state.depth)
     state.atritas_turns_left = ATRITAS_TURNS
 
-    # THE SIGHT. The whole floor, through the walls, for the rest of the
-    # floor: the dark showing Noxx everything it owns.
-    revealed = state.dungeon_map.explored
-    for x in range(state.dungeon_map.width):
-        for y in range(state.dungeon_map.height):
-            revealed.add((x, y))
+    # THE SIGHT. The whole floor, through the walls -- and only for as long as
+    # the shadow walks. Written as a flag rather than into ``explored``: the
+    # dark showing Noxx everything it owns is not the same as Noxx having been
+    # there, and a floor he leaves with the shadow's eyes should close back
+    # over what he never saw for himself.
+    state.void_sight = True
     state.say("You give in to the void.", LogKind.BAD)
     state.say("Atritas rises from your dark and looks around.", LogKind.SYSTEM)
     state.say(
-        "Every wall is glass. There is nowhere down here it is not.",
+        "Every wall is glass -- for as long as he walks.",
         LogKind.GOOD,
     )
     return _spend_the_turn(state)
@@ -1484,8 +1484,10 @@ def _advance_atritas(state: GameState) -> None:
     state.atritas_turns_left -= 1
     if state.atritas_turns_left <= 0:
         state.atritas = None
+        state.void_sight = False
         state.say(
-            "Atritas sinks back into your dark. The walls are stone again.",
+            "Atritas sinks back into your dark. The walls close over "
+            "everything you never saw.",
             LogKind.SYSTEM,
         )
 

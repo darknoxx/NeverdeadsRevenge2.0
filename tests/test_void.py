@@ -113,15 +113,26 @@ def test_a_new_floor_ask_again():
 
 
 # -- what the cast is worth ----------------------------------------------------
-def test_the_cast_opens_the_whole_floor():
-    """Every wall is glass: the whole map is explored, walls and all."""
+def test_the_cast_opens_the_whole_floor_but_only_while_the_shadow_walks():
+    """Every wall is glass -- for as long as he walks. The reveal is *shown*,
+    not *known*: it does not touch ``explored``, and it closes again the
+    moment the shadow leaves."""
     state = _run(ultimate_level=1)
+    total = state.dungeon_map.width * state.dungeon_map.height
 
     perform_action(state, Action.ULTIMATE)
 
-    total = state.dungeon_map.width * state.dungeon_map.height
-    assert len(state.dungeon_map.explored) == total, (
-        "the reveal left a wall unopened"
+    assert state.void_sight is True, "the walls stayed stone"
+    assert len(state.dungeon_map.explored) < total, (
+        "the reveal was written into memory instead of shown"
+    )
+
+    _wait(state, 40)
+
+    assert state.atritas is None
+    assert state.void_sight is False, "the glass outlived the shadow"
+    assert len(state.dungeon_map.explored) < total, (
+        "the walls stayed seen after the shadow left"
     )
 
 
