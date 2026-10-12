@@ -187,6 +187,14 @@ def _draw_map(buffer, state, area) -> None:
                     # light ground, and a light wall on light ground would be
                     # the one thing the fortress's own weather erases.
                     fg = parse_style("grey15").fg
+                elif (
+                    state.actor_at(position) is not None
+                    or dungeon.item_at(position) is not None
+                ):
+                    # Everything alive and everything lying there goes black
+                    # in the fortress's weather: a green ghoul on light ground
+                    # is a smudge, and the room is meant to read as a room.
+                    fg = parse_style("black").fg
                 style = Style(
                     fg=fg,
                     bg=FROST,

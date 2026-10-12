@@ -177,7 +177,7 @@ colour while it is live, grey again once the floor has had its answer.
 | hero | the ask | what it does |
 | --- | --- | --- |
 | Noxx | **give in to the void** | Atritas, a dark shadow, walks beside him for 40 turns, tearing at whatever comes within three paces -- and it blinks beside the thing it strikes, so you see it happen. The whole floor is laid open through the walls. The price: one heart's worth every eighth turn, never the last one -- and every kill the shadow makes hands one heart back, so wading into a group pays. |
-| Yeti | **build the Frozen Fortress** | A wall of ice rises nearby with as much health as Yeti has. Everything hostile on the floor -- hunter included -- prefers it to Yeti and chews on it instead. It lasts 40 turns or until it breaks. The price: the cold closes Yeti's sight to five paces and turns the whole floor white while it stands. |
+| Yeti | **build the Frozen Fortress** | A wall of ice rises nearby with as much health as Yeti has. Everything hostile on the floor -- hunter included -- prefers it to Yeti and chews on it instead. It lasts 80 turns or until it breaks, and while it stands the whole floor lies on white with every creature and every item drawn black. The price: the cold closes Yeti's sight to five paces. |
 | Walkyrion | **shatter the golden bell** | He drives his blade into the floor. Three paces of ground answer: walls come down to plain floor (the dungeon's own edge stays), everything hostile there is cut and thrown two paces, and anything that dies pays out like any kill. A room, not a duel. |
 
 ## Between the runs

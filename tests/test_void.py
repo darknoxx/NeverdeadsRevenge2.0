@@ -344,12 +344,16 @@ def test_everything_prefers_the_ice_to_the_hero():
     assert state.player.stats.hp == before_hero, "the hero was bitten anyway"
 
 
-def test_the_fortress_melts_at_forty_turns():
+def test_the_fortress_melts_at_its_eighty_turns():
+    from neverdeads_revenge.game.difficulty import FORTRESS_TURNS
+
+    assert FORTRESS_TURNS == 80, "the wall's clock changed without its test"
+
     state = _yeti_run()
     perform_action(state, Action.ULTIMATE)
     assert state.fortress is not None
 
-    _wait(state, 40)
+    _wait(state, FORTRESS_TURNS)
 
     assert state.fortress is None, "the wall overstayed"
     assert state.sight_penalty == 0, "the cold never let go of the eyes"

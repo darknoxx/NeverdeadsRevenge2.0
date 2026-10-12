@@ -92,9 +92,10 @@ ATRITAS_RADIUS = 3
 #: whole bargain: wade into a group, and the dark pays for the blood it took.
 ATRITAS_KILL_HEAL = 1
 
-#: How long Yeti's Frozen Fortress stands, in turns -- the same promise as the
-#: shadow's, and the same reason for saying it in turns.
-FORTRESS_TURNS = 40
+#: How long Yeti's Frozen Fortress stands, in turns -- twice the shadow's
+#: stay, because a wall that only soaks is worth less per turn than a shadow
+#: that cuts, and the sight it takes is paid the whole time it is up.
+FORTRESS_TURNS = 80
 
 #: How much of Yeti's sight the fortress takes while it stands. The cold
 #: closes the dark in; that is the price of the wall.
