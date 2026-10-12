@@ -507,3 +507,32 @@ def test_every_shadow_kill_hands_a_heart_back():
     # not arrived yet, so the trade shows in full.
     assert state.player.stats.hp == 11, "the kill did not pay the blood back"
     assert any("gives one back" in entry.text for entry in state.log)
+
+
+def test_the_shadow_keeps_three_paces_of_sight_wherever_it_blinks():
+    """It walks the floor looking for prey; wherever it lands it sees, so the
+    summoner can watch the work he is bleeding for."""
+    from neverdeads_revenge.game.difficulty import ATRITAS_VIEW
+
+    state = _run(ultimate_level=1)
+    perform_action(state, Action.ULTIMATE)
+
+    # Stage a kill away from Noxx, let the shadow blink to it, and check the
+    # square it landed on is lit even where the hero cannot see.
+    hero = state.player.position
+    far = (hero[0] + 2, hero[1] + 2)
+    state.dungeon_map.set_tile(far, Tile.FLOOR)
+    _stage_enemy_at_square(state, far, hp=1)
+
+    _wait(state, 3)  # the blink and the kill
+
+    atritas = state.atritas
+    assert atritas is not None
+    ax, ay = atritas.position
+    for dx in range(-ATRITAS_VIEW, ATRITAS_VIEW + 1):
+        for dy in range(-ATRITAS_VIEW, ATRITAS_VIEW + 1):
+            pos = (ax + dx, ay + dy)
+            if state.dungeon_map.in_bounds(pos):
+                assert state.dungeon_map.is_visible(pos), (
+                    f"{pos} went dark around the shadow"
+                )

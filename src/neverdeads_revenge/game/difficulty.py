@@ -35,6 +35,7 @@ __all__ = [
     "ATRITAS_SWING_EVERY",
     "ATRITAS_DRAIN_EVERY",
     "ATRITAS_RADIUS",
+    "ATRITAS_VIEW",
     "ATRITAS_KILL_HEAL",
     "FORTRESS_TURNS",
     "FORTRESS_SIGHT_PENALTY",
@@ -87,6 +88,11 @@ ATRITAS_DRAIN_EVERY = 8
 
 #: How close an enemy has to stand to Noxx before Atritas swings at it.
 ATRITAS_RADIUS = 3
+
+#: How far the shadow keeps the floor in view around itself. It blinks from
+#: prey to prey, and wherever it lands it sees -- three paces, always -- so
+#: the summoner can watch the work it is paying for.
+ATRITAS_VIEW = 3
 
 #: How much health Atritas hands back to its summoner for every kill it
 #: makes. The price is per beat and the feeding is per kill, which is the

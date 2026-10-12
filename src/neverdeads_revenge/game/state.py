@@ -41,7 +41,7 @@ from .actors import (
 )
 from .combat import apply_revenge
 from .curses import CURSES, Curse
-from .difficulty import FORTRESS_VIEW, ULTIMATE_LEVEL, potency
+from .difficulty import ATRITAS_VIEW, FORTRESS_VIEW, ULTIMATE_LEVEL, potency
 from .gifts import GIFTS
 from .lore import PAGE_COUNT, numeral
 from .npcs import NPCS, Npc, npc_by_key
@@ -678,15 +678,35 @@ class GameState:
             # THE FROZEN FORTRESS watches on the hero's behalf. Three paces
             # around the wall stay visible even after the cold has taken his
             # eyes, so the thing he built is never lost behind what it cost.
-            fx, fy = self.fortress.position
-            for dx in range(-FORTRESS_VIEW, FORTRESS_VIEW + 1):
-                for dy in range(-FORTRESS_VIEW, FORTRESS_VIEW + 1):
-                    pos = (fx + dx, fy + dy)
-                    if self.dungeon_map.in_bounds(pos):
-                        visible.add(pos)
-                        explored.add(pos)
+            self._widen_vision(visible, explored, self.fortress.position, FORTRESS_VIEW)
+        if self.atritas is not None:
+            # And the shadow sees its own work. It blinks from prey to prey,
+            # and wherever it lands it looks: three paces, so the summoner can
+            # watch the thing he is bleeding for.
+            self._widen_vision(visible, explored, self.atritas.position, ATRITAS_VIEW)
         self.dungeon_map.visible = visible
         self.dungeon_map.explored |= explored
+
+    def _widen_vision(
+        self,
+        visible: set[Pos],
+        explored: set[Pos],
+        centre: Pos,
+        radius: int,
+    ) -> None:
+        """Open a square of floor around ``centre`` in both sight sets.
+
+        Its own function because the fortress and the shadow ask the same
+        thing of the map, and the copy that would drift is the one written
+        twice.
+        """
+        cx, cy = centre
+        for dx in range(-radius, radius + 1):
+            for dy in range(-radius, radius + 1):
+                pos = (cx + dx, cy + dy)
+                if self.dungeon_map.in_bounds(pos):
+                    visible.add(pos)
+                    explored.add(pos)
 
     # -- floors -------------------------------------------------------------
     def build_floor(self, depth: int) -> GeneratedFloor:
