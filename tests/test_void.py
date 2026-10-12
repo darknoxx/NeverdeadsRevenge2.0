@@ -134,7 +134,28 @@ def test_the_shadow_stands_beside_noxx():
     assert atritas is not None
     assert atritas.kind is ActorKind.ATRITAS
     distance = chebyshev(atritas.position, state.player.position)
-    assert 2 <= distance <= 4, "the dark is not beside anyone"
+    assert distance == 1, "the dark did not land beside its summoner"
+
+
+def test_a_taken_square_pushes_the_summon_one_pace_out():
+    """Beside is the promise; a crowded doorway is not a refusal. With all
+    eight neighbours held, the thing arrives one ring further."""
+    from neverdeads_revenge.core.direction import DIRECTIONS
+
+    state = _run(ultimate_level=1)
+    here = state.player.position
+    for direction in DIRECTIONS:
+        square = direction.step(here)
+        state.dungeon_map.set_tile(square, Tile.FLOOR)
+        _stage_enemy_at_square(state, square, hp=99)
+
+    perform_action(state, Action.ULTIMATE)
+
+    atritas = state.atritas
+    assert atritas is not None, "the crowd vetoed the summon"
+    assert chebyshev(atritas.position, here) == 2, (
+        "the summon did not step out one ring"
+    )
 
 
 def test_a_bump_against_the_shadow_costs_nothing():
@@ -304,7 +325,34 @@ def test_the_fortress_stands_near_yeti_with_his_own_blood():
     assert fortress.stats.max_hp == 20, "the wall did not take Yeti's blood"
     assert fortress.stats.hp == 20
     distance = chebyshev(fortress.position, state.player.position)
-    assert 2 <= distance <= 4, "the wall went up somewhere else"
+    assert distance == 1, "the wall did not go up beside its builder"
+
+
+def test_the_fortress_keeps_three_paces_of_its_own_weather():
+    """The wall watches on Yeti's behalf: what he built is never lost behind
+    what it cost, even after he walks away from it."""
+    from neverdeads_revenge.game.difficulty import FORTRESS_VIEW
+
+    state = _yeti_run()
+    perform_action(state, Action.ULTIMATE)
+    fortress = state.fortress
+    assert fortress is not None
+
+    # Walk him off, and let the vision recompute as it would in play.
+    far = (state.player.position[0] + 12, state.player.position[1])
+    state.dungeon_map.set_tile(far, Tile.FLOOR)
+    state.player.position = far
+    state.refresh_vision()
+
+    fx, fy = fortress.position
+    for dx in range(-FORTRESS_VIEW, FORTRESS_VIEW + 1):
+        for dy in range(-FORTRESS_VIEW, FORTRESS_VIEW + 1):
+            pos = (fx + dx, fy + dy)
+            if state.dungeon_map.in_bounds(pos):
+                assert state.dungeon_map.is_visible(pos), (
+                    f"{pos} went dark around the wall"
+                )
+    assert state.dungeon_map.is_visible(fortress.position)
 
 
 def test_the_fortress_takes_five_paces_of_sight():

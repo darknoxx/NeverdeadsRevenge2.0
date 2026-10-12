@@ -1387,11 +1387,15 @@ def _is_outer_wall(state: GameState, pos: Pos) -> bool:
 
 
 def _ultimate_spot(state: GameState) -> Pos | None:
-    """Where a summoned thing stands when it arrives: a walkable tile a few
-    paces from the hero, preferentially at three. Two is too close to be
-    anywhere, four unlearns the shape of 'beside you'; everything in between
-    is theatre the rules do not need."""
-    for distance in (3, 2, 4):
+    """Where a summoned thing stands when it arrives.
+
+    Beside the hero first -- the promise is a thing that happens *next to
+    you*, and both asks read better the closer they land. If everything
+    adjacent is taken (an enemy in the way, a wall), one pace further, and so
+    on out; a summon that refused because the hero stood in a doorway would be
+    a summon the dungeon could veto.
+    """
+    for distance in (1, 2, 3, 4):
         for direction in DIRECTIONS:
             x, y = state.player.position
             steps = 0

@@ -38,6 +38,7 @@ __all__ = [
     "ATRITAS_KILL_HEAL",
     "FORTRESS_TURNS",
     "FORTRESS_SIGHT_PENALTY",
+    "FORTRESS_VIEW",
     "BELL_RADIUS",
     "enemy_speed",
     "weight_at_depth",
@@ -100,6 +101,12 @@ FORTRESS_TURNS = 80
 #: How much of Yeti's sight the fortress takes while it stands. The cold
 #: closes the dark in; that is the price of the wall.
 FORTRESS_SIGHT_PENALTY = 5
+
+#: How far the fortress keeps the floor in view around itself. It is the one
+#: thing on the floor that watches on the hero's behalf: three paces around
+#: the wall stay visible even after the cold has taken his eyes, so what he
+#: built is never lost behind what it cost.
+FORTRESS_VIEW = 3
 
 #: Walkyrion's bell rings for this many paces around him, measured the way
 #: everything in the dungeon measures: Chebyshev, so the field is a square.

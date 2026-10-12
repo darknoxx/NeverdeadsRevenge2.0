@@ -41,7 +41,7 @@ from .actors import (
 )
 from .combat import apply_revenge
 from .curses import CURSES, Curse
-from .difficulty import ULTIMATE_LEVEL, potency
+from .difficulty import FORTRESS_VIEW, ULTIMATE_LEVEL, potency
 from .gifts import GIFTS
 from .lore import PAGE_COUNT, numeral
 from .npcs import NPCS, Npc, npc_by_key
@@ -674,6 +674,17 @@ class GameState:
             self.dungeon_map.is_opaque,
             self.dungeon_map.in_bounds,
         )
+        if self.fortress is not None:
+            # THE FROZEN FORTRESS watches on the hero's behalf. Three paces
+            # around the wall stay visible even after the cold has taken his
+            # eyes, so the thing he built is never lost behind what it cost.
+            fx, fy = self.fortress.position
+            for dx in range(-FORTRESS_VIEW, FORTRESS_VIEW + 1):
+                for dy in range(-FORTRESS_VIEW, FORTRESS_VIEW + 1):
+                    pos = (fx + dx, fy + dy)
+                    if self.dungeon_map.in_bounds(pos):
+                        visible.add(pos)
+                        explored.add(pos)
         self.dungeon_map.visible = visible
         self.dungeon_map.explored |= explored
 
