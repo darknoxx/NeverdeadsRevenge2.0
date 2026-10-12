@@ -172,7 +172,7 @@ out its pitch and its catch before you take it:
 Every hero has one ask a floor, bound to `f`, from **level 10** on. The
 sidebar carries the promise: grey until the level, breathing in the hero's own
 colour while it is live, grey again once the floor has had its answer.
-(`--testrun` lowers the gate to level 2, for looking at them.)
+(`--testrun` lowers the gate to level 1, for looking at them.)
 
 | hero | the ask | what it does |
 | --- | --- | --- |

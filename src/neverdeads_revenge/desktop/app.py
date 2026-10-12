@@ -387,7 +387,7 @@ class DesktopApp(QMainWindow):
         )
         self.run = start_run(
             HEROES[hero_key], self.seed, loadout=loadout, pages=missing,
-            ultimate_level=2 if self.testrun else None,
+            ultimate_level=1 if self.testrun else None,
         )
         self._seen_log = 0
         self.effects.clear()
