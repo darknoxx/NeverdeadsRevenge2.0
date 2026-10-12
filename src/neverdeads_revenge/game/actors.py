@@ -740,9 +740,8 @@ def make_enemy(template: EnemyTemplate, position: Pos) -> Actor:
 def make_fortress(position: Pos, health: int) -> Actor:
     """Raise Yeti's wall of ice.
 
-    ``health`` is half of what Yeti had when he built it, so a fortress raised
-    on the brink is a fortress on the brink -- the ask spends whatever the
-    moment is worth, and nothing pretends otherwise.
+    ``health`` is what Yeti had when he built it -- the wall is as hard as he
+    is at the moment he asks, which makes the moment worth choosing.
     """
     return Actor(
         name="the frozen fortress",

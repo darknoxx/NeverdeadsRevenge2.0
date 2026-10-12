@@ -247,8 +247,7 @@ class GameState:
     #: Yeti's bastion, while it stands. Same shape of life as the shadow: not
     #: an enemy, not in the queue, kept by its own clock -- and the one thing
     #: on the floor every monster would rather bite than the hero.
-    fortress: Actor | None = None
-    #: Turns left before the fortress melts.
+    fortress: Actor | None = None    #: Turns left before the fortress melts.
     fortress_turns_left: int = 0
     #: Sight taken away by an ultimate still running, in tiles.
     sight_penalty: int = 0

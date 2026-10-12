@@ -293,7 +293,7 @@ def _yeti_run(ultimate_level: int = 1, seed: int = 5):
     return start_run(HEROES["yeti"], seed, ultimate_level=ultimate_level)
 
 
-def test_the_fortress_stands_near_yeti_with_half_his_blood():
+def test_the_fortress_stands_near_yeti_with_his_own_blood():
     state = _yeti_run()
     state.player.stats.hp = 20
 
@@ -301,8 +301,8 @@ def test_the_fortress_stands_near_yeti_with_half_his_blood():
 
     fortress = state.fortress
     assert fortress is not None
-    assert fortress.stats.max_hp == 10, "the wall did not cost half a life"
-    assert fortress.stats.hp == 10
+    assert fortress.stats.max_hp == 20, "the wall did not take Yeti's blood"
+    assert fortress.stats.hp == 20
     distance = chebyshev(fortress.position, state.player.position)
     assert 2 <= distance <= 4, "the wall went up somewhere else"
 

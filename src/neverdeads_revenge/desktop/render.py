@@ -494,8 +494,10 @@ ULTIMATE_PROMPTS: dict[str, tuple[str, tuple[int, int, int]]] = {
     "walkyrion": ("shatter the golden bell", (212, 175, 55)),
 }
 
-#: The cold the floor goes while the Frozen Fortress stands.
-FROST = QColor("#e8f2f4")
+#: The cold the floor goes while the Frozen Fortress stands. A cold grey-blue
+#: rather than paper white: bright enough to be the fortress's own weather,
+#: dark enough that the grey of a remembered wall still reads against it.
+FROST = QColor("#bfced2")
 
 
 def ultimate_ready(state: GameState) -> bool:

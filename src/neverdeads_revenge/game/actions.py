@@ -1280,8 +1280,8 @@ def _summon_void(state: GameState) -> ActionResult:
 
 
 def _build_fortress(state: GameState) -> ActionResult:
-    """Yeti raises the Frozen Fortress: a wall of ice with half his blood in
-    it, which everything on the floor would rather bite than him.
+    """Yeti raises the Frozen Fortress: a wall of ice with as much blood in it
+    as Yeti has, which everything on the floor would rather bite than him.
 
     The price is the sight it takes: the cold closes the dark in to five
     paces, and the floor goes white around the wall while it stands.
@@ -1292,7 +1292,7 @@ def _build_fortress(state: GameState) -> ActionResult:
         return ActionResult(consumed_turn=False, acted=False)
 
     state.ultimate_available = False
-    health = max(1, state.player.stats.hp // 2)
+    health = max(1, state.player.stats.hp)
     state.fortress = make_fortress(spot, health)
     state.fortress_turns_left = FORTRESS_TURNS
     state.sight_penalty = FORTRESS_SIGHT_PENALTY
