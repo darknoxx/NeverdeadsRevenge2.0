@@ -372,8 +372,13 @@ class ShopScreen(Screen):
             # edge. A press moves the cursor its own stride, so the window
             # moves the same stride -- never a jump.
             self.offset = selected
-        elif selected >= self.offset + window:
-            self.offset = selected - window + 1
+        elif selected >= self.offset + window - 1:
+            # A shelf line is two rows: the offer, and the line that says what
+            # it does. Pinning the cursor on the very last visible row hid the
+            # description of whatever sat there -- most visibly the last wild
+            # offer, whose detail was the one thing the window always cut. So
+            # the cursor pins one row higher, and its detail keeps the edge.
+            self.offset = selected - window + 2
         for n, (text, style, _offer) in enumerate(rows[self.offset : self.offset + window]):
             buffer.text(x + 3, y + 3 + n, text[: width - 6], parse_style(style))
 

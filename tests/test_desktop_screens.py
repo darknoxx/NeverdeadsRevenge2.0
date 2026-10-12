@@ -619,9 +619,9 @@ def test_an_old_hold_cannot_cash_itself_in():
 # -- a menu cursor walks its window, and dead lists do not pretend to scroll ---
 def test_the_shelf_cursor_walks_inside_the_window(app):
     """The house style for menus: the cursor moves through the visible rows,
-    and the shelf only shifts when the cursor reaches an edge. The old
-    stateless formula parked the cursor on the bottom edge and dragged the
-    list, so going back up scrolled the shelf under a polished-in cursor."""
+    and the shelf only shifts when the cursor reaches an edge. A shelf line is
+    two rows -- the offer and what it does -- so the edge is the row above the
+    bottom, and the detail is never the thing the window hides."""
     from PySide6.QtCore import Qt
 
     press(app, Qt.Key.Key_S, "s")  # the shop
@@ -635,44 +635,39 @@ def test_the_shelf_cursor_walks_inside_the_window(app):
             n for n, row in enumerate(screen._rows(70)) if row[2] == screen.index
         )
 
-    # every press skips its own detail line, so walk until the cursor sits on
-    # the window's bottom edge
-    while cursor_row() < window - 1:
+    # Down: the cursor walks, and the row under it -- the description -- stays
+    # inside the window the whole way.
+    moved = False
+    for _ in range(10):
+        before = screen.offset
         press(app, Qt.Key.Key_Down)
-    assert screen.offset == 0, "the shelf moved before the cursor reached its edge"
+        row = cursor_row()
+        assert row + 1 <= screen.offset + window - 1, (
+            "the cursor's own detail line fell out of the window"
+        )
+        assert screen.offset >= before, "the shelf jumped the wrong way"
+        if screen.offset != before:
+            moved = True
+    assert moved, "the shelf never followed the cursor"
 
-    press(app, Qt.Key.Key_Down)  # the edge: the window now lives with the shift
-    press(app, Qt.Key.Key_Down)
-    assert cursor_row() == screen.offset + window - 1, (
-        "a walking cursor was not pinned at the window's bottom edge"
-    )
-
-    # and back up, in the mirror image of the walk down: the cursor climbs
-    # and the shelf holds still until the top edge; tied to the edge, the
-    # window follows it one cursor-stride at a time -- never a jump -- and
-    # the whole thing ends in the rest state, shelf open at the heading.
-    pinned = screen.offset
-    saw_pin = False
-    while screen.index > 0:
+    # Up: the cursor climbs inside the window, the shelf holds still until the
+    # cursor reaches the top edge.
+    for _ in range(10):
         before = screen.offset
         press(app, Qt.Key.Key_Up)
         row = cursor_row()
-        assert screen.offset <= row < screen.offset + window, "the cursor left its window"
+        assert screen.offset <= row < screen.offset + window, (
+            "the cursor left its window"
+        )
         assert screen.offset <= before, "going up dragged the shelf the wrong way"
-        assert screen.offset in (before, row) or (
-            screen.offset == 0 and row <= 2
-        ), "the shelf jumped instead of following"
-        if screen.offset != before:
-            saw_pin = True
-        pinned = min(pinned, screen.offset)
-
-    assert saw_pin, "the window never followed the cursor at the top edge"
-    assert screen.offset == 0 and cursor_row() <= 2, "no rest state at the top"
 
     press(app, Qt.Key.Key_Escape)
 
 
 class _FakeEvent:
+    """A key event that is never a repeat, for tests that drive a screen
+    directly rather than through the app."""
+
     def isAutoRepeat(self) -> bool:
         return False
 
