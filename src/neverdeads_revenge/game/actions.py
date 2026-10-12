@@ -27,9 +27,15 @@ from neverdeads_revenge.world.items import ITEMS, make_coin, make_item
 from neverdeads_revenge.world.map import GroundItem
 from neverdeads_revenge.world.tiles import Tile
 
-from .actors import Actor, ActorKind, make_enemy, pick_enemy_template
+from .actors import Actor, ActorKind, make_atritas, make_enemy, pick_enemy_template
 from .combat import apply_revenge, attack
 from .curses import TOUCH_CURSES, CURSES, curse_by_key
+from .difficulty import (
+    ATRITAS_DRAIN_EVERY,
+    ATRITAS_RADIUS,
+    ATRITAS_SWING_EVERY,
+    ATRITAS_TURNS,
+)
 from .gifts import gift_by_key
 from .lore import numeral
 from .statuses import status_by_key
@@ -110,6 +116,12 @@ class Action(Enum):
     CLEANSE = "cleanse"
     QUAFF = "quaff"
     INVENTORY = "inventory"
+    #: Noxx gives into the void. Once a floor, from a level, and only his: a
+    #: shadow called Atritas walks beside him, the whole floor answers to his
+    #: sight, and every second beat of the shadow is a drop of the summoner's
+    #: own blood. Bound to `f`, because the void is not a navigation verb and
+    #: deserved a key of its own.
+    SUMMON_VOID = "summon_void"
 
     @property
     def direction(self) -> Direction:
@@ -567,6 +579,8 @@ def perform_action(state: GameState, action: Action) -> ActionResult:
             return _take_fame(state)
         case Action.CLEANSE:
             return _cleanse(state)
+        case Action.SUMMON_VOID:
+            return _summon_void(state)
         case Action.QUAFF:
             return _quaff(state)
         case Action.INVENTORY:
@@ -642,6 +656,12 @@ def _try_move(state: GameState, direction: Direction) -> tuple[bool, bool]:
             # silence: the player pressed a direction and something has to
             # happen, even if the something is "no, and here is why".
             state.say(f"{blocker.name} is in the way. Press enter to speak.", LogKind.PLAIN)
+            return False, False
+        if blocker.kind is ActorKind.ATRITAS:
+            # The shadow is standing right where you were about to walk. It
+            # asks nothing of your blade, and charging a turn for bumping
+            # your own dark would be the void taxing its summoner.
+            state.say("It is yours. It moves with you, not against you.", LogKind.PLAIN)
             return False, False
         _resolve_player_attack(state, blocker)
         return True, True
@@ -1174,6 +1194,156 @@ def _rewind(state: GameState) -> ActionResult:
         LogKind.GOOD,
     )
     return _outcome(state, consumed_turn=False, acted=True)
+
+
+def _summon_void(state: GameState) -> ActionResult:
+    """Noxx gives into the void. Once a floor, from a level, and his alone.
+
+    What the promise pays with, in order: a shadow with a name, the whole
+    floor laid open, and a drop of the summoner's own blood on every second
+    beat of the shadow's stay -- never the last drop. What it costs with: the
+    floor's one ask, and whatever the monsters do with the turn of darkness
+    the summon spends.
+    """
+    hero = state.player
+    if state.hero.key != "noxx":
+        # The void is not for everyone. It does not explain itself to them
+        # either: to the others the key does nothing at all.
+        return ActionResult(consumed_turn=False, acted=False)
+    if state.level < state.ultimate_level:
+        state.say(
+            f"Give in to the void -- not yet. It answers at level "
+            f"{state.ultimate_level}.",
+            LogKind.PLAIN,
+        )
+        return ActionResult(consumed_turn=False, acted=False)
+    if not state.void_available:
+        state.say(
+            "The void has already had this floor. It does not ask twice.",
+            LogKind.PLAIN,
+        )
+        return ActionResult(consumed_turn=False, acted=False)
+
+    spot = _void_summon_spot(state)
+    if spot is None:
+        # Nowhere for the dark to stand is a corner case a cast cannot live
+        # through: rather than spend the ask and smother the shadow, refuse.
+        state.say("The dark has nowhere to stand here.", LogKind.PLAIN)
+        return ActionResult(consumed_turn=False, acted=False)
+
+    state.void_available = False
+    state.atritas = make_atritas(spot, state.level, state.depth)
+    state.atritas_turns_left = ATRITAS_TURNS
+
+    # THE SIGHT. The whole floor, through the walls, for the rest of the
+    # floor: the dark showing Noxx everything it owns.
+    revealed = state.dungeon_map.explored
+    for x in range(state.dungeon_map.width):
+        for y in range(state.dungeon_map.height):
+            revealed.add((x, y))
+    state.say("You give in to the void.", LogKind.BAD)
+    state.say("Atritas rises from your dark and looks around.", LogKind.SYSTEM)
+    state.say(
+        "Every wall is glass. There is nowhere down here it is not.",
+        LogKind.GOOD,
+    )
+    return _outcome(state, consumed_turn=True, acted=True)
+
+
+def _void_summon_spot(state: GameState) -> Pos | None:
+    """Where the shadow stands when it arrives: a walkable tile a few paces
+    from Noxx, preferentially at three. Two is too close to be anywhere, four
+    unlearns the shape of 'beside you'; everything in between is theatre the
+    rules do not need."""
+    from neverdeads_revenge.core.direction import DIRECTIONS
+
+    for distance in (3, 2, 4):
+        for direction in DIRECTIONS:
+            x, y = state.player.position
+            steps = 0
+            pos = (x, y)
+            while steps < distance:
+                pos = direction.step(pos)
+                steps += 1
+            if not state.dungeon_map.in_bounds(pos):
+                continue
+            if not state.dungeon_map.is_walkable(pos):
+                continue
+            if state.actor_at(pos) is not None:
+                continue
+            return pos
+    return None
+
+
+def _advance_atritas(state: GameState) -> None:
+    """One beat of the shadow's life. Called from ``advance_world``, which is
+    why it is in turns and not in seconds: the monsters it kills live in turns,
+    and a shadow on a different clock from its prey would be a shadow nothing
+    could ever reach.
+
+    Every swing aims at what stands close to Noxx -- the promise was that it
+    attacks *around* him -- and every second beat of the stay is the
+    summoner's own blood, floored at one so the dark spends him and never
+    spends him out.
+    """
+    atritas = state.atritas
+    if atritas is None or state.over:
+        return
+
+    hero = state.player
+    age = ATRITAS_TURNS - state.atritas_turns_left
+
+    # THE PRICE.
+    if age and age % ATRITAS_DRAIN_EVERY == 0 and hero.stats.hp > 1:
+        hero.stats.hp -= 1
+        state.say("The void takes its toll: one heart's worth.", LogKind.DAMAGE)
+
+    # THE ASSISTANCE.
+    if age % ATRITAS_SWING_EVERY == 3:
+        target = None
+        best = ATRITAS_RADIUS + 1
+        for enemy in state.living_enemies:
+            distance = chebyshev(hero.position, enemy.position)
+            if distance <= ATRITAS_RADIUS and distance < best:
+                target = enemy
+                best = distance
+        if target is not None:
+            outcome = attack(atritas, target, state.rng, spread=state.damage_spread)
+            if outcome.hit:
+                state.hits.append(target.position)
+                if outcome.killed:
+                    state.say(
+                        f"Atritas tears the {target.name} apart for "
+                        f"{outcome.damage}!",
+                        LogKind.CRIT if outcome.crit else LogKind.COMBAT,
+                    )
+                    _on_death(state, target)
+                    _remove_corpse(state, target)
+                else:
+                    state.say(
+                        f"Atritas wounds the {target.name} for {outcome.damage}.",
+                        LogKind.CRIT if outcome.crit else LogKind.COMBAT,
+                    )
+            else:
+                state.say(
+                    f"Atritas swings at the {target.name} and misses.",
+                    LogKind.PLAIN,
+                )
+        else:
+            # No prey by Noxx: the shadow keeps to his side.
+            if chebyshev(atritas.position, hero.position) > 2:
+                step = direction_towards(atritas.position, hero.position)
+                landing = step.step(atritas.position)
+                if state.dungeon_map.is_walkable(landing) and state.actor_at(landing) is None:
+                    atritas.position = landing
+
+    state.atritas_turns_left -= 1
+    if state.atritas_turns_left <= 0:
+        state.atritas = None
+        state.say(
+            "Atritas sinks back into your dark. The walls are stone again.",
+            LogKind.SYSTEM,
+        )
 
 
 def _take_fame(state: GameState) -> ActionResult:
@@ -1768,3 +1938,8 @@ def advance_world(state: GameState) -> None:
         state.shrouded -= 1
     if state.salt_ward:
         state.salt_ward -= 1
+
+    # The shadow's beat sits after the monsters': the dark works while and
+    # over the dungeon's own answering turn, and every fresh player turn is
+    # one tick of its stay.
+    _advance_atritas(state)

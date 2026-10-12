@@ -30,6 +30,11 @@ __all__ = [
     "SPEED_HORIZON",
     "GAP_CLOSED_BY_THEN",
     "potency",
+    "ULTIMATE_LEVEL",
+    "ATRITAS_TURNS",
+    "ATRITAS_SWING_EVERY",
+    "ATRITAS_DRAIN_EVERY",
+    "ATRITAS_RADIUS",
     "enemy_speed",
     "weight_at_depth",
 ]
@@ -56,6 +61,27 @@ __all__ = [
 #: fast just to stand still. The two dials are kept in step by a test, which
 #: insists the ceiling is reached exactly on the last floor and not before.
 POTENCY_PER_FLOOR = 0.225
+
+#: The level the void starts talking to Noxx. Below it, the prompt in the
+#: sidebar reads grey and `f` refuses politely. The one the tests turn to 2.
+ULTIMATE_LEVEL = 10
+
+#: How long Atritas walks beside Noxx once summoned, in turns. Forty: the
+#: "few seconds" the promise names, said in the only currency the dungeon
+#: keeps, so a slow reader is not charged more than a fast one.
+ATRITAS_TURNS = 40
+
+#: Turns between two of Atritas's swings. Staggered against the drain so the
+#: price and the assistance do not land on the same beat.
+ATRITAS_SWING_EVERY = 6
+
+#: Turns between two beats of the price: one health, floored at one. The
+#: summoner cannot be killed by their own dark -- a bargain that could finish
+#: you is a bet, and this is not a bet, it is a cost.
+ATRITAS_DRAIN_EVERY = 8
+
+#: How close an enemy has to stand to Noxx before Atritas swings at it.
+ATRITAS_RADIUS = 3
 
 #: Ceiling on potency. Without it a floor-40 monster would be unplayable and any
 #: formula mistake would silently become exponential. Just over two and a half

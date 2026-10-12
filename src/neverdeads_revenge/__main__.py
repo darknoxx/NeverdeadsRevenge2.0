@@ -60,7 +60,7 @@ def main(argv: list[str] | None = None) -> int:
     from .desktop.app import DesktopApp
 
     app = QApplication(sys.argv[:1])
-    window = DesktopApp(seed=args.seed, no_sound=args.no_sound)
+    window = DesktopApp(seed=args.seed, no_sound=args.no_sound, testrun=args.testrun)
     window.resize(1280, 800)
     window.show()
     return app.exec()

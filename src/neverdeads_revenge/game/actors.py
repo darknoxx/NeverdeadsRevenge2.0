@@ -34,6 +34,7 @@ __all__ = [
     "EnemyTemplate",
     "ENEMIES",
     "make_hero",
+    "make_atritas",
     "make_enemy",
     "make_npc",
     "scale_template",
@@ -106,6 +107,10 @@ class ActorKind(Enum):
     #: Somebody who is neither. Not in the turn queue, not attackable, and in
     #: the way -- walking into one is a conversation, not a fight.
     NPC = "npc"
+    #: The dark beside Noxx. Not an enemy and not a person: nothing aims at it,
+    #: nothing counts it on a floor, and it has no turn in the queue. It acts
+    #: alongside the scheduler and answers only to its own clock.
+    ATRITAS = "atritas"
 
 
 #: What REVENGE grants a hero, and how much of it.
@@ -724,6 +729,30 @@ def make_enemy(template: EnemyTemplate, position: Pos) -> Actor:
         gold=template.gold,
         curse_chance=template.curse_chance,
         inflicts=template.inflicts,
+    )
+
+
+def make_atritas(position: Pos, level: int, depth: int) -> Actor:
+    """Set the dark on its feet beside Noxx.
+
+    The damage is the summoner's yardstick, not a whisper: this is the part of
+    the void the promise names enormous, so it scales with the depth the way
+    everything that hits does, and a little with the level the void was given
+    into at. One tile, one shape, one dark letter.
+    """
+    low = 18 + 3 * depth + level
+    return Actor(
+        name="atritas",
+        kind=ActorKind.ATRITAS,
+        # Health is irrelevant: nothing may strike the shadow. One rather than
+        # zero, because an actor at zero health is a corpse by convention.
+        stats=replace(HEROES["noxx"].stats, hp=1, max_hp=1, damage=(low, low + 6)),
+        position=position,
+        glyph="A",
+        color="#12716f",
+        behaviour="atritas",
+        gold=(0, 0),
+        curse_chance=0.0,
     )
 
 

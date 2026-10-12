@@ -1335,3 +1335,70 @@ def test_a_sound_thread_never_writes_the_save_itself(app, qapp):
         "the sound thread wrote the save file itself"
     )
     assert app.progress.muted is True, "the give-up was not recorded as muted"
+
+
+# -- the void: the prompt's three states, and f -------------------------------
+def test_the_void_prompt_reads_the_right_states():
+    """Grey until the level asks for it, dark petrol and breathing once it
+    can be given into, grey again once the floor has had its answer."""
+    from neverdeads_revenge.desktop.render import _void_prompt
+    from neverdeads_revenge.desktop.theme import parse_style
+    from neverdeads_revenge.game.actors import HEROES
+    from neverdeads_revenge.game.state import start_run
+
+    state = start_run(HEROES["noxx"], 3)
+
+    text, colour = _void_prompt(state, 0.0)  # level 1, gate 10: locked
+    assert text == "give in to the void (lvl 10)", "the lock did not say when"
+    assert colour == parse_style("grey30").fg
+
+    state.ultimate_level = 1  # level 1 >= 1: the promise is live
+    text, colour = _void_prompt(state, 0.0)
+    assert text == "give in to the void (f)"
+    # The breath at t=0 is 0.55 + 0.45 * 0.5 = 0.775 of the petrol base.
+    assert colour.getRgb()[:3] == (round(14 * 0.775), round(111 * 0.775), round(111 * 0.775)), (
+        "the petrol does not breathe where the bloom can hear it"
+    )
+
+    state.ultimate_level = 1
+    state.atritas = HEROES["noxx"]  # any object; the check is presence
+    text, colour = _void_prompt(state, 0.0)
+    assert text == "give in to the void" and colour == parse_style("grey35").fg
+
+    state.atritas = None
+    state.void_available = False
+    text, colour = _void_prompt(state, 0.0)
+    assert colour == parse_style("grey35").fg, "a spent ask still advertised"
+
+    state.void_available = True
+    state.hero = HEROES["yeti"]
+    assert _void_prompt(state, 0.0) is None, "the dark advertised to Yeti"
+
+
+def test_f_gives_in_when_the_gate_allows(app):
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.desktop.keys import KEY_BINDINGS
+
+    assert KEY_BINDINGS["f"].name == "SUMMON_VOID"
+
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)
+
+    played: list[str] = []
+    original = app.play
+    app.play = lambda name=None: played.append(name if name else "?")  # type: ignore[assignment]
+    try:
+        app.run.level = 1
+        app.run.ultimate_level = 1
+        press(app, Qt.Key.Key_F, "f")  # the ask, taken
+        assert app.run.atritas is not None, "the void did not answer"
+        assert app.run.void_available is False
+        assert "void" in played, "the dark arrived in silence"
+
+        before = app.run.atritas
+        press(app, Qt.Key.Key_F, "f")  # spent: the floor had its answer
+        assert app.run.atritas is before, "the void answered twice"
+        assert top(app) == "GameScreen"
+    finally:
+        app.play = original

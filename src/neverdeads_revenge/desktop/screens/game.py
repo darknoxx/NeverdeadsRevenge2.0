@@ -109,6 +109,9 @@ class GameScreen(Screen):
         equipment = dict(run.player.equipment)
 
         result = perform_action(run, action)
+        if action is Action.SUMMON_VOID and run.atritas is not None:
+            # The dark answers with its own note, not the log's second reading.
+            app.play("void")
         app.play_after(before)
         self._effects(app, hp, gold, gifts, curses, before[2])
         self._file_pages(app)

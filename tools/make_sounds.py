@@ -128,6 +128,15 @@ SOUNDS: dict[str, tuple[Note, ...]] = {
     ),
 }
 
+SOUNDS["void"] = (
+    # The void answers. Three descending wide pulses, each dirtier than the
+    # last, ending under the range a laptop can produce but shaped so the
+    # descent carries it anyway. The floor falling out, in three breaths.
+    Note(300, 0.18, duty=0.75, to=150, noise=0.35, volume=0.7),
+    Note(220, 0.18, duty=0.75, to=110, noise=0.4, volume=0.7),
+    Note(150, 0.34, duty=0.75, to=60, noise=0.45, volume=0.75),
+)
+
 
 def render(notes: tuple[Note, ...], rate: int = RATE) -> bytes:
     """Turn a recipe into 16-bit mono PCM.

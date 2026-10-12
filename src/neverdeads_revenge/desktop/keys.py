@@ -38,5 +38,6 @@ KEY_BINDINGS: dict[str, Action] = {
     "q": Action.QUAFF,
     "r": Action.REWIND,
     ">": Action.DESCEND,
+    "f": Action.SUMMON_VOID,
     "enter": Action.INTERACT,
 }

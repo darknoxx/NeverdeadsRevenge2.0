@@ -12,8 +12,11 @@ build a buffer and read the cells back without a screen attached.
 
 from __future__ import annotations
 
+import math
+import time
+
 from PySide6.QtCore import QRect
-from PySide6.QtGui import QImage, QPainter
+from PySide6.QtGui import QColor, QImage, QPainter
 
 from neverdeads_revenge.game.npcs import NPC_COLOR, NPC_GLYPH
 from neverdeads_revenge.game.prologue import legend_rows
@@ -232,13 +235,15 @@ def small_face_top(state) -> int:
     return len(hud_lines(state)) + 1
 
 
-def paste_sidebar(image, state, cols, rows, cell_w, cell_h, small) -> None:
+def paste_sidebar(image, state, cols, rows, cell_w, cell_h, small, now: float | None = None) -> None:
     """Everything under the HUD's rule, in one small face.
 
     The glance groups first -- lower case now, they were shouting in a panel
     meant for a glance, and the small face has no room for headlines anyway --
-    then a thin rule, then the legend. All of it measured from the same top row
-    the drawing above hands over, so the two can never drift apart.
+    then the void's line, then a thin rule, then the legend. All of it measured
+    from the same top row the drawing above hands over, so the two can never
+    drift apart. ``now`` drives the ready state's breath; it defaults so a
+    caller that has no clock -- a test -- still gets a prompt drawn.
     """
     areas = regions(cols, rows)
     sx, sy, sw, _sh = areas["sidebar"]
@@ -273,6 +278,17 @@ def paste_sidebar(image, state, cols, rows, cell_w, cell_h, small) -> None:
         else:
             draw("-", text_x, y, dim)
             y += small.cell_h
+    # The void's own line, belonging to the group of rules the sidebar keeps:
+    # grey until the level, dark petrol and breathing while it can be given
+    # into, grey again once the floor has had it. The pulse is luminance on
+    # purpose -- the shader's bloom is already a reading of brightness, so the
+    # glow needs no new pass.
+    prompt = _void_prompt(state, time.time() if now is None else now)
+    if prompt is not None:
+        text, colour = prompt
+        if y + small.cell_h <= rows * cell_h:
+            draw(text[:chars], text_x, y, colour)
+            y += small.cell_h + small.cell_h // 4
     y += small.cell_h // 3  # air between the groups and the legend
     if y < rows * cell_h:
         painter.setPen(dim)
@@ -453,6 +469,30 @@ def paste_log(
         )
         y += line_h
     painter.end()
+
+
+def _void_prompt(state: GameState, now: float) -> tuple[str, QColor] | None:
+    """The sidebar's promise of the dark, in the state it is in.
+
+    ``None`` for anybody who is not Noxx: the void does not advertise itself
+    to heroes it does not belong to.
+    """
+    if state.hero.key != "noxx":
+        return None
+    if state.atritas is not None or not state.void_available:
+        # Given: grey until the next floor says otherwise. The dead line is
+        # the receipt, not an invitation.
+        return "give in to the void", parse_style("grey35").fg
+    if state.level < state.ultimate_level:
+        return (
+            f"give in to the void (lvl {state.ultimate_level})",
+            parse_style("grey30").fg,
+        )
+    # Ready: dark petrol, breathing. The breath is why there is a ``now``.
+    breathing = 0.55 + 0.45 * (0.5 + 0.5 * math.sin(now * 2.0 * math.pi / 1.6))
+    base = (14, 111, 111)
+    lit = tuple(int(round(channel * breathing)) for channel in base)
+    return "give in to the void (f)", QColor(*lit)
 
 
 def marks_names(state: GameState, kind: str) -> list[str]:

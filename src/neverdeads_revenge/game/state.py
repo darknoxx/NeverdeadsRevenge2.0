@@ -32,6 +32,7 @@ from .actors import (
     Actor,
     ActorKind,
     Hero,
+    make_atritas,
     make_enemy,
     make_hero,
     make_npc,
@@ -40,7 +41,7 @@ from .actors import (
 )
 from .combat import apply_revenge
 from .curses import CURSES, Curse
-from .difficulty import potency
+from .difficulty import ULTIMATE_LEVEL, potency
 from .gifts import GIFTS
 from .lore import PAGE_COUNT, numeral
 from .npcs import NPCS, Npc, npc_by_key
@@ -224,6 +225,24 @@ class GameState:
     #: the action is a bullet that lands one square from its target, because the
     #: thing that died may well have walked on before it did.
     deaths: list[Pos] = field(default_factory=list)
+
+    # -- the void ------------------------------------------------------------
+    #
+    # Noxx's own dark, once a floor, from the level the shadow starts answering.
+    #: Whether the void can be given into on this floor. Refilled by
+    #: :meth:`build_floor`, spent by the summon, and carried through the save
+    #: so an old save cannot lie its way into a second summon.
+    void_available: bool = True
+    #: The level the void starts answering at. `--testrun` runs turn it to 2.
+    ultimate_level: int = ULTIMATE_LEVEL
+    #: The shadow itself, while it walks. Not in ``enemies`` -- nothing aims at
+    #: it, nothing counts it as a monster, and nothing in the turn queue acts
+    #: for it. It is driven alongside the scheduler in :func:`advance_world`
+    #: and unsummoned by its own clock, which is why it does not live in the
+    #: queue that speed owns.
+    atritas: Actor | None = None
+    #: Turns left before Atritas sinks back into the dark.
+    atritas_turns_left: int = 0
 
     # -- what the shop sent with you ----------------------------------------
     #
@@ -593,6 +612,10 @@ class GameState:
         for npc in self.npcs:
             if npc.position == pos:
                 return npc
+        if self.atritas is not None and self.atritas.position == pos:
+            # The shadow stands in the way the way a shadow does: solid to its
+            # summoner, and a bump against it is a word, not a fight.
+            return self.atritas
         return None
 
     def npc_beside_player(self) -> Actor | None:
@@ -736,6 +759,12 @@ class GameState:
         self.salt_ward = 0
         self.trail.clear()
         self.helped.clear()
+        # THE VOID. One give per floor: a new floor is a new dark asking, and
+        # whatever shadow was walking beside the hero stays with the floor it
+        # was summoned on.
+        self.atritas = None
+        self.atritas_turns_left = 0
+        self.void_available = True
 
         self.arm_amulets()
 
@@ -958,6 +987,7 @@ def start_run(
     loadout: Loadout | None = None,
     upgrades: dict[str, int] | None = None,
     pages: tuple[int, ...] | None = None,
+    ultimate_level: int | None = None,
 ) -> GameState:
     """Begin a fresh run with ``hero``.
 
@@ -974,6 +1004,8 @@ def start_run(
     """
     loadout = loadout or Loadout()
     state = GameState(hero=hero, rng=Rng(seed), seed=seed)
+    if ultimate_level is not None:
+        state.ultimate_level = ultimate_level
     state.missing_pages = (
         set(pages) if pages is not None else set(range(1, PAGE_COUNT + 1))
     )

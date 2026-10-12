@@ -71,10 +71,19 @@ class DesktopApp(QMainWindow):
     #: owns the save file: a queued signal lands the change on the GUI thread.
     sound_gave_up = Signal(bool)
 
-    def __init__(self, *, seed: int | None = None, no_sound: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        seed: int | None = None,
+        no_sound: bool = False,
+        testrun: bool = False,
+    ) -> None:
         super().__init__()
         self.setWindowTitle("Neverdead's Revenge")
         self.font = BitmapFont()
+        #: `--testrun`: the chronicle unlocked and the purse full, and for the
+        #: one feature being tested this session, the void answers early.
+        self.testrun = testrun
 
         saved = load_settings()
         self.crt = CrtSettings(
@@ -269,15 +278,46 @@ class DesktopApp(QMainWindow):
             getattr(screen, "hold", None) is not None and screen.hold.holding
             for screen in self.screens
         )
+        breathing = self._void_is_breathing()
         if not (
             holding
             or self.effects.active
             or self.view.is_shaking()
             or self.glass_note is not None
+            or breathing
         ):
             return
+        if breathing and not (
+            holding or self.effects.active or self.view.is_shaking()
+        ):
+            # The breath is a slow, calm thing: ten frames of it a second is
+            # already over-generous, and a full redraw on every tick would
+            # spend the whole frame budget on one line of colour.
+            now = time.monotonic()
+            if now - self._last_pulse_paint < 0.1:
+                return
+            self._last_pulse_paint = now
         self.effects.step(0.033)
         self.redraw()
+
+    _last_pulse_paint: float = 0.0
+
+    def _void_is_breathing(self) -> bool:
+        """Whether the ready void's prompt needs repainting to breathe.
+
+        The pulse is drawn in the sidebar paste, and a prompt that only
+        repaints on keypress would be a breath that stops every time the hero
+        stops. Cheap to ask, and wrong only during the one part of the run
+        where the promise can be kept.
+        """
+        run = self.run
+        return (
+            run is not None
+            and run.hero.key == "noxx"
+            and run.void_available
+            and run.atritas is None
+            and run.level >= run.ultimate_level
+        )
 
     # -- the stack ----------------------------------------------------------
     def push(self, screen) -> None:
@@ -348,7 +388,8 @@ class DesktopApp(QMainWindow):
             if number not in self.progress.pages
         )
         self.run = start_run(
-            HEROES[hero_key], self.seed, loadout=loadout, pages=missing
+            HEROES[hero_key], self.seed, loadout=loadout, pages=missing,
+            ultimate_level=2 if self.testrun else None,
         )
         self._seen_log = 0
         self.effects.clear()
