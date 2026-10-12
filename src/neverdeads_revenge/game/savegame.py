@@ -35,6 +35,7 @@ from ..world.modifiers import Modifiers
 from .lore import PAGE_COUNT
 from .actors import Actor, ActorKind, HEROES, Stats, Trait
 from .curses import Curse
+from .difficulty import BASE_PACK_SLOTS
 from .npcs import NPCS
 from .state import GameState, LogEntry, LogKind, RunState
 
@@ -203,6 +204,7 @@ def dump(state: GameState) -> dict:
         "waits_in_a_row": state.waits_in_a_row,
         "salt_ward": state.salt_ward,
         "void_available": state.ultimate_available,
+        "pack_capacity": state.pack_capacity,
         "trail": _encode(state.trail),
         "helped": _encode(state.helped),
         "wilds": _encode(state.wilds),
@@ -288,6 +290,9 @@ def load(payload: dict) -> GameState:
         state.ultimate_available = payload.get(
             "void_available", payload.get("ultimate_available", True)
         )
+        # ``get`` like the rest: a run saved before the pack had a size simply
+        # gets the base allowance, which is what it was playing with anyway.
+        state.pack_capacity = payload.get("pack_capacity", BASE_PACK_SLOTS)
         state.trail = _decode(payload.get("trail", {}))
         state.helped = set(_decode(payload.get("helped", [])))
         # ``set`` around both, because ``_decode`` hands back a list and these

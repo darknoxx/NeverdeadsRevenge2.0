@@ -41,7 +41,13 @@ from .actors import (
 )
 from .combat import apply_revenge
 from .curses import CURSES, Curse
-from .difficulty import ATRITAS_VIEW, FORTRESS_VIEW, ULTIMATE_LEVEL, potency
+from .difficulty import (
+    ATRITAS_VIEW,
+    BASE_PACK_SLOTS,
+    FORTRESS_VIEW,
+    ULTIMATE_LEVEL,
+    potency,
+)
 from .gifts import GIFTS
 from .lore import PAGE_COUNT, numeral
 from .npcs import NPCS, Npc, npc_by_key
@@ -259,6 +265,9 @@ class GameState:
     fortress_turns_left: int = 0
     #: Sight taken away by an ultimate still running, in tiles.
     sight_penalty: int = 0
+    #: How many things the pack holds. Base plus whatever the shop sold, so a
+    #: run that bought slots carries them for its whole life.
+    pack_capacity: int = BASE_PACK_SLOTS
 
     # -- what the shop sent with you ----------------------------------------
     #
@@ -1107,6 +1116,8 @@ def _apply_upgrades(state: GameState, upgrades: dict[str, int]) -> None:
             player.stats.speed += upgrade.speed * stacks
         if upgrade.sight:
             state.sight_bonus += upgrade.sight * stacks
+        if upgrade.pack_slots:
+            state.pack_capacity += upgrade.pack_slots * stacks
 
     # A run starts whole. Bought health you do not have is not bought health,
     # and the blood bargain's whole point is that the missing part is gone.

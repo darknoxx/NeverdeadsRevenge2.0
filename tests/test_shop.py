@@ -628,3 +628,24 @@ def test_the_mirror_and_famine_agree_to_a_number():
 
     assert state.heal_scale == 0.5 * 1.5
     assert abs(state.heal_scale - 0.75) < 1e-9
+
+
+def test_the_pack_shelf_line_gets_dearer_as_it_is_bought():
+    """The offer in the shop carries the *next* stack's price, and each stack
+    costs more than the last -- the fourth slot is a decision."""
+    from neverdeads_revenge.game.shop import META_UPGRADES, build_stock
+    from neverdeads_revenge.persistence import MetaProgress
+
+    progress = MetaProgress(gold=100_000)
+    prices = []
+    for _ in range(META_UPGRADES["pack"].max_stacks):
+        offers = {offer.key: offer for offer in build_stock(progress)}
+        pack = offers["pack"]
+        prices.append(pack.price)
+        progress.upgrades["pack"] = progress.upgrades.get("pack", 0) + 1
+
+    assert prices == [140, 280, 420, 560], f"the ladder reads {prices}"
+
+    # and once it is maxed it is offered as taken, not as another slot
+    offers = {offer.key: offer for offer in build_stock(progress)}
+    assert offers["pack"].maxed, "a maxed pack still sold a slot"

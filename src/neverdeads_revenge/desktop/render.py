@@ -436,7 +436,7 @@ def hud_lines(state: GameState) -> list[tuple[str, str]]:
         lines.append(("The rift hums.", "bold bright_cyan"))
 
     potions = sum(1 for item in state.inventory if item.heal > 0)
-    draughts = f"Gold {state.gold}   Draughts {potions}"
+    draughts = f"Gold {state.gold}   Draughts {potions}/{state.pack_capacity}"
     if potions:
         draughts += " q"
     lines.append((draughts, "bold yellow"))

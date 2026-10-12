@@ -64,7 +64,9 @@ what you carry, and by spending the ground you are standing on.
 
 - **Two draughts**: a potion (heals 8) and an elixir (heals 20). `q` drinks the
   cheapest one that covers the wound, because wasting half an elixir is the
-  mistake everybody makes once.
+  mistake everybody makes once. The **pack holds three things** to start with;
+  the shop sells slots up to seven, each dearer than the last, and a full pack
+  leaves the loot where it lies and says why.
 - **Thirteen weapons** (the rusted tooth, the grey bite, the long hunger, the
   patient knife...) and **ten pieces of armour** (the thin hide, the rune
   plate, the ashfall cloak...), each with its own modifiers.
@@ -147,6 +149,7 @@ and a purchase rings the till.
 | Vigour | 140g | +5 max health | up to 3 |
 | Haste | 220g | +0.12 speed | up to 2 |
 | Lantern | 180g | +1 sight | once |
+| Pack | 140g, then dearer each time | +1 pack slot -- the pack starts at 3 and stops at 7 | up to 4 |
 | Blood Bargain | 170g | +0.15 speed, for good -- and -4 max health, for good | up to 2 |
 
 **Wild offers** rotate between runs and sell exactly the risk their name

@@ -52,11 +52,12 @@ def enemy_count(depth: int) -> int:
     the difficulty dial that is easiest to overshoot, and a dial you can call is
     a dial you can measure.
 
-    Raised from seven on the experimental branch. More bodies is a *different*
-    kind of hard from bigger numbers: it costs turns, it crowds corridors, and
-    it is the thing a slow hero has least of.
+    Raised from seven on the experimental branch, and again to eleven when the
+    floors felt thin: more bodies is a *different* kind of hard from bigger
+    numbers -- it costs turns, it crowds corridors, and it is the thing a slow
+    hero has least of.
     """
-    return 8 + depth
+    return 11 + depth
 
 
 #: How likely a floor is to have somebody on it.

@@ -590,3 +590,70 @@ def test_the_hunt_does_not_wander_without_reason():
 
     distance = chebyshev(atritas.position, state.player.position)
     assert distance <= 3, "the shadow wandered off with nothing to hunt"
+
+
+# -- the pack has a size now ------------------------------------------------------
+def test_a_full_pack_refuses_and_keeps_the_loot_on_the_floor():
+    """Three slots to start. The fourth draught stays where it lies, with the
+    reason said out loud, and the refusal eats nothing."""
+    from neverdeads_revenge.game.difficulty import BASE_PACK_SLOTS
+    from neverdeads_revenge.world.items import ITEMS, make_item
+
+    state = _run()
+    assert state.pack_capacity == BASE_PACK_SLOTS
+
+    for _ in range(BASE_PACK_SLOTS):
+        state.inventory.append(make_item(ITEMS["potion"]))
+    state.dungeon_map.add_item(state.player.position, make_item(ITEMS["elixir"]))
+
+    result = perform_action(state, Action.INTERACT)
+
+    assert result.consumed_turn is False
+    assert len(state.inventory) == BASE_PACK_SLOTS, "the pack overfilled"
+    assert state.dungeon_map.item_at(state.player.position) is not None, (
+        "the refusal ate the draught"
+    )
+    assert any("pack is full" in entry.text for entry in state.log)
+
+
+def test_a_drunk_slot_opens_again():
+    """Quaffing is how a full pack breathes."""
+    from neverdeads_revenge.game.difficulty import BASE_PACK_SLOTS
+    from neverdeads_revenge.world.items import ITEMS, make_item
+
+    state = _run()
+    state.player.stats.hp = 5
+    for _ in range(BASE_PACK_SLOTS):
+        state.inventory.append(make_item(ITEMS["potion"]))
+    state.dungeon_map.add_item(state.player.position, make_item(ITEMS["elixir"]))
+
+    perform_action(state, Action.QUAFF)  # a slot opens
+    result = perform_action(state, Action.INTERACT)
+
+    assert result.consumed_turn is False
+    assert state.dungeon_map.item_at(state.player.position) is None, (
+        "the opened slot did not take the draught"
+    )
+
+
+def test_the_shop_sells_slots_dearer_each_time_and_stops_at_seven():
+    from neverdeads_revenge.game.difficulty import BASE_PACK_SLOTS
+    from neverdeads_revenge.game.shop import META_UPGRADES
+
+    pack = META_UPGRADES["pack"]
+
+    assert [pack.price_at(owned) for owned in range(4)] == [140, 280, 420, 560]
+    assert pack.max_stacks == 4
+    assert BASE_PACK_SLOTS + pack.max_stacks == 7, "the allowance moved"
+
+
+def test_bought_slots_carry_into_the_run_and_through_a_save():
+    from neverdeads_revenge.game.actors import HEROES
+    from neverdeads_revenge.game.difficulty import BASE_PACK_SLOTS
+    from neverdeads_revenge.game.savegame import dump, load
+    from neverdeads_revenge.game.state import start_run
+
+    state = start_run(HEROES["noxx"], 5, upgrades={"pack": 2})
+
+    assert state.pack_capacity == BASE_PACK_SLOTS + 2
+    assert load(dump(state)).pack_capacity == BASE_PACK_SLOTS + 2

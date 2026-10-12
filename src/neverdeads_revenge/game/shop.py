@@ -71,9 +71,20 @@ class MetaUpgrade:
     max_hp: int = 0
     speed: float = 0.0
     sight: int = 0
+    #: Pack slots bought, per stack.
+    pack_slots: int = 0
     max_stacks: int = 3
+    #: Whether each stack costs more than the last. True for the pack, whose
+    #: whole point is that the fourth slot is a decision and not a formality.
+    escalating: bool = False
     #: Only ever offered on the rotating shelf, never in the fixed stock.
     wild: bool = False
+
+    def price_at(self, owned: int) -> int:
+        """What the next stack costs, given how many are already held."""
+        if self.escalating:
+            return self.price * (owned + 1)
+        return self.price
 
     def effect(self, stacks: int) -> str:
         """The effect line for ``stacks`` stacks, or an empty string."""
@@ -84,6 +95,8 @@ class MetaUpgrade:
             parts.append(f"{self.speed * stacks:+.2f} speed")
         if self.sight:
             parts.append(f"{self.sight * stacks:+d} sight")
+        if self.pack_slots:
+            parts.append(f"{self.pack_slots * stacks:+d} pack slots")
         return ", ".join(parts)
 
 
@@ -114,6 +127,19 @@ META_UPGRADES: dict[str, MetaUpgrade] = {
         price=180,
         sight=1,
         max_stacks=1,
+    ),
+    "pack": MetaUpgrade(
+        key="pack",
+        name="Pack",
+        description="another thing you can carry, and another after that",
+        # Priced in the permanent tier, like every other upgrade: 140, 280,
+        # 420, 560 -- each slot dearer than the last, so the fourth is a
+        # decision and not a formality. Four of them take the pack from three
+        # to seven, which is the whole allowance a run ever gets.
+        price=140,
+        pack_slots=1,
+        max_stacks=4,
+        escalating=True,
     ),
     "blood_deal": MetaUpgrade(
         key="blood_deal",
@@ -413,6 +439,7 @@ def build_stock(progress) -> list[Offer]:
         if upgrade.wild:
             continue
         owned = progress.upgrades.get(key, 0)
+        price = upgrade.price_at(owned)
         offers.append(
             Offer(
                 key=key,
@@ -420,10 +447,10 @@ def build_stock(progress) -> list[Offer]:
                 label=upgrade.name,
                 detail=upgrade.effect(owned + 1) if not owned >= upgrade.max_stacks
                 else upgrade.effect(owned),
-                price=upgrade.price,
+                price=price,
                 owned=owned,
                 limit=upgrade.max_stacks,
-                affordable=gold >= upgrade.price,
+                affordable=gold >= price,
             )
         )
 

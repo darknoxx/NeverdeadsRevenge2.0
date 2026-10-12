@@ -1642,6 +1642,21 @@ def _pick_up(state: GameState) -> ActionResult:
         state.say("It is not going anywhere. It has to be opened.", LogKind.PLAIN)
         return ActionResult(consumed_turn=False, acted=False)
 
+    if (
+        item.slot is None
+        and item.kind not in ("coin", "page")
+        and len(state.inventory) >= state.pack_capacity
+    ):
+        # A full pack is a full pack: the thing stays where it lies, and the
+        # shop is where the room comes from. Checked before the item is taken
+        # off the floor, so a refusal does not eat it.
+        state.say(
+            f"The pack is full: {state.pack_capacity} slots, and the shop "
+            f"sells more.",
+            LogKind.PLAIN,
+        )
+        return ActionResult(consumed_turn=False, acted=False)
+
     state.dungeon_map.remove_item(state.player.position)
 
     if item.kind == "page":

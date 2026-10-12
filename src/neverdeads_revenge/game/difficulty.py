@@ -42,6 +42,7 @@ __all__ = [
     "FORTRESS_SIGHT_PENALTY",
     "FORTRESS_VIEW",
     "BELL_RADIUS",
+    "BASE_PACK_SLOTS",
     "enemy_speed",
     "weight_at_depth",
 ]
@@ -126,6 +127,11 @@ FORTRESS_VIEW = 3
 #: Walkyrion's bell rings for this many paces around him, measured the way
 #: everything in the dungeon measures: Chebyshev, so the field is a square.
 BELL_RADIUS = 3
+
+#: What the pack holds before any upgrade. Three draughts is what a careful
+#: player carries for one bad floor; the shop sells the rest, one slot at a
+#: time and each dearer than the last.
+BASE_PACK_SLOTS = 3
 
 #: Ceiling on potency. Without it a floor-40 monster would be unplayable and any
 #: formula mistake would silently become exponential. Just over two and a half
