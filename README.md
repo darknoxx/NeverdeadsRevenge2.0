@@ -1,100 +1,199 @@
 # Neverdead's Revenge 2.0
 
-**The same dungeon, on a CRT.**
+**A turn-based dungeon roguelite, rendered as an old CRT.**
 
-Noxx was killed once, and death did not keep him: the body walked out of the
-underdark with a price to settle. Under the mountains of Karpas there is a
-dungeon for people like that -- ten floors of monsters that get harder the whole
-way down, a shop between them that sells next-run time, chests that charge a
-curse before they open, and a floor where something already knows where you are
-and is on its way. There is one rule above the others: the way out is not behind
-you. **The rift is on floor ten.**
+You are Noxx, and you were killed once. Death did not keep you, and the body
+walked out of the dark with something left to settle. Under the mountains of
+Karpas there is a dungeon for people like that: ten floors, monsters that get
+harder every step down, chests that charge a curse before they open, and a
+shop that sells time. Somewhere below, a rift tears the dark open. **The way out
+is on floor ten.**
 
-This is the desktop build of the **terminal roguelite**. The dungeon, the
-monsters, the curses, the gifts, the shop, the save format and the balance are
-the *same systems* -- forked wholesale from the terminal project, which was
-frozen the day this one started. What is new is everything above them: a
-PySide6 window, a pattern buffer, and a fragment shader that puts scanlines,
-bloom and a toggleable barrel over the picture. It is a **fork, not a wrapper**,
-and from here this is where the game lives.
+This is the desktop build of the **terminal roguelite Neverdead's Revenge**. The
+dungeon, the monsters, the items, the curses, the gifts, the shop, the save
+format and the balance are the same systems as the terminal game -- forked
+wholesale and never changed to know a terminal stopped existing. What is new is
+everything above them: a PySide6 window, a pattern buffer, and a shader that
+puts scanlines, bloom and a toggleable barrel over the picture.
 
 | | |
 | --- | --- |
-| <img src="docs/screenshots/01_title.png" alt="the title" /> | <img src="docs/screenshots/02_prologue.png" alt="the premise, once per session" /> |
-| the title, and its menu read sideways | the premise: once per session, and the only prose in the game |
+| <img src="docs/screenshots/01_title.png" alt="the title screen" /> | <img src="docs/screenshots/02_prologue.png" alt="the prologue" /> |
+| the title, read sideways with `←` `→` | the premise, told once per session |
 
-## Heroes
+| | |
+| --- | --- |
+| <img src="docs/screenshots/03_dungeon.png" alt="floor four" /> | <img src="docs/screenshots/04_shop.png" alt="the shop" /> |
+| floor four: the tide charged, a wound taken, the hour kept | the shop, sectioned and priced |
 
-Three to pick from, each a philosophy as much as a stat line:
+## How a run goes
+
+A run is **ten floors**, each generated fresh: rooms, grass, rubble, a
+cleansing spring, loot that may be standing under something you have to fight
+for, and stairs down somewhere inconvenient. Enemies scale with the depth, so
+the same floor ten that you barely survive at the start is the floor you have
+to learn.
+
+Fights are turn-based on an eight-way grid. Everything has speed, and speed
+decides how often a turn arrives: Noxx at 1.50 acts half again as often as a
+ghoul at 1.00. You win by trading hits better than the other thing, by using
+what you carry, and by spending the ground you are standing on.
+
+- **Health, armour, crit, evasion, accuracy** are the numbers that matter.
+  Armour is a flat subtraction, so it is worth most against many small blows.
+- **Statuses** do the slow work: bleeding, poisoned, burning and chilled all
+  tick damage, and the sidebar counts down what is left of them.
+- **REVENGE** is the run's own engine. Every kill charges it, and each hero
+  collects it differently (see the heroes below). It lapses between floors, so
+  it is a charge for the floor it was earned on, not a permanent stat.
+- **The borrowed hour** is the undo. With that gift, once per floor the run can
+  be turned back one turn, and the death screen offers it one last time: `r`
+  takes the death back.
+
+### The three heroes
 
 | | name | title | the shape of it |
 | --- | --- | --- | --- |
-| **N** | Noxx | the swift one | Quick hands, quicker feet. Wins fights he should lose: strike, vanish, come back before they can swing. Fragile, but every opening is lethal. |
-| **Y** | Yeti | the unmoved | Slow as a glacier and about as easy to move. Does not dodge and does not rush; everything that reaches him has to get through the armour first, and most things do not. |
-| **W** | Walkyrion | the even blade | No weakness worth naming and no trick worth relying on. Strikes on time, takes the hit he has to, and is still standing when the screaming stops. |
+| **N** | Noxx | the swift one | Quick hands, quicker feet. Wins fights he should lose: strike, vanish, come back before they can swing. Fragile, but every opening is lethal. REVENGE: **BLACK TIDE** (speed). |
+| **Y** | Yeti | the unmoved | Slow as a glacier and about as easy to move. Does not dodge and does not rush; everything that reaches him goes through the armour first, and most things do not. REVENGE: **FROZEN FORTRESS** (armour). |
+| **W** | Walkyrion | the even blade | No weakness worth naming and no trick worth relying on. Strikes on time, takes the hit he has to, and is still standing when the screaming stops. REVENGE: **AURAL BLADE** (damage). |
 
-Every kill charges **REVENGE**, and the grant is personal: Noxx's stacks flood
-his **BLACK TIDE**, Yeti hardens the **FROZEN FORTRESS**, Walkyrion sharpens the
-**AURAL BLADE**. It builds as the floor bleeds and it lapses on the way down --
-a fight carried through the stairs is a fight that has not happened yet.
+## What is down there
 
-## The shape of a run
+### Loot and gear
 
-- **Ten floors**, a freshly generated dungeon each: rooms, grass, rubble, a
-  spring that washes a curse off for a price, loot that may be standing under
-  something you have to fight for, and the way out where it is not easy to be.
-- **The borrowed hour.** Once a floor, the run can be turned one turn back
-  from held snapshots -- and the ending offers it one last time: `r` on the
-  death tally takes the death back. Unspent, it is gone when the floor is.
-- **The hunter.** On the deeper floors, sometimes: fast, scaled up, and already
-  moving. It knows where you are because that is all it does, and the game
-  tells you when the floor has one.
-- **Cursed chests.** A chest names its price -- a curse -- before the lid
-  moves: take the reward and carry it, or walk past. A chest whose price you
-  already carry opens for nothing. And the wager runs the other trade: leave
-  the cursed blade where it lies, take the curse, and bank **fame** into the
-  score instead.
-- **The shop**, priced and honest. What the purse cannot reach is drawn grey
-  with the reason beside the price; the shelves are sectioned (supplies, gear,
-  amulets, upgrades); and a shelf of **wild offers** -- the pact, the wager, the
-  blind box, the coin hand -- rotates between runs and sells exactly the risks
-  their names suggest.
+- **Two draughts**: a potion (heals 8) and an elixir (heals 20). `q` drinks the
+  cheapest one that covers the wound, because wasting half an elixir is the
+  mistake everybody makes once.
+- **Thirteen weapons** (the rusted tooth, the grey bite, the long hunger, the
+  patient knife...) and **ten pieces of armour** (the thin hide, the rune
+  plate, the ashfall cloak...), each with its own modifiers.
+- **Fourteen amulets**, each a passive rule rather than a number: the last
+  ember (every kill puts two health back), the coin hand (every coin is worth a
+  quarter more), the wayfarer (you know the way out when you arrive), the
+  mirror (whatever strikes you takes two back), the rune heart (+1 max health
+  per floor down), and the rest.
+- Gear **equips on pickup**, and whatever it replaces is set down beside you --
+  so trying something on is always free, and nothing found can be lost by
+  picking it up. Every pickup opens a page that says what it is and what it
+  does, before you walk on with it.
 
-| | |
+### Curses and chests
+
+A chest names its price before the lid moves: it will charge you a **curse**
+for whatever is inside. You can pay and open it, or pay and leave the reward
+where it lies to take **fame** instead -- and fame is score. There are thirteen
+curses, and none of them is small:
+
+| curse | what it takes |
 | --- | --- |
-| <img src="docs/screenshots/03_dungeon.png" alt="floor four, mid-run" /> | <img src="docs/screenshots/04_shop.png" alt="the shop" /> |
-| floor four: the tide charged, a wound taken, the hour kept | the shop, sectioned and priced to what you have |
+| WITHER | a quarter of your health, taken now and for good |
+| BLEED | a drop of blood every tenth step |
+| FRAIL | two points of armour, gone |
+| HEAVY | a quarter of your speed |
+| DIM | your sight, cut to five paces |
+| FAMINE | half of what every draught is worth |
+| TITHE | a drop of blood for every thing you kill |
+| COMPANY | two more shapes on every floor |
+| HESITATION | every fifth turn, the step is not yours |
+| ASHEN HAND | half of what every coin is worth |
+| LONG DARK | your sight, cut to one pace |
+| FEVER | your blows swing twice as wide |
+| CRAWL | three of what you leave alive follows you down |
 
-- **Gifts are rule changes, not loot names.** THE HUNGRY ROAD cuts whatever
-  walks in your trail; MOMENTUM lands the next blow harder, the longer you walk
-  one way; THE DEBT OF BLOOD owes back everything you are made to bleed; THE
-  LAST BREATH turns three desperate health into double force and harder evasion;
-  THE SALT CIRCLE makes three waits in a row unreachable; THE BLOOD PRICE
-  scatters coins where you are hit; THE KINDNESS makes anyone you meet hand over
-  something to drink; NOTHING WASTED shatters a drunk draught into everyone
-  beside you; and THE DARK KNOWS shows every monster on the floor, through
-  walls.
-- **Deaths leave pixels.** A kill bursts red at the exact square it happened on,
-  coins rattle out where a monster paid for its cruelty, and a critical lands
-  with a spark. The glass shakes on wounds: the picture samples, the world
-  does not.
+### Gifts
 
-After the tally there is a name for the board, and a slot the title will offer
-back. `s` in the pause writes the run in progress even earlier; `c CONTINUE`
-takes it whole -- the floor, the health, the turns paid -- and consumes it, so
-nothing waits twice. A fresh game reads the premise to you once per session;
-by the second run there is no speech before floor one.
+Gifts are **rule changes**, not loot names. Seventeen of them exist, and each
+one rewrites a piece of the game while it is held:
 
-## On the glass
+| gift | the rule it changes |
+| --- | --- |
+| THE LONG REACH | your blow reaches two squares, and nothing solid in between |
+| THE STEP BEHIND | every fifth step costs you no time at all |
+| THE KIND DARK | every floor you descend lifts one curse |
+| THE HOLLOW ROAD | walk into stone, at two health a square |
+| THE BORROWED HOUR | once a floor, take back the last thing you did |
+| THE ASH MARK | every blow you land leaves it burning |
+| THE OPEN WOUND | your first blow on each thing leaves it bleeding |
+| THE SLOW KNITTING | every twentieth step puts one health back |
+| THE HUNGRY ROAD | every square you leave cuts whatever walks after you |
+| MOMENTUM | the longer you walk one way, the harder your next blow lands |
+| THE DEBT OF BLOOD | what you are made to bleed is owed back on your next blow |
+| THE LAST BREATH | at three health or less: you hit twice as hard and are harder to hit |
+| THE DARK KNOWS | you see every monster on the floor, through the walls |
+| THE SALT CIRCLE | wait three turns in a row and nothing can reach you |
+| THE BLOOD PRICE | every blow you take scatters coin at your feet |
+| THE KINDNESS | whoever you meet hands you something to drink |
+| NOTHING WASTED | a draught you drink shatters into everything beside you |
 
-The screen runs through a **pattern buffer** -- a grid of characters turned into
-one flat image -- and then a shader lays scanlines, bloom and (F4, off at first)
-a barrel over it. The scale lands the grid near **a hundred columns**: a whole
-pixel per character step on a small laptop, two on 1080p, four on 4K, and the
-frame is letterboxed exactly where the number does not divide. Small text is not
-a smaller dungeon: the log keeps a face of its own, drawn straight onto the
-frame, with the sidebar's curses, gifts, effects and statuses above a rule, and
-the legend of glyphs under another.
+### The hunter
+
+On the deeper floors, sometimes, a hunter spawns: fast, scaled up, and already
+moving. It knows where you are because that is all it does, and the game tells
+you when a floor has one. Everything else has to see you before it comes for
+you; the hunter does not.
+
+### The shop
+
+Between runs the shop spends the coins you died with. It is priced honestly:
+what the purse cannot reach is drawn grey with the reason beside the price. The
+shelves are sectioned -- **supplies, gear, amulets, upgrades, wild offers** --
+and a purchase rings the till.
+
+**Permanent upgrades** buy things that survive the run:
+
+| upgrade | price | what it does | stacks |
+| --- | --- | --- | --- |
+| Vigour | 140g | +5 max health | up to 3 |
+| Haste | 220g | +0.12 speed | up to 2 |
+| Lantern | 180g | +1 sight | once |
+| Blood Bargain | 170g | +0.15 speed, for good -- and -4 max health, for good | up to 2 |
+
+**Wild offers** rotate between runs and sell exactly the risk their name
+suggests. A deal whose cost is a footnote is not a decision, so every one reads
+out its pitch and its catch before you take it:
+
+| offer | price | the pitch | the catch |
+| --- | --- | --- | --- |
+| the blind box | 45g | something from the deep, unseen | you do not get to look first |
+| the pact | 85g | coins are worth half again as much | you start cursed, and the dark picks |
+| greed | 75g | coins are worth double | everything below is a fifth tougher |
+| grave goods | 105g | grave iron in hand from the start | it is heavy, and it slows you down |
+| second wind | 120g | the first killing blow does not land | once a run, and no more |
+| the wager | 65g | a coin, thrown into the dark | one face a blade, the other a curse |
+| the hollow tooth | 115g | every kill feeds you three | and no draught will ever stay down |
+| the pilgrim's toll | 95g | coins are worth half again as much | the dark takes five for each floor |
+| the count's favour | 125g | every thirteenth kill heals you whole | you do not want to know who counts |
+| the mirror of hunger | 115g | a draught heals half again as much | and something drinks beside you |
+| the nameless run | 105g | coins are worth double | and the score is worth half |
+
+## Between the runs
+
+- **The chronicle** collects **37 torn pages** found on the floors. Each page is
+  prose, and once found it is in the book for good; the chronicle shows the full
+  text of every page you have, and marks the ones you have not.
+- **The board** keeps every finished run, best first, with the name you left.
+- **Fame** is score: a chest's curse taken for the reward pays you nothing, but
+  a chest's reward *left* for the curse pays a point of fame, which raises the
+  run's score multiplier.
+- **The prologue** tells the premise once per session, between the hero choice
+  and floor one. After that the game starts without a speech.
+- **Save and continue**: `s` in the pause writes the run in progress to
+  `run.json`; the title then offers it back as `c CONTINUE`. Picking it up
+  consumes the slot and restores the run whole -- floor, health, turns walked.
+  A save from another build is refused rather than crashing.
+
+## The CRT
+
+The picture is a **pattern buffer**: a grid of characters turned into one flat
+image, which a fragment shader then draws with scanlines, bloom and a barrel
+distortion. The scale lands the grid near **a hundred columns** -- one pixel per
+character step on a small laptop, two on 1080p, four on 4K -- and the frame is
+letterboxed exactly where the number does not divide.
+
+Small text is not a smaller dungeon. The log keeps a face of its own, drawn
+straight onto the frame, with the sidebar's curses, gifts, effects and statuses
+above a rule and the legend of glyphs under another.
 
 | key | what it does |
 | --- | --- |
@@ -106,25 +205,26 @@ the legend of glyphs under another.
 The glass remembers its effects between runs, and every toggle is announced on
 the glass itself.
 
-## The keys
+## Controls
 
-The dungeon plays exactly like the terminal game:
-
-| key | does |
+| key | what it does |
 | --- | --- |
-| `↑↓←→` / `hjkl`, `yubn` | move (the diagonals are real: 8-way) |
-| `.` or `space` | wait a turn (and hold the salt circle, with the gift) |
-| `enter` | loot, stairs, spring, or speak |
-| `q` / `i` | drink / pack |
-| `c` / `?` | the sheet / the reference |
-| `esc` | the pause (`s` save and quit, `q` to title, `m` sound) |
-| `←→` + `enter` | the menus, sideways -- or their letters straight |
+| arrows, `hjkl`, `wasd` | move |
+| `y` `u` `b` `n` (and Home/PgUp/End/PgDn) | move diagonally |
+| `.` or `space` | wait a turn |
+| `enter` | interact: loot, stairs, spring, chest, or speak |
+| `>` | take the stairs down |
+| `q` | drink the cheapest draught that covers the wound |
+| `i` | the pack |
+| `c` | the hero sheet |
+| `?` | controls and reference |
+| `r` | the borrowed hour |
+| `esc` | pause (`r`/`esc` resume, `s` save and quit, `q` quit to title, `m` sound) |
 
-Nothing answers a repeated key that never pressed: a held `enter` cannot open a
-chest and then agree to it in the same breath, because Qt tells the game when a
-key is held and a menu answers one gesture at a time. The holds -- the prologue,
-the death tally -- are the one place a held key is the *point*: the fill runs on
-the wall clock, a release ends it, and taps never sneak through.
+The menus are read sideways: `←` `→` choose, `enter` takes, or press the letter
+of the row you want. Dialogs never answer their own opening press, and the two
+screens that want a *held* key -- the prologue and the death tally -- fill a bar
+while it is held and refuse taps, so nothing walks through them by accident.
 
 ## Getting started
 
@@ -132,14 +232,13 @@ the wall clock, a release ends it, and taps never sneak through.
 ./install.sh
 ```
 
-The installer does **whatever is missing**: it creates a `.venv` in this
-directory, installs the game and its dependencies into it, checks the imports
-(PySide6/miniaudio), and on Linux adds the game to the applications menu --
-with a real icon, no sudo, nothing outside `$HOME`. Run it again any time; it
-reuses what is already there. `--dry-run`, `--no-desktop`, `--python PATH` and
-`--uninstall` are supported.
+The installer creates a `.venv` in this directory, installs the game and its
+dependencies into it, checks that PySide6 and miniaudio import, and on Linux
+adds the game to the applications menu with a real icon -- no sudo, nothing
+outside `$HOME`. Run it again any time; it reuses what is already there.
+`--dry-run`, `--no-desktop`, `--python PATH` and `--uninstall` are supported.
 
-The long way, if you prefer doing it by hand:
+By hand, if you prefer:
 
 ```sh
 python3 -m venv .venv
@@ -147,7 +246,7 @@ python3 -m venv .venv
 ./ndr2
 ```
 
-The same launcher takes the flags the terminal build had:
+`ndr2` runs the windowed game and takes the flags the terminal build had:
 
 ```sh
 ./ndr2 --seed 42     # the same dungeon, again
@@ -156,35 +255,37 @@ The same launcher takes the flags the terminal build had:
 ./ndr2 --testrun     # the chronicle unlocked and the purse full
 ```
 
-Runs on **PySide6** and **miniaudio**, and needs a display: the design is the
-screen. Headless environments run the test suite instead, offscreen:
+The game needs a display: the design is the screen. Headless environments run
+the test suite instead, offscreen:
 
 ```sh
-./.venv/bin/pytest -q
+./.venv/bin/pytest -q      # 1,388 tests, engine and UI both
 ```
 
-## Where things live
+## How it is put together
 
 ```text
 src/neverdeads_revenge/
-  core/ world/ game/ persistence.py   the forked systems -- no screen anywhere
+  core/ world/ game/ persistence.py   the game itself -- no screen anywhere
   desktop/                            the PySide6 presentation layer
+    theme.py    the palette, and Rich styles translated
+    font.py     a monospaced cell, drawn without antialiasing
     buffer.py   the grid of characters -> an image
     crt.py      the shader: integer scaling, scanlines, bloom, geometry
     render.py   the map, the sidebar and the log strip, as cells
     effects.py  the moving pixels: blood, coins, sparks, and the shake
     app.py      the window, the keys, the loop, the settings
     screens/    every menu and dialog, drawn and key-routed
-tests/                               1,383 at this writing, engine and UI both
+tests/                                engine and UI, 1,388 at this writing
 ```
 
-The engine (`core/`, `world/`, `game/`) never imports a UI, so the game stays a
-library another client could drive -- which is the rule the fork is built on.
+The engine (`core/`, `world/`, `game/`) never imports a UI. The game is a
+library that a second client could drive, and the desktop is one client of it.
 
 ## Save data
 
 2.0 keeps its own profile in `~/.local/share/neverdeads_revenge2/`, separate
-from the terminal build, on purpose: experimenting here never touches a terminal
+from the terminal build on purpose: experimenting here never touches a terminal
 run's scores or chronicle, and the other way around.
 
 ## Licence
