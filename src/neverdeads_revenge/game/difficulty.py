@@ -35,6 +35,7 @@ __all__ = [
     "ATRITAS_SWING_EVERY",
     "ATRITAS_DRAIN_EVERY",
     "ATRITAS_RADIUS",
+    "ATRITAS_HUNT_RADIUS",
     "ATRITAS_VIEW",
     "ATRITAS_KILL_HEAL",
     "FORTRESS_TURNS",
@@ -88,6 +89,14 @@ ATRITAS_DRAIN_EVERY = 8
 
 #: How close an enemy has to stand to Noxx before Atritas swings at it.
 ATRITAS_RADIUS = 3
+
+#: How far the shadow will *hunt*: a prey within this many paces of where it
+#: stands is fair game, and it blinks to it. Wider than the guard radius, so
+#: the shadow seeks and destroys rather than waiting by its summoner -- while
+#: the hero's own three paces stay the fallback, because a shadow that
+#: wandered off the moment something looked interesting would be a bodyguard
+#: with a hobby.
+ATRITAS_HUNT_RADIUS = 5
 
 #: How far the shadow keeps the floor in view around itself. It blinks from
 #: prey to prey, and wherever it lands it sees -- three paces, always -- so

@@ -536,3 +536,46 @@ def test_the_shadow_keeps_three_paces_of_sight_wherever_it_blinks():
                 assert state.dungeon_map.is_visible(pos), (
                     f"{pos} went dark around the shadow"
                 )
+
+
+def test_the_shadow_hunts_outward_within_five_paces():
+    """Seek and destroy: prey within the hunt radius of where the shadow
+    stands is fair game, even when the hero is nowhere near it."""
+    from neverdeads_revenge.game.difficulty import ATRITAS_HUNT_RADIUS
+
+    state = _run(ultimate_level=1)
+    perform_action(state, Action.ULTIMATE)
+    atritas = state.atritas
+    assert atritas is not None
+
+    # A ghoul five paces from the shadow, straight away from the hero, so it
+    # is inside the hunt radius and outside anything the hero could reach.
+    from neverdeads_revenge.core.direction import direction_towards
+
+    away = direction_towards(state.player.position, atritas.position)
+    far = atritas.position
+    for _ in range(5):
+        far = away.step(far)
+    state.dungeon_map.set_tile(far, Tile.FLOOR)
+    enemy = _stage_enemy_at_square(state, far, hp=1)
+    assert chebyshev(atritas.position, far) <= ATRITAS_HUNT_RADIUS
+    assert chebyshev(state.player.position, far) > ATRITAS_HUNT_RADIUS
+
+    _wait(state, 3)  # the swing lands at age 3
+
+    assert enemy.alive is False, "the shadow let its prey walk"
+    assert any("Atritas" in entry.text for entry in state.log)
+
+
+def test_the_hunt_does_not_wander_without_reason():
+    """With nothing in reach anywhere, it stays with the hero rather than
+    drifting off -- the fallback is the guard radius, not the map."""
+    state = _run(ultimate_level=1)
+    perform_action(state, Action.ULTIMATE)
+    atritas = state.atritas
+    assert atritas is not None
+
+    _wait(state, 6)
+
+    distance = chebyshev(atritas.position, state.player.position)
+    assert distance <= 3, "the shadow wandered off with nothing to hunt"

@@ -39,6 +39,7 @@ from .combat import apply_revenge, attack
 from .curses import TOUCH_CURSES, CURSES, curse_by_key
 from .difficulty import (
     ATRITAS_DRAIN_EVERY,
+    ATRITAS_HUNT_RADIUS,
     ATRITAS_KILL_HEAL,
     ATRITAS_RADIUS,
     ATRITAS_SWING_EVERY,
@@ -1438,13 +1439,7 @@ def _advance_atritas(state: GameState) -> None:
 
     # THE ASSISTANCE.
     if age % ATRITAS_SWING_EVERY == 3:
-        target = None
-        best = ATRITAS_RADIUS + 1
-        for enemy in state.living_enemies:
-            distance = chebyshev(hero.position, enemy.position)
-            if distance <= ATRITAS_RADIUS and distance < best:
-                target = enemy
-                best = distance
+        target = _shadow_prey(state, atritas)
         if target is not None:
             # THE BLINK. The dark does not walk to its prey -- it is simply
             # found there, one free square beside it, so the summoner sees
@@ -1522,6 +1517,31 @@ def _melt_fortress(state: GameState) -> None:
     state.fortress = None
     state.fortress_turns_left = 0
     state.sight_penalty = 0
+
+
+def _shadow_prey(state: GameState, atritas: Actor) -> Actor | None:
+    """What the shadow goes for next.
+
+    First anything within its hunt radius of where it *stands* -- seek and
+    destroy, prey to prey, across the floor. Failing that, anything within the
+    guard radius of its summoner, so it never abandons the hero it belongs to
+    just because the room it left had nothing in it.
+    """
+    prey = _nearest_enemy(state, atritas.position, ATRITAS_HUNT_RADIUS)
+    if prey is not None:
+        return prey
+    return _nearest_enemy(state, state.player.position, ATRITAS_RADIUS)
+
+
+def _nearest_enemy(state: GameState, centre: Pos, radius: int) -> Actor | None:
+    best: Actor | None = None
+    best_distance = radius + 1
+    for enemy in state.living_enemies:
+        distance = chebyshev(centre, enemy.position)
+        if distance <= radius and distance < best_distance:
+            best = enemy
+            best_distance = distance
+    return best
 
 
 def _place_beside(state: GameState, atritas: Actor, target: Actor) -> None:
