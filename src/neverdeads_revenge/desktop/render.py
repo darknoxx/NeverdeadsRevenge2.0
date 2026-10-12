@@ -488,10 +488,15 @@ def _void_prompt(state: GameState, now: float) -> tuple[str, QColor] | None:
             f"give in to the void (lvl {state.ultimate_level})",
             parse_style("grey30").fg,
         )
-    # Ready: dark petrol, breathing. The breath is why there is a ``now``.
-    breathing = 0.55 + 0.45 * (0.5 + 0.5 * math.sin(now * 2.0 * math.pi / 1.6))
+    # Ready: dark petrol, breathing -- and not a whisper of a breath: the
+    # promise is supposed to catch the eye from across the log. The pulse
+    # rises past the base colour on purpose; the bloom is a reading of
+    # brightness and that overshoot is what makes the line visibly alive.
+    breathing = 0.35 + 0.95 * (0.5 + 0.5 * math.sin(now * 2.0 * math.pi / 1.0))
     base = (14, 111, 111)
-    lit = tuple(int(round(channel * breathing)) for channel in base)
+    lit = tuple(
+        max(0, min(255, int(round(channel * breathing)))) for channel in base
+    )
     return "give in to the void (f)", QColor(*lit)
 
 

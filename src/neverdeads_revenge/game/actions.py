@@ -1247,6 +1247,12 @@ def _summon_void(state: GameState) -> ActionResult:
         "Every wall is glass. There is nowhere down here it is not.",
         LogKind.GOOD,
     )
+    # A turn, like the chest and the draught: the summon spends the beat the
+    # monsters were owed, and the shadow's first tick happens inside it.
+    state.turn += 1
+    state.total_turns += 1
+    advance_world(state)
+    state.refresh_vision()
     return _outcome(state, consumed_turn=True, acted=True)
 
 
@@ -1308,6 +1314,11 @@ def _advance_atritas(state: GameState) -> None:
                 target = enemy
                 best = distance
         if target is not None:
+            # THE BLINK. The dark does not walk to its prey -- it is simply
+            # found there, one free square beside it, so the summoner sees
+            # the shadow arrive where it strikes and never wonders whether
+            # it worked.
+            _place_beside(state, atritas, target)
             outcome = attack(atritas, target, state.rng, spread=state.damage_spread)
             if outcome.hit:
                 state.hits.append(target.position)
@@ -1344,6 +1355,33 @@ def _advance_atritas(state: GameState) -> None:
             "Atritas sinks back into your dark. The walls are stone again.",
             LogKind.SYSTEM,
         )
+
+
+def _place_beside(state: GameState, atritas: Actor, target: Actor) -> None:
+    """Put the shadow on a free square beside its prey, before it strikes.
+
+    Beside, never on: the prey's own square is occupied, and so is every
+    square an actor holds. If the prey is packed in on all eight sides the
+    shadow stays where it is and strikes through anyway -- the blink is for
+    seeing, and seeing can fail without breaking the swing.
+    """
+    options = []
+    for direction in DIRECTIONS:
+        landing = direction.step(target.position)
+        if landing == state.player.position:
+            continue
+        if not state.dungeon_map.is_walkable(landing):
+            continue
+        if state.actor_at(landing) is not None:
+            continue
+        options.append(landing)
+    if not options:
+        return
+    # The square closest to the summoner, so the shadow keeps to his side of
+    # its prey when there is a choice.
+    atritas.position = min(
+        options, key=lambda pos: chebyshev(pos, state.player.position)
+    )
 
 
 def _take_fame(state: GameState) -> ActionResult:

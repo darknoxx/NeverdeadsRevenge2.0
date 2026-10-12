@@ -188,10 +188,10 @@ def test_the_drain_happens_on_its_beat():
 
     perform_action(state, Action.SUMMON_VOID)
     state.player.stats.hp = 3
-    # The cast's own tick is age one, so the first drain lands on the ninth
-    # beat of waiting, not the eighth.
+    # The cast's own tick is age zero, so the drain's first beat is the
+    # eighth wait after it.
 
-    _wait(state, 8)
+    _wait(state, 7)
     assert state.player.stats.hp == 3
     _wait(state, 1)
     assert state.player.stats.hp == 2
@@ -232,6 +232,30 @@ def test_the_shadow_ignores_a_far_prey():
     assert state.enemies and state.enemies[0].alive, (
         "the shadow reached a thing it was never promised"
     )
+
+
+def test_the_shadow_blinks_beside_its_prey():
+    """The dark is found where it strikes: a swing happens one square from
+    the target, and on a square that is nobody else's."""
+    state = _run(ultimate_level=1)
+    perform_action(state, Action.SUMMON_VOID)
+
+    hero_position = state.player.position
+    enemy = _stage_enemy_at_square(
+        state, (hero_position[0] + 2, hero_position[1]), hp=99
+    )
+    atritas = state.atritas
+    held = atritas.position
+
+    _wait(state, 3)  # the first swing lands on the shadow's own beat
+
+    assert not enemy.alive is None  # it swung either way
+    assert chebyshev(atritas.position, enemy.position) == 1, (
+        f"the shadow struck from {atritas.position}, not from beside its prey"
+    )
+    assert atritas.position != held
+    assert atritas.position != state.player.position
+    assert atritas.position != enemy.position
 
 
 def test_the_shadow_leaves_at_forty_turns():

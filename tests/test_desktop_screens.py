@@ -1355,10 +1355,13 @@ def test_the_void_prompt_reads_the_right_states():
     state.ultimate_level = 1  # level 1 >= 1: the promise is live
     text, colour = _void_prompt(state, 0.0)
     assert text == "give in to the void (f)"
-    # The breath at t=0 is 0.55 + 0.45 * 0.5 = 0.775 of the petrol base.
-    assert colour.getRgb()[:3] == (round(14 * 0.775), round(111 * 0.775), round(111 * 0.775)), (
+    # The breath at t=0 is 0.35 + 0.95 * 0.5 = 0.825 of the petrol base.
+    assert colour.getRgb()[:3] == (round(14 * 0.825), round(111 * 0.825), round(111 * 0.825)), (
         "the petrol does not breathe where the bloom can hear it"
     )
+    # and the crest overdraws the base, so the glow is an event, not a tint:
+    text, crest = _void_prompt(state, 0.25)
+    assert crest.getRgb()[:3] == (18, 144, 144), "the crest never crosses the base"
 
     state.ultimate_level = 1
     state.atritas = HEROES["noxx"]  # any object; the check is presence
