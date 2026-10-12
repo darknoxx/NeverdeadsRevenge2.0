@@ -333,8 +333,8 @@ def test_the_fortress_stands_near_yeti_with_his_own_blood():
 
     fortress = state.fortress
     assert fortress is not None
-    assert fortress.stats.max_hp == 20, "the wall did not take Yeti's blood"
-    assert fortress.stats.hp == 20
+    assert fortress.stats.max_hp == 40, "the wall did not take twice his blood"
+    assert fortress.stats.hp == 40
     distance = chebyshev(fortress.position, state.player.position)
     assert distance == 1, "the wall did not go up beside its builder"
 

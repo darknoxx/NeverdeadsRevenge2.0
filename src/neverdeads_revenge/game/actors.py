@@ -740,8 +740,9 @@ def make_enemy(template: EnemyTemplate, position: Pos) -> Actor:
 def make_fortress(position: Pos, health: int) -> Actor:
     """Raise Yeti's wall of ice.
 
-    ``health`` is what Yeti had when he built it -- the wall is as hard as he
-    is at the moment he asks, which makes the moment worth choosing.
+    ``health`` is twice what Yeti had when he built it -- the wall is not a
+    second Yeti, it is a thicker one, and a bastion that broke as fast as its
+    builder bleeds would never earn the sight it takes.
     """
     return Actor(
         name="the frozen fortress",
