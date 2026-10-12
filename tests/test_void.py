@@ -642,8 +642,8 @@ def test_the_shop_sells_slots_dearer_each_time_and_stops_at_seven():
 
     pack = META_UPGRADES["pack"]
 
-    assert [pack.price_at(owned) for owned in range(4)] == [140, 280, 420, 560]
-    assert pack.max_stacks == 4
+    assert [pack.price_at(owned) for owned in range(5)] == [100, 150, 200, 250, 300]
+    assert pack.max_stacks == 5
     assert BASE_PACK_SLOTS + pack.max_stacks == 7, "the allowance moved"
 
 

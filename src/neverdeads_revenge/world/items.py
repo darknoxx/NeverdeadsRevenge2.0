@@ -636,9 +636,10 @@ def make_coin(value: int) -> GroundItem:
 
 #: How often a chest holds a rule instead of a thing.
 #:
-#: A third. Rarer and the gifts are a rumour; commoner and the loot stops
-#: mattering, which would be a shame -- the blade is half of what a chest is.
-GIFT_CHANCE = 1 / 3
+#: A half now. A third made the gifts a rumour -- the bot runs saw one gift in
+#: a hundred runs -- and the gifts are the most interesting thing a floor can
+#: hand over. The loot still matters; it is no longer the whole of a chest.
+GIFT_CHANCE = 1 / 2
 
 
 def page_count(depth: int) -> int:
@@ -786,8 +787,12 @@ def loot_count(depth: int) -> int:
     Deliberately stingy, and it grows slowly. Health is a run-long resource, so
     the supply of it is the difficulty dial that matters most: a floor that
     hands out four draughts is a floor where the monsters stop being scary.
+
+    Raised by one when the floors went to eleven monsters: the bot runs died to
+    *numbers*, not to blows, and one draught against twelve bodies is a floor
+    that only pays in blood.
     """
-    return min(1 + depth // 3, 4)
+    return min(2 + depth // 3, 5)
 
 
 def equipment_count(depth: int) -> int:

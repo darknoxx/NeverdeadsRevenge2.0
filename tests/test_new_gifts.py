@@ -67,8 +67,21 @@ def test_the_open_wound_bleeds_the_first_thing_it_touches():
     assert "bleed" in enemy.statuses
 
 
+def _empty_floor(seed: int = 3):
+    """A floor with nobody on it, so a test about *walking* tests walking.
+
+    The floors hold eleven monsters now; a walker that ignores them dies on the
+    way to the twentieth step, which is a true fact about the game and a false
+    one about the gift.
+    """
+    state = start_run(NOXX, seed=seed)
+    state.enemies = []
+    state.turn_queue = type(state.turn_queue)([state.player])
+    return state
+
+
 def test_the_slow_knitting_closes_a_point_every_twentieth_step():
-    state = start_run(NOXX, seed=3)
+    state = _empty_floor()
     state.gifts.add("slow_knitting")
     state.player.stats.hp = 1
 
@@ -84,7 +97,7 @@ def test_the_slow_knitting_closes_a_point_every_twentieth_step():
 
 
 def test_without_the_knitting_walking_closes_nothing():
-    state = start_run(NOXX, seed=3)
+    state = _empty_floor()
     state.player.stats.hp = 1
 
     for _ in range(SLOW_KNITTING_EVERY):

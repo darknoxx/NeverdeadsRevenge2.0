@@ -19,7 +19,6 @@ from PySide6.QtCore import QRect
 from PySide6.QtGui import QColor, QImage, QPainter
 
 from neverdeads_revenge.game.npcs import NPC_COLOR, NPC_GLYPH
-from neverdeads_revenge.game.prologue import legend_rows
 from neverdeads_revenge.game.state import GameState, LogKind
 from neverdeads_revenge.world.generator import ESCAPE_DEPTH
 from neverdeads_revenge.world.items import (
@@ -324,15 +323,11 @@ def paste_sidebar(image, state, cols, rows, cell_w, cell_h, small, now: float | 
         painter.setPen(dim)
         painter.drawLine(left, y, (sx + sw) * cell_w - small.cell_w, y)
         y += (small.cell_h * 3) // 2
-    # The legend.
-    for glyph, text in legend_rows(state.depth, state.hero):
-        if y + small.cell_h > rows * cell_h:
-            break
-        if glyph:
-            draw(glyph, left, y, parse_style(_legend_colour(glyph)).fg)
-            draw(text[:chars], text_x, y, parse_style("grey70").fg)
-        elif text:
-            draw(text[:chars], left, y, parse_style("grey70").fg)
+    # The legend lives in its own menu now (`l`). The sidebar's job is the run
+    # in progress, and a reference that never changes was spending the best
+    # rows on every turn -- so what is left here is the pointer to it.
+    if y + small.cell_h <= rows * cell_h:
+        draw("l legend   ? reference", left, y, dim)
         y += small.cell_h
     painter.end()
 

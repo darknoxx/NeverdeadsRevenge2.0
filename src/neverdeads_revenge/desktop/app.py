@@ -27,6 +27,7 @@ from neverdeads_revenge.game.savegame import dump, load
 from neverdeads_revenge.game.shop import loadout_from
 from neverdeads_revenge.game.state import RunState, start_run
 from neverdeads_revenge.persistence import (
+    MetaProgress,
     clear_run,
     load_meta,
     load_run,
@@ -423,6 +424,29 @@ class DesktopApp(QMainWindow):
         from .screens.menus import ChronicleScreen
 
         self.push(ChronicleScreen())
+
+    def open_delete_progress(self) -> None:
+        """Ask for the word, then erase everything.
+
+        The dialog is the whole safety: it returns ``True`` only when the
+        player typed DELETE, and a ``False`` -- an escape, a changed mind --
+        leaves the profile exactly where it was.
+        """
+        from .screens.dialogs import DeleteProgressScreen
+
+        self.push(
+            DeleteProgressScreen(
+                on_done=lambda confirmed: self.delete_progress() if confirmed else None
+            )
+        )
+
+    def delete_progress(self) -> None:
+        """Wipe the profile and the saved run. Nothing is kept back."""
+        self.progress = MetaProgress()
+        self.save_progress()
+        clear_run()
+        self.run = None
+        self._note_glass("EVERYTHING DELETED")
 
     def save_and_quit(self) -> None:
         if self.run is not None:

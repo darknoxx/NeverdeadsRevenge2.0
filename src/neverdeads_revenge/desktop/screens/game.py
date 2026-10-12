@@ -87,6 +87,11 @@ class GameScreen(Screen):
 
             app.push(PackScreen(self.state))
             return True
+        if name == "l":
+            from .menus import LegendScreen
+
+            app.push(LegendScreen(self.state))
+            return True
 
         action = KEY_BINDINGS.get(name)
         if action is None:

@@ -586,8 +586,13 @@ def test_the_wild_offers_are_priced_against_the_run_they_change():
     because they are the only ones you keep."""
     from neverdeads_revenge.game.shop import META_UPGRADES
 
+    # The Pack is the deliberate exception: a comfort, not a power, and priced
+    # below the single-run wilds on purpose. Every *other* permanent upgrade
+    # stays the dearest tier in the game.
     cheapest_upgrade = min(
-        upgrade.price for upgrade in META_UPGRADES.values() if not upgrade.wild
+        upgrade.price
+        for key, upgrade in META_UPGRADES.items()
+        if not upgrade.wild and key != "pack"
     )
     permanent = [
         offer for offer in WILD_OFFERS.values() if offer.permanent is not None
@@ -644,7 +649,7 @@ def test_the_pack_shelf_line_gets_dearer_as_it_is_bought():
         prices.append(pack.price)
         progress.upgrades["pack"] = progress.upgrades.get("pack", 0) + 1
 
-    assert prices == [140, 280, 420, 560], f"the ladder reads {prices}"
+    assert prices == [100, 150, 200, 250, 300], f"the ladder reads {prices}"
 
     # and once it is maxed it is offered as taken, not as another slot
     offers = {offer.key: offer for offer in build_stock(progress)}

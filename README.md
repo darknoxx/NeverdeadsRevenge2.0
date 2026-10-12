@@ -64,7 +64,7 @@ what you carry, and by spending the ground you are standing on.
 
 - **Two draughts**: a potion (heals 8) and an elixir (heals 20). `q` drinks the
   cheapest one that covers the wound, because wasting half an elixir is the
-  mistake everybody makes once. The **pack holds three things** to start with;
+  mistake everybody makes once. The **pack holds two things** to start with;
   the shop sells slots up to seven, each dearer than the last, and a full pack
   leaves the loot where it lies and says why.
 - **Thirteen weapons** (the rusted tooth, the grey bite, the long hunger, the
@@ -130,8 +130,8 @@ one rewrites a piece of the game while it is held:
 
 ### The hunter
 
-On the deeper floors, sometimes, a hunter spawns: fast, scaled up, and already
-moving. It knows where you are because that is all it does, and the game tells
+From the fifth floor on, sometimes, a hunter spawns: fast, scaled up, and
+already moving. It knows where you are because that is all it does, and the game tells
 you when a floor has one. Everything else has to see you before it comes for
 you; the hunter does not.
 
@@ -149,7 +149,7 @@ and a purchase rings the till.
 | Vigour | 140g | +5 max health | up to 3 |
 | Haste | 220g | +0.12 speed | up to 2 |
 | Lantern | 180g | +1 sight | once |
-| Pack | 140g, then dearer each time | +1 pack slot -- the pack starts at 3 and stops at 7 | up to 4 |
+| Pack | 100g, then 150, 200, 250, 300 | +1 pack slot -- the pack starts at 2 and stops at 7 | up to 5 |
 | Blood Bargain | 170g | +0.15 speed, for good -- and -4 max health, for good | up to 2 |
 
 **Wild offers** rotate between runs and sell exactly the risk their name
@@ -172,10 +172,12 @@ out its pitch and its catch before you take it:
 
 ## The ultimates
 
-Every hero has one ask a floor, bound to `f`, from **level 10** on. The
+Every hero has one ask a floor, bound to `f`, from **level 7** on. The
 sidebar carries the promise: grey until the level, breathing in the hero's own
 colour while it is live, grey again once the floor has had its answer.
-(`--testrun` lowers the gate to level 1, for looking at them.)
+(`--testrun` lowers the gate to level 1, for looking at them. Level seven is
+about a floor or two of real clearing, so the ask belongs to a good run rather
+than to a perfect one.)
 
 | hero | the ask | what it does |
 | --- | --- | --- |
@@ -225,21 +227,26 @@ the glass itself.
 
 | key | what it does |
 | --- | --- |
-| arrows, `hjkl`, `wasd` | move |
+| arrows, `wasd`, `hjk` | move (`l` is the legend now) |
 | `y` `u` `b` `n` (and Home/PgUp/End/PgDn) | move diagonally |
 | `.` or `space` | wait a turn |
 | `enter` | interact: loot, stairs, spring, chest, or speak |
 | `>` | take the stairs down |
 | `q` | drink the cheapest draught that covers the wound |
 | `i` | the pack |
+| `l` | the legend of glyphs |
 | `f` | the hero's ultimate, once a floor (see above) |
 | `c` | the hero sheet |
 | `?` | controls and reference |
 | `r` | the borrowed hour |
-| `esc` | pause (`r`/`esc` resume, `s` save and quit, `q` quit to title, `m` sound) |
+| `esc` | pause (`r`/`esc` resume, `c` controls, `s` save and quit, `q` to title, `m` sound) |
 
 The menus are read sideways: `←` `→` choose, `enter` takes, or press the letter
-of the row you want. Dialogs never answer their own opening press, and the two
+of the row you want. The **legend of glyphs** lives in its own menu (`l`) --
+the sidebar keeps the run, the reference lives one key away. The pause offers
+**CONTROLS**, and the title offers **DELETE PROGRESS**: it asks for the word
+DELETE to be typed out, because a confirm key is a reflex and a word is a
+decision. Dialogs never answer their own opening press, and the two
 screens that want a *held* key -- the prologue and the death tally -- fill a bar
 while it is held and refuse taps, so nothing walks through them by accident.
 

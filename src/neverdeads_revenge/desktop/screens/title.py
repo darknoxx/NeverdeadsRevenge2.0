@@ -29,6 +29,7 @@ class TitleScreen(Screen):
             ("s", "SHOP"),
             ("h", "SCORES"),
             ("l", "CHRONICLE"),
+            ("d", "DELETE PROGRESS"),
             ("q", "QUIT"),
         ]
         return items
@@ -137,5 +138,7 @@ class TitleScreen(Screen):
             app.open_scoreboard()
         elif key == "l":
             app.open_chronicle()
+        elif key == "d":
+            app.open_delete_progress()
         elif key == "q":
             app.quit_requested()

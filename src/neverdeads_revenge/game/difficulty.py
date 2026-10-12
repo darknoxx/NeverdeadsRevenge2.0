@@ -70,9 +70,13 @@ __all__ = [
 #: insists the ceiling is reached exactly on the last floor and not before.
 POTENCY_PER_FLOOR = 0.225
 
-#: The level the void starts talking to Noxx. Below it, the prompt in the
-#: sidebar reads grey and `f` refuses politely. The one the tests turn to 2.
-ULTIMATE_LEVEL = 10
+#: The level the ultimates start answering at. Below it, the prompt in the
+#: sidebar reads grey and `f` refuses politely. Seven rather than ten after the
+#: bot runs: level ten is thirty-six kills, which is *clearing three floors*,
+#: and a promise nobody ever sees is not a promise. Seven is twenty-eight kills
+#: -- a good floor or two -- so the ask is part of a good run and not a
+#: trophy for a perfect one.
+ULTIMATE_LEVEL = 7
 
 #: How long Atritas walks beside Noxx once summoned, in turns. Forty: the
 #: "few seconds" the promise names, said in the only currency the dungeon
@@ -128,10 +132,10 @@ FORTRESS_VIEW = 3
 #: everything in the dungeon measures: Chebyshev, so the field is a square.
 BELL_RADIUS = 3
 
-#: What the pack holds before any upgrade. Three draughts is what a careful
-#: player carries for one bad floor; the shop sells the rest, one slot at a
-#: time and each dearer than the last.
-BASE_PACK_SLOTS = 3
+#: What the pack holds before any upgrade. Two draughts, so the limit is felt
+#: on the first floor rather than admired: the shop sells the rest, one slot at
+#: a time and each dearer than the last.
+BASE_PACK_SLOTS = 2
 
 #: Ceiling on potency. Without it a floor-40 monster would be unplayable and any
 #: formula mistake would silently become exponential. Just over two and a half

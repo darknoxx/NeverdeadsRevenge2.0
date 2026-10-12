@@ -81,9 +81,12 @@ NPC_CHANCE = 0.25
 #: any more, it is the floor.
 HUNTER_CHANCE_BY_DEPTH: dict[int, float] = {
     1: 0.0,
-    2: 0.075,
-    3: 0.10,
-    4: 0.15,
+    2: 0.0,
+    3: 0.0,
+    4: 0.0,
+    # From the fifth floor on, and never before: measured, the hunter kills a
+    # 26-health hero in 1.5 blows from floor five, which is a wall the early
+    # floors should not have to explain.
     5: 0.20,
     6: 0.25,
     7: 0.30,
@@ -100,7 +103,9 @@ def hunter_chance(depth: int) -> float:
     silently dropping to nothing, which is the failure mode a bare ``.get``
     would have.
     """
-    if depth <= 1:
+    if depth < 5:
+        # Nothing before the fifth floor. The table above says so; this says it
+        # again so a table edit cannot quietly reintroduce a floor-2 ambush.
         return 0.0
     last = max(HUNTER_CHANCE_BY_DEPTH)
     return HUNTER_CHANCE_BY_DEPTH.get(depth, HUNTER_CHANCE_BY_DEPTH[last])

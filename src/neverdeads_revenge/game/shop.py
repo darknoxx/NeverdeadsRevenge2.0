@@ -74,17 +74,16 @@ class MetaUpgrade:
     #: Pack slots bought, per stack.
     pack_slots: int = 0
     max_stacks: int = 3
-    #: Whether each stack costs more than the last. True for the pack, whose
-    #: whole point is that the fourth slot is a decision and not a formality.
-    escalating: bool = False
+    #: What each further stack adds to the price. A step rather than a
+    #: multiplier: multiplying turned the fourth slot into a 560-coin luxury,
+    #: and the pack is meant to be a comfort, not a monument.
+    price_step: int = 0
     #: Only ever offered on the rotating shelf, never in the fixed stock.
     wild: bool = False
 
     def price_at(self, owned: int) -> int:
         """What the next stack costs, given how many are already held."""
-        if self.escalating:
-            return self.price * (owned + 1)
-        return self.price
+        return self.price + self.price_step * owned
 
     def effect(self, stacks: int) -> str:
         """The effect line for ``stacks`` stacks, or an empty string."""
@@ -132,14 +131,14 @@ META_UPGRADES: dict[str, MetaUpgrade] = {
         key="pack",
         name="Pack",
         description="another thing you can carry, and another after that",
-        # Priced in the permanent tier, like every other upgrade: 140, 280,
-        # 420, 560 -- each slot dearer than the last, so the fourth is a
-        # decision and not a formality. Four of them take the pack from three
-        # to seven, which is the whole allowance a run ever gets.
-        price=140,
+        # 100, 150, 200, 250, 300: dearer each time, but by a step rather than
+        # by a multiple. Five of them take the pack from two to seven, which is
+        # still the whole allowance a run gets -- for 1000 coin rather than
+        # 1400, because a comfort should be saveable-for.
+        price=100,
         pack_slots=1,
-        max_stacks=4,
-        escalating=True,
+        max_stacks=5,
+        price_step=50,
     ),
     "blood_deal": MetaUpgrade(
         key="blood_deal",

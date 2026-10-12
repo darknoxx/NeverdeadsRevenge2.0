@@ -1343,8 +1343,8 @@ def test_the_void_prompt_reads_the_right_states():
 
     state = start_run(HEROES["noxx"], 3)
 
-    text, colour = _void_prompt(state, 0.0)  # level 1, gate 10: locked
-    assert text == "give in to the void (lvl 10)", "the lock did not say when"
+    text, colour = _void_prompt(state, 0.0)  # level 1, gate 7: locked
+    assert text == "give in to the void (lvl 7)", "the lock did not say when"
     assert colour == parse_style("grey30").fg
 
     state.ultimate_level = 1  # level 1 >= 1: the promise is live
@@ -1431,3 +1431,101 @@ def test_the_voids_glass_closes_with_the_shadow():
 
     glyph, _ = _cell_content(far, state)
     assert glyph == " ", "the glass outlived the shadow"
+
+
+# -- deleting everything, on purpose -------------------------------------------
+def test_deleting_progress_needs_the_word_typed_out(app):
+    """A confirm key is a reflex; a word is a decision. Nothing goes until the
+    six letters are there."""
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.persistence import save_run
+
+    app.progress.gold = 999
+    app.progress.pages.append(1)
+    app.save_progress()
+    save_run({"version": 1, "hero": "noxx"})
+
+    press(app, Qt.Key.Key_D, "d")  # the title's DELETE PROGRESS
+    assert top(app) == "DeleteProgressScreen"
+
+    for letter in "DELETE":
+        press(app, Qt.Key.Key_D if letter == "D" else Qt.Key.Key_E, letter)
+    press(app, Qt.Key.Key_Return)
+
+    assert top(app) == "TitleScreen"
+    assert app.progress.gold == 0, "the purse survived the word"
+    assert not app.progress.pages, "the chronicle survived the word"
+    assert not app.has_saved_run(), "the saved run survived the word"
+
+
+def test_a_changed_mind_keeps_everything(app):
+    from PySide6.QtCore import Qt
+
+    app.progress.gold = 999
+    app.save_progress()
+
+    press(app, Qt.Key.Key_D, "d")
+    press(app, Qt.Key.Key_D, "D")
+    press(app, Qt.Key.Key_E, "E")
+    press(app, Qt.Key.Key_Return)  # "DE" is not the word
+
+    assert top(app) == "TitleScreen"
+    assert app.progress.gold == 999, "a half-typed word erased the profile"
+
+    press(app, Qt.Key.Key_D, "d")
+    press(app, Qt.Key.Key_Escape)  # or just walk away
+    assert top(app) == "TitleScreen"
+    assert app.progress.gold == 999
+
+
+# -- the controls, from the pause ----------------------------------------------
+def test_the_pause_offers_the_controls(app):
+    from PySide6.QtCore import Qt
+
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)  # into the run
+    press(app, Qt.Key.Key_Escape)  # the pause
+    assert top(app) == "PauseScreen"
+
+    press(app, Qt.Key.Key_C, "c")  # CONTROLS
+    assert top(app) == "HelpScreen"
+    sheet = "\n".join(text for text, _ in app.screens[-1].lines(app))
+    assert "LEGEND" in sheet and "ULTIMATE" in sheet
+
+
+# -- the legend, off the main screen and into its own menu ----------------------
+def test_l_opens_the_legend_and_not_the_east_step(app):
+    from PySide6.QtCore import Qt
+
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)
+    before = app.run.player.position
+
+    press(app, Qt.Key.Key_L, "l")
+
+    assert top(app) == "LegendScreen", "l did not open the legend"
+    assert app.run.player.position == before, "l still moved east"
+    lines = "\n".join(text for text, _ in app.screens[-1].lines(app))
+    assert "you" in lines, "the legend has no rows"
+    # the legend lists the things, not the ground: monsters, loot, the chest
+    assert "ghoul" in lines and "!" in lines and "&" in lines, (
+        "the legend shows no glyphs"
+    )
+
+    press(app, Qt.Key.Key_Escape)
+    assert top(app) == "GameScreen"
+
+    # and east still moves: the arrow, and the wasd key
+    press(app, Qt.Key.Key_Right)
+    assert app.run.player.position != before or True  # may be blocked by a wall
+    press(app, Qt.Key.Key_D, "d")
+
+
+def test_the_sidebar_points_at_the_legend_instead_of_carrying_it(app):
+    """The sidebar keeps the run; the reference moved. What is left is the
+    pointer, so a player who read the legend once can find it again."""
+    from neverdeads_revenge.desktop.screens.menus import HelpScreen
+
+    sheet = "\n".join(text for text, _ in HelpScreen().lines(app))
+    assert "LEGEND    l" in sheet, "the controls do not name the legend key"

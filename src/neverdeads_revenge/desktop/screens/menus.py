@@ -80,6 +80,36 @@ class _Panel(Screen):
         return True
 
 
+class LegendScreen(_Panel):
+    """What the glyphs are, off the main screen and into a menu.
+
+    The sidebar's job is the run in progress; a reference that never changes
+    was spending the sidebar's best rows on every turn. Opened with `l`.
+    """
+
+    title = "THE LEGEND"
+    hint = "↑↓ scroll   esc closes"
+
+    def __init__(self, state) -> None:
+        super().__init__()
+        self.state = state
+
+    def lines(self, app) -> list[tuple[str, str]]:
+        from neverdeads_revenge.game.prologue import legend_rows
+
+        from ..render import _legend_colour
+
+        rows: list[tuple[str, str]] = []
+        for glyph, text in legend_rows(self.state.depth, self.state.hero):
+            if glyph:
+                rows.append((f"{glyph}   {text}", _legend_colour(glyph)))
+            elif text:
+                rows.append((f"    {text}", "grey70"))
+            else:
+                rows.append(("", ""))
+        return rows
+
+
 class HelpScreen(_Panel):
     """The controls and the terrain reference."""
 
@@ -90,11 +120,12 @@ class HelpScreen(_Panel):
         from neverdeads_revenge.game.prologue import terrain_help
 
         rows = [
-            ("MOVE      arrows / hjkl / yubn (diagonals)", BONE),
+            ("MOVE      arrows / wasd / hjk / yubn (diagonals)", BONE),
             ("WAIT      . or space", BONE),
             ("TAKE      enter  (loot, stairs, or speak)", BONE),
             ("DRINK     q      PACK  i      SHEET  c", BONE),
-            ("HOUR      r      (with the gift)   HELP  ?", BONE),
+            ("LEGEND    l      REFERENCE  ?      HOUR  r", BONE),
+            ("ULTIMATE  f      (once a floor, from level 7)", BONE),
             ("MENU      escape", BONE),
             ("", ""),
             ("THE GLASS", f"bold {PURPLE}"),
