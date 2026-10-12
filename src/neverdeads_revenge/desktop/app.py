@@ -16,7 +16,7 @@ from __future__ import annotations
 import random
 import time
 
-from PySide6.QtCore import QEvent, Qt, QTimer
+from PySide6.QtCore import QEvent, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QKeyEvent, QPalette
 from PySide6.QtWidgets import QMainWindow
 
@@ -66,6 +66,11 @@ GEOMETRY_KEY = Qt.Key.Key_F4
 class DesktopApp(QMainWindow):
     """The whole desktop game: one window, one view, a stack of screens."""
 
+    #: Raised by the sound thread when the audio session gives up. It is a
+    #: signal, not a call, because the thread that notices is not the one that
+    #: owns the save file: a queued signal lands the change on the GUI thread.
+    sound_gave_up = Signal(bool)
+
     def __init__(self, *, seed: int | None = None, no_sound: bool = False) -> None:
         super().__init__()
         self.setWindowTitle("Neverdead's Revenge")
@@ -98,8 +103,11 @@ class DesktopApp(QMainWindow):
         self._seen_log = 0
         self.sfx = Sfx(muted=no_sound or self.progress.muted)
         # If the session gives up entirely the meta record must hear of it, or
-        # the next toggle writes the give-up back down as unmuted.
-        self.sfx.on_mute = self._sound_gave_up
+        # the next toggle writes the give-up back down as unmuted. The sound
+        # thread only emits; the change and the save happen here, on the GUI
+        # thread, queued by Qt.
+        self.sound_gave_up.connect(self._sound_gave_up)
+        self.sfx.on_mute = self.sound_gave_up.emit
         #: The moving pixels. Their own layer, drawn over the still frame.
         self.effects = Effects(self.font.cell_w, self.font.cell_h)
         #: A word about the glass, said for a moment: what a toggle key just did.

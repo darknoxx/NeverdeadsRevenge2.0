@@ -1306,3 +1306,32 @@ def test_the_shop_bell_rings_on_a_purchase(app):
         app.play = original
 
     assert "coin" in played, "a purchase happened in silence"
+
+
+def test_a_sound_thread_never_writes_the_save_itself(app, qapp):
+    """The sound thread notices that the audio session has given up, and the
+    save file is written by whoever owns it. Two threads writing the same
+    progress record race, and the last writer silently drops the other's
+    update. So the thread only announces; the GUI thread saves."""
+    import threading
+
+    from neverdeads_revenge.desktop.audio import GIVE_UP_AFTER
+
+    writers: list[threading.Thread] = []
+    app.save_progress = lambda: writers.append(threading.current_thread())
+    app.progress.muted = False
+
+    def fail_from_the_sound_thread() -> None:
+        for _ in range(GIVE_UP_AFTER):
+            app.sfx._count_failure()
+
+    worker = threading.Thread(target=fail_from_the_sound_thread)
+    worker.start()
+    worker.join()
+    qapp.processEvents()
+
+    assert writers, "the give-up never reached the record"
+    assert all(t is threading.main_thread() for t in writers), (
+        "the sound thread wrote the save file itself"
+    )
+    assert app.progress.muted is True, "the give-up was not recorded as muted"
