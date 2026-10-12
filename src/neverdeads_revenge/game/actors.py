@@ -35,6 +35,7 @@ __all__ = [
     "ENEMIES",
     "make_hero",
     "make_atritas",
+    "make_fortress",
     "make_enemy",
     "make_npc",
     "scale_template",
@@ -111,6 +112,10 @@ class ActorKind(Enum):
     #: nothing counts it on a floor, and it has no turn in the queue. It acts
     #: alongside the scheduler and answers only to its own clock.
     ATRITAS = "atritas"
+    #: Yeti's bastion: a wall of ice that everything hostile would rather bite
+    #: than the hero. Solid, temporary, and it has hit points of its own --
+    #: half of what the builder had when it went up.
+    FORTRESS = "fortress"
 
 
 #: What REVENGE grants a hero, and how much of it.
@@ -729,6 +734,35 @@ def make_enemy(template: EnemyTemplate, position: Pos) -> Actor:
         gold=template.gold,
         curse_chance=template.curse_chance,
         inflicts=template.inflicts,
+    )
+
+
+def make_fortress(position: Pos, health: int) -> Actor:
+    """Raise Yeti's wall of ice.
+
+    ``health`` is half of what Yeti had when he built it, so a fortress raised
+    on the brink is a fortress on the brink -- the ask spends whatever the
+    moment is worth, and nothing pretends otherwise.
+    """
+    return Actor(
+        name="the frozen fortress",
+        kind=ActorKind.FORTRESS,
+        # Hit points only, and none of Yeti's armour: the promise was half his
+        # *blood* in a wall of ice, not half his kit. An armoured wall would
+        # soak the very bites it exists to take.
+        stats=replace(
+            HEROES["yeti"].stats,
+            hp=health,
+            max_hp=health,
+            armor=0,
+            evasion=0,
+        ),
+        position=position,
+        glyph="F",
+        color="#9fe3ef",
+        behaviour="fortress",
+        gold=(0, 0),
+        curse_chance=0.0,
     )
 
 

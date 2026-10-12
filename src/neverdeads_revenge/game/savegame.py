@@ -202,7 +202,7 @@ def dump(state: GameState) -> dict:
         "blood_debt": state.blood_debt,
         "waits_in_a_row": state.waits_in_a_row,
         "salt_ward": state.salt_ward,
-        "void_available": state.void_available,
+        "void_available": state.ultimate_available,
         "trail": _encode(state.trail),
         "helped": _encode(state.helped),
         "wilds": _encode(state.wilds),
@@ -279,11 +279,15 @@ def load(payload: dict) -> GameState:
         state.blood_debt = payload.get("blood_debt", 0)
         state.waits_in_a_row = payload.get("waits_in_a_row", 0)
         state.salt_ward = payload.get("salt_ward", 0)
-        # The floor's one summon. The shadow itself is not carried: it belongs
-        # to the floor it was asked for, and save-and-quit mid-stay lets it
-        # fade without ceremony -- only the *spent* flag matters, because that
-        # is the part a reload could otherwise have back for nothing.
-        state.void_available = payload.get("void_available", True)
+        # The floor's one ask. The summoned things themselves are not carried:
+        # they belong to the floor they were asked for, and save-and-quit
+        # mid-stay lets them fade without ceremony -- only the *spent* flag
+        # matters, because that is the part a reload could otherwise have back
+        # for nothing. The key is still ``void_available`` so saves written
+        # before the other heroes had ultimates still load.
+        state.ultimate_available = payload.get(
+            "void_available", payload.get("ultimate_available", True)
+        )
         state.trail = _decode(payload.get("trail", {}))
         state.helped = set(_decode(payload.get("helped", [])))
         # ``set`` around both, because ``_decode`` hands back a list and these

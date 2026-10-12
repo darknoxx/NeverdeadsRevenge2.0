@@ -27,14 +27,25 @@ from neverdeads_revenge.world.items import ITEMS, make_coin, make_item
 from neverdeads_revenge.world.map import GroundItem
 from neverdeads_revenge.world.tiles import Tile
 
-from .actors import Actor, ActorKind, make_atritas, make_enemy, pick_enemy_template
+from .actors import (
+    Actor,
+    ActorKind,
+    make_atritas,
+    make_enemy,
+    make_fortress,
+    pick_enemy_template,
+)
 from .combat import apply_revenge, attack
 from .curses import TOUCH_CURSES, CURSES, curse_by_key
 from .difficulty import (
     ATRITAS_DRAIN_EVERY,
+    ATRITAS_KILL_HEAL,
     ATRITAS_RADIUS,
     ATRITAS_SWING_EVERY,
     ATRITAS_TURNS,
+    BELL_RADIUS,
+    FORTRESS_SIGHT_PENALTY,
+    FORTRESS_TURNS,
 )
 from .gifts import gift_by_key
 from .lore import numeral
@@ -116,12 +127,11 @@ class Action(Enum):
     CLEANSE = "cleanse"
     QUAFF = "quaff"
     INVENTORY = "inventory"
-    #: Noxx gives into the void. Once a floor, from a level, and only his: a
-    #: shadow called Atritas walks beside him, the whole floor answers to his
-    #: sight, and every second beat of the shadow is a drop of the summoner's
-    #: own blood. Bound to `f`, because the void is not a navigation verb and
-    #: deserved a key of its own.
-    SUMMON_VOID = "summon_void"
+    #: The hero's ultimate. Once a floor, from a level, and different for every
+    #: hero: Noxx gives into the void, Yeti builds the Frozen Fortress,
+    #: Walkyrion shatters the golden bell. Bound to `f`, because an ultimate is
+    #: not a navigation verb and deserved a key of its own.
+    ULTIMATE = "ultimate"
 
     @property
     def direction(self) -> Direction:
@@ -579,8 +589,8 @@ def perform_action(state: GameState, action: Action) -> ActionResult:
             return _take_fame(state)
         case Action.CLEANSE:
             return _cleanse(state)
-        case Action.SUMMON_VOID:
-            return _summon_void(state)
+        case Action.ULTIMATE:
+            return _ultimate(state)
         case Action.QUAFF:
             return _quaff(state)
         case Action.INVENTORY:
@@ -662,6 +672,10 @@ def _try_move(state: GameState, direction: Direction) -> tuple[bool, bool]:
             # asks nothing of your blade, and charging a turn for bumping
             # your own dark would be the void taxing its summoner.
             state.say("It is yours. It moves with you, not against you.", LogKind.PLAIN)
+            return False, False
+        if blocker.kind is ActorKind.FORTRESS:
+            # A wall of your own ice. It is not a fight, and it is not a door.
+            state.say("The ice is yours. It is not going anywhere.", LogKind.PLAIN)
             return False, False
         _resolve_player_attack(state, blocker)
         return True, True
@@ -1196,42 +1210,57 @@ def _rewind(state: GameState) -> ActionResult:
     return _outcome(state, consumed_turn=False, acted=True)
 
 
+def _ultimate(state: GameState) -> ActionResult:
+    """The hero's own ask, once a floor, from the level the dark answers at.
+
+    One gate for all three, then one shape each. Kept as a dispatcher rather
+    than three verbs so the key, the gate, the once-a-floor rule and the
+    sidebar's promise have exactly one place to be true.
+    """
+    if state.level < state.ultimate_level:
+        state.say(
+            f"Not yet. The dark answers at level {state.ultimate_level}.",
+            LogKind.PLAIN,
+        )
+        return ActionResult(consumed_turn=False, acted=False)
+    if not state.ultimate_available:
+        state.say(
+            "The dark has already had this floor. It does not ask twice.",
+            LogKind.PLAIN,
+        )
+        return ActionResult(consumed_turn=False, acted=False)
+
+    builders = {
+        "noxx": _summon_void,
+        "yeti": _build_fortress,
+        "walkyrion": _shatter_bell,
+    }
+    build = builders.get(state.hero.key)
+    if build is None:
+        # A hero the dark has nothing for. The key does nothing at all, and
+        # says nothing: an unanswerable offer is worse than silence.
+        return ActionResult(consumed_turn=False, acted=False)
+    return build(state)
+
+
 def _summon_void(state: GameState) -> ActionResult:
     """Noxx gives into the void. Once a floor, from a level, and his alone.
 
     What the promise pays with, in order: a shadow with a name, the whole
     floor laid open, and a drop of the summoner's own blood on every second
-    beat of the shadow's stay -- never the last drop. What it costs with: the
-    floor's one ask, and whatever the monsters do with the turn of darkness
-    the summon spends.
+    beat of the shadow's stay -- never the last drop. And what the shadow
+    kills feeds the summoner back one heart each: the price is what makes the
+    group worth wading into, and the feeding is what makes it a trade rather
+    than a tax.
     """
-    hero = state.player
-    if state.hero.key != "noxx":
-        # The void is not for everyone. It does not explain itself to them
-        # either: to the others the key does nothing at all.
-        return ActionResult(consumed_turn=False, acted=False)
-    if state.level < state.ultimate_level:
-        state.say(
-            f"Give in to the void -- not yet. It answers at level "
-            f"{state.ultimate_level}.",
-            LogKind.PLAIN,
-        )
-        return ActionResult(consumed_turn=False, acted=False)
-    if not state.void_available:
-        state.say(
-            "The void has already had this floor. It does not ask twice.",
-            LogKind.PLAIN,
-        )
-        return ActionResult(consumed_turn=False, acted=False)
-
-    spot = _void_summon_spot(state)
+    spot = _ultimate_spot(state)
     if spot is None:
         # Nowhere for the dark to stand is a corner case a cast cannot live
         # through: rather than spend the ask and smother the shadow, refuse.
         state.say("The dark has nowhere to stand here.", LogKind.PLAIN)
         return ActionResult(consumed_turn=False, acted=False)
 
-    state.void_available = False
+    state.ultimate_available = False
     state.atritas = make_atritas(spot, state.level, state.depth)
     state.atritas_turns_left = ATRITAS_TURNS
 
@@ -1247,8 +1276,98 @@ def _summon_void(state: GameState) -> ActionResult:
         "Every wall is glass. There is nowhere down here it is not.",
         LogKind.GOOD,
     )
-    # A turn, like the chest and the draught: the summon spends the beat the
-    # monsters were owed, and the shadow's first tick happens inside it.
+    return _spend_the_turn(state)
+
+
+def _build_fortress(state: GameState) -> ActionResult:
+    """Yeti raises the Frozen Fortress: a wall of ice with half his blood in
+    it, which everything on the floor would rather bite than him.
+
+    The price is the sight it takes: the cold closes the dark in to five
+    paces, and the floor goes white around the wall while it stands.
+    """
+    spot = _ultimate_spot(state)
+    if spot is None:
+        state.say("There is no room here to raise a wall.", LogKind.PLAIN)
+        return ActionResult(consumed_turn=False, acted=False)
+
+    state.ultimate_available = False
+    health = max(1, state.player.stats.hp // 2)
+    state.fortress = make_fortress(spot, health)
+    state.fortress_turns_left = FORTRESS_TURNS
+    state.sight_penalty = FORTRESS_SIGHT_PENALTY
+
+    state.say("You build the Frozen Fortress.", LogKind.GOOD)
+    state.say(
+        "The cold rises to your waist, and everything that was hunting you "
+        "turns its head.",
+        LogKind.SYSTEM,
+    )
+    return _spend_the_turn(state)
+
+
+def _shatter_bell(state: GameState) -> ActionResult:
+    """Walkyrion drives his blade into the floor and rings the golden bell.
+
+    Three paces of ground answer: the walls come down -- plain floor, not
+    rubble, because the promise was a clearing and rubble is a fence -- and
+    everything hostile standing there is thrown off its feet and cut. Not the
+    heaviest blow in the game; the shadow holds that record. This one is a
+    room, not a duel.
+    """
+    hero = state.player
+    here = hero.position
+    broken = 0
+    struck: list[str] = []
+
+    for x in range(here[0] - BELL_RADIUS, here[0] + BELL_RADIUS + 1):
+        for y in range(here[1] - BELL_RADIUS, here[1] + BELL_RADIUS + 1):
+            pos = (x, y)
+            if chebyshev(here, pos) > BELL_RADIUS:
+                continue
+            if not state.dungeon_map.in_bounds(pos):
+                continue
+            if state.dungeon_map.tile_at(pos) is Tile.WALL:
+                if _is_outer_wall(state, pos):
+                    # The map's own edge stays: a wall that fell there would
+                    # open the dungeon onto nothing.
+                    continue
+                state.dungeon_map.set_tile(pos, Tile.FLOOR)
+                broken += 1
+
+    state.ultimate_available = False
+    state.say("You shatter the golden bell.", LogKind.GOOD)
+    state.say("The note goes down through the floor.", LogKind.SYSTEM)
+
+    for enemy in list(state.living_enemies):
+        if chebyshev(here, enemy.position) > BELL_RADIUS:
+            continue
+        roll = enemy.stats.hurt(hero.damage_roll(state.rng))
+        state.hits.append(enemy.position)
+        struck.append(f"{enemy.name} ({roll})")
+        if not enemy.stats.alive:
+            state.say(f"The {enemy.name} comes apart on the note.", LogKind.COMBAT)
+            _on_death(state, enemy)
+            _remove_corpse(state, enemy)
+            continue
+        # Off its feet: two paces away from the hero, or as far as the room
+        # allows. The wall it lands against is its own problem.
+        _knock_back(state, enemy)
+        _knock_back(state, enemy)
+
+    if broken:
+        state.say(f"{broken} walls come down around you.", LogKind.GOOD)
+    if struck:
+        state.say("The note finds: " + ", ".join(struck) + ".", LogKind.COMBAT)
+    elif not broken:
+        state.say("The note finds nothing to break.", LogKind.PLAIN)
+    return _spend_the_turn(state)
+
+
+def _spend_the_turn(state: GameState) -> ActionResult:
+    """The tail every ultimate shares: the beat, the answering world, and the
+    eyes. Its own function because the three casts were each growing a copy of
+    it, and the copies had already started to drift."""
     state.turn += 1
     state.total_turns += 1
     advance_world(state)
@@ -1256,13 +1375,22 @@ def _summon_void(state: GameState) -> ActionResult:
     return _outcome(state, consumed_turn=True, acted=True)
 
 
-def _void_summon_spot(state: GameState) -> Pos | None:
-    """Where the shadow stands when it arrives: a walkable tile a few paces
-    from Noxx, preferentially at three. Two is too close to be anywhere, four
-    unlearns the shape of 'beside you'; everything in between is theatre the
-    rules do not need."""
-    from neverdeads_revenge.core.direction import DIRECTIONS
+def _is_outer_wall(state: GameState, pos: Pos) -> bool:
+    """Whether ``pos`` is on the dungeon's own edge, which nothing may break."""
+    x, y = pos
+    return (
+        x <= 0
+        or y <= 0
+        or x >= state.dungeon_map.width - 1
+        or y >= state.dungeon_map.height - 1
+    )
 
+
+def _ultimate_spot(state: GameState) -> Pos | None:
+    """Where a summoned thing stands when it arrives: a walkable tile a few
+    paces from the hero, preferentially at three. Two is too close to be
+    anywhere, four unlearns the shape of 'beside you'; everything in between
+    is theatre the rules do not need."""
     for distance in (3, 2, 4):
         for direction in DIRECTIONS:
             x, y = state.player.position
@@ -1330,6 +1458,12 @@ def _advance_atritas(state: GameState) -> None:
                     )
                     _on_death(state, target)
                     _remove_corpse(state, target)
+                    # The feeding. Every kill the shadow makes hands the
+                    # summoner one heart back, which is what makes wading
+                    # into a group a trade instead of a tax.
+                    healed = state.player.stats.heal(ATRITAS_KILL_HEAL)
+                    if healed:
+                        state.say("The dark gives one back.", LogKind.GOOD)
                 else:
                     state.say(
                         f"Atritas wounds the {target.name} for {outcome.damage}.",
@@ -1355,6 +1489,35 @@ def _advance_atritas(state: GameState) -> None:
             "Atritas sinks back into your dark. The walls are stone again.",
             LogKind.SYSTEM,
         )
+
+
+def _advance_fortress(state: GameState) -> None:
+    """One beat of the fortress's stay. The wall is not a fighter -- it does
+    nothing but stand there and be worth biting -- so this is only the clock
+    and, at the end, the thaw."""
+    fortress = state.fortress
+    if fortress is None or state.over:
+        return
+    if not fortress.alive:
+        # Broken by teeth rather than by time. The enemies' blows set
+        # ``alive`` false; the message belongs to whoever landed the last one,
+        # which is the enemy turn, so this only cleans up.
+        _melt_fortress(state)
+        return
+    state.fortress_turns_left -= 1
+    if state.fortress_turns_left <= 0:
+        _melt_fortress(state)
+        state.say(
+            "The Frozen Fortress thaws to slush, and the cold lets go of "
+            "your eyes.",
+            LogKind.SYSTEM,
+        )
+
+
+def _melt_fortress(state: GameState) -> None:
+    state.fortress = None
+    state.fortress_turns_left = 0
+    state.sight_penalty = 0
 
 
 def _place_beside(state: GameState, atritas: Actor, target: Actor) -> None:
@@ -1769,18 +1932,57 @@ def take_turn(state: GameState, actor: Actor) -> bool:
         return False
 
     player = state.player
-    distance = chebyshev(actor.position, player.position)
+    # THE FROZEN FORTRESS. While the wall stands, it is what everything on
+    # the floor wants: the lure is read once, here, so no monster has its own
+    # opinion about it. The hunter is included -- a wall of ice that the one
+    # monster that always knows where you are ignores would be a wall with a
+    # hole in it.
+    lure = state.lure
+    target = lure.position if lure is not None else player.position
+    distance = chebyshev(actor.position, target)
 
     if distance <= 1:
-        _resolve_enemy_attack(state, actor, player)
+        if lure is not None:
+            _resolve_attack_on_fortress(state, actor, lure)
+        else:
+            _resolve_enemy_attack(state, actor, player)
         return True
 
-    if _move_towards_player(state, actor, player, distance):
+    if _move_towards_player(state, actor, player, distance, towards=target):
         # THE HUNGRY ROAD: the step it just took may have been onto the hero's
         # glass, which is the whole point of leaving it.
         _spring_the_trail(state, actor)
         return True
     return False
+
+
+def _resolve_attack_on_fortress(state: GameState, attacker: Actor, fortress: Actor) -> None:
+    """A monster bites the ice.
+
+    A plain attack, with none of the rules that guard the *hero* -- the salt
+    circle, the grave ward and the last breath are promises about the player,
+    and a wall is not a person. What the fortress has instead is hit points,
+    and when they run out the wall is gone.
+    """
+    outcome = attack(attacker, fortress, state.rng)
+    if not outcome.hit:
+        state.say(
+            f"The {attacker.name} scrapes at the ice and finds no purchase.",
+            LogKind.PLAIN,
+        )
+        return
+    state.hits.append(fortress.position)
+    if not fortress.stats.alive:
+        fortress.alive = False
+        state.say(
+            f"The {attacker.name} breaks the Frozen Fortress apart.",
+            LogKind.BAD,
+        )
+        return
+    state.say(
+        f"The {attacker.name} strikes the ice for {outcome.damage}.",
+        LogKind.PLAIN,
+    )
 
 
 def _resolve_enemy_attack(state: GameState, attacker: Actor, player: Actor) -> None:
@@ -1860,14 +2062,20 @@ def _resolve_enemy_attack(state: GameState, attacker: Actor, player: Actor) -> N
 
 
 def _move_towards_player(
-    state: GameState, actor: Actor, player: Actor, distance: int
+    state: GameState, actor: Actor, player: Actor, distance: int, towards: Pos | None = None
 ) -> bool:
     """Step one cell closer, or drift if there is no way through.
 
     Candidate steps are tried in preference order, straight ahead first, so
     monsters close in rather than jitter. Sideways options let them slide around
     a blocked approach instead of pressing uselessly into a wall.
+
+    ``towards`` is where the step is aimed -- the hero by default, and the
+    Frozen Fortress while it stands. Passing it in rather than reading
+    ``state.lure`` here keeps the targeting decision in one place (the enemy
+    turn), and keeps this a function about stepping.
     """
+    goal = towards if towards is not None else player.position
     if actor.behaviour == "hunter":
         # The hunter takes the first step of the *shortest path*, not the
         # straightest line. A greedy step is what everything else uses, and for
@@ -1875,13 +2083,13 @@ def _move_towards_player(
         # plenty -- but a greedy stepper walks into the first wall between it
         # and the player and stays there, which is a hunter that looks broken
         # rather than dangerous.
-        target = _hunter_step(state, actor, player)
+        target = _hunter_step(state, actor, player, goal)
         if target is None:
             return False
         actor.position = target
         return True
 
-    forward = direction_towards(actor.position, player.position)
+    forward = direction_towards(actor.position, goal)
 
     if actor.behaviour == "cautious" and distance > 5:
         # Keep their distance until the player comes to them.
@@ -1897,23 +2105,27 @@ def _move_towards_player(
             continue
         if state.actor_at(target) is not None:
             continue
-        if chebyshev(target, player.position) >= distance:
+        if chebyshev(target, goal) >= distance:
             continue
         actor.position = target
         return True
     return False
 
 
-def _hunter_step(state: GameState, actor: Actor, player: Actor) -> Pos | None:
-    """The first cell of the shortest walkable path from ``actor`` to ``player``.
+def _hunter_step(
+    state: GameState, actor: Actor, player: Actor, goal_pos: Pos | None = None
+) -> Pos | None:
+    """The first cell of the shortest walkable path from ``actor`` to its goal.
 
     Breadth-first over the floor, which is about fifteen hundred cells on the
     largest map and runs once per hunter turn. The path is rebuilt every turn
     rather than stored: the player moves, the floor does not change, and a
     cached path that outlives the thing it was planned around is how a monster
-    ends up walking confidently into a wall.
+    ends up walking confidently into a wall. ``goal_pos`` overrides the hero
+    when something else on the floor is the thing worth walking to -- the
+    Frozen Fortress, for the one monster whose pathing is not greedy.
     """
-    start, goal = actor.position, player.position
+    start, goal = actor.position, goal_pos if goal_pos is not None else player.position
     came_from: dict[Pos, Pos | None] = {start: None}
     queue = deque([start])
 
@@ -1981,3 +2193,4 @@ def advance_world(state: GameState) -> None:
     # over the dungeon's own answering turn, and every fresh player turn is
     # one tick of its stay.
     _advance_atritas(state)
+    _advance_fortress(state)

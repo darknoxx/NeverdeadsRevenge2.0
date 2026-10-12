@@ -1369,13 +1369,18 @@ def test_the_void_prompt_reads_the_right_states():
     assert text == "give in to the void" and colour == parse_style("grey35").fg
 
     state.atritas = None
-    state.void_available = False
+    state.ultimate_available = False
     text, colour = _void_prompt(state, 0.0)
     assert colour == parse_style("grey35").fg, "a spent ask still advertised"
 
-    state.void_available = True
+    state.ultimate_available = True
     state.hero = HEROES["yeti"]
-    assert _void_prompt(state, 0.0) is None, "the dark advertised to Yeti"
+    text, _ = _void_prompt(state, 0.0)
+    assert text == "build the Frozen Fortress (f)", "Yeti's ask went unnamed"
+
+    state.hero = HEROES["walkyrion"]
+    text, _ = _void_prompt(state, 0.0)
+    assert text == "shatter the golden bell (f)", "Walkyrion's ask went unnamed"
 
 
 def test_f_gives_in_when_the_gate_allows(app):
@@ -1383,7 +1388,7 @@ def test_f_gives_in_when_the_gate_allows(app):
 
     from neverdeads_revenge.desktop.keys import KEY_BINDINGS
 
-    assert KEY_BINDINGS["f"].name == "SUMMON_VOID"
+    assert KEY_BINDINGS["f"].name == "ULTIMATE"
 
     press(app, Qt.Key.Key_Return)
     press(app, Qt.Key.Key_Return)
@@ -1396,7 +1401,7 @@ def test_f_gives_in_when_the_gate_allows(app):
         app.run.ultimate_level = 1
         press(app, Qt.Key.Key_F, "f")  # the ask, taken
         assert app.run.atritas is not None, "the void did not answer"
-        assert app.run.void_available is False
+        assert app.run.ultimate_available is False
         assert "void" in played, "the dark arrived in silence"
 
         before = app.run.atritas

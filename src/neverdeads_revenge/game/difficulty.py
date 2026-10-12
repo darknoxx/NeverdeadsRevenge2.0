@@ -35,6 +35,10 @@ __all__ = [
     "ATRITAS_SWING_EVERY",
     "ATRITAS_DRAIN_EVERY",
     "ATRITAS_RADIUS",
+    "ATRITAS_KILL_HEAL",
+    "FORTRESS_TURNS",
+    "FORTRESS_SIGHT_PENALTY",
+    "BELL_RADIUS",
     "enemy_speed",
     "weight_at_depth",
 ]
@@ -82,6 +86,23 @@ ATRITAS_DRAIN_EVERY = 8
 
 #: How close an enemy has to stand to Noxx before Atritas swings at it.
 ATRITAS_RADIUS = 3
+
+#: How much health Atritas hands back to its summoner for every kill it
+#: makes. The price is per beat and the feeding is per kill, which is the
+#: whole bargain: wade into a group, and the dark pays for the blood it took.
+ATRITAS_KILL_HEAL = 1
+
+#: How long Yeti's Frozen Fortress stands, in turns -- the same promise as the
+#: shadow's, and the same reason for saying it in turns.
+FORTRESS_TURNS = 40
+
+#: How much of Yeti's sight the fortress takes while it stands. The cold
+#: closes the dark in; that is the price of the wall.
+FORTRESS_SIGHT_PENALTY = 5
+
+#: Walkyrion's bell rings for this many paces around him, measured the way
+#: everything in the dungeon measures: Chebyshev, so the field is a square.
+BELL_RADIUS = 3
 
 #: Ceiling on potency. Without it a floor-40 monster would be unplayable and any
 #: formula mistake would silently become exponential. Just over two and a half

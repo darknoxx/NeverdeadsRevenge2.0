@@ -303,21 +303,19 @@ class DesktopApp(QMainWindow):
     _last_pulse_paint: float = 0.0
 
     def _void_is_breathing(self) -> bool:
-        """Whether the ready void's prompt needs repainting to breathe.
+        """Whether a live ultimate's prompt needs repainting to breathe.
 
         The pulse is drawn in the sidebar paste, and a prompt that only
         repaints on keypress would be a breath that stops every time the hero
         stops. Cheap to ask, and wrong only during the one part of the run
-        where the promise can be kept.
+        where a promise can be kept.
         """
         run = self.run
-        return (
-            run is not None
-            and run.hero.key == "noxx"
-            and run.void_available
-            and run.atritas is None
-            and run.level >= run.ultimate_level
-        )
+        if run is None:
+            return False
+        from .render import ultimate_ready
+
+        return ultimate_ready(run)
 
     # -- the stack ----------------------------------------------------------
     def push(self, screen) -> None:

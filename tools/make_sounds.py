@@ -128,6 +128,22 @@ SOUNDS: dict[str, tuple[Note, ...]] = {
     ),
 }
 
+SOUNDS["ice"] = (
+    # The Frozen Fortress goes up: a thin high shimmer stacking upward, cold
+    # and short, like frost cracking across a pane.
+    Note(880, 0.10, duty=0.25, to=1175, volume=0.5),
+    Note(1175, 0.12, duty=0.25, to=1568, noise=0.15, volume=0.45),
+    Note(1568, 0.16, duty=0.125, to=2093, noise=0.25, volume=0.4),
+)
+
+SOUNDS["bell"] = (
+    # The golden bell is struck into the floor: one bright strike and its
+    # ring, then the glass underneath it giving way.
+    Note(1319, 0.09, duty=0.25, volume=0.7),
+    Note(988, 0.16, duty=0.25, to=880, volume=0.55),
+    Note(659, 0.30, duty=0.5, to=330, noise=0.35, volume=0.6),
+)
+
 SOUNDS["void"] = (
     # The void answers. Three descending wide pulses, each dirtier than the
     # last, ending under the range a laptop can produce but shaped so the

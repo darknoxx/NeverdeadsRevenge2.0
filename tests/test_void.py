@@ -51,32 +51,34 @@ def test_the_void_refuses_the_low_levels():
     state.level = 1  # the start; the void answers at ten
 
     before_turns = state.total_turns
-    result = perform_action(state, Action.SUMMON_VOID)
+    result = perform_action(state, Action.ULTIMATE)
 
     assert state.atritas is None
-    assert state.void_available is True
+    assert state.ultimate_available is True
     assert state.total_turns == before_turns, "a refusal cannot cost the floor"
-    assert any("not yet" in entry.text for entry in state.log)
+    assert any("Not yet" in entry.text for entry in state.log)
 
 
-def test_the_void_does_not_advertise_to_other_heroes():
-    """Noxx's dark is his: on anybody else the key is a key that does nothing,
-    and nothing is not a log line reading as an offer."""
-    state = start_run(HEROES["yeti"], 3, ultimate_level=1)
+def test_every_hero_has_an_ask_of_their_own():
+    """The gate is shared; the shape is not. Yeti raises the wall, Walkyrion
+    rings the bell, and neither of them is a shadow."""
+    yeti = start_run(HEROES["yeti"], 3, ultimate_level=1)
+    perform_action(yeti, Action.ULTIMATE)
+    assert yeti.fortress is not None and yeti.atritas is None
+    assert yeti.ultimate_available is False
 
-    result = perform_action(state, Action.SUMMON_VOID)
-
-    assert state.atritas is None
-    assert state.void_available is True
-    assert state.total_turns == 0
-    assert any("atritas" not in entry.text.lower() for entry in state.log[-1:])
+    walkyrion = start_run(HEROES["walkyrion"], 3, ultimate_level=1)
+    perform_action(walkyrion, Action.ULTIMATE)
+    assert walkyrion.fortress is None and walkyrion.atritas is None
+    assert walkyrion.ultimate_available is False
+    assert any("bell" in entry.text.lower() for entry in walkyrion.log)
 
 
 def test_a_testrun_runs_answer_early():
     """`--testrun` lowers the gate so a test can hear the whole song."""
     state = _run(ultimate_level=1)
 
-    result = perform_action(state, Action.SUMMON_VOID)
+    result = perform_action(state, Action.ULTIMATE)
     # Consumes a turn: the scheduler answers the cast, so the shadow is real.
     assert state.atritas is not None, "the void refused its one ask"
 
@@ -86,11 +88,11 @@ def test_the_void_answers_once_and_then_goes_grey():
     """Second cast on one floor: refused, and the refusal is free."""
     state = _run(ultimate_level=1)
 
-    assert perform_action(state, Action.SUMMON_VOID).consumed_turn
-    assert state.void_available is False
+    assert perform_action(state, Action.ULTIMATE).consumed_turn
+    assert state.ultimate_available is False
 
     before_turns = state.total_turns
-    result = perform_action(state, Action.SUMMON_VOID)
+    result = perform_action(state, Action.ULTIMATE)
 
     assert result.consumed_turn is False
     assert state.total_turns == before_turns
@@ -101,12 +103,12 @@ def test_a_new_floor_ask_again():
     """Descent refills the ask: the promise is per floor, and says so."""
     state = _run(ultimate_level=1)
 
-    perform_action(state, Action.SUMMON_VOID)
-    assert state.void_available is False
+    perform_action(state, Action.ULTIMATE)
+    assert state.ultimate_available is False
 
     state.build_floor(2)
 
-    assert state.void_available is True
+    assert state.ultimate_available is True
     assert state.atritas is None, "the shadow stays with its own floor"
 
 
@@ -115,7 +117,7 @@ def test_the_cast_opens_the_whole_floor():
     """Every wall is glass: the whole map is explored, walls and all."""
     state = _run(ultimate_level=1)
 
-    perform_action(state, Action.SUMMON_VOID)
+    perform_action(state, Action.ULTIMATE)
 
     total = state.dungeon_map.width * state.dungeon_map.height
     assert len(state.dungeon_map.explored) == total, (
@@ -126,7 +128,7 @@ def test_the_cast_opens_the_whole_floor():
 def test_the_shadow_stands_beside_noxx():
     state = _run(ultimate_level=1)
 
-    perform_action(state, Action.SUMMON_VOID)
+    perform_action(state, Action.ULTIMATE)
 
     atritas = state.atritas
     assert atritas is not None
@@ -138,7 +140,7 @@ def test_the_shadow_stands_beside_noxx():
 def test_a_bump_against_the_shadow_costs_nothing():
     """Walking into your own dark is a word, not a fight and not a turn."""
     state = _run(ultimate_level=1)
-    perform_action(state, Action.SUMMON_VOID)
+    perform_action(state, Action.ULTIMATE)
     atritas = state.atritas
     state.player.position = (atritas.position[0] - 1, atritas.position[1])
     state.refresh_vision()
@@ -174,7 +176,7 @@ def test_the_drain_spend_health_but_never_the_last():
     cannot kill its summoner, because the ask was a cost, not a bet."""
     state = _run(ultimate_level=1)
 
-    perform_action(state, Action.SUMMON_VOID)
+    perform_action(state, Action.ULTIMATE)
     state.player.stats.hp = 5
 
     _wait(state, ATRITAS_TURNS)
@@ -186,7 +188,7 @@ def test_the_drain_spend_health_but_never_the_last():
 def test_the_drain_happens_on_its_beat():
     state = _run(ultimate_level=1)
 
-    perform_action(state, Action.SUMMON_VOID)
+    perform_action(state, Action.ULTIMATE)
     state.player.stats.hp = 3
     # The cast's own tick is age zero, so the drain's first beat is the
     # eighth wait after it.
@@ -202,7 +204,7 @@ def test_the_shadow_takes_the_preys_beside_noxx():
     """Atritas swings on what stands within his reach of Noxx, and the kill
     is Noxx's: coin, revenge, level, the whole payoff."""
     state = _run(ultimate_level=1)
-    perform_action(state, Action.SUMMON_VOID)
+    perform_action(state, Action.ULTIMATE)
 
     square = (state.player.position[0] + 1, state.player.position[1])
     enemy = _stage_enemy_at_square(state, square, hp=1)
@@ -219,7 +221,7 @@ def test_the_shadow_takes_the_preys_beside_noxx():
 def test_the_shadow_ignores_a_far_prey():
     """The promise was *around* him: distance is respected, reach is not."""
     state = _run(ultimate_level=1)
-    perform_action(state, Action.SUMMON_VOID)
+    perform_action(state, Action.ULTIMATE)
 
     far_square = (
         state.player.position[0] + ATRITAS_RADIUS + 5,
@@ -238,7 +240,7 @@ def test_the_shadow_blinks_beside_its_prey():
     """The dark is found where it strikes: a swing happens one square from
     the target, and on a square that is nobody else's."""
     state = _run(ultimate_level=1)
-    perform_action(state, Action.SUMMON_VOID)
+    perform_action(state, Action.ULTIMATE)
 
     hero_position = state.player.position
     enemy = _stage_enemy_at_square(
@@ -262,7 +264,7 @@ def test_the_shadow_leaves_at_forty_turns():
     """Forty beats, then the dark goes home -- and the walls re-close."""
     state = _run(ultimate_level=1)
 
-    perform_action(state, Action.SUMMON_VOID)
+    perform_action(state, Action.ULTIMATE)
     assert state.atritas is not None
 
     _wait(state, ATRITAS_TURNS)
@@ -278,9 +280,178 @@ def test_the_ask_survives_a_save():
     from neverdeads_revenge.game.savegame import dump, load
 
     state = _run(ultimate_level=1)
-    perform_action(state, Action.SUMMON_VOID)
-    assert state.void_available is False
+    perform_action(state, Action.ULTIMATE)
+    assert state.ultimate_available is False
 
     restored = load(dump(state))
 
-    assert restored.void_available is False
+    assert restored.ultimate_available is False
+
+
+# -- Yeti: the Frozen Fortress --------------------------------------------------
+def _yeti_run(ultimate_level: int = 1, seed: int = 5):
+    return start_run(HEROES["yeti"], seed, ultimate_level=ultimate_level)
+
+
+def test_the_fortress_stands_near_yeti_with_half_his_blood():
+    state = _yeti_run()
+    state.player.stats.hp = 20
+
+    perform_action(state, Action.ULTIMATE)
+
+    fortress = state.fortress
+    assert fortress is not None
+    assert fortress.stats.max_hp == 10, "the wall did not cost half a life"
+    assert fortress.stats.hp == 10
+    distance = chebyshev(fortress.position, state.player.position)
+    assert 2 <= distance <= 4, "the wall went up somewhere else"
+
+
+def test_the_fortress_takes_five_paces_of_sight():
+    state = _yeti_run()
+    before = state.sight_radius
+
+    perform_action(state, Action.ULTIMATE)
+
+    assert state.sight_radius == max(1, before - 5)
+
+
+def test_everything_prefers_the_ice_to_the_hero():
+    """The wall's whole worth: the monsters walk to it and bite it, not Yeti."""
+    state = _yeti_run()
+    perform_action(state, Action.ULTIMATE)
+    fortress = state.fortress
+    assert fortress is not None
+
+    # A ghoul beside the wall on the side it can see -- the sight penalty is
+    # part of the fortress, and a monster that cannot see the ice cannot want
+    # it -- with Yeti out of reach.
+    from neverdeads_revenge.core.direction import direction_towards
+
+    spot = direction_towards(fortress.position, state.player.position).step(
+        fortress.position
+    )
+    state.dungeon_map.set_tile(spot, Tile.FLOOR)
+    enemy = _stage_enemy_at_square(state, spot, hp=99)
+    enemy.stats.damage = (3, 3)
+    state.player.stats.hp = 40
+    before_ice = fortress.stats.hp
+    before_hero = state.player.stats.hp
+
+    _wait(state, 2)
+
+    assert fortress.stats.hp < before_ice, "the wall was ignored"
+    assert state.player.stats.hp == before_hero, "the hero was bitten anyway"
+
+
+def test_the_fortress_melts_at_forty_turns():
+    state = _yeti_run()
+    perform_action(state, Action.ULTIMATE)
+    assert state.fortress is not None
+
+    _wait(state, 40)
+
+    assert state.fortress is None, "the wall overstayed"
+    assert state.sight_penalty == 0, "the cold never let go of the eyes"
+    assert any("thaws" in entry.text for entry in state.log)
+
+
+def test_a_broken_fortress_lets_the_cold_go():
+    """Destroyed by teeth instead of by time: the same clean-up, no timer."""
+    state = _yeti_run()
+    perform_action(state, Action.ULTIMATE)
+    fortress = state.fortress
+    assert fortress is not None
+    fortress.stats.hp = 1
+
+    spot = (fortress.position[0] + 1, fortress.position[1])
+    state.dungeon_map.set_tile(spot, Tile.FLOOR)
+    enemy = _stage_enemy_at_square(state, spot, hp=99)
+    enemy.stats.damage = (9, 9)
+    enemy.stats.accuracy = 99
+
+    _wait(state, 2)
+
+    assert state.fortress is None, "the broken wall stood there anyway"
+    assert state.sight_penalty == 0
+
+
+# -- Walkyrion: the golden bell --------------------------------------------------
+def _walkyrion_run(ultimate_level: int = 1, seed: int = 5):
+    return start_run(HEROES["walkyrion"], seed, ultimate_level=ultimate_level)
+
+
+def test_the_bell_clears_the_walls_but_not_the_maps_edge():
+    """Three paces of walls come down to plain floor -- walkable *and*
+    see-through -- while the dungeon's own edge stays: a wall that fell there
+    would open the floor onto nothing."""
+    state = _walkyrion_run()
+    here = state.player.position
+    inner = (here[0] + 1, here[1])
+    state.dungeon_map.set_tile(inner, Tile.WALL)
+    # A wall on the map's own border, three paces away at most.
+    edge = (state.dungeon_map.width - 1, here[1])
+    state.dungeon_map.set_tile(edge, Tile.WALL)
+
+    perform_action(state, Action.ULTIMATE)
+
+    assert state.dungeon_map.tile_at(inner) is Tile.FLOOR, "an inner wall stood"
+    assert state.dungeon_map.tile_at(edge) is Tile.WALL, "the map's edge broke"
+    assert not state.dungeon_map.is_opaque(inner), "the clearing kept a fence"
+
+
+def test_the_bell_throws_and_cuts_but_does_not_shred():
+    """A room, not a duel: moderate damage, a hard shove, and the whole
+    payoff when the shove is what kills."""
+    state = _walkyrion_run()
+    here = state.player.position
+    square = (here[0] + 1, here[1])
+    state.dungeon_map.set_tile(square, Tile.FLOOR)
+    for x in range(here[0] - 4, here[0] + 5):
+        for y in range(here[1] - 4, here[1] + 5):
+            state.dungeon_map.set_tile((x, y), Tile.FLOOR)
+    enemy = _stage_enemy_at_square(state, square, hp=60)
+    enemy.stats.evasion = 0
+    revenge_before = state.revenge_stacks
+
+    perform_action(state, Action.ULTIMATE)
+
+    assert enemy.alive, "the bell shredded a full-health thing"
+    assert enemy.stats.hp < 60, "the bell did not cut"
+    moved = chebyshev(enemy.position, square)
+    assert moved >= 1, "the bell did not throw it"
+    assert state.revenge_stacks == revenge_before, "a survivor paid revenge"
+
+
+def test_the_bell_kills_pay_like_any_kill():
+    state = _walkyrion_run()
+    here = state.player.position
+    square = (here[0] + 1, here[1])
+    state.dungeon_map.set_tile(square, Tile.FLOOR)
+    enemy = _stage_enemy_at_square(state, square, hp=1)
+    revenge_before = state.revenge_stacks
+
+    perform_action(state, Action.ULTIMATE)
+
+    assert enemy.alive is False
+    assert state.revenge_stacks > revenge_before, "the kill was nobody's"
+    assert state.kills >= 1
+
+
+# -- the feeding ------------------------------------------------------------------
+def test_every_shadow_kill_hands_a_heart_back():
+    """The bargain that makes a group worth wading into: Atritas charges
+    blood by the beat and pays it back by the kill."""
+    state = _run(ultimate_level=1)
+    perform_action(state, Action.ULTIMATE)
+    state.player.stats.hp = 10
+
+    square = (state.player.position[0] + 1, state.player.position[1])
+    _stage_enemy_at_square(state, square, hp=1)
+
+    _wait(state, 4)  # the swing lands at age 3 and kills
+
+    # Ten taken in, one handed back by the kill; the drain's first beat has
+    # not arrived yet, so the trade shows in full.
+    assert state.player.stats.hp == 11, "the kill did not pay the blood back"
+    assert any("gives one back" in entry.text for entry in state.log)

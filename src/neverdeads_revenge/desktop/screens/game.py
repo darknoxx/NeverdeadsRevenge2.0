@@ -30,6 +30,15 @@ from .dialogs import (
 )
 from .game_over import GameOverScreen, NameEntryScreen
 
+#: Which sound each hero's ultimate makes. Kept here rather than in the audio
+#: layer because it is a casting decision -- the sound module only knows how
+#: to play a name.
+ULTIMATE_SOUND: dict[str, str] = {
+    "noxx": "void",
+    "yeti": "ice",
+    "walkyrion": "bell",
+}
+
 __all__ = ["GameScreen", "REWIND"]
 
 #: The answer that takes the ending back, if there is a borrowed hour in hand.
@@ -107,11 +116,14 @@ class GameScreen(Screen):
         curses = len(run.curses)
         curse_keys = {curse.key for curse in run.curses}
         equipment = dict(run.player.equipment)
+        ultimate_ready = run.ultimate_available
 
         result = perform_action(run, action)
-        if action is Action.SUMMON_VOID and run.atritas is not None:
-            # The dark answers with its own note, not the log's second reading.
-            app.play("void")
+        if action is Action.ULTIMATE and ultimate_ready and not run.ultimate_available:
+            # The dark answers with its own note, not the log's second reading
+            # -- and its own note per hero, because the three asks sound like
+            # three different things.
+            app.play(ULTIMATE_SOUND.get(run.hero.key, "void"))
         app.play_after(before)
         self._effects(app, hp, gold, gifts, curses, before[2])
         self._file_pages(app)

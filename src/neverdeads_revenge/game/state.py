@@ -228,12 +228,13 @@ class GameState:
 
     # -- the void ------------------------------------------------------------
     #
-    # Noxx's own dark, once a floor, from the level the shadow starts answering.
-    #: Whether the void can be given into on this floor. Refilled by
-    #: :meth:`build_floor`, spent by the summon, and carried through the save
-    #: so an old save cannot lie its way into a second summon.
-    void_available: bool = True
-    #: The level the void starts answering at. `--testrun` runs turn it to 2.
+    # Each hero's ultimate, once a floor, from the level the dark starts
+    # answering. The flag is shared: one ask a floor, whichever shape it takes.
+    #: Whether this floor's ultimate can still be asked for. Refilled by
+    #: :meth:`build_floor`, spent by the cast, and carried through the save so
+    #: an old save cannot lie its way into a second ask.
+    ultimate_available: bool = True
+    #: The level the ultimates start answering at. `--testrun` runs turn it to 2.
     ultimate_level: int = ULTIMATE_LEVEL
     #: The shadow itself, while it walks. Not in ``enemies`` -- nothing aims at
     #: it, nothing counts it as a monster, and nothing in the turn queue acts
@@ -243,6 +244,14 @@ class GameState:
     atritas: Actor | None = None
     #: Turns left before Atritas sinks back into the dark.
     atritas_turns_left: int = 0
+    #: Yeti's bastion, while it stands. Same shape of life as the shadow: not
+    #: an enemy, not in the queue, kept by its own clock -- and the one thing
+    #: on the floor every monster would rather bite than the hero.
+    fortress: Actor | None = None
+    #: Turns left before the fortress melts.
+    fortress_turns_left: int = 0
+    #: Sight taken away by an ultimate still running, in tiles.
+    sight_penalty: int = 0
 
     # -- what the shop sent with you ----------------------------------------
     #
@@ -382,11 +391,11 @@ class GameState:
         The tightest curse wins rather than the last one applied: two things
         closing the dark in should not open it back up.
         """
-        radius = VIEW_RADIUS + self.sight_bonus
+        radius = VIEW_RADIUS + self.sight_bonus - self.sight_penalty
         for curse in self.curses:
             if curse.sight is not None:
                 radius = min(radius, curse.sight)
-        return radius
+        return max(1, radius)
 
     @property
     def bleed_every(self) -> int:
@@ -616,6 +625,21 @@ class GameState:
             # The shadow stands in the way the way a shadow does: solid to its
             # summoner, and a bump against it is a word, not a fight.
             return self.atritas
+        if self.fortress is not None and self.fortress.position == pos:
+            # A wall of ice is a wall.
+            return self.fortress
+        return None
+
+    @property
+    def lure(self) -> Actor | None:
+        """What the monsters would rather bite than the hero, if anything.
+
+        THE FROZEN FORTRESS and nothing else. It is read by the enemy turn
+        rather than written into every monster, so the one place that decides
+        where a floor's teeth point stays one place.
+        """
+        if self.fortress is not None and self.fortress.alive:
+            return self.fortress
         return None
 
     def npc_beside_player(self) -> Actor | None:
@@ -760,11 +784,13 @@ class GameState:
         self.trail.clear()
         self.helped.clear()
         # THE VOID. One give per floor: a new floor is a new dark asking, and
-        # whatever shadow was walking beside the hero stays with the floor it
-        # was summoned on.
+        # whatever the last one sent stays with the floor it was asked on.
         self.atritas = None
         self.atritas_turns_left = 0
-        self.void_available = True
+        self.fortress = None
+        self.fortress_turns_left = 0
+        self.sight_penalty = 0
+        self.ultimate_available = True
 
         self.arm_amulets()
 

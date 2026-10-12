@@ -166,6 +166,11 @@ def _draw_map(buffer, state, area) -> None:
     x0, y0, width, height = area
     dungeon = state.dungeon_map
     left, top, view_w, view_h = viewport(state, width, height)
+    # THE FROZEN FORTRESS. While it stands the whole floor lies under its own
+    # light: every cell gets the cold white behind it, so the room reads as
+    # the thing it has become. The glyphs keep their colours; the background
+    # is what changes.
+    frosted = state.fortress is not None
 
     for y in range(view_h):
         for x in range(view_w):
@@ -175,6 +180,15 @@ def _draw_map(buffer, state, area) -> None:
                 # A square something struck this turn flashes in reverse --
                 # parsed onto the cell's own style, so the wall stays a wall.
                 style = parse_style("reverse", style)
+            if frosted and style.bg is None:
+                style = Style(
+                    fg=style.fg,
+                    bg=FROST,
+                    bold=style.bold,
+                    dim=style.dim,
+                    reverse=style.reverse,
+                    italic=style.italic,
+                )
             buffer.put(x0 + x, y0 + y, glyph, style)
 
 
@@ -471,33 +485,68 @@ def paste_log(
     painter.end()
 
 
+#: Each hero's promise, as the sidebar says it: the name, and the colour it
+#: is said in. Noxx's petrol, Yeti's ice, Walkyrion's gold -- the colour of
+#: the thing the ask actually summons.
+ULTIMATE_PROMPTS: dict[str, tuple[str, tuple[int, int, int]]] = {
+    "noxx": ("give in to the void", (14, 111, 111)),
+    "yeti": ("build the Frozen Fortress", (159, 227, 239)),
+    "walkyrion": ("shatter the golden bell", (212, 175, 55)),
+}
+
+#: The cold the floor goes while the Frozen Fortress stands.
+FROST = QColor("#e8f2f4")
+
+
+def ultimate_ready(state: GameState) -> bool:
+    """Whether the hero's ask is live: available, off cooldown, and the level
+    is there. Read by the prompt and by the app's breathing tick, so the pulse
+    and the promise cannot disagree about what state they are in."""
+    return (
+        state.ultimate_available
+        and state.atritas is None
+        and state.fortress is None
+        and state.level >= state.ultimate_level
+    )
+
+
 def _void_prompt(state: GameState, now: float) -> tuple[str, QColor] | None:
     """The sidebar's promise of the dark, in the state it is in.
 
-    ``None`` for anybody who is not Noxx: the void does not advertise itself
-    to heroes it does not belong to.
+    One line per hero, in that hero's colour: grey before the level, breathing
+    in the colour once it is live, grey again once the floor has had its ask.
+    While the fortress stands the line turns into its health, because a wall
+    with hit points is a thing the player needs a number for.
     """
-    if state.hero.key != "noxx":
+    entry = ULTIMATE_PROMPTS.get(state.hero.key)
+    if entry is None:
         return None
-    if state.atritas is not None or not state.void_available:
+    name, base = entry
+
+    if state.fortress is not None:
+        fortress = state.fortress
+        return (
+            f"the fortress stands {fortress.stats.hp}/{fortress.stats.max_hp}",
+            QColor(*base),
+        )
+    if state.atritas is not None or not state.ultimate_available:
         # Given: grey until the next floor says otherwise. The dead line is
         # the receipt, not an invitation.
-        return "give in to the void", parse_style("grey35").fg
+        return name, parse_style("grey35").fg
     if state.level < state.ultimate_level:
         return (
-            f"give in to the void (lvl {state.ultimate_level})",
+            f"{name} (lvl {state.ultimate_level})",
             parse_style("grey30").fg,
         )
-    # Ready: dark petrol, breathing -- and not a whisper of a breath: the
-    # promise is supposed to catch the eye from across the log. The pulse
-    # rises past the base colour on purpose; the bloom is a reading of
-    # brightness and that overshoot is what makes the line visibly alive.
+    # Ready: the hero's own colour, breathing -- and not a whisper of a
+    # breath: the promise is supposed to catch the eye from across the log.
+    # The pulse rises past the base colour on purpose; the bloom is a reading
+    # of brightness and that overshoot is what makes the line visibly alive.
     breathing = 0.35 + 0.95 * (0.5 + 0.5 * math.sin(now * 2.0 * math.pi / 1.0))
-    base = (14, 111, 111)
     lit = tuple(
         max(0, min(255, int(round(channel * breathing)))) for channel in base
     )
-    return "give in to the void (f)", QColor(*lit)
+    return f"{name} (f)", QColor(*lit)
 
 
 def marks_names(state: GameState, kind: str) -> list[str]:
