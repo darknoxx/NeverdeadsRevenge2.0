@@ -757,8 +757,11 @@ def make_fortress(position: Pos, health: int) -> Actor:
             evasion=0,
         ),
         position=position,
+        # Black, not ice-blue: the fortress puts the whole floor on white, and
+        # the one glyph that has to be found at a glance should not be the one
+        # that washes out in its own weather.
         glyph="F",
-        color="#9fe3ef",
+        color="#0b0f12",
         behaviour="fortress",
         gold=(0, 0),
         curse_chance=0.0,

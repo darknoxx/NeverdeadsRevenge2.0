@@ -181,8 +181,14 @@ def _draw_map(buffer, state, area) -> None:
                 # parsed onto the cell's own style, so the wall stays a wall.
                 style = parse_style("reverse", style)
             if frosted and style.bg is None:
+                fg = style.fg
+                if dungeon.display_tile(position) is Tile.WALL:
+                    # The walls go darker with the cold on them. The frost is
+                    # light ground, and a light wall on light ground would be
+                    # the one thing the fortress's own weather erases.
+                    fg = parse_style("grey15").fg
                 style = Style(
-                    fg=style.fg,
+                    fg=fg,
                     bg=FROST,
                     bold=style.bold,
                     dim=style.dim,
