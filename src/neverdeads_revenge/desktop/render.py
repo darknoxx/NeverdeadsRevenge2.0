@@ -172,6 +172,11 @@ def _draw_map(buffer, state, area) -> None:
     # the thing it has become. The glyphs keep their colours; the background
     # is what changes.
     frosted = state.fortress is not None
+    # THE CARRION TONGUE paints the floor's dead rather than marking it: a
+    # glyph loses to whatever else is on the square -- and a kill almost always
+    # leaves coin there, so the stain was invisible exactly where it mattered
+    # most. The *background* is the one channel loot does not use.
+    tongue = state.has_draught("carrion_tongue")
 
     for y in range(view_h):
         for x in range(view_w):
@@ -181,6 +186,15 @@ def _draw_map(buffer, state, area) -> None:
                 # A square something struck this turn flashes in reverse --
                 # parsed onto the cell's own style, so the wall stays a wall.
                 style = parse_style("reverse", style)
+            if tongue and position in state.death_squares and style.bg is None:
+                style = Style(
+                    fg=style.fg,
+                    bg=BLOOD_TINT,
+                    bold=style.bold,
+                    dim=style.dim,
+                    reverse=style.reverse,
+                    italic=style.italic,
+                )
             if frosted and style.bg is None:
                 fg = style.fg
                 if dungeon.display_tile(position) is Tile.WALL:
@@ -523,6 +537,11 @@ ULTIMATE_PROMPTS: dict[str, tuple[str, tuple[int, int, int]]] = {
     "yeti": ("build the Frozen Fortress", (159, 227, 239)),
     "walkyrion": ("shatter the golden bell", (212, 175, 55)),
 }
+
+#: The blood the floor keeps while the carrion tongue works. Dark, so a coin
+#: or a glyph on top of it still reads, and so it reads as a soaked square
+#: rather than as a second kind of floor.
+BLOOD_TINT = QColor("#3a0f12")
 
 #: The cold the floor goes while the Frozen Fortress stands. A cold grey-blue
 #: rather than paper white: bright enough to be the fortress's own weather,
