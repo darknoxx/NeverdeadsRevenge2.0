@@ -29,7 +29,9 @@ puts scanlines, bloom and a toggleable barrel over the picture.
 ## How a run goes
 
 A run is **ten floors**, each generated fresh: rooms, grass, rubble, a
-cleansing spring, loot that may be standing under something you have to fight
+cleansing spring that washes a curse off for a price (45% of floors, and
+**two** of them from the fifth floor down, where the chests have had time to
+pile curses on), loot that may be standing under something you have to fight
 for, and stairs down somewhere inconvenient. Enemies scale with the depth, so
 the same floor ten that you barely survive at the start is the floor you have
 to learn.
@@ -157,11 +159,22 @@ and a purchase rings the till.
 
 | upgrade | price | what it does | stacks |
 | --- | --- | --- | --- |
-| Vigour | 140g | +5 max health | up to 3 |
-| Haste | 220g | +0.12 speed | up to 2 |
+| Vigour | 140g, then dearer each time | +5 max health | up to 5 |
+| Haste | 220g, then dearer each time | +0.12 speed | up to 3 |
+| Whetstone | 140g | +1 damage | up to 3 |
+| Edge | 180g | +5% crit chance | up to 3 |
 | Lantern | 180g | +1 sight | once |
 | Pack | 100g, then 150, 200, 250, 300 | +1 pack slot -- the pack starts at 2 and stops at 7 | up to 5 |
 | Blood Bargain | 170g | +0.15 speed, for good -- and -4 max health, for good | up to 2 |
+
+**Bloodlines** are one per hero, and each only works for its own -- the shelf
+is shared, the gift is not. They are the reason to play all three:
+
+| bloodline | hero | what it does | stacks |
+| --- | --- | --- | --- |
+| Bleeding Edge | Noxx | a crit leaves a wound that bleeds longer (+2 turns per stack) | up to 3 |
+| Hoarfrost | Yeti | 15% chance per stack to freeze whoever strikes you | up to 3 |
+| Ring of the Bell | Walkyrion | 20% chance per stack to throw what you hit | up to 3 |
 
 **Wild offers** rotate between runs and sell exactly the risk their name
 suggests. A deal whose cost is a footnote is not a decision, so every one reads
