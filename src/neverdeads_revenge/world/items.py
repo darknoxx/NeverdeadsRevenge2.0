@@ -28,6 +28,7 @@ __all__ = [
     "roll_item",
     "roll_chest_contents",
     "loot_count",
+    "strange_count",
     "equipment_count",
     "chest_count",
     "page_count",
@@ -60,6 +61,10 @@ class ItemTemplate:
     kind: str
     #: Health restored when drunk.
     heal: int = 0
+    #: Which strange rule a draught lays on the floor, by key. ``None`` for
+    #: everything that is not one of the five bottles; the rule lives in
+    #: :mod:`game.draughts`, this is only its name.
+    draught: str | None = None
     #: Which equipment slot it fills. ``None`` for something you drink.
     slot: str | None = None
     #: What wearing it changes.
@@ -134,6 +139,64 @@ ITEMS: dict[str, ItemTemplate] = {
         heal=20,
         weight=2.0,
         weight_growth=1.25,
+    ),
+    # -- the strange draughts ----------------------------------------------
+    #
+    # Five bottles that are not medicine. Their rules are the floor's and last
+    # until the stairs; they are drunk from the pack by name, so `q` -- which
+    # drinks the cheapest thing that covers a wound -- never touches one of
+    # them, and never wastes one on a scratch either.
+    #
+    # Their own kind, and therefore their own spawn budget: rolled from the
+    # healing pool they would have thinned the medicine, and the medicine is
+    # the one supply the whole game is balanced around.
+    "thin_veil": ItemTemplate(
+        key="thin_veil",
+        name="the thin veil",
+        glyph=":",
+        # Pale and ghostly, and picked by arithmetic rather than by eye: the
+        # palette's distance test is strict, and a bottle that reads as a
+        # person (or as the armour) on the map is a bottle nobody picks up.
+        color="#7f9bd4",
+        kind="strange",
+        draught="thin_veil",
+    ),
+    "kindled_breath": ItemTemplate(
+        key="kindled_breath",
+        name="the kindled breath",
+        glyph="^",
+        # A hot orange, chosen by arithmetic: the hunter owns #ff5555 and
+        # Walkyrion #ffb000, and the palette's distance test is not a
+        # formality.
+        color="#f85800",
+        kind="strange",
+        draught="kindled_breath",
+    ),
+    "short_crown": ItemTemplate(
+        key="short_crown",
+        name="the short crown",
+        glyph="=",
+        color="#ffd76e",
+        kind="strange",
+        draught="short_crown",
+    ),
+    "carrion_tongue": ItemTemplate(
+        key="carrion_tongue",
+        name="the carrion tongue",
+        glyph=";",
+        color="#9ad06b",
+        kind="strange",
+        draught="carrion_tongue",
+    ),
+    "drunkards_road": ItemTemplate(
+        key="drunkards_road",
+        name="the drunkard's road",
+        glyph="/",
+        # Hot pink: noxx's violet owns the #a8-range, and the distance test
+        # said so.
+        color="#f00090",
+        kind="strange",
+        draught="drunkards_road",
     ),
     # -- weapons -----------------------------------------------------------
     #
@@ -793,6 +856,18 @@ def loot_count(depth: int) -> int:
     that only pays in blood.
     """
     return min(2 + depth // 3, 5)
+
+
+def strange_count(depth: int) -> int:
+    """How many strange draughts a floor holds.
+
+    Its own budget, deliberately, and the reason the healing supply did not
+    have to be raised to make room for them: rolled from the draught pool the
+    five new bottles would have cut the medicine to a fifth, which is the
+    failure the draught/equipment split was invented to avoid. A floor now
+    holds its medicine *and* a curiosity or two.
+    """
+    return min(1 + depth // 4, 3)
 
 
 def equipment_count(depth: int) -> int:

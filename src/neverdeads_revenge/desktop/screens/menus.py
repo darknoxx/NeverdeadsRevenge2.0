@@ -7,6 +7,7 @@ only place in the game outside a run where coin changes hands.
 
 from __future__ import annotations
 
+from neverdeads_revenge.game.actions import drink, drop
 from neverdeads_revenge.game.gifts import gift_by_key
 from neverdeads_revenge.game.lore import PAGE_COUNT, numeral
 from neverdeads_revenge.game.shop import ShopError, WILD_OFFERS, build_stock, buy, describe_item
@@ -138,50 +139,110 @@ class HelpScreen(_Panel):
 
 
 class PackScreen(_Panel):
-    """What is being carried -- a small box this time.
+    """What is being carried -- a small box with a hand in it.
 
-    The pack holds draughts and nothing else, so a shelf the size of the
-    chronicle is a statement about the inventory the game does not have. Its
-    own draw, modest width and content-driven height, the scroll kept for the
-    pockets a hoarder grows into.
+    Two things can be done with what is in here: **drink it** or **set it
+    down**. `q` on the map still drinks the cheapest thing that covers a
+    wound, because that is the choice nobody wants to make twice; this screen
+    is for the *other* choices -- the five strange bottles, which are drunk by
+    name, and the space they take up.
     """
 
     title = "THE PACK"
+    hint = "↑↓  enter drink  x drop  esc close"
 
     def __init__(self, state) -> None:
         super().__init__()
         self.state = state
+        self.index = 0
+        self.message = ""
 
-    def draw(self, buffer, app) -> None:
-        body = self.lines(app)
-        width = min(buffer.cols - 8, 46)
-        height = min(buffer.rows - 2, max(len(body) + 6, 8))
-        x, y = (buffer.cols - width) // 2, (buffer.rows - height) // 2
-        box(buffer, x, y, width, height, title=self.title, border=BLOOD, fill=True)
-        window = height - 4
-        self._body_size = (len(body), window)
-        self.offset = max(0, min(self.offset, max(0, len(body) - window)))
-        for i, (text, style) in enumerate(body[self.offset : self.offset + window]):
-            buffer.text(x + 3, y + 2 + i, text[: width - 6], parse_style(style))
-        rule(buffer, x + 1, y + height - 2, width - 2, ASH)
-        more = "  ▼" if self.offset + window < len(body) else ""
-        buffer.text(x + 3, y + height - 1, (self.hint + more)[: width - 6], parse_style(ASH))
+    #: What the draw uses for its width, so the wrap and the box agree.
+    width = 46
+    _text_room = width - 12
 
-    def lines(self, app) -> list[tuple[str, str]]:
+    def _kinds(self) -> list[tuple[str, int]]:
+        """``(item_id, count)`` in the order the box shows them."""
         counts: dict[str, int] = {}
         for item in self.state.inventory:
             counts[item.item_id] = counts.get(item.item_id, 0) + 1
-        if not counts:
-            return [("You carry nothing.", ASH)]
-        rows: list[tuple[str, str]] = []
-        for item_id, count in sorted(counts.items()):
+        return sorted(counts.items())
+
+    def _rows(self, kinds: list[tuple[str, int]]) -> list[tuple[str, str, str | None]]:
+        from .dialogs import wrap
+
+        if not kinds:
+            return [("You carry nothing.", ASH, None)]
+        rows: list[tuple[str, str, str | None]] = []
+        for position, (item_id, count) in enumerate(kinds):
             template = ITEMS.get(item_id)
             if template is None:
                 continue
             label = f"{count}x {template.name}" if count > 1 else template.name
-            rows.append((f"{label}", f"bold {BONE}"))
-            rows.append((f"    {describe_item(template)}", ASH))
+            chosen = position == self.index
+            tag = "►" if chosen else " "
+            style = f"bold {BONE}" if chosen else BONE
+            rows.append((f"{tag} {label}", style, item_id))
+            # Wrapped, not clipped: the strange bottles explain themselves in a
+            # sentence, and a sentence the box cuts in half is a bottle nobody
+            # dares drink.
+            for piece in wrap(describe_item(template), self._text_room):
+                rows.append((f"      {piece}", ASH, None))
         return rows
+
+    def draw(self, buffer, app) -> None:
+        kinds = self._kinds()
+        self.index = max(0, min(self.index, len(kinds) - 1)) if kinds else 0
+        rows = self._rows(kinds)
+        width = min(buffer.cols - 8, 46)
+        height = min(buffer.rows - 2, max(len(rows) + 6, 8))
+        x, y = (buffer.cols - width) // 2, (buffer.rows - height) // 2
+        box(buffer, x, y, width, height, title=self.title, border=BLOOD, fill=True)
+        window = height - 4
+        self._body_size = (len(rows), window)
+        self.offset = max(0, min(self.offset, max(0, len(rows) - window)))
+        # The cursor walks and the box follows, two rows per line like the
+        # shop's shelf: a pack line is a thing and what it does.
+        chosen_id = kinds[self.index][0] if kinds else None
+        selected = next(
+            (n for n, row in enumerate(rows) if row[2] is not None and row[2] == chosen_id),
+            0,
+        )
+        if selected < self.offset:
+            self.offset = selected
+        elif selected >= self.offset + window - 1:
+            self.offset = selected - window + 2
+        self.offset = max(0, min(self.offset, max(0, len(rows) - window)))
+        for i, (text, style, _id) in enumerate(rows[self.offset : self.offset + window]):
+            buffer.text(x + 3, y + 2 + i, text[: width - 6], parse_style(style))
+        rule(buffer, x + 1, y + height - 2, width - 2, ASH)
+        line = self.message or self.hint
+        more = "  ▼" if self.offset + window < len(rows) else ""
+        buffer.text(x + 3, y + height - 1, (line + more)[: width - 6], parse_style(ASH))
+
+    def key(self, name, event, app) -> bool:
+        if event.isAutoRepeat():
+            return True
+        kinds = self._kinds()
+        if name in ("up", "k"):
+            if kinds:
+                self.index = (self.index - 1) % len(kinds)
+            return True
+        if name in ("down", "j"):
+            if kinds:
+                self.index = (self.index + 1) % len(kinds)
+            return True
+        if name in ("enter", "return") and kinds:
+            self.message = drink(self.state, kinds[self.index][0])
+            app.play("item")
+            return True
+        if name in ("x", "d") and kinds:
+            self.message = drop(self.state, kinds[self.index][0])
+            return True
+        if name in ("escape", "i"):
+            app.pop()
+            return True
+        return True
 
 
 class CharacterScreen(_Panel):

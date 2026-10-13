@@ -1637,7 +1637,9 @@ def test_an_item_that_is_not_equipment_never_fills_a_slot():
             assert template.kind in wearable, template.key
             assert not template.heal, f"{template.key} both heals and is worn"
         else:
-            assert template.kind == "draught", template.key
+            # Two kinds of bottle now: the medicine, and the five strange
+            # draughts that lay a rule on the floor.
+            assert template.kind in ("draught", "strange"), template.key
 
 
 def test_picking_up_nothing_says_so():

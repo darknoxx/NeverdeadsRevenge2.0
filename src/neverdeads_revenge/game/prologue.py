@@ -119,10 +119,19 @@ def item_legend() -> list[tuple[str, str]]:
     The chest is a row of its own: it is not loot, it is a question.
     """
     rows: list[tuple[str, str]] = []
+    strange: list[str] = []
     for template in ITEMS.values():
         if template.chest_only or template.slot is not None:
             continue
+        if template.kind == "strange":
+            # One row for the five strange bottles, glyphs together: the map
+            # tells them apart by colour, and the legend has one line to say
+            # that they are a rule rather than a mending.
+            strange.append(template.glyph)
+            continue
         rows.append((template.glyph, f"{template.name}, heals {template.heal}"))
+    if strange:
+        rows.append((" ".join(strange), "strange draughts, a rule for this floor"))
     # The worn things get a row *each* now. They used to share one row of
     # glyphs -- three separate rows cost the terminal sidebar a row it did not
     # have -- but a shared row could only carry one colour, and the three are

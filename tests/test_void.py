@@ -657,3 +657,128 @@ def test_bought_slots_carry_into_the_run_and_through_a_save():
 
     assert state.pack_capacity == BASE_PACK_SLOTS + 2
     assert load(dump(state)).pack_capacity == BASE_PACK_SLOTS + 2
+
+
+# -- the strange draughts ---------------------------------------------------------
+def _pack(state, item_id: str) -> None:
+    from neverdeads_revenge.world.items import ITEMS, make_item
+
+    state.inventory.append(make_item(ITEMS[item_id]))
+
+
+def test_the_veil_hides_until_the_hero_strikes():
+    """Nothing looks at the hero while the veil holds -- and the first landing
+    blow tears it, because a veil is a promise about looking."""
+    from neverdeads_revenge.game.actions import drink
+
+    state = _run()
+    square = (state.player.position[0] + 1, state.player.position[1])
+    state.dungeon_map.set_tile(square, Tile.FLOOR)
+    enemy = _stage_enemy_at_square(state, square, hp=99)
+    _pack(state, "thin_veil")
+
+    drink(state, "thin_veil")
+    assert state.has_draught("thin_veil")
+
+    _wait(state, 3)
+    assert enemy.position == square, "the veiled hero was hunted anyway"
+    assert state.player.hp == state.player.max_hp, "the veiled hero was bitten"
+
+    perform_action(state, Action.MOVE_EAST)  # the blow that tears it
+    assert not state.has_draught("thin_veil"), "the veil outlived the blow"
+
+
+def test_the_kindled_breath_sets_every_blow_burning():
+    from neverdeads_revenge.game.actions import drink
+
+    state = _run()
+    square = (state.player.position[0] + 1, state.player.position[1])
+    state.dungeon_map.set_tile(square, Tile.FLOOR)
+    enemy = _stage_enemy_at_square(state, square, hp=99)
+    _pack(state, "kindled_breath")
+
+    drink(state, "kindled_breath")
+    perform_action(state, Action.MOVE_EAST)
+
+    assert "burn" in enemy.statuses, "the breath did not kindle"
+
+
+def test_the_short_crown_pays_the_charge_twice():
+    from neverdeads_revenge.game.actions import drink
+
+    state = _run()
+    square = (state.player.position[0] + 1, state.player.position[1])
+    state.dungeon_map.set_tile(square, Tile.FLOOR)
+    _stage_enemy_at_square(state, square, hp=1)
+    _pack(state, "short_crown")
+
+    drink(state, "short_crown")
+    perform_action(state, Action.MOVE_EAST)
+
+    assert state.revenge_stacks == 2, "the crown paid the ordinary charge"
+
+
+def test_the_carrion_tongue_feeds_on_the_floors_dead():
+    from neverdeads_revenge.game.actions import drink
+
+    state = _run()
+    square = (state.player.position[0] + 1, state.player.position[1])
+    state.dungeon_map.set_tile(square, Tile.FLOOR)
+    _stage_enemy_at_square(state, square, hp=1)
+    perform_action(state, Action.MOVE_EAST)  # the kill, and the square remembers
+    assert square in state.death_squares
+
+    _pack(state, "carrion_tongue")
+    drink(state, "carrion_tongue")
+    state.player.stats.hp = 5
+    state.player.position = (square[0] - 1, square[1])
+    state.refresh_vision()
+
+    perform_action(state, Action.MOVE_EAST)  # onto the dead square
+
+    assert state.player.stats.hp == 6, "the tongue found nothing"
+    assert square not in state.death_squares, "the dead square fed twice"
+
+
+def test_the_drunkards_road_chooses_the_steps():
+    from neverdeads_revenge.game.actions import drink
+
+    state = _run()
+    _pack(state, "drunkards_road")
+    drink(state, "drunkards_road")
+
+    # Walk ten times "east" and see where the feet take us: at least one step
+    # must have gone somewhere else, or the bottle did nothing.
+    positions = set()
+    for _ in range(10):
+        perform_action(state, Action.MOVE_EAST)
+        positions.add(state.player.position)
+    assert len(positions) > 1
+
+
+def test_the_strange_draughts_are_the_floors_and_no_longer():
+    from neverdeads_revenge.game.actions import drink
+
+    state = _run()
+    _pack(state, "short_crown")
+    drink(state, "short_crown")
+    assert state.has_draught("short_crown")
+
+    state.build_floor(2)
+
+    assert not state.floor_draughts, "a rule crossed the stairs"
+    assert not state.death_squares, "the carrion memory crossed the stairs"
+
+
+def test_a_floor_holds_medicine_and_curiosities_apart():
+    """The strange draughts have their own budget: rolled from the healing pool
+    they would have cut the medicine, which is the one supply the game is
+    balanced around."""
+    from neverdeads_revenge.world.items import ITEMS, loot_count, strange_count
+
+    for depth in (1, 5, 10):
+        assert strange_count(depth) >= 1
+        assert loot_count(depth) >= 2
+    strange = [t for t in ITEMS.values() if t.kind == "strange"]
+    assert len(strange) == 5
+    assert all(t.heal == 0 and t.draught for t in strange), "a strange bottle heals"

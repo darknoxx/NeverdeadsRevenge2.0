@@ -222,7 +222,13 @@ class InfoScreen(_Dialog):
     Everything a run catches whose shape is its own price -- a blade picked
     up, a curse left in you, a gift the dark decided you need -- gets one of
     these, because a log line scrolls away and a note in the sidebar is a
-    decoration. One box, one page, read with one press.
+    decoration.
+
+    It closes on enter and escape and on nothing else. Any-key closing was a
+    trap: a wraith lands a curse mid-fight, the window opens, and the direction
+    key already under the player's thumb dismisses the page before a word of it
+    is read. A key you have to *choose* is the difference between reading it
+    and losing it.
     """
 
     def __init__(self, title: str, name: str, text: str) -> None:
@@ -238,7 +244,10 @@ class InfoScreen(_Dialog):
     def key(self, name, event, app) -> bool:
         if event.isAutoRepeat():
             return True
-        self.finish(app, None)
+        if name in ("enter", "return", "escape"):
+            self.finish(app, None)
+        # Everything else is swallowed: a direction key, a drink, a wait -- all
+        # of them are keys the player was already pressing.
         return True
 
 

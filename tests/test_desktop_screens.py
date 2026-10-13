@@ -695,30 +695,31 @@ def test_the_pack_of_two_items_does_not_scroll(app, font):
     assert screen.offset == 0
 
 
-def test_a_long_list_stops_at_its_floor(app, font):
+def test_a_long_pack_walks_its_cursor_and_never_scrolls_past_its_floor(app, font):
+    """The pack has a hand in it now: down moves the cursor and the box
+    follows, two rows per line, and the floor is the floor."""
     from neverdeads_revenge.desktop.buffer import PatternBuffer
     from neverdeads_revenge.desktop.screens.menus import PackScreen
     from neverdeads_revenge.world.items import ITEMS, make_item
 
-    class _Pack:
+    class _LongPack:
         inventory = [make_item(ITEMS[key]) for key in list(ITEMS)[:14]]
 
-    screen = PackScreen(_Pack())
+    screen = PackScreen(_LongPack())
     buffer = PatternBuffer(70, 30, font)
     screen.draw(buffer, app)
     total, window = screen._body_size
     assert window < total, "the pack has no overflow to test against"
 
-    for _ in range(total + 10):
+    for _ in range(40):
         screen.key("down", _FakeEvent(), app)
-    assert screen.offset == max(0, total - window), "the floor scrolled past the end"
+        assert screen.offset <= max(0, total - window), "the box scrolled past its end"
+        assert screen.index < len(screen._kinds()), "the cursor left the pack"
 
-    screen.key("up", _FakeEvent(), app)
-    assert screen.offset == max(0, total - window) - 1
-
-    for _ in range(total + 10):
+    for _ in range(40):
         screen.key("up", _FakeEvent(), app)
-    assert screen.offset == 0
+        assert screen.offset >= 0
+        assert screen.index < len(screen._kinds())
 
 
 def test_the_shelf_stops_at_its_ends(app):
@@ -774,17 +775,16 @@ def test_a_held_scroll_key_walks_the_list(app):
 
 
 def test_a_held_scroll_key_walks_a_panel(app, font):
+    """The read-only panels scroll on a held key; the pack does not, because
+    the pack has a cursor and a menu answers one gesture per line."""
     from neverdeads_revenge.desktop.buffer import PatternBuffer
-    from neverdeads_revenge.desktop.screens.menus import PackScreen
-    from neverdeads_revenge.world.items import ITEMS, make_item
+    from neverdeads_revenge.desktop.screens.menus import ChronicleScreen
 
-    class _LongPack:
-        inventory = [make_item(ITEMS[key]) for key in list(ITEMS)[:14]]
-
-    screen = PackScreen(_LongPack())
+    screen = ChronicleScreen()  # thirty-seven pages, so it always overflows
     buffer = PatternBuffer(70, 30, font)
     screen.draw(buffer, app)
     total, window = screen._body_size
+    assert window < total, "the chronicle has no overflow to test against"
 
     class _Repeat:
         def isAutoRepeat(self) -> bool:
@@ -1529,3 +1529,100 @@ def test_the_sidebar_points_at_the_legend_instead_of_carrying_it(app):
 
     sheet = "\n".join(text for text, _ in HelpScreen().lines(app))
     assert "LEGEND    l" in sheet, "the controls do not name the legend key"
+
+
+# -- the pickup page does not close under your thumb -----------------------------
+def test_a_pickup_page_ignores_everything_but_enter(app):
+    """The wraith's curse lands mid-fight, the page opens, and the direction
+    key already under the player's thumb used to dismiss it unread."""
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.world.items import ITEMS, make_item
+
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)
+    state = app.run
+    state.dungeon_map.add_item(state.player.position, make_item(ITEMS["tooth"]))
+    press(app, Qt.Key.Key_Return)  # the pickup
+    assert top(app) == "InfoScreen"
+
+    for key in (Qt.Key.Key_Right, Qt.Key.Key_Down, Qt.Key.Key_Space, Qt.Key.Key_Q):
+        press(app, key)
+        assert top(app) == "InfoScreen", "a direction key ate the page"
+
+    press(app, Qt.Key.Key_Return)
+    assert top(app) == "GameScreen"
+
+    # and escape is allowed: it is a key you *choose*
+    state.dungeon_map.add_item(state.player.position, make_item(ITEMS["bite"]))
+    press(app, Qt.Key.Key_Return)
+    assert top(app) == "InfoScreen"
+    press(app, Qt.Key.Key_Escape)
+    assert top(app) == "GameScreen"
+
+
+# -- the pack: drink it or set it down -------------------------------------------
+def test_the_pack_drinks_and_drops_by_name(app):
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.world.items import ITEMS, make_item
+    from neverdeads_revenge.world.tiles import Tile
+
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)
+    state = app.run
+    state.inventory.append(make_item(ITEMS["thin_veil"]))
+    state.inventory.append(make_item(ITEMS["potion"]))
+    state.dungeon_map.set_tile(
+        (state.player.position[0] + 1, state.player.position[1]), Tile.FLOOR
+    )
+
+    press(app, Qt.Key.Key_I, "i")
+    assert top(app) == "PackScreen"
+    screen = app.screens[-1]
+
+    # the cursor picks; potion sorts first, thin_veil second
+    kinds = [item_id for item_id, _ in screen._kinds()]
+    assert kinds == ["potion", "thin_veil"], kinds
+    press(app, Qt.Key.Key_Down)
+    assert screen.index == 1
+
+    press(app, Qt.Key.Key_Return)  # drink the veil
+    assert state.has_draught("thin_veil"), "the pack did not drink by name"
+    assert "thin_veil" not in [i.item_id for i in state.inventory], "the bottle stayed"
+
+    # and now drop the potion: it lands beside the hero
+    press(app, Qt.Key.Key_Up)
+    assert screen.index == 0
+    press(app, Qt.Key.Key_X, "x")
+    assert "potion" not in [i.item_id for i in state.inventory], "the drop did nothing"
+    beside = [
+        pos
+        for pos in state.dungeon_map.items
+        if state.dungeon_map.item_at(pos) is not None
+        and state.dungeon_map.item_at(pos).item_id == "potion"
+    ]
+    assert beside, "the dropped draught is nowhere on the floor"
+
+    press(app, Qt.Key.Key_Escape)
+    assert top(app) == "GameScreen"
+
+
+def test_q_never_drinks_a_strange_bottle(app):
+    """`q` is the careful drink -- the cheapest thing that covers the wound.
+    A bottle that lays a rule is not a wound's business."""
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.world.items import ITEMS, make_item
+
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)
+    state = app.run
+    state.inventory.append(make_item(ITEMS["short_crown"]))
+    state.player.stats.hp = 5
+
+    press(app, Qt.Key.Key_Q, "q")
+
+    assert state.player.stats.hp == 5, "q drank a bottle that heals nothing"
+    assert "short_crown" in [i.item_id for i in state.inventory], "q wasted the crown"
+    assert not state.floor_draughts

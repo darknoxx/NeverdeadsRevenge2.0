@@ -37,6 +37,7 @@ from .actors import (
 )
 from .combat import apply_revenge, attack
 from .curses import TOUCH_CURSES, CURSES, curse_by_key
+from .draughts import draught_by_key
 from .difficulty import (
     ATRITAS_DRAIN_EVERY,
     ATRITAS_HUNT_RADIUS,
@@ -62,6 +63,8 @@ __all__ = [
     "take_turn",
     "advance_world",
     "descend",
+    "drink",
+    "drop",
     "MAX_ENEMY_ACTIONS_PER_PLAYER_TURN",
 ]
 
@@ -313,6 +316,9 @@ def _on_death(state: GameState, enemy: Actor) -> None:
     """
     state.kills += 1
     state.deaths.append(enemy.position)
+    # THE CARRION TONGUE reads this long after the blood has been cleared: a
+    # square where something died is a square that feeds, for the whole floor.
+    state.death_squares.add(enemy.position)
     _drop_coins(state, enemy)
     if enemy.behaviour == "hunter":
         _hunter_spoils(state, enemy)
@@ -350,6 +356,10 @@ def _on_death(state: GameState, enemy: Actor) -> None:
 
     before = state.revenge_stacks
     gain = 1 + (1 if state.has_passive("long_hunger") else 0)
+    if state.has_draught("short_crown"):
+        # THE SHORT CROWN. Twice the charge for the floor and no longer: it is
+        # the one bottle that turns a floor into a fight worth picking.
+        gain *= 2
     state.revenge_stacks = apply_revenge(player, before + gain)
     if state.revenge_stacks > before:
         # Say what it actually granted, and say it by its own name: the tide,
@@ -654,6 +664,12 @@ def _try_move(state: GameState, direction: Direction) -> tuple[bool, bool]:
     gift can: a step that reported "nothing happened" would leave the player
     standing still on screen.
     """
+    if state.has_draught("drunkards_road"):
+        # THE DRUNKARD'S ROAD. The direction is chosen for the hero, every
+        # step, from the run's own dice -- so a seeded run stays a run and not
+        # a coin toss, and the player spends the floor steering a cart.
+        direction = state.rng.pick(DIRECTIONS)
+
     target = direction.step(state.player.position)
     if not state.dungeon_map.in_bounds(target):
         return False, False
@@ -725,6 +741,13 @@ def _try_move(state: GameState, direction: Direction) -> tuple[bool, bool]:
     _after_step(state, origin, direction)
     _bleed(state)
     _knit(state)
+    if state.has_draught("carrion_tongue") and target in state.death_squares:
+        # THE CARRION TONGUE. A square where something died feeds the hero who
+        # walks over it -- once: the floor remembers the dead, not the meal.
+        state.death_squares.discard(target)
+        healed = state.player.stats.heal(1)
+        if healed:
+            state.say("The tongue finds what the floor left. One back.", LogKind.GOOD)
 
     # THE STEP BEHIND. Every fifth step costs no time at all, which is the one
     # gift that touches the *score* -- turns are the score -- and therefore the
@@ -906,13 +929,20 @@ def _resolve_player_attack(state: GameState, target: Actor) -> None:
         state.say("It has been waiting for this one.", LogKind.GOOD)
 
     _enemy_takes_damage(state, target, outcome)
+    if state.has_draught("thin_veil"):
+        # The veil was a promise about *looking*. The moment a blow lands, the
+        # floor has seen where the hero is, and the bottle's work is done.
+        state.floor_draughts.discard("thin_veil")
+        state.say("The veil tears, and the floor finds you.", LogKind.BAD)
     if not outcome.killed:
         # The blade's own statuses, plus the two gifts that add one. Built here
         # rather than on the weapon because a gift is a *rule about the player*,
         # not a property of the thing in their hand -- and the wound only opens
         # on the first blow, which is the same "first" the patient knife reads.
         opening: tuple[str, ...] = _inflicts_of(state.player)
-        if state.has_gift("ash_mark"):
+        if state.has_gift("ash_mark") or state.has_draught("kindled_breath"):
+            # THE KINDLED BREATH is the ash mark in a bottle: every blow sets
+            # it burning, for as long as the floor lasts.
             opening += ("burn",)
         if first and state.has_gift("open_wound"):
             opening += ("bleed",)
@@ -1785,11 +1815,20 @@ def _quaff(state: GameState) -> ActionResult:
     # Spend the smallest draught that does the job without overflowing; if none
     # can, spend the smallest one anyway and accept the spill. Either way the
     # good draught is saved for a wound that needs it.
-    affordable = [item for item in state.inventory if item.heal <= missing]
+    #
+    # Only the ones that *heal*: the strange draughts are drunk from the pack by
+    # name, and a mouthful that mends nothing would have been swallowed here
+    # whenever the wounds were small.
+    healing = [item for item in state.inventory if item.heal > 0]
+    if not healing:
+        state.say("Nothing in the pack heals.", LogKind.PLAIN)
+        return ActionResult(consumed_turn=False, acted=False)
+
+    affordable = [item for item in healing if item.heal <= missing]
     item = (
         max(affordable, key=lambda i: i.heal)
         if affordable
-        else min(state.inventory, key=lambda i: i.heal)
+        else min(healing, key=lambda i: i.heal)
     )
 
     state.inventory.remove(item)
@@ -1958,12 +1997,70 @@ def descend(state: GameState) -> ActionResult:
     return _try_descend(state)
 
 
+#: Public wrappers for the pack: the two things a player can do with a thing
+#: they are carrying, by name, from the pack screen. The screen picks; the
+#: engine decides what the pick means.
+def drink(state: GameState, item_id: str) -> str:
+    """Drink one named draught out of the pack. Returns the line to show.
+
+    Healing draughts mend; the strange ones lay a rule on the floor. Either
+    way the bottle is gone, and either way it is the *player's* choice which
+    one -- `q` still drinks the cheapest that covers the wound, because that
+    decision is the one nobody wants to make twice.
+    """
+    item = next((i for i in state.inventory if i.item_id == item_id), None)
+    if item is None:
+        return "There is none of that in the pack."
+    if state.draughts_forbidden:
+        return "Your mouth is closed to it. Nothing you drink stays down."
+
+    template = ITEMS.get(item.item_id)
+    state.inventory.remove(item)
+
+    if template is not None and template.draught:
+        draught = draught_by_key(template.draught)
+        state.floor_draughts.add(template.draught)
+        if draught is not None:
+            state.say(
+                f"You drink the {item.name}. {draught.blurb.capitalize()} -- "
+                f"until you leave this floor.",
+                LogKind.GOOD,
+            )
+            return f"{draught.name}: {draught.blurb}."
+        return f"You drink the {item.name}."
+
+    amount = max(1, round((template.heal if template else 0) * state.heal_scale))
+    healed = state.player.stats.heal(amount)
+    state.say(f"You drink the {item.name} and recover {healed}.", LogKind.GOOD)
+    return f"You drink the {item.name} and recover {healed}."
+
+
+def drop(state: GameState, item_id: str) -> str:
+    """Set one named thing out of the pack onto the floor beside the hero.
+
+    Beside, not underfoot: an item beneath the player is one they pick up again
+    the next time they press enter, which is a loop, not a discard.
+    """
+    item = next((i for i in state.inventory if i.item_id == item_id), None)
+    if item is None:
+        return "There is none of that in the pack."
+    if not _set_down(state, item):
+        return "There is nowhere to put it down."
+    state.inventory.remove(item)
+    state.say(f"You set down the {item.name}.", LogKind.PLAIN)
+    return f"You set down the {item.name}."
+
+
 # -- enemy turns -----------------------------------------------------------
 
 
 def take_turn(state: GameState, actor: Actor) -> bool:
     """Let one enemy act. Returns whether it actually spent a turn."""
     if not actor.alive or state.over:
+        return False
+    if state.has_draught("thin_veil"):
+        # THE THIN VEIL. Nothing looks at the hero until the hero strikes: the
+        # same gate as being unseen, and it drops the moment a blow lands.
         return False
     if actor.behaviour != "hunter" and not state.dungeon_map.is_visible(
         actor.position

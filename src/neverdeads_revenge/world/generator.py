@@ -29,6 +29,7 @@ from .items import (
     rare_find_count,
     roll_chest_contents,
     roll_item,
+    strange_count,
 )
 from .map import DungeonMap, GroundItem
 from .tiles import Tile
@@ -544,6 +545,14 @@ def _scatter_loot(
     to_place += [
         make_item(roll_item(rng, depth, kinds=("weapon", "armour")))
         for _ in range(equipment_count(depth))
+    ]
+    # And the strange draughts, from their own pool: five bottles that lay a
+    # rule on the floor, none of them medicine. Rolled from the draught pool
+    # they would have cut the healing to a fifth; rolled apart, the floor holds
+    # both.
+    to_place += [
+        make_item(roll_item(rng, depth, kinds=("strange",)))
+        for _ in range(strange_count(depth))
     ]
     if curse_keys:
         # A different curse in each chest on a floor, and never more chests than

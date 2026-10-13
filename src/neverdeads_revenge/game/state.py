@@ -268,6 +268,15 @@ class GameState:
     #: How many things the pack holds. Base plus whatever the shop sold, so a
     #: run that bought slots carries them for its whole life.
     pack_capacity: int = BASE_PACK_SLOTS
+    #: The strange draughts drunk on this floor, by key. A set rather than a
+    #: single slot because nothing stops a player drinking two, and every one
+    #: of them is emptied by :meth:`build_floor` -- a rule carried down the
+    #: stairs would be a rule the next floor never agreed to.
+    floor_draughts: set[str] = field(default_factory=set)
+    #: Where things have died on this floor, for THE CARRION TONGUE. A floor
+    #: long memory rather than the per-action ``deaths`` list: the tongue feeds
+    #: on a square long after the blood that marked it has been cleared.
+    death_squares: set[Pos] = field(default_factory=set)
 
     # -- what the shop sent with you ----------------------------------------
     #
@@ -523,6 +532,10 @@ class GameState:
     def has_gift(self, key: str) -> bool:
         """Whether the dungeon has handed this gift over."""
         return key in self.gifts
+
+    def has_draught(self, key: str) -> bool:
+        """Whether a strange draught is working on this floor."""
+        return key in self.floor_draughts
 
     @property
     def unheld_gifts(self) -> tuple[str, ...]:
@@ -839,6 +852,11 @@ class GameState:
         self.fortress_turns_left = 0
         self.sight_penalty = 0
         self.ultimate_available = True
+        # The floor's own weather, and its own memory of the dead. Both are the
+        # floor's: neither the strange draughts nor the carrion tongue's
+        # feeding crosses the stairs.
+        self.floor_draughts.clear()
+        self.death_squares.clear()
 
         self.arm_amulets()
 

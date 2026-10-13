@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 
 from neverdeads_revenge.core.rng import Rng
 from neverdeads_revenge.game.amulets import AMULETS, blurb_for
+from neverdeads_revenge.game.draughts import draught_by_key
 from neverdeads_revenge.game.statuses import status_by_key
 from neverdeads_revenge.world.items import ITEMS, ItemTemplate
 
@@ -370,6 +371,11 @@ def describe_item(template: ItemTemplate) -> str:
     """
     if template.amulet is not None:
         return blurb_for(template.amulet)
+    if template.draught is not None:
+        # A strange bottle's rule, from the draught table -- the same way an
+        # amulet's sentence comes from its own.
+        draught = draught_by_key(template.draught)
+        return draught.blurb if draught is not None else ""
     if template.heal:
         return f"heals {template.heal}"
 

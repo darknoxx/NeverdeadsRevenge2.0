@@ -70,6 +70,15 @@ what you carry, and by spending the ground you are standing on.
 - **Thirteen weapons** (the rusted tooth, the grey bite, the long hunger, the
   patient knife...) and **ten pieces of armour** (the thin hide, the rune
   plate, the ashfall cloak...), each with its own modifiers.
+- **Five strange draughts**, none of them medicine: each lays a rule on the
+  floor and lasts only until the stairs. THE THIN VEIL (nothing looks at you
+  until you strike), THE KINDLED BREATH (every blow you land sets it burning),
+  THE SHORT CROWN (every kill pays REVENGE twice), THE CARRION TONGUE (walk
+  where something died and it feeds you), and THE DRUNKARD'S ROAD (your feet
+  choose the way now). They spawn from their *own* budget, so the medicine is
+  never thinned by them -- a floor holds its draughts and a curiosity or two --
+  and `q` never touches one: the strange bottles are drunk by name, from the
+  pack.
 - **Fourteen amulets**, each a passive rule rather than a number: the last
   ember (every kill puts two health back), the coin hand (every coin is worth a
   quarter more), the wayfarer (you know the way out when you arrive), the
@@ -233,7 +242,7 @@ the glass itself.
 | `enter` | interact: loot, stairs, spring, chest, or speak |
 | `>` | take the stairs down |
 | `q` | drink the cheapest draught that covers the wound |
-| `i` | the pack |
+| `i` | the pack -- `↑↓` choose, `enter` drink it, `x` set it down |
 | `l` | the legend of glyphs |
 | `f` | the hero's ultimate, once a floor (see above) |
 | `c` | the hero sheet |
@@ -249,6 +258,10 @@ DELETE to be typed out, because a confirm key is a reflex and a word is a
 decision. Dialogs never answer their own opening press, and the two
 screens that want a *held* key -- the prologue and the death tally -- fill a bar
 while it is held and refuse taps, so nothing walks through them by accident.
+The page that opens when something is picked up -- a blade, a curse, a gift --
+closes on `enter` (or `escape`) and on nothing else: a wraith's curse lands
+mid-fight, and the direction key already under your thumb should not be the
+thing that eats it.
 
 ## Getting started
 
