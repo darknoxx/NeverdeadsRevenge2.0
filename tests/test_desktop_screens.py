@@ -1626,3 +1626,36 @@ def test_q_never_drinks_a_strange_bottle(app):
     assert state.player.stats.hp == 5, "q drank a bottle that heals nothing"
     assert "short_crown" in [i.item_id for i in state.inventory], "q wasted the crown"
     assert not state.floor_draughts
+
+
+def test_the_carrion_tongue_marks_the_floors_dead():
+    """A dim blood spot where something stopped moving, shown only while the
+    tongue is working -- and never the bright red comma, which is the hungry
+    road's own mark."""
+    from neverdeads_revenge.desktop.render import _cell_content
+    from neverdeads_revenge.game.actions import perform_action
+    from neverdeads_revenge.game.actors import ENEMIES, HEROES, make_enemy
+    from neverdeads_revenge.game.state import start_run
+    from neverdeads_revenge.world.tiles import Tile
+
+    state = start_run(HEROES["noxx"], 3)
+    state.dungeon_map.set_tile((state.player.position[0] + 1, state.player.position[1]), Tile.FLOOR)
+    square = (state.player.position[0] + 1, state.player.position[1])
+    enemy = make_enemy(ENEMIES["ghoul"], square)
+    enemy.stats.hp = 1
+    state.enemies.append(enemy)
+    state.turn_queue.add(enemy)
+    from neverdeads_revenge.game.actions import Action
+
+    perform_action(state, Action.MOVE_EAST)  # the kill
+    assert square in state.death_squares
+    state.dungeon_map.remove_item(square)  # the kill's coins are loot, not stain
+
+    glyph, _ = _cell_content(square, state)
+    assert glyph != "·", "the floor showed a stain nobody could see"
+
+    state.floor_draughts.add("carrion_tongue")
+    glyph, style = _cell_content(square, state)
+    assert glyph == "·", "the tongue showed no blood"
+    assert style.fg.name() == "#8b1a1a", f"the stain is {style.fg.name()}, not blood"
+    assert style.dim, "the stain is not lying on the ground"

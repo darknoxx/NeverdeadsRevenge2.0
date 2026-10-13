@@ -227,6 +227,18 @@ def _cell_content(position, state: GameState) -> tuple[str, Style]:
 
     if visible and position in state.trail:
         return ",", parse_style("red")
+    if (
+        visible
+        and state.has_draught("carrion_tongue")
+        and position in state.death_squares
+    ):
+        # THE CARRION TONGUE shows the floor's dead: a dim blood spot where
+        # something stopped moving. A middle dot, because the bright red comma
+        # is the hungry road's trail and a floor with two red commas meaning
+        # two things is a floor that lies. Dim, because a stain lies *on* the
+        # ground rather than standing on it -- and only while the tongue is
+        # working, since it is the tongue's sense of the floor, not decoration.
+        return "·", parse_style("dim #8b1a1a")
 
     tile = dungeon.display_tile(position)
     if visible:

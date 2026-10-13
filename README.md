@@ -74,8 +74,9 @@ what you carry, and by spending the ground you are standing on.
   floor and lasts only until the stairs. THE THIN VEIL (nothing looks at you
   until you strike), THE KINDLED BREATH (every blow you land sets it burning),
   THE SHORT CROWN (every kill pays REVENGE twice), THE CARRION TONGUE (walk
-  where something died and it feeds you), and THE DRUNKARD'S ROAD (your feet
-  choose the way now). They spawn from their *own* budget, so the medicine is
+  where something died and it feeds you -- and while it works, the floor's
+  dead show as dim blood spots), and THE DRUNKARD'S ROAD (your feet choose the
+  way now). They spawn from their *own* budget, so the medicine is
   never thinned by them -- a floor holds its draughts and a curiosity or two --
   and `q` never touches one: the strange bottles are drunk by name, from the
   pack.
