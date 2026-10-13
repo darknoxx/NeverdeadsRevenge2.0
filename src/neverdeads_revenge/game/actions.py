@@ -664,12 +664,6 @@ def _try_move(state: GameState, direction: Direction) -> tuple[bool, bool]:
     gift can: a step that reported "nothing happened" would leave the player
     standing still on screen.
     """
-    if state.has_draught("drunkards_road"):
-        # THE DRUNKARD'S ROAD. The direction is chosen for the hero, every
-        # step, from the run's own dice -- so a seeded run stays a run and not
-        # a coin toss, and the player spends the floor steering a cart.
-        direction = state.rng.pick(DIRECTIONS)
-
     target = direction.step(state.player.position)
     if not state.dungeon_map.in_bounds(target):
         return False, False
@@ -2243,6 +2237,11 @@ def _move_towards_player(
         target = direction.step(actor.position)
         if not state.dungeon_map.is_walkable(target):
             continue
+        if state.corpse_blocks(target):
+            # THE GALLOWS ROAD. The floor's dead are walls to everything that
+            # hunts: the hero walks over them (and eats them, with the tongue),
+            # the monsters cannot follow.
+            continue
         if state.actor_at(target) is not None:
             continue
         if chebyshev(target, goal) >= distance:
@@ -2278,6 +2277,11 @@ def _hunter_step(
             if step in came_from:
                 continue
             if step != goal and not state.dungeon_map.is_walkable(step):
+                continue
+            if step != goal and state.corpse_blocks(step):
+                # THE GALLOWS ROAD holds the hunter too: the dead are walls to
+                # everything that hunts, and the hunter's path is not an
+                # exception it gets to keep.
                 continue
             if step != goal and state.actor_at(step) is not None:
                 continue

@@ -740,20 +740,40 @@ def test_the_carrion_tongue_feeds_on_the_floors_dead():
     assert square not in state.death_squares, "the dead square fed twice"
 
 
-def test_the_drunkards_road_chooses_the_steps():
+def test_the_gallows_road_walls_the_dead_off_from_the_hunt():
+    """The floor's dead are walls to everything that hunts -- and not to the
+    hero, who walks over them (and eats them, with the tongue)."""
     from neverdeads_revenge.game.actions import drink
 
     state = _run()
-    _pack(state, "drunkards_road")
-    drink(state, "drunkards_road")
+    here = state.player.position
+    # A corpse between a ghoul and the hero: the kill leaves the square, then
+    # the bottle makes it a wall.
+    corpse = (here[0] + 1, here[1])
+    state.dungeon_map.set_tile(corpse, Tile.FLOOR)
+    _stage_enemy_at_square(state, corpse, hp=1)
+    perform_action(state, Action.MOVE_EAST)  # the kill, on the corpse square
+    assert corpse in state.death_squares
+    state.dungeon_map.remove_item(corpse)
+    state.player.position = (here[0] - 2, here[1])
+    state.dungeon_map.set_tile((here[0] - 1, here[1]), Tile.FLOOR)
+    state.refresh_vision()
 
-    # Walk ten times "east" and see where the feet take us: at least one step
-    # must have gone somewhere else, or the bottle did nothing.
-    positions = set()
-    for _ in range(10):
-        perform_action(state, Action.MOVE_EAST)
-        positions.add(state.player.position)
-    assert len(positions) > 1
+    _pack(state, "gallows_road")
+    drink(state, "gallows_road")
+
+    # A ghoul on the far side walks *around* the corpse rather than over it.
+    ghoul = (here[0] + 2, here[1])
+    state.dungeon_map.set_tile(ghoul, Tile.FLOOR)
+    enemy = _stage_enemy_at_square(state, ghoul, hp=99)
+    _wait(state, 3)
+    assert enemy.position != corpse, "the hunt walked over the dead"
+
+    # and the hero may: the dead are on the hero's side
+    state.player.position = (corpse[0] - 1, corpse[1])
+    state.refresh_vision()
+    perform_action(state, Action.MOVE_EAST)
+    assert state.player.position == corpse, "the hero was walled off by their own dead"
 
 
 def test_the_strange_draughts_are_the_floors_and_no_longer():

@@ -188,15 +188,15 @@ ITEMS: dict[str, ItemTemplate] = {
         kind="strange",
         draught="carrion_tongue",
     ),
-    "drunkards_road": ItemTemplate(
-        key="drunkards_road",
-        name="the drunkard's road",
+    "gallows_road": ItemTemplate(
+        key="gallows_road",
+        name="the gallows road",
         glyph="/",
-        # Hot pink: noxx's violet owns the #a8-range, and the distance test
-        # said so.
-        color="#f00090",
+        # Bone: pale, and clear of every other colour on the map -- the palette
+        # test's own arithmetic picked the family.
+        color="#e8e4c8",
         kind="strange",
-        draught="drunkards_road",
+        draught="gallows_road",
     ),
     # -- weapons -----------------------------------------------------------
     #

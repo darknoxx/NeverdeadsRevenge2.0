@@ -47,10 +47,10 @@ FLOOR_DRAUGHTS: dict[str, FloorDraught] = {
         name="THE CARRION TONGUE",
         blurb="walk where something died and it feeds you",
     ),
-    "drunkards_road": FloorDraught(
-        key="drunkards_road",
-        name="THE DRUNKARD'S ROAD",
-        blurb="your feet choose the way now",
+    "gallows_road": FloorDraught(
+        key="gallows_road",
+        name="THE GALLOWS ROAD",
+        blurb="the dead hold them back -- nothing walks where something died",
     ),
 }
 

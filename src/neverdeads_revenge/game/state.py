@@ -537,6 +537,16 @@ class GameState:
         """Whether a strange draught is working on this floor."""
         return key in self.floor_draughts
 
+    def corpse_blocks(self, pos: Pos) -> bool:
+        """Whether THE GALLOWS ROAD holds a monster out of ``pos``.
+
+        One place, read by everything that moves a monster, so the rule cannot
+        be half-applied: the hunter's own path search and the ordinary greedy
+        step both ask here. The hero is never asked -- the dead are on their
+        side, and the tongue eats what the road walls off.
+        """
+        return self.has_draught("gallows_road") and pos in self.death_squares
+
     @property
     def unheld_gifts(self) -> tuple[str, ...]:
         """Every gift this run has not been given, by key.
