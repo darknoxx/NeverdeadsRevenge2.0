@@ -2045,7 +2045,7 @@ def drink(state: GameState, item_id: str) -> str:
         state.floor_draughts.add(template.draught)
         if draught is not None:
             state.say(
-                f"You drink the {item.name}. {draught.blurb.capitalize()} -- "
+                f"You drink {_the(item.name)}. {draught.blurb.capitalize()} -- "
                 f"until you leave this floor.",
                 LogKind.GOOD,
             )
@@ -2054,8 +2054,8 @@ def drink(state: GameState, item_id: str) -> str:
 
     amount = max(1, round((template.heal if template else 0) * state.heal_scale))
     healed = state.player.stats.heal(amount)
-    state.say(f"You drink the {item.name} and recover {healed}.", LogKind.GOOD)
-    return f"You drink the {item.name} and recover {healed}."
+    state.say(f"You drink {_the(item.name)} and recover {healed}.", LogKind.GOOD)
+    return f"You drink {_the(item.name)} and recover {healed}."
 
 
 def drop(state: GameState, item_id: str) -> str:
@@ -2070,8 +2070,8 @@ def drop(state: GameState, item_id: str) -> str:
     if not _set_down(state, item):
         return "There is nowhere to put it down."
     state.inventory.remove(item)
-    state.say(f"You set down the {item.name}.", LogKind.PLAIN)
-    return f"You set down the {item.name}."
+    state.say(f"You set down {_the(item.name)}.", LogKind.PLAIN)
+    return f"You set down {_the(item.name)}."
 
 
 # -- enemy turns -----------------------------------------------------------
