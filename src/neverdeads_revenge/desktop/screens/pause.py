@@ -25,6 +25,7 @@ class PauseScreen(Screen):
     def items(self, app) -> list[tuple[str, str]]:
         return [
             ("r", "RESUME"),
+            ("c", "CONTROLS"),
             ("s", "SAVE AND QUIT"),
             ("q", "QUIT TO TITLE"),
             ("m", f"SOUND: {'on' if not app.sfx.muted else 'off'}"),
@@ -56,7 +57,7 @@ class PauseScreen(Screen):
         if name in ("escape", "r"):
             app.pop()
             return True
-        if name in ("s", "q", "m"):
+        if name in ("s", "q", "m", "c"):
             self._choose(name, app)
             return True
         return True
@@ -64,6 +65,11 @@ class PauseScreen(Screen):
     def _choose(self, key: str, app) -> None:
         if key == "r":
             app.pop()
+        elif key == "c":
+            # The reference, from the one menu that has room to offer it.
+            from .menus import HelpScreen
+
+            app.push(HelpScreen())
         elif key == "s":
             app.save_and_quit()
         elif key == "q":

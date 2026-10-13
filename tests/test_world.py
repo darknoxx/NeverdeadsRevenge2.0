@@ -87,7 +87,10 @@ def test_equipment_of_a_kind_looks_alike_on_purpose():
 
     by_kind: dict[str, set[str]] = {}
     for item in ITEMS.values():
-        if item.kind == "draught":
+        if item.kind in ("draught", "strange"):
+            # Bottles are the exception twice over: the medicine is a choice
+            # between sizes, and the five strange draughts are five different
+            # rules -- so each gets its own glyph on purpose.
             continue
         by_kind.setdefault(item.kind, set()).add(item.glyph)
     for kind, glyphs in by_kind.items():

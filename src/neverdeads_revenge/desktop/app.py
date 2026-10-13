@@ -27,6 +27,7 @@ from neverdeads_revenge.game.savegame import dump, load
 from neverdeads_revenge.game.shop import loadout_from
 from neverdeads_revenge.game.state import RunState, start_run
 from neverdeads_revenge.persistence import (
+    MetaProgress,
     clear_run,
     load_meta,
     load_run,
@@ -71,10 +72,19 @@ class DesktopApp(QMainWindow):
     #: owns the save file: a queued signal lands the change on the GUI thread.
     sound_gave_up = Signal(bool)
 
-    def __init__(self, *, seed: int | None = None, no_sound: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        seed: int | None = None,
+        no_sound: bool = False,
+        testrun: bool = False,
+    ) -> None:
         super().__init__()
         self.setWindowTitle("Neverdead's Revenge")
         self.font = BitmapFont()
+        #: `--testrun`: the chronicle unlocked and the purse full, and for the
+        #: one feature being tested this session, the void answers early.
+        self.testrun = testrun
 
         saved = load_settings()
         self.crt = CrtSettings(
@@ -269,15 +279,44 @@ class DesktopApp(QMainWindow):
             getattr(screen, "hold", None) is not None and screen.hold.holding
             for screen in self.screens
         )
+        breathing = self._void_is_breathing()
         if not (
             holding
             or self.effects.active
             or self.view.is_shaking()
             or self.glass_note is not None
+            or breathing
         ):
             return
+        if breathing and not (
+            holding or self.effects.active or self.view.is_shaking()
+        ):
+            # The breath is a slow, calm thing: ten frames of it a second is
+            # already over-generous, and a full redraw on every tick would
+            # spend the whole frame budget on one line of colour.
+            now = time.monotonic()
+            if now - self._last_pulse_paint < 0.1:
+                return
+            self._last_pulse_paint = now
         self.effects.step(0.033)
         self.redraw()
+
+    _last_pulse_paint: float = 0.0
+
+    def _void_is_breathing(self) -> bool:
+        """Whether a live ultimate's prompt needs repainting to breathe.
+
+        The pulse is drawn in the sidebar paste, and a prompt that only
+        repaints on keypress would be a breath that stops every time the hero
+        stops. Cheap to ask, and wrong only during the one part of the run
+        where a promise can be kept.
+        """
+        run = self.run
+        if run is None:
+            return False
+        from .render import ultimate_ready
+
+        return ultimate_ready(run)
 
     # -- the stack ----------------------------------------------------------
     def push(self, screen) -> None:
@@ -348,7 +387,8 @@ class DesktopApp(QMainWindow):
             if number not in self.progress.pages
         )
         self.run = start_run(
-            HEROES[hero_key], self.seed, loadout=loadout, pages=missing
+            HEROES[hero_key], self.seed, loadout=loadout, pages=missing,
+            ultimate_level=1 if self.testrun else None,
         )
         self._seen_log = 0
         self.effects.clear()
@@ -384,6 +424,29 @@ class DesktopApp(QMainWindow):
         from .screens.menus import ChronicleScreen
 
         self.push(ChronicleScreen())
+
+    def open_delete_progress(self) -> None:
+        """Ask for the word, then erase everything.
+
+        The dialog is the whole safety: it returns ``True`` only when the
+        player typed DELETE, and a ``False`` -- an escape, a changed mind --
+        leaves the profile exactly where it was.
+        """
+        from .screens.dialogs import DeleteProgressScreen
+
+        self.push(
+            DeleteProgressScreen(
+                on_done=lambda confirmed: self.delete_progress() if confirmed else None
+            )
+        )
+
+    def delete_progress(self) -> None:
+        """Wipe the profile and the saved run. Nothing is kept back."""
+        self.progress = MetaProgress()
+        self.save_progress()
+        clear_run()
+        self.run = None
+        self._note_glass("EVERYTHING DELETED")
 
     def save_and_quit(self) -> None:
         if self.run is not None:

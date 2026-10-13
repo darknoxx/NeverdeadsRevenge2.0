@@ -28,6 +28,7 @@ __all__ = [
     "roll_item",
     "roll_chest_contents",
     "loot_count",
+    "strange_count",
     "equipment_count",
     "chest_count",
     "page_count",
@@ -60,6 +61,10 @@ class ItemTemplate:
     kind: str
     #: Health restored when drunk.
     heal: int = 0
+    #: Which strange rule a draught lays on the floor, by key. ``None`` for
+    #: everything that is not one of the five bottles; the rule lives in
+    #: :mod:`game.draughts`, this is only its name.
+    draught: str | None = None
     #: Which equipment slot it fills. ``None`` for something you drink.
     slot: str | None = None
     #: What wearing it changes.
@@ -134,6 +139,64 @@ ITEMS: dict[str, ItemTemplate] = {
         heal=20,
         weight=2.0,
         weight_growth=1.25,
+    ),
+    # -- the strange draughts ----------------------------------------------
+    #
+    # Five bottles that are not medicine. Their rules are the floor's and last
+    # until the stairs; they are drunk from the pack by name, so `q` -- which
+    # drinks the cheapest thing that covers a wound -- never touches one of
+    # them, and never wastes one on a scratch either.
+    #
+    # Their own kind, and therefore their own spawn budget: rolled from the
+    # healing pool they would have thinned the medicine, and the medicine is
+    # the one supply the whole game is balanced around.
+    "thin_veil": ItemTemplate(
+        key="thin_veil",
+        name="the thin veil",
+        glyph=":",
+        # Pale and ghostly, and picked by arithmetic rather than by eye: the
+        # palette's distance test is strict, and a bottle that reads as a
+        # person (or as the armour) on the map is a bottle nobody picks up.
+        color="#7f9bd4",
+        kind="strange",
+        draught="thin_veil",
+    ),
+    "kindled_breath": ItemTemplate(
+        key="kindled_breath",
+        name="the kindled breath",
+        glyph="^",
+        # A hot orange, chosen by arithmetic: the hunter owns #ff5555 and
+        # Walkyrion #ffb000, and the palette's distance test is not a
+        # formality.
+        color="#f85800",
+        kind="strange",
+        draught="kindled_breath",
+    ),
+    "short_crown": ItemTemplate(
+        key="short_crown",
+        name="the short crown",
+        glyph="=",
+        color="#ffd76e",
+        kind="strange",
+        draught="short_crown",
+    ),
+    "carrion_tongue": ItemTemplate(
+        key="carrion_tongue",
+        name="the carrion tongue",
+        glyph=";",
+        color="#9ad06b",
+        kind="strange",
+        draught="carrion_tongue",
+    ),
+    "gallows_road": ItemTemplate(
+        key="gallows_road",
+        name="the gallows road",
+        glyph="/",
+        # Bone: pale, and clear of every other colour on the map -- the palette
+        # test's own arithmetic picked the family.
+        color="#e8e4c8",
+        kind="strange",
+        draught="gallows_road",
     ),
     # -- weapons -----------------------------------------------------------
     #
@@ -636,9 +699,10 @@ def make_coin(value: int) -> GroundItem:
 
 #: How often a chest holds a rule instead of a thing.
 #:
-#: A third. Rarer and the gifts are a rumour; commoner and the loot stops
-#: mattering, which would be a shame -- the blade is half of what a chest is.
-GIFT_CHANCE = 1 / 3
+#: A half now. A third made the gifts a rumour -- the bot runs saw one gift in
+#: a hundred runs -- and the gifts are the most interesting thing a floor can
+#: hand over. The loot still matters; it is no longer the whole of a chest.
+GIFT_CHANCE = 1 / 2
 
 
 def page_count(depth: int) -> int:
@@ -786,8 +850,24 @@ def loot_count(depth: int) -> int:
     Deliberately stingy, and it grows slowly. Health is a run-long resource, so
     the supply of it is the difficulty dial that matters most: a floor that
     hands out four draughts is a floor where the monsters stop being scary.
+
+    Raised by one when the floors went to eleven monsters: the bot runs died to
+    *numbers*, not to blows, and one draught against twelve bodies is a floor
+    that only pays in blood.
     """
-    return min(1 + depth // 3, 4)
+    return min(2 + depth // 3, 5)
+
+
+def strange_count(depth: int) -> int:
+    """How many strange draughts a floor holds.
+
+    Its own budget, deliberately, and the reason the healing supply did not
+    have to be raised to make room for them: rolled from the draught pool the
+    five new bottles would have cut the medicine to a fifth, which is the
+    failure the draught/equipment split was invented to avoid. A floor now
+    holds its medicine *and* a curiosity or two.
+    """
+    return min(1 + depth // 4, 3)
 
 
 def equipment_count(depth: int) -> int:

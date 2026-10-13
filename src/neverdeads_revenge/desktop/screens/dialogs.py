@@ -11,6 +11,7 @@ from __future__ import annotations
 from ..chrome import ASH, BONE, BLOOD, box, rule
 from ..theme import parse_style
 from .base import Screen
+from .game_over import clean_name
 
 __all__ = [
     "ConfirmScreen",
@@ -19,6 +20,7 @@ __all__ = [
     "NpcScreen",
     "PageScreen",
     "InfoScreen",
+    "DeleteProgressScreen",
     "OPEN",
     "FAME",
 ]
@@ -152,6 +154,49 @@ class SpringScreen(_Dialog):
         return True
 
 
+class DeleteProgressScreen(_Dialog):
+    """Erasing everything, on purpose, with the word typed out.
+
+    A confirm key is a reflex; a word is a decision. Nothing goes until the
+    six letters are there, and escape always walks away. The alternative --
+    a two-key dialog -- is the one that gets answered by a hand that was
+    already moving.
+    """
+
+    modal = True
+    title = "DELETE EVERYTHING"
+    hint = "type DELETE   enter to erase   esc to keep"
+
+    def __init__(self, on_done=None) -> None:
+        super().__init__(on_done)
+        self.typed = ""
+
+    def _body(self) -> str:
+        return (
+            "This erases every score on the board, the chronicle, the purse, "
+            "every upgrade bought, and the run you put down. There is no undo "
+            "and no copy.\n\n"
+            f"Type DELETE to be sure:   {self.typed or '_'}"
+        )
+
+    def key(self, name, event, app) -> bool:
+        if event.isAutoRepeat():
+            return True
+        if name == "escape":
+            self.finish(app, False)
+            return True
+        if name == "backspace":
+            self.typed = self.typed[:-1]
+            return True
+        if name == "enter":
+            self.finish(app, self.typed.upper() == "DELETE")
+            return True
+        char = clean_name(event.text() or "")
+        if char and len(self.typed) < len("DELETE"):
+            self.typed += char.upper()
+        return True
+
+
 class NpcScreen(_Dialog):
     """Somebody has something to say. Any key closes it."""
 
@@ -177,7 +222,13 @@ class InfoScreen(_Dialog):
     Everything a run catches whose shape is its own price -- a blade picked
     up, a curse left in you, a gift the dark decided you need -- gets one of
     these, because a log line scrolls away and a note in the sidebar is a
-    decoration. One box, one page, read with one press.
+    decoration.
+
+    It closes on enter and escape and on nothing else. Any-key closing was a
+    trap: a wraith lands a curse mid-fight, the window opens, and the direction
+    key already under the player's thumb dismisses the page before a word of it
+    is read. A key you have to *choose* is the difference between reading it
+    and losing it.
     """
 
     def __init__(self, title: str, name: str, text: str) -> None:
@@ -193,7 +244,10 @@ class InfoScreen(_Dialog):
     def key(self, name, event, app) -> bool:
         if event.isAutoRepeat():
             return True
-        self.finish(app, None)
+        if name in ("enter", "return", "escape"):
+            self.finish(app, None)
+        # Everything else is swallowed: a direction key, a drink, a wait -- all
+        # of them are keys the player was already pressing.
         return True
 
 

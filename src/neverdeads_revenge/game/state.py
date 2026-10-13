@@ -32,6 +32,7 @@ from .actors import (
     Actor,
     ActorKind,
     Hero,
+    make_atritas,
     make_enemy,
     make_hero,
     make_npc,
@@ -40,7 +41,13 @@ from .actors import (
 )
 from .combat import apply_revenge
 from .curses import CURSES, Curse
-from .difficulty import potency
+from .difficulty import (
+    ATRITAS_VIEW,
+    BASE_PACK_SLOTS,
+    FORTRESS_VIEW,
+    ULTIMATE_LEVEL,
+    potency,
+)
 from .gifts import GIFTS
 from .lore import PAGE_COUNT, numeral
 from .npcs import NPCS, Npc, npc_by_key
@@ -225,6 +232,52 @@ class GameState:
     #: thing that died may well have walked on before it did.
     deaths: list[Pos] = field(default_factory=list)
 
+    # -- the void ------------------------------------------------------------
+    #
+    # Each hero's ultimate, once a floor, from the level the dark starts
+    # answering. The flag is shared: one ask a floor, whichever shape it takes.
+    #: Whether this floor's ultimate can still be asked for. Refilled by
+    #: :meth:`build_floor`, spent by the cast, and carried through the save so
+    #: an old save cannot lie its way into a second ask.
+    ultimate_available: bool = True
+    #: The level the ultimates start answering at. `--testrun` runs turn it to 2.
+    ultimate_level: int = ULTIMATE_LEVEL
+    #: The shadow itself, while it walks. Not in ``enemies`` -- nothing aims at
+    #: it, nothing counts it as a monster, and nothing in the turn queue acts
+    #: for it. It is driven alongside the scheduler in :func:`advance_world`
+    #: and unsummoned by its own clock, which is why it does not live in the
+    #: queue that speed owns.
+    atritas: Actor | None = None
+    #: Turns left before Atritas sinks back into the dark.
+    atritas_turns_left: int = 0
+    #: THE SIGHT. While Atritas walks, the whole floor is shown -- every wall,
+    #: every corner, whether or not the hero has been there. It is *drawn*
+    #: open, not *known* open: nothing here makes a monster act (that is
+    #: ``visible``), and it is deliberately not written into ``explored``,
+    #: because the dark showing you something is not the same as you having
+    #: seen it. When the shadow leaves, the walls close back over what the
+    #: hero never actually walked.
+    void_sight: bool = False
+    #: Yeti's bastion, while it stands. Same shape of life as the shadow: not
+    #: an enemy, not in the queue, kept by its own clock -- and the one thing
+    #: on the floor every monster would rather bite than the hero.
+    fortress: Actor | None = None    #: Turns left before the fortress melts.
+    fortress_turns_left: int = 0
+    #: Sight taken away by an ultimate still running, in tiles.
+    sight_penalty: int = 0
+    #: How many things the pack holds. Base plus whatever the shop sold, so a
+    #: run that bought slots carries them for its whole life.
+    pack_capacity: int = BASE_PACK_SLOTS
+    #: The strange draughts drunk on this floor, by key. A set rather than a
+    #: single slot because nothing stops a player drinking two, and every one
+    #: of them is emptied by :meth:`build_floor` -- a rule carried down the
+    #: stairs would be a rule the next floor never agreed to.
+    floor_draughts: set[str] = field(default_factory=set)
+    #: Where things have died on this floor, for THE CARRION TONGUE. A floor
+    #: long memory rather than the per-action ``deaths`` list: the tongue feeds
+    #: on a square long after the blood that marked it has been cleared.
+    death_squares: set[Pos] = field(default_factory=set)
+
     # -- what the shop sent with you ----------------------------------------
     #
     # Bought before the run and carried into it. Kept as plain numbers rather
@@ -363,11 +416,11 @@ class GameState:
         The tightest curse wins rather than the last one applied: two things
         closing the dark in should not open it back up.
         """
-        radius = VIEW_RADIUS + self.sight_bonus
+        radius = VIEW_RADIUS + self.sight_bonus - self.sight_penalty
         for curse in self.curses:
             if curse.sight is not None:
                 radius = min(radius, curse.sight)
-        return radius
+        return max(1, radius)
 
     @property
     def bleed_every(self) -> int:
@@ -479,6 +532,20 @@ class GameState:
     def has_gift(self, key: str) -> bool:
         """Whether the dungeon has handed this gift over."""
         return key in self.gifts
+
+    def has_draught(self, key: str) -> bool:
+        """Whether a strange draught is working on this floor."""
+        return key in self.floor_draughts
+
+    def corpse_blocks(self, pos: Pos) -> bool:
+        """Whether THE GALLOWS ROAD holds a monster out of ``pos``.
+
+        One place, read by everything that moves a monster, so the rule cannot
+        be half-applied: the hunter's own path search and the ordinary greedy
+        step both ask here. The hero is never asked -- the dead are on their
+        side, and the tongue eats what the road walls off.
+        """
+        return self.has_draught("gallows_road") and pos in self.death_squares
 
     @property
     def unheld_gifts(self) -> tuple[str, ...]:
@@ -593,6 +660,25 @@ class GameState:
         for npc in self.npcs:
             if npc.position == pos:
                 return npc
+        if self.atritas is not None and self.atritas.position == pos:
+            # The shadow stands in the way the way a shadow does: solid to its
+            # summoner, and a bump against it is a word, not a fight.
+            return self.atritas
+        if self.fortress is not None and self.fortress.position == pos:
+            # A wall of ice is a wall.
+            return self.fortress
+        return None
+
+    @property
+    def lure(self) -> Actor | None:
+        """What the monsters would rather bite than the hero, if anything.
+
+        THE FROZEN FORTRESS and nothing else. It is read by the enemy turn
+        rather than written into every monster, so the one place that decides
+        where a floor's teeth point stays one place.
+        """
+        if self.fortress is not None and self.fortress.alive:
+            return self.fortress
         return None
 
     def npc_beside_player(self) -> Actor | None:
@@ -628,8 +714,39 @@ class GameState:
             self.dungeon_map.is_opaque,
             self.dungeon_map.in_bounds,
         )
+        if self.fortress is not None:
+            # THE FROZEN FORTRESS watches on the hero's behalf. Three paces
+            # around the wall stay visible even after the cold has taken his
+            # eyes, so the thing he built is never lost behind what it cost.
+            self._widen_vision(visible, explored, self.fortress.position, FORTRESS_VIEW)
+        if self.atritas is not None:
+            # And the shadow sees its own work. It blinks from prey to prey,
+            # and wherever it lands it looks: three paces, so the summoner can
+            # watch the thing he is bleeding for.
+            self._widen_vision(visible, explored, self.atritas.position, ATRITAS_VIEW)
         self.dungeon_map.visible = visible
         self.dungeon_map.explored |= explored
+
+    def _widen_vision(
+        self,
+        visible: set[Pos],
+        explored: set[Pos],
+        centre: Pos,
+        radius: int,
+    ) -> None:
+        """Open a square of floor around ``centre`` in both sight sets.
+
+        Its own function because the fortress and the shadow ask the same
+        thing of the map, and the copy that would drift is the one written
+        twice.
+        """
+        cx, cy = centre
+        for dx in range(-radius, radius + 1):
+            for dy in range(-radius, radius + 1):
+                pos = (cx + dx, cy + dy)
+                if self.dungeon_map.in_bounds(pos):
+                    visible.add(pos)
+                    explored.add(pos)
 
     # -- floors -------------------------------------------------------------
     def build_floor(self, depth: int) -> GeneratedFloor:
@@ -736,6 +853,20 @@ class GameState:
         self.salt_ward = 0
         self.trail.clear()
         self.helped.clear()
+        # THE VOID. One give per floor: a new floor is a new dark asking, and
+        # whatever the last one sent stays with the floor it was asked on.
+        self.atritas = None
+        self.atritas_turns_left = 0
+        self.void_sight = False
+        self.fortress = None
+        self.fortress_turns_left = 0
+        self.sight_penalty = 0
+        self.ultimate_available = True
+        # The floor's own weather, and its own memory of the dead. Both are the
+        # floor's: neither the strange draughts nor the carrion tongue's
+        # feeding crosses the stairs.
+        self.floor_draughts.clear()
+        self.death_squares.clear()
 
         self.arm_amulets()
 
@@ -958,6 +1089,7 @@ def start_run(
     loadout: Loadout | None = None,
     upgrades: dict[str, int] | None = None,
     pages: tuple[int, ...] | None = None,
+    ultimate_level: int | None = None,
 ) -> GameState:
     """Begin a fresh run with ``hero``.
 
@@ -974,6 +1106,8 @@ def start_run(
     """
     loadout = loadout or Loadout()
     state = GameState(hero=hero, rng=Rng(seed), seed=seed)
+    if ultimate_level is not None:
+        state.ultimate_level = ultimate_level
     state.missing_pages = (
         set(pages) if pages is not None else set(range(1, PAGE_COUNT + 1))
     )
@@ -1010,6 +1144,8 @@ def _apply_upgrades(state: GameState, upgrades: dict[str, int]) -> None:
             player.stats.speed += upgrade.speed * stacks
         if upgrade.sight:
             state.sight_bonus += upgrade.sight * stacks
+        if upgrade.pack_slots:
+            state.pack_capacity += upgrade.pack_slots * stacks
 
     # A run starts whole. Bought health you do not have is not bought health,
     # and the blood bargain's whole point is that the missing part is gone.

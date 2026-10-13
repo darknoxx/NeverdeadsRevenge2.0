@@ -22,7 +22,8 @@ KEY_BINDINGS: dict[str, Action] = {
     "h": Action.MOVE_WEST,
     "a": Action.MOVE_WEST,
     "right": Action.MOVE_EAST,
-    "l": Action.MOVE_EAST,
+    # ``l`` used to move east; it opens the legend now, and east is the arrow,
+    # ``d`` and the numpad. The help screen says so.
     "d": Action.MOVE_EAST,
     "y": Action.MOVE_NW,
     "u": Action.MOVE_NE,
@@ -38,5 +39,6 @@ KEY_BINDINGS: dict[str, Action] = {
     "q": Action.QUAFF,
     "r": Action.REWIND,
     ">": Action.DESCEND,
+    "f": Action.ULTIMATE,
     "enter": Action.INTERACT,
 }

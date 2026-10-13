@@ -34,6 +34,8 @@ __all__ = [
     "EnemyTemplate",
     "ENEMIES",
     "make_hero",
+    "make_atritas",
+    "make_fortress",
     "make_enemy",
     "make_npc",
     "scale_template",
@@ -106,6 +108,14 @@ class ActorKind(Enum):
     #: Somebody who is neither. Not in the turn queue, not attackable, and in
     #: the way -- walking into one is a conversation, not a fight.
     NPC = "npc"
+    #: The dark beside Noxx. Not an enemy and not a person: nothing aims at it,
+    #: nothing counts it on a floor, and it has no turn in the queue. It acts
+    #: alongside the scheduler and answers only to its own clock.
+    ATRITAS = "atritas"
+    #: Yeti's bastion: a wall of ice that everything hostile would rather bite
+    #: than the hero. Solid, temporary, and it has hit points of its own --
+    #: half of what the builder had when it went up.
+    FORTRESS = "fortress"
 
 
 #: What REVENGE grants a hero, and how much of it.
@@ -724,6 +734,62 @@ def make_enemy(template: EnemyTemplate, position: Pos) -> Actor:
         gold=template.gold,
         curse_chance=template.curse_chance,
         inflicts=template.inflicts,
+    )
+
+
+def make_fortress(position: Pos, health: int) -> Actor:
+    """Raise Yeti's wall of ice.
+
+    ``health`` is twice what Yeti had when he built it -- the wall is not a
+    second Yeti, it is a thicker one, and a bastion that broke as fast as its
+    builder bleeds would never earn the sight it takes.
+    """
+    return Actor(
+        name="the frozen fortress",
+        kind=ActorKind.FORTRESS,
+        # Hit points only, and none of Yeti's armour: the promise was half his
+        # *blood* in a wall of ice, not half his kit. An armoured wall would
+        # soak the very bites it exists to take.
+        stats=replace(
+            HEROES["yeti"].stats,
+            hp=health,
+            max_hp=health,
+            armor=0,
+            evasion=0,
+        ),
+        position=position,
+        # Black, not ice-blue: the fortress puts the whole floor on white, and
+        # the one glyph that has to be found at a glance should not be the one
+        # that washes out in its own weather.
+        glyph="F",
+        color="#0b0f12",
+        behaviour="fortress",
+        gold=(0, 0),
+        curse_chance=0.0,
+    )
+
+
+def make_atritas(position: Pos, level: int, depth: int) -> Actor:
+    """Set the dark on its feet beside Noxx.
+
+    The damage is the summoner's yardstick, not a whisper: this is the part of
+    the void the promise names enormous, so it scales with the depth the way
+    everything that hits does, and a little with the level the void was given
+    into at. One tile, one shape, one dark letter.
+    """
+    low = 18 + 3 * depth + level
+    return Actor(
+        name="atritas",
+        kind=ActorKind.ATRITAS,
+        # Health is irrelevant: nothing may strike the shadow. One rather than
+        # zero, because an actor at zero health is a corpse by convention.
+        stats=replace(HEROES["noxx"].stats, hp=1, max_hp=1, damage=(low, low + 6)),
+        position=position,
+        glyph="A",
+        color="#12716f",
+        behaviour="atritas",
+        gold=(0, 0),
+        curse_chance=0.0,
     )
 
 

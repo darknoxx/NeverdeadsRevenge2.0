@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 
 from neverdeads_revenge.core.rng import Rng
 from neverdeads_revenge.game.amulets import AMULETS, blurb_for
+from neverdeads_revenge.game.draughts import draught_by_key
 from neverdeads_revenge.game.statuses import status_by_key
 from neverdeads_revenge.world.items import ITEMS, ItemTemplate
 
@@ -71,9 +72,19 @@ class MetaUpgrade:
     max_hp: int = 0
     speed: float = 0.0
     sight: int = 0
+    #: Pack slots bought, per stack.
+    pack_slots: int = 0
     max_stacks: int = 3
+    #: What each further stack adds to the price. A step rather than a
+    #: multiplier: multiplying turned the fourth slot into a 560-coin luxury,
+    #: and the pack is meant to be a comfort, not a monument.
+    price_step: int = 0
     #: Only ever offered on the rotating shelf, never in the fixed stock.
     wild: bool = False
+
+    def price_at(self, owned: int) -> int:
+        """What the next stack costs, given how many are already held."""
+        return self.price + self.price_step * owned
 
     def effect(self, stacks: int) -> str:
         """The effect line for ``stacks`` stacks, or an empty string."""
@@ -84,6 +95,8 @@ class MetaUpgrade:
             parts.append(f"{self.speed * stacks:+.2f} speed")
         if self.sight:
             parts.append(f"{self.sight * stacks:+d} sight")
+        if self.pack_slots:
+            parts.append(f"{self.pack_slots * stacks:+d} pack slots")
         return ", ".join(parts)
 
 
@@ -114,6 +127,19 @@ META_UPGRADES: dict[str, MetaUpgrade] = {
         price=180,
         sight=1,
         max_stacks=1,
+    ),
+    "pack": MetaUpgrade(
+        key="pack",
+        name="Pack",
+        description="another thing you can carry, and another after that",
+        # 100, 150, 200, 250, 300: dearer each time, but by a step rather than
+        # by a multiple. Five of them take the pack from two to seven, which is
+        # still the whole allowance a run gets -- for 1000 coin rather than
+        # 1400, because a comfort should be saveable-for.
+        price=100,
+        pack_slots=1,
+        max_stacks=5,
+        price_step=50,
     ),
     "blood_deal": MetaUpgrade(
         key="blood_deal",
@@ -345,6 +371,11 @@ def describe_item(template: ItemTemplate) -> str:
     """
     if template.amulet is not None:
         return blurb_for(template.amulet)
+    if template.draught is not None:
+        # A strange bottle's rule, from the draught table -- the same way an
+        # amulet's sentence comes from its own.
+        draught = draught_by_key(template.draught)
+        return draught.blurb if draught is not None else ""
     if template.heal:
         return f"heals {template.heal}"
 
@@ -413,6 +444,7 @@ def build_stock(progress) -> list[Offer]:
         if upgrade.wild:
             continue
         owned = progress.upgrades.get(key, 0)
+        price = upgrade.price_at(owned)
         offers.append(
             Offer(
                 key=key,
@@ -420,10 +452,10 @@ def build_stock(progress) -> list[Offer]:
                 label=upgrade.name,
                 detail=upgrade.effect(owned + 1) if not owned >= upgrade.max_stacks
                 else upgrade.effect(owned),
-                price=upgrade.price,
+                price=price,
                 owned=owned,
                 limit=upgrade.max_stacks,
-                affordable=gold >= upgrade.price,
+                affordable=gold >= price,
             )
         )
 

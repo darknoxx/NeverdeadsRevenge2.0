@@ -35,6 +35,7 @@ from ..world.modifiers import Modifiers
 from .lore import PAGE_COUNT
 from .actors import Actor, ActorKind, HEROES, Stats, Trait
 from .curses import Curse
+from .difficulty import BASE_PACK_SLOTS
 from .npcs import NPCS
 from .state import GameState, LogEntry, LogKind, RunState
 
@@ -202,6 +203,8 @@ def dump(state: GameState) -> dict:
         "blood_debt": state.blood_debt,
         "waits_in_a_row": state.waits_in_a_row,
         "salt_ward": state.salt_ward,
+        "void_available": state.ultimate_available,
+        "pack_capacity": state.pack_capacity,
         "trail": _encode(state.trail),
         "helped": _encode(state.helped),
         "wilds": _encode(state.wilds),
@@ -278,6 +281,18 @@ def load(payload: dict) -> GameState:
         state.blood_debt = payload.get("blood_debt", 0)
         state.waits_in_a_row = payload.get("waits_in_a_row", 0)
         state.salt_ward = payload.get("salt_ward", 0)
+        # The floor's one ask. The summoned things themselves are not carried:
+        # they belong to the floor they were asked for, and save-and-quit
+        # mid-stay lets them fade without ceremony -- only the *spent* flag
+        # matters, because that is the part a reload could otherwise have back
+        # for nothing. The key is still ``void_available`` so saves written
+        # before the other heroes had ultimates still load.
+        state.ultimate_available = payload.get(
+            "void_available", payload.get("ultimate_available", True)
+        )
+        # ``get`` like the rest: a run saved before the pack had a size simply
+        # gets the base allowance, which is what it was playing with anyway.
+        state.pack_capacity = payload.get("pack_capacity", BASE_PACK_SLOTS)
         state.trail = _decode(payload.get("trail", {}))
         state.helped = set(_decode(payload.get("helped", [])))
         # ``set`` around both, because ``_decode`` hands back a list and these

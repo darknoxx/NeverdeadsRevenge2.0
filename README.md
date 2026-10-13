@@ -64,10 +64,23 @@ what you carry, and by spending the ground you are standing on.
 
 - **Two draughts**: a potion (heals 8) and an elixir (heals 20). `q` drinks the
   cheapest one that covers the wound, because wasting half an elixir is the
-  mistake everybody makes once.
+  mistake everybody makes once. The **pack holds two things** to start with;
+  the shop sells slots up to seven, each dearer than the last, and a full pack
+  leaves the loot where it lies and says why.
 - **Thirteen weapons** (the rusted tooth, the grey bite, the long hunger, the
   patient knife...) and **ten pieces of armour** (the thin hide, the rune
   plate, the ashfall cloak...), each with its own modifiers.
+- **Five strange draughts**, none of them medicine: each lays a rule on the
+  floor and lasts only until the stairs. THE THIN VEIL (nothing looks at you
+  until you strike), THE KINDLED BREATH (every blow you land sets it burning),
+  THE SHORT CROWN (every kill pays REVENGE twice), THE CARRION TONGUE (walk
+  where something died and it feeds you -- and while it works, the floor's
+  dead show as dim blood spots), and THE GALLOWS ROAD (the dead hold the hunt
+  back: nothing that hunts can walk where something died, though the hero
+  can). They spawn from their *own* budget, so the medicine is
+  never thinned by them -- a floor holds its draughts and a curiosity or two --
+  and `q` never touches one: the strange bottles are drunk by name, from the
+  pack.
 - **Fourteen amulets**, each a passive rule rather than a number: the last
   ember (every kill puts two health back), the coin hand (every coin is worth a
   quarter more), the wayfarer (you know the way out when you arrive), the
@@ -128,8 +141,8 @@ one rewrites a piece of the game while it is held:
 
 ### The hunter
 
-On the deeper floors, sometimes, a hunter spawns: fast, scaled up, and already
-moving. It knows where you are because that is all it does, and the game tells
+From the fifth floor on, sometimes, a hunter spawns: fast, scaled up, and
+already moving. It knows where you are because that is all it does, and the game tells
 you when a floor has one. Everything else has to see you before it comes for
 you; the hunter does not.
 
@@ -147,6 +160,7 @@ and a purchase rings the till.
 | Vigour | 140g | +5 max health | up to 3 |
 | Haste | 220g | +0.12 speed | up to 2 |
 | Lantern | 180g | +1 sight | once |
+| Pack | 100g, then 150, 200, 250, 300 | +1 pack slot -- the pack starts at 2 and stops at 7 | up to 5 |
 | Blood Bargain | 170g | +0.15 speed, for good -- and -4 max health, for good | up to 2 |
 
 **Wild offers** rotate between runs and sell exactly the risk their name
@@ -166,6 +180,21 @@ out its pitch and its catch before you take it:
 | the count's favour | 125g | every thirteenth kill heals you whole | you do not want to know who counts |
 | the mirror of hunger | 115g | a draught heals half again as much | and something drinks beside you |
 | the nameless run | 105g | coins are worth double | and the score is worth half |
+
+## The ultimates
+
+Every hero has one ask a floor, bound to `f`, from **level 7** on. The
+sidebar carries the promise: grey until the level, breathing in the hero's own
+colour while it is live, grey again once the floor has had its answer.
+(`--testrun` lowers the gate to level 1, for looking at them. Level seven is
+about a floor or two of real clearing, so the ask belongs to a good run rather
+than to a perfect one.)
+
+| hero | the ask | what it does |
+| --- | --- | --- |
+| Noxx | **give in to the void** | Atritas, a dark shadow, walks beside him for 40 turns, hunting anything within five paces -- it blinks beside the thing it strikes, so you see it happen. Every wall is glass *while he walks*, and the walls close again over whatever the hero never actually saw. The price: one heart's worth every eighth turn, never the last one -- and every kill the shadow makes hands one heart back, so wading into a group pays. |
+| Yeti | **build the Frozen Fortress** | A wall of ice rises nearby with twice Yeti's health. Everything hostile on the floor -- hunter included -- prefers it to Yeti and chews on it instead. It lasts 80 turns or until it breaks, and while it stands the whole floor lies on white with every creature and every item drawn black. The price: the cold closes Yeti's sight to five paces. |
+| Walkyrion | **shatter the golden bell** | He drives his blade into the floor. Three paces of ground answer: walls come down to plain floor (the dungeon's own edge stays), everything hostile there is cut and thrown two paces, and anything that dies pays out like any kill. A room, not a duel. |
 
 ## Between the runs
 
@@ -209,22 +238,32 @@ the glass itself.
 
 | key | what it does |
 | --- | --- |
-| arrows, `hjkl`, `wasd` | move |
+| arrows, `wasd`, `hjk` | move (`l` is the legend now) |
 | `y` `u` `b` `n` (and Home/PgUp/End/PgDn) | move diagonally |
 | `.` or `space` | wait a turn |
 | `enter` | interact: loot, stairs, spring, chest, or speak |
 | `>` | take the stairs down |
 | `q` | drink the cheapest draught that covers the wound |
-| `i` | the pack |
+| `i` | the pack -- `↑↓` choose, `enter` drink it, `x` set it down |
+| `l` | the legend of glyphs |
+| `f` | the hero's ultimate, once a floor (see above) |
 | `c` | the hero sheet |
 | `?` | controls and reference |
 | `r` | the borrowed hour |
-| `esc` | pause (`r`/`esc` resume, `s` save and quit, `q` quit to title, `m` sound) |
+| `esc` | pause (`r`/`esc` resume, `c` controls, `s` save and quit, `q` to title, `m` sound) |
 
 The menus are read sideways: `←` `→` choose, `enter` takes, or press the letter
-of the row you want. Dialogs never answer their own opening press, and the two
+of the row you want. The **legend of glyphs** lives in its own menu (`l`) --
+the sidebar keeps the run, the reference lives one key away. The pause offers
+**CONTROLS**, and the title offers **DELETE PROGRESS**: it asks for the word
+DELETE to be typed out, because a confirm key is a reflex and a word is a
+decision. Dialogs never answer their own opening press, and the two
 screens that want a *held* key -- the prologue and the death tally -- fill a bar
 while it is held and refuse taps, so nothing walks through them by accident.
+The page that opens when something is picked up -- a blade, a curse, a gift --
+closes on `enter` (or `escape`) and on nothing else: a wraith's curse lands
+mid-fight, and the direction key already under your thumb should not be the
+thing that eats it.
 
 ## Getting started
 

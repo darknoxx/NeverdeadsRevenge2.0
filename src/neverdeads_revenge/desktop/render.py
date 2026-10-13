@@ -12,11 +12,14 @@ build a buffer and read the cells back without a screen attached.
 
 from __future__ import annotations
 
-from PySide6.QtCore import QRect
-from PySide6.QtGui import QImage, QPainter
+import math
+import time
 
+from PySide6.QtCore import QRect
+from PySide6.QtGui import QColor, QImage, QPainter
+
+from neverdeads_revenge.game.draughts import draught_by_key
 from neverdeads_revenge.game.npcs import NPC_COLOR, NPC_GLYPH
-from neverdeads_revenge.game.prologue import legend_rows
 from neverdeads_revenge.game.state import GameState, LogKind
 from neverdeads_revenge.world.generator import ESCAPE_DEPTH
 from neverdeads_revenge.world.items import (
@@ -72,6 +75,7 @@ _STYLE_BY_GROUP = {
     "curses": "red",
     "gifts": "bright_green",
     "effects": "cyan",
+    "draughts": "#c98fe0",
     "statuses": "yellow",
 }
 
@@ -163,6 +167,11 @@ def _draw_map(buffer, state, area) -> None:
     x0, y0, width, height = area
     dungeon = state.dungeon_map
     left, top, view_w, view_h = viewport(state, width, height)
+    # THE FROZEN FORTRESS. While it stands the whole floor lies under its own
+    # light: every cell gets the cold white behind it, so the room reads as
+    # the thing it has become. The glyphs keep their colours; the background
+    # is what changes.
+    frosted = state.fortress is not None
 
     for y in range(view_h):
         for x in range(view_w):
@@ -172,6 +181,29 @@ def _draw_map(buffer, state, area) -> None:
                 # A square something struck this turn flashes in reverse --
                 # parsed onto the cell's own style, so the wall stays a wall.
                 style = parse_style("reverse", style)
+            if frosted and style.bg is None:
+                fg = style.fg
+                if dungeon.display_tile(position) is Tile.WALL:
+                    # The walls go darker with the cold on them. The frost is
+                    # light ground, and a light wall on light ground would be
+                    # the one thing the fortress's own weather erases.
+                    fg = parse_style("grey15").fg
+                elif (
+                    state.actor_at(position) is not None
+                    or dungeon.item_at(position) is not None
+                ):
+                    # Everything alive and everything lying there goes black
+                    # in the fortress's weather: a green ghoul on light ground
+                    # is a smudge, and the room is meant to read as a room.
+                    fg = parse_style("black").fg
+                style = Style(
+                    fg=fg,
+                    bg=FROST,
+                    bold=style.bold,
+                    dim=style.dim,
+                    reverse=style.reverse,
+                    italic=style.italic,
+                )
             buffer.put(x0 + x, y0 + y, glyph, style)
 
 
@@ -197,11 +229,25 @@ def _cell_content(position, state: GameState) -> tuple[str, Style]:
 
     if visible and position in state.trail:
         return ",", parse_style("red")
+    if (
+        visible
+        and state.has_draught("carrion_tongue")
+        and position in state.death_squares
+    ):
+        # THE CARRION TONGUE shows the floor's dead: a dim blood spot where
+        # something stopped moving. A middle dot, because the bright red comma
+        # is the hungry road's trail and a floor with two red commas meaning
+        # two things is a floor that lies. Dim, because a stain lies *on* the
+        # ground rather than standing on it -- and only while the tongue is
+        # working, since it is the tongue's sense of the floor, not decoration.
+        return "·", parse_style("dim #8b1a1a")
 
     tile = dungeon.display_tile(position)
     if visible:
         return tile.glyph, parse_style(tile.color)
-    if dungeon.is_explored(position) and (
+    if (
+        dungeon.is_explored(position) or state.void_sight
+    ) and (
         tile.blocks_movement
         or tile in (Tile.STAIRS_DOWN, Tile.RIFT, Tile.SPRING)
     ):
@@ -232,13 +278,15 @@ def small_face_top(state) -> int:
     return len(hud_lines(state)) + 1
 
 
-def paste_sidebar(image, state, cols, rows, cell_w, cell_h, small) -> None:
+def paste_sidebar(image, state, cols, rows, cell_w, cell_h, small, now: float | None = None) -> None:
     """Everything under the HUD's rule, in one small face.
 
     The glance groups first -- lower case now, they were shouting in a panel
     meant for a glance, and the small face has no room for headlines anyway --
-    then a thin rule, then the legend. All of it measured from the same top row
-    the drawing above hands over, so the two can never drift apart.
+    then the void's line, then a thin rule, then the legend. All of it measured
+    from the same top row the drawing above hands over, so the two can never
+    drift apart. ``now`` drives the ready state's breath; it defaults so a
+    caller that has no clock -- a test -- still gets a prompt drawn.
     """
     areas = regions(cols, rows)
     sx, sy, sw, _sh = areas["sidebar"]
@@ -258,7 +306,7 @@ def paste_sidebar(image, state, cols, rows, cell_w, cell_h, small) -> None:
 
     y = top
     # The glance groups.
-    for kind in ("curses", "gifts", "effects", "statuses"):
+    for kind in ("curses", "gifts", "effects", "draughts", "statuses"):
         if y + small.cell_h > rows * cell_h:
             break
         draw(kind, left, y, dim)
@@ -273,20 +321,27 @@ def paste_sidebar(image, state, cols, rows, cell_w, cell_h, small) -> None:
         else:
             draw("-", text_x, y, dim)
             y += small.cell_h
+    # The void's own line, belonging to the group of rules the sidebar keeps:
+    # grey until the level, dark petrol and breathing while it can be given
+    # into, grey again once the floor has had it. The pulse is luminance on
+    # purpose -- the shader's bloom is already a reading of brightness, so the
+    # glow needs no new pass.
+    prompt = _void_prompt(state, time.time() if now is None else now)
+    if prompt is not None:
+        text, colour = prompt
+        if y + small.cell_h <= rows * cell_h:
+            draw(text[:chars], text_x, y, colour)
+            y += small.cell_h + small.cell_h // 4
     y += small.cell_h // 3  # air between the groups and the legend
     if y < rows * cell_h:
         painter.setPen(dim)
         painter.drawLine(left, y, (sx + sw) * cell_w - small.cell_w, y)
         y += (small.cell_h * 3) // 2
-    # The legend.
-    for glyph, text in legend_rows(state.depth, state.hero):
-        if y + small.cell_h > rows * cell_h:
-            break
-        if glyph:
-            draw(glyph, left, y, parse_style(_legend_colour(glyph)).fg)
-            draw(text[:chars], text_x, y, parse_style("grey70").fg)
-        elif text:
-            draw(text[:chars], left, y, parse_style("grey70").fg)
+    # The legend lives in its own menu now (`l`). The sidebar's job is the run
+    # in progress, and a reference that never changes was spending the best
+    # rows on every turn -- so what is left here is the pointer to it.
+    if y + small.cell_h <= rows * cell_h:
+        draw("l legend   ? reference", left, y, dim)
         y += small.cell_h
     painter.end()
 
@@ -389,9 +444,14 @@ def hud_lines(state: GameState) -> list[tuple[str, str]]:
     if state.at_the_rift:
         lines.append(("The rift hums.", "bold bright_cyan"))
 
-    potions = sum(1 for item in state.inventory if item.heal > 0)
-    draughts = f"Gold {state.gold}   Draughts {potions}"
-    if potions:
+    # The whole pack, not just the medicine: a strange bottle takes a slot, and
+    # a counter that said 1/2 while the pack was full was a counter that lied
+    # about the only number on the line that is a limit.
+    healing = sum(1 for item in state.inventory if item.heal > 0)
+    draughts = (
+        f"Gold {state.gold}   Draughts {len(state.inventory)}/{state.pack_capacity}"
+    )
+    if healing:
         draughts += " q"
     lines.append((draughts, "bold yellow"))
 
@@ -455,6 +515,72 @@ def paste_log(
     painter.end()
 
 
+#: Each hero's promise, as the sidebar says it: the name, and the colour it
+#: is said in. Noxx's petrol, Yeti's ice, Walkyrion's gold -- the colour of
+#: the thing the ask actually summons.
+ULTIMATE_PROMPTS: dict[str, tuple[str, tuple[int, int, int]]] = {
+    "noxx": ("give in to the void", (14, 111, 111)),
+    "yeti": ("build the Frozen Fortress", (159, 227, 239)),
+    "walkyrion": ("shatter the golden bell", (212, 175, 55)),
+}
+
+#: The cold the floor goes while the Frozen Fortress stands. A cold grey-blue
+#: rather than paper white: bright enough to be the fortress's own weather,
+#: dark enough that the grey of a remembered wall still reads against it.
+FROST = QColor("#bfced2")
+
+
+def ultimate_ready(state: GameState) -> bool:
+    """Whether the hero's ask is live: available, off cooldown, and the level
+    is there. Read by the prompt and by the app's breathing tick, so the pulse
+    and the promise cannot disagree about what state they are in."""
+    return (
+        state.ultimate_available
+        and state.atritas is None
+        and state.fortress is None
+        and state.level >= state.ultimate_level
+    )
+
+
+def _void_prompt(state: GameState, now: float) -> tuple[str, QColor] | None:
+    """The sidebar's promise of the dark, in the state it is in.
+
+    One line per hero, in that hero's colour: grey before the level, breathing
+    in the colour once it is live, grey again once the floor has had its ask.
+    While the fortress stands the line turns into its health, because a wall
+    with hit points is a thing the player needs a number for.
+    """
+    entry = ULTIMATE_PROMPTS.get(state.hero.key)
+    if entry is None:
+        return None
+    name, base = entry
+
+    if state.fortress is not None:
+        fortress = state.fortress
+        return (
+            f"the fortress stands {fortress.stats.hp}/{fortress.stats.max_hp}",
+            QColor(*base),
+        )
+    if state.atritas is not None or not state.ultimate_available:
+        # Given: grey until the next floor says otherwise. The dead line is
+        # the receipt, not an invitation.
+        return name, parse_style("grey35").fg
+    if state.level < state.ultimate_level:
+        return (
+            f"{name} (lvl {state.ultimate_level})",
+            parse_style("grey30").fg,
+        )
+    # Ready: the hero's own colour, breathing -- and not a whisper of a
+    # breath: the promise is supposed to catch the eye from across the log.
+    # The pulse rises past the base colour on purpose; the bloom is a reading
+    # of brightness and that overshoot is what makes the line visibly alive.
+    breathing = 0.35 + 0.95 * (0.5 + 0.5 * math.sin(now * 2.0 * math.pi / 1.0))
+    lit = tuple(
+        max(0, min(255, int(round(channel * breathing)))) for channel in base
+    )
+    return f"{name} (f)", QColor(*lit)
+
+
 def marks_names(state: GameState, kind: str) -> list[str]:
     """The names in one column group, in the order the sheet prints them."""
     from neverdeads_revenge.game.gifts import gift_by_key
@@ -469,6 +595,16 @@ def marks_names(state: GameState, kind: str) -> list[str]:
             gift = gift_by_key(key)
             if gift is not None:
                 names.append(gift.name)
+        return names
+    if kind == "draughts":
+        # The strange bottles, while they work. They count against the pack
+        # and they change the floor, so they belong beside the gifts and the
+        # effects rather than only in the pack screen.
+        names = []
+        for key in sorted(state.floor_draughts):
+            draught = draught_by_key(key)
+            if draught is not None:
+                names.append(draught.name)
         return names
     if kind == "statuses":
         names = []

@@ -29,6 +29,7 @@ from .items import (
     rare_find_count,
     roll_chest_contents,
     roll_item,
+    strange_count,
 )
 from .map import DungeonMap, GroundItem
 from .tiles import Tile
@@ -52,11 +53,12 @@ def enemy_count(depth: int) -> int:
     the difficulty dial that is easiest to overshoot, and a dial you can call is
     a dial you can measure.
 
-    Raised from seven on the experimental branch. More bodies is a *different*
-    kind of hard from bigger numbers: it costs turns, it crowds corridors, and
-    it is the thing a slow hero has least of.
+    Raised from seven on the experimental branch, and again to eleven when the
+    floors felt thin: more bodies is a *different* kind of hard from bigger
+    numbers -- it costs turns, it crowds corridors, and it is the thing a slow
+    hero has least of.
     """
-    return 8 + depth
+    return 11 + depth
 
 
 #: How likely a floor is to have somebody on it.
@@ -80,9 +82,12 @@ NPC_CHANCE = 0.25
 #: any more, it is the floor.
 HUNTER_CHANCE_BY_DEPTH: dict[int, float] = {
     1: 0.0,
-    2: 0.075,
-    3: 0.10,
-    4: 0.15,
+    2: 0.0,
+    3: 0.0,
+    4: 0.0,
+    # From the fifth floor on, and never before: measured, the hunter kills a
+    # 26-health hero in 1.5 blows from floor five, which is a wall the early
+    # floors should not have to explain.
     5: 0.20,
     6: 0.25,
     7: 0.30,
@@ -99,7 +104,9 @@ def hunter_chance(depth: int) -> float:
     silently dropping to nothing, which is the failure mode a bare ``.get``
     would have.
     """
-    if depth <= 1:
+    if depth < 5:
+        # Nothing before the fifth floor. The table above says so; this says it
+        # again so a table edit cannot quietly reintroduce a floor-2 ambush.
         return 0.0
     last = max(HUNTER_CHANCE_BY_DEPTH)
     return HUNTER_CHANCE_BY_DEPTH.get(depth, HUNTER_CHANCE_BY_DEPTH[last])
@@ -538,6 +545,14 @@ def _scatter_loot(
     to_place += [
         make_item(roll_item(rng, depth, kinds=("weapon", "armour")))
         for _ in range(equipment_count(depth))
+    ]
+    # And the strange draughts, from their own pool: five bottles that lay a
+    # rule on the floor, none of them medicine. Rolled from the draught pool
+    # they would have cut the healing to a fifth; rolled apart, the floor holds
+    # both.
+    to_place += [
+        make_item(roll_item(rng, depth, kinds=("strange",)))
+        for _ in range(strange_count(depth))
     ]
     if curse_keys:
         # A different curse in each chest on a floor, and never more chests than

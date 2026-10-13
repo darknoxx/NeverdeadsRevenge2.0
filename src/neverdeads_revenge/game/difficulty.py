@@ -30,6 +30,19 @@ __all__ = [
     "SPEED_HORIZON",
     "GAP_CLOSED_BY_THEN",
     "potency",
+    "ULTIMATE_LEVEL",
+    "ATRITAS_TURNS",
+    "ATRITAS_SWING_EVERY",
+    "ATRITAS_DRAIN_EVERY",
+    "ATRITAS_RADIUS",
+    "ATRITAS_HUNT_RADIUS",
+    "ATRITAS_VIEW",
+    "ATRITAS_KILL_HEAL",
+    "FORTRESS_TURNS",
+    "FORTRESS_SIGHT_PENALTY",
+    "FORTRESS_VIEW",
+    "BELL_RADIUS",
+    "BASE_PACK_SLOTS",
     "enemy_speed",
     "weight_at_depth",
 ]
@@ -56,6 +69,73 @@ __all__ = [
 #: fast just to stand still. The two dials are kept in step by a test, which
 #: insists the ceiling is reached exactly on the last floor and not before.
 POTENCY_PER_FLOOR = 0.225
+
+#: The level the ultimates start answering at. Below it, the prompt in the
+#: sidebar reads grey and `f` refuses politely. Seven rather than ten after the
+#: bot runs: level ten is thirty-six kills, which is *clearing three floors*,
+#: and a promise nobody ever sees is not a promise. Seven is twenty-eight kills
+#: -- a good floor or two -- so the ask is part of a good run and not a
+#: trophy for a perfect one.
+ULTIMATE_LEVEL = 7
+
+#: How long Atritas walks beside Noxx once summoned, in turns. Forty: the
+#: "few seconds" the promise names, said in the only currency the dungeon
+#: keeps, so a slow reader is not charged more than a fast one.
+ATRITAS_TURNS = 40
+
+#: Turns between two of Atritas's swings. Staggered against the drain so the
+#: price and the assistance do not land on the same beat.
+ATRITAS_SWING_EVERY = 6
+
+#: Turns between two beats of the price: one health, floored at one. The
+#: summoner cannot be killed by their own dark -- a bargain that could finish
+#: you is a bet, and this is not a bet, it is a cost.
+ATRITAS_DRAIN_EVERY = 8
+
+#: How close an enemy has to stand to Noxx before Atritas swings at it.
+ATRITAS_RADIUS = 3
+
+#: How far the shadow will *hunt*: a prey within this many paces of where it
+#: stands is fair game, and it blinks to it. Wider than the guard radius, so
+#: the shadow seeks and destroys rather than waiting by its summoner -- while
+#: the hero's own three paces stay the fallback, because a shadow that
+#: wandered off the moment something looked interesting would be a bodyguard
+#: with a hobby.
+ATRITAS_HUNT_RADIUS = 5
+
+#: How far the shadow keeps the floor in view around itself. It blinks from
+#: prey to prey, and wherever it lands it sees -- three paces, always -- so
+#: the summoner can watch the work it is paying for.
+ATRITAS_VIEW = 3
+
+#: How much health Atritas hands back to its summoner for every kill it
+#: makes. The price is per beat and the feeding is per kill, which is the
+#: whole bargain: wade into a group, and the dark pays for the blood it took.
+ATRITAS_KILL_HEAL = 1
+
+#: How long Yeti's Frozen Fortress stands, in turns -- twice the shadow's
+#: stay, because a wall that only soaks is worth less per turn than a shadow
+#: that cuts, and the sight it takes is paid the whole time it is up.
+FORTRESS_TURNS = 80
+
+#: How much of Yeti's sight the fortress takes while it stands. The cold
+#: closes the dark in; that is the price of the wall.
+FORTRESS_SIGHT_PENALTY = 5
+
+#: How far the fortress keeps the floor in view around itself. It is the one
+#: thing on the floor that watches on the hero's behalf: three paces around
+#: the wall stay visible even after the cold has taken his eyes, so what he
+#: built is never lost behind what it cost.
+FORTRESS_VIEW = 3
+
+#: Walkyrion's bell rings for this many paces around him, measured the way
+#: everything in the dungeon measures: Chebyshev, so the field is a square.
+BELL_RADIUS = 3
+
+#: What the pack holds before any upgrade. Two draughts, so the limit is felt
+#: on the first floor rather than admired: the shop sells the rest, one slot at
+#: a time and each dearer than the last.
+BASE_PACK_SLOTS = 2
 
 #: Ceiling on potency. Without it a floor-40 monster would be unplayable and any
 #: formula mistake would silently become exponential. Just over two and a half

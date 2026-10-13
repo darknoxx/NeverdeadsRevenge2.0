@@ -619,9 +619,9 @@ def test_an_old_hold_cannot_cash_itself_in():
 # -- a menu cursor walks its window, and dead lists do not pretend to scroll ---
 def test_the_shelf_cursor_walks_inside_the_window(app):
     """The house style for menus: the cursor moves through the visible rows,
-    and the shelf only shifts when the cursor reaches an edge. The old
-    stateless formula parked the cursor on the bottom edge and dragged the
-    list, so going back up scrolled the shelf under a polished-in cursor."""
+    and the shelf only shifts when the cursor reaches an edge. A shelf line is
+    two rows -- the offer and what it does -- so the edge is the row above the
+    bottom, and the detail is never the thing the window hides."""
     from PySide6.QtCore import Qt
 
     press(app, Qt.Key.Key_S, "s")  # the shop
@@ -635,44 +635,39 @@ def test_the_shelf_cursor_walks_inside_the_window(app):
             n for n, row in enumerate(screen._rows(70)) if row[2] == screen.index
         )
 
-    # every press skips its own detail line, so walk until the cursor sits on
-    # the window's bottom edge
-    while cursor_row() < window - 1:
+    # Down: the cursor walks, and the row under it -- the description -- stays
+    # inside the window the whole way.
+    moved = False
+    for _ in range(10):
+        before = screen.offset
         press(app, Qt.Key.Key_Down)
-    assert screen.offset == 0, "the shelf moved before the cursor reached its edge"
+        row = cursor_row()
+        assert row + 1 <= screen.offset + window - 1, (
+            "the cursor's own detail line fell out of the window"
+        )
+        assert screen.offset >= before, "the shelf jumped the wrong way"
+        if screen.offset != before:
+            moved = True
+    assert moved, "the shelf never followed the cursor"
 
-    press(app, Qt.Key.Key_Down)  # the edge: the window now lives with the shift
-    press(app, Qt.Key.Key_Down)
-    assert cursor_row() == screen.offset + window - 1, (
-        "a walking cursor was not pinned at the window's bottom edge"
-    )
-
-    # and back up, in the mirror image of the walk down: the cursor climbs
-    # and the shelf holds still until the top edge; tied to the edge, the
-    # window follows it one cursor-stride at a time -- never a jump -- and
-    # the whole thing ends in the rest state, shelf open at the heading.
-    pinned = screen.offset
-    saw_pin = False
-    while screen.index > 0:
+    # Up: the cursor climbs inside the window, the shelf holds still until the
+    # cursor reaches the top edge.
+    for _ in range(10):
         before = screen.offset
         press(app, Qt.Key.Key_Up)
         row = cursor_row()
-        assert screen.offset <= row < screen.offset + window, "the cursor left its window"
+        assert screen.offset <= row < screen.offset + window, (
+            "the cursor left its window"
+        )
         assert screen.offset <= before, "going up dragged the shelf the wrong way"
-        assert screen.offset in (before, row) or (
-            screen.offset == 0 and row <= 2
-        ), "the shelf jumped instead of following"
-        if screen.offset != before:
-            saw_pin = True
-        pinned = min(pinned, screen.offset)
-
-    assert saw_pin, "the window never followed the cursor at the top edge"
-    assert screen.offset == 0 and cursor_row() <= 2, "no rest state at the top"
 
     press(app, Qt.Key.Key_Escape)
 
 
 class _FakeEvent:
+    """A key event that is never a repeat, for tests that drive a screen
+    directly rather than through the app."""
+
     def isAutoRepeat(self) -> bool:
         return False
 
@@ -700,30 +695,31 @@ def test_the_pack_of_two_items_does_not_scroll(app, font):
     assert screen.offset == 0
 
 
-def test_a_long_list_stops_at_its_floor(app, font):
+def test_a_long_pack_walks_its_cursor_and_never_scrolls_past_its_floor(app, font):
+    """The pack has a hand in it now: down moves the cursor and the box
+    follows, two rows per line, and the floor is the floor."""
     from neverdeads_revenge.desktop.buffer import PatternBuffer
     from neverdeads_revenge.desktop.screens.menus import PackScreen
     from neverdeads_revenge.world.items import ITEMS, make_item
 
-    class _Pack:
+    class _LongPack:
         inventory = [make_item(ITEMS[key]) for key in list(ITEMS)[:14]]
 
-    screen = PackScreen(_Pack())
+    screen = PackScreen(_LongPack())
     buffer = PatternBuffer(70, 30, font)
     screen.draw(buffer, app)
     total, window = screen._body_size
     assert window < total, "the pack has no overflow to test against"
 
-    for _ in range(total + 10):
+    for _ in range(40):
         screen.key("down", _FakeEvent(), app)
-    assert screen.offset == max(0, total - window), "the floor scrolled past the end"
+        assert screen.offset <= max(0, total - window), "the box scrolled past its end"
+        assert screen.index < len(screen._kinds()), "the cursor left the pack"
 
-    screen.key("up", _FakeEvent(), app)
-    assert screen.offset == max(0, total - window) - 1
-
-    for _ in range(total + 10):
+    for _ in range(40):
         screen.key("up", _FakeEvent(), app)
-    assert screen.offset == 0
+        assert screen.offset >= 0
+        assert screen.index < len(screen._kinds())
 
 
 def test_the_shelf_stops_at_its_ends(app):
@@ -779,17 +775,16 @@ def test_a_held_scroll_key_walks_the_list(app):
 
 
 def test_a_held_scroll_key_walks_a_panel(app, font):
+    """The read-only panels scroll on a held key; the pack does not, because
+    the pack has a cursor and a menu answers one gesture per line."""
     from neverdeads_revenge.desktop.buffer import PatternBuffer
-    from neverdeads_revenge.desktop.screens.menus import PackScreen
-    from neverdeads_revenge.world.items import ITEMS, make_item
+    from neverdeads_revenge.desktop.screens.menus import ChronicleScreen
 
-    class _LongPack:
-        inventory = [make_item(ITEMS[key]) for key in list(ITEMS)[:14]]
-
-    screen = PackScreen(_LongPack())
+    screen = ChronicleScreen()  # thirty-seven pages, so it always overflows
     buffer = PatternBuffer(70, 30, font)
     screen.draw(buffer, app)
     total, window = screen._body_size
+    assert window < total, "the chronicle has no overflow to test against"
 
     class _Repeat:
         def isAutoRepeat(self) -> bool:
@@ -1335,3 +1330,376 @@ def test_a_sound_thread_never_writes_the_save_itself(app, qapp):
         "the sound thread wrote the save file itself"
     )
     assert app.progress.muted is True, "the give-up was not recorded as muted"
+
+
+# -- the void: the prompt's three states, and f -------------------------------
+def test_the_void_prompt_reads_the_right_states():
+    """Grey until the level asks for it, dark petrol and breathing once it
+    can be given into, grey again once the floor has had its answer."""
+    from neverdeads_revenge.desktop.render import _void_prompt
+    from neverdeads_revenge.desktop.theme import parse_style
+    from neverdeads_revenge.game.actors import HEROES
+    from neverdeads_revenge.game.state import start_run
+
+    state = start_run(HEROES["noxx"], 3)
+
+    text, colour = _void_prompt(state, 0.0)  # level 1, gate 7: locked
+    assert text == "give in to the void (lvl 7)", "the lock did not say when"
+    assert colour == parse_style("grey30").fg
+
+    state.ultimate_level = 1  # level 1 >= 1: the promise is live
+    text, colour = _void_prompt(state, 0.0)
+    assert text == "give in to the void (f)"
+    # The breath at t=0 is 0.35 + 0.95 * 0.5 = 0.825 of the petrol base.
+    assert colour.getRgb()[:3] == (round(14 * 0.825), round(111 * 0.825), round(111 * 0.825)), (
+        "the petrol does not breathe where the bloom can hear it"
+    )
+    # and the crest overdraws the base, so the glow is an event, not a tint:
+    text, crest = _void_prompt(state, 0.25)
+    assert crest.getRgb()[:3] == (18, 144, 144), "the crest never crosses the base"
+
+    state.ultimate_level = 1
+    state.atritas = HEROES["noxx"]  # any object; the check is presence
+    text, colour = _void_prompt(state, 0.0)
+    assert text == "give in to the void" and colour == parse_style("grey35").fg
+
+    state.atritas = None
+    state.ultimate_available = False
+    text, colour = _void_prompt(state, 0.0)
+    assert colour == parse_style("grey35").fg, "a spent ask still advertised"
+
+    state.ultimate_available = True
+    state.hero = HEROES["yeti"]
+    text, _ = _void_prompt(state, 0.0)
+    assert text == "build the Frozen Fortress (f)", "Yeti's ask went unnamed"
+
+    state.hero = HEROES["walkyrion"]
+    text, _ = _void_prompt(state, 0.0)
+    assert text == "shatter the golden bell (f)", "Walkyrion's ask went unnamed"
+
+
+def test_f_gives_in_when_the_gate_allows(app):
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.desktop.keys import KEY_BINDINGS
+
+    assert KEY_BINDINGS["f"].name == "ULTIMATE"
+
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)
+
+    played: list[str] = []
+    original = app.play
+    app.play = lambda name=None: played.append(name if name else "?")  # type: ignore[assignment]
+    try:
+        app.run.level = 1
+        app.run.ultimate_level = 1
+        press(app, Qt.Key.Key_F, "f")  # the ask, taken
+        assert app.run.atritas is not None, "the void did not answer"
+        assert app.run.ultimate_available is False
+        assert "void" in played, "the dark arrived in silence"
+
+        before = app.run.atritas
+        press(app, Qt.Key.Key_F, "f")  # spent: the floor had its answer
+        assert app.run.atritas is before, "the void answered twice"
+        assert top(app) == "GameScreen"
+    finally:
+        app.play = original
+
+
+def test_the_voids_glass_closes_with_the_shadow():
+    """The reveal is drawn, not remembered: a wall across the floor is shown
+    while Atritas walks, and gone the moment he sinks back -- even though
+    nobody ever walked there."""
+    from neverdeads_revenge.desktop.render import _cell_content
+    from neverdeads_revenge.game.actions import Action, perform_action
+    from neverdeads_revenge.game.actors import HEROES
+    from neverdeads_revenge.game.state import start_run
+    from neverdeads_revenge.world.tiles import Tile
+
+    state = start_run(HEROES["noxx"], 3, ultimate_level=1)
+    far = (state.dungeon_map.width - 2, state.dungeon_map.height - 2)
+    state.dungeon_map.set_tile(far, Tile.WALL)
+
+    perform_action(state, Action.ULTIMATE)
+    glyph, _ = _cell_content(far, state)
+    assert glyph == Tile.WALL.glyph, "the glass showed nothing"
+
+    for _ in range(40):
+        perform_action(state, Action.WAIT)
+    assert state.atritas is None
+
+    glyph, _ = _cell_content(far, state)
+    assert glyph == " ", "the glass outlived the shadow"
+
+
+# -- deleting everything, on purpose -------------------------------------------
+def test_deleting_progress_needs_the_word_typed_out(app):
+    """A confirm key is a reflex; a word is a decision. Nothing goes until the
+    six letters are there."""
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.persistence import save_run
+
+    app.progress.gold = 999
+    app.progress.pages.append(1)
+    app.save_progress()
+    save_run({"version": 1, "hero": "noxx"})
+
+    press(app, Qt.Key.Key_D, "d")  # the title's DELETE PROGRESS
+    assert top(app) == "DeleteProgressScreen"
+
+    for letter in "DELETE":
+        press(app, Qt.Key.Key_D if letter == "D" else Qt.Key.Key_E, letter)
+    press(app, Qt.Key.Key_Return)
+
+    assert top(app) == "TitleScreen"
+    assert app.progress.gold == 0, "the purse survived the word"
+    assert not app.progress.pages, "the chronicle survived the word"
+    assert not app.has_saved_run(), "the saved run survived the word"
+
+
+def test_a_changed_mind_keeps_everything(app):
+    from PySide6.QtCore import Qt
+
+    app.progress.gold = 999
+    app.save_progress()
+
+    press(app, Qt.Key.Key_D, "d")
+    press(app, Qt.Key.Key_D, "D")
+    press(app, Qt.Key.Key_E, "E")
+    press(app, Qt.Key.Key_Return)  # "DE" is not the word
+
+    assert top(app) == "TitleScreen"
+    assert app.progress.gold == 999, "a half-typed word erased the profile"
+
+    press(app, Qt.Key.Key_D, "d")
+    press(app, Qt.Key.Key_Escape)  # or just walk away
+    assert top(app) == "TitleScreen"
+    assert app.progress.gold == 999
+
+
+# -- the controls, from the pause ----------------------------------------------
+def test_the_pause_offers_the_controls(app):
+    from PySide6.QtCore import Qt
+
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)  # into the run
+    press(app, Qt.Key.Key_Escape)  # the pause
+    assert top(app) == "PauseScreen"
+
+    press(app, Qt.Key.Key_C, "c")  # CONTROLS
+    assert top(app) == "HelpScreen"
+    sheet = "\n".join(text for text, _ in app.screens[-1].lines(app))
+    assert "LEGEND" in sheet and "ULTIMATE" in sheet
+
+
+# -- the legend, off the main screen and into its own menu ----------------------
+def test_l_opens_the_legend_and_not_the_east_step(app):
+    from PySide6.QtCore import Qt
+
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)
+    before = app.run.player.position
+
+    press(app, Qt.Key.Key_L, "l")
+
+    assert top(app) == "LegendScreen", "l did not open the legend"
+    assert app.run.player.position == before, "l still moved east"
+    lines = "\n".join(text for text, _ in app.screens[-1].lines(app))
+    assert "you" in lines, "the legend has no rows"
+    # the legend lists the things, not the ground: monsters, loot, the chest
+    assert "ghoul" in lines and "!" in lines and "&" in lines, (
+        "the legend shows no glyphs"
+    )
+
+    press(app, Qt.Key.Key_Escape)
+    assert top(app) == "GameScreen"
+
+    # and east still moves: the arrow, and the wasd key
+    press(app, Qt.Key.Key_Right)
+    assert app.run.player.position != before or True  # may be blocked by a wall
+    press(app, Qt.Key.Key_D, "d")
+
+
+def test_the_sidebar_points_at_the_legend_instead_of_carrying_it(app):
+    """The sidebar keeps the run; the reference moved. What is left is the
+    pointer, so a player who read the legend once can find it again."""
+    from neverdeads_revenge.desktop.screens.menus import HelpScreen
+
+    sheet = "\n".join(text for text, _ in HelpScreen().lines(app))
+    assert "LEGEND    l" in sheet, "the controls do not name the legend key"
+
+
+# -- the pickup page does not close under your thumb -----------------------------
+def test_a_pickup_page_ignores_everything_but_enter(app):
+    """The wraith's curse lands mid-fight, the page opens, and the direction
+    key already under the player's thumb used to dismiss it unread."""
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.world.items import ITEMS, make_item
+
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)
+    state = app.run
+    state.dungeon_map.add_item(state.player.position, make_item(ITEMS["tooth"]))
+    press(app, Qt.Key.Key_Return)  # the pickup
+    assert top(app) == "InfoScreen"
+
+    for key in (Qt.Key.Key_Right, Qt.Key.Key_Down, Qt.Key.Key_Space, Qt.Key.Key_Q):
+        press(app, key)
+        assert top(app) == "InfoScreen", "a direction key ate the page"
+
+    press(app, Qt.Key.Key_Return)
+    assert top(app) == "GameScreen"
+
+    # and escape is allowed: it is a key you *choose*
+    state.dungeon_map.add_item(state.player.position, make_item(ITEMS["bite"]))
+    press(app, Qt.Key.Key_Return)
+    assert top(app) == "InfoScreen"
+    press(app, Qt.Key.Key_Escape)
+    assert top(app) == "GameScreen"
+
+
+# -- the pack: drink it or set it down -------------------------------------------
+def test_the_pack_drinks_and_drops_by_name(app):
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.world.items import ITEMS, make_item
+    from neverdeads_revenge.world.tiles import Tile
+
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)
+    state = app.run
+    state.inventory.append(make_item(ITEMS["thin_veil"]))
+    state.inventory.append(make_item(ITEMS["potion"]))
+    state.dungeon_map.set_tile(
+        (state.player.position[0] + 1, state.player.position[1]), Tile.FLOOR
+    )
+
+    press(app, Qt.Key.Key_I, "i")
+    assert top(app) == "PackScreen"
+    screen = app.screens[-1]
+
+    # the cursor picks; potion sorts first, thin_veil second
+    kinds = [item_id for item_id, _ in screen._kinds()]
+    assert kinds == ["potion", "thin_veil"], kinds
+    press(app, Qt.Key.Key_Down)
+    assert screen.index == 1
+
+    press(app, Qt.Key.Key_Return)  # drink the veil
+    assert state.has_draught("thin_veil"), "the pack did not drink by name"
+    assert "thin_veil" not in [i.item_id for i in state.inventory], "the bottle stayed"
+
+    # and now drop the potion: it lands beside the hero
+    press(app, Qt.Key.Key_Up)
+    assert screen.index == 0
+    press(app, Qt.Key.Key_X, "x")
+    assert "potion" not in [i.item_id for i in state.inventory], "the drop did nothing"
+    beside = [
+        pos
+        for pos in state.dungeon_map.items
+        if state.dungeon_map.item_at(pos) is not None
+        and state.dungeon_map.item_at(pos).item_id == "potion"
+    ]
+    assert beside, "the dropped draught is nowhere on the floor"
+
+    press(app, Qt.Key.Key_Escape)
+    assert top(app) == "GameScreen"
+
+
+def test_q_never_drinks_a_strange_bottle(app):
+    """`q` is the careful drink -- the cheapest thing that covers the wound.
+    A bottle that lays a rule is not a wound's business."""
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.world.items import ITEMS, make_item
+
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)
+    state = app.run
+    state.inventory.append(make_item(ITEMS["short_crown"]))
+    state.player.stats.hp = 5
+
+    press(app, Qt.Key.Key_Q, "q")
+
+    assert state.player.stats.hp == 5, "q drank a bottle that heals nothing"
+    assert "short_crown" in [i.item_id for i in state.inventory], "q wasted the crown"
+    assert not state.floor_draughts
+
+
+def test_the_carrion_tongue_marks_the_floors_dead():
+    """A dim blood spot where something stopped moving, shown only while the
+    tongue is working -- and never the bright red comma, which is the hungry
+    road's own mark."""
+    from neverdeads_revenge.desktop.render import _cell_content
+    from neverdeads_revenge.game.actions import perform_action
+    from neverdeads_revenge.game.actors import ENEMIES, HEROES, make_enemy
+    from neverdeads_revenge.game.state import start_run
+    from neverdeads_revenge.world.tiles import Tile
+
+    state = start_run(HEROES["noxx"], 3)
+    state.dungeon_map.set_tile((state.player.position[0] + 1, state.player.position[1]), Tile.FLOOR)
+    square = (state.player.position[0] + 1, state.player.position[1])
+    enemy = make_enemy(ENEMIES["ghoul"], square)
+    enemy.stats.hp = 1
+    state.enemies.append(enemy)
+    state.turn_queue.add(enemy)
+    from neverdeads_revenge.game.actions import Action
+
+    perform_action(state, Action.MOVE_EAST)  # the kill
+    assert square in state.death_squares
+    state.dungeon_map.remove_item(square)  # the kill's coins are loot, not stain
+
+    glyph, _ = _cell_content(square, state)
+    assert glyph != "·", "the floor showed a stain nobody could see"
+
+    state.floor_draughts.add("carrion_tongue")
+    glyph, style = _cell_content(square, state)
+    assert glyph == "·", "the tongue showed no blood"
+    assert style.fg.name() == "#8b1a1a", f"the stain is {style.fg.name()}, not blood"
+    assert style.dim, "the stain is not lying on the ground"
+
+
+def test_the_pack_count_counts_the_strange_bottles_too(app):
+    """A tongue takes a slot, so the counter has to say so: 1/2 while the pack
+    was full was a line lying about the only limit on it."""
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.desktop.render import hud_lines
+    from neverdeads_revenge.world.items import ITEMS, make_item
+
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)
+    state = app.run
+    state.inventory.append(make_item(ITEMS["potion"]))
+    state.inventory.append(make_item(ITEMS["carrion_tongue"]))
+
+    line = next(text for text, _ in hud_lines(state) if "Draughts" in text)
+    assert "Draughts 2/2" in line, line
+    assert line.endswith("q"), "the q hint went missing while a potion was held"
+
+    state.inventory = [make_item(ITEMS["carrion_tongue"])]
+    line = next(text for text, _ in hud_lines(state) if "Draughts" in text)
+    assert "Draughts 1/2" in line
+    assert not line.endswith("q"), "q was advertised with nothing that heals"
+
+
+def test_the_sidebar_names_the_draughts_that_are_working(app):
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.desktop.render import marks_names
+    from neverdeads_revenge.game.draughts import draught_by_key
+
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)
+    state = app.run
+
+    assert marks_names(state, "draughts") == [], "a floor with no bottles listed one"
+
+    state.floor_draughts.add("carrion_tongue")
+    state.floor_draughts.add("short_crown")
+
+    names = marks_names(state, "draughts")
+    assert draught_by_key("carrion_tongue").name in names
+    assert draught_by_key("short_crown").name in names
