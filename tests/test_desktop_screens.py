@@ -1703,3 +1703,37 @@ def test_the_sidebar_names_the_draughts_that_are_working(app):
     names = marks_names(state, "draughts")
     assert draught_by_key("carrion_tongue").name in names
     assert draught_by_key("short_crown").name in names
+
+
+def test_the_tongue_paints_the_dead_even_under_the_coins(app):
+    """The kill leaves coin where it died, and the coin won the square: the
+    stain was invisible exactly where the kills were. The background is the
+    channel loot does not use."""
+    from neverdeads_revenge.desktop.buffer import PatternBuffer
+    from neverdeads_revenge.desktop.render import BLOOD_TINT, _draw_map, regions, viewport
+    from neverdeads_revenge.game.actions import Action, perform_action
+    from neverdeads_revenge.game.actors import ENEMIES, HEROES, make_enemy
+    from neverdeads_revenge.game.state import start_run
+    from neverdeads_revenge.world.tiles import Tile
+
+    state = start_run(HEROES["noxx"], 3)
+    square = (state.player.position[0] + 1, state.player.position[1])
+    state.dungeon_map.set_tile(square, Tile.FLOOR)
+    enemy = make_enemy(ENEMIES["ghoul"], square)
+    enemy.stats.hp = 1
+    state.enemies.append(enemy)
+    state.turn_queue.add(enemy)
+    perform_action(state, Action.MOVE_EAST)  # the kill, and its coin
+    assert square in state.death_squares
+
+    state.floor_draughts.add("carrion_tongue")
+    buffer = PatternBuffer(40, 16, app.font)
+    area = regions(buffer.cols, buffer.rows)["map"]
+    _draw_map(buffer, state, area)
+    left, top, _, _ = viewport(state, area[2], area[3])
+    cell = buffer.cells[square[1] - top][square[0] - left]
+
+    assert cell.char == "$", "the coin went missing from the corpse"
+    assert cell.style.bg is not None and cell.style.bg.name() == BLOOD_TINT.name(), (
+        "the dead square is not painted under the loot"
+    )
