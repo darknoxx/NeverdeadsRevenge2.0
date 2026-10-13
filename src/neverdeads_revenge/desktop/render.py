@@ -18,6 +18,7 @@ import time
 from PySide6.QtCore import QRect
 from PySide6.QtGui import QColor, QImage, QPainter
 
+from neverdeads_revenge.game.draughts import draught_by_key
 from neverdeads_revenge.game.npcs import NPC_COLOR, NPC_GLYPH
 from neverdeads_revenge.game.state import GameState, LogKind
 from neverdeads_revenge.world.generator import ESCAPE_DEPTH
@@ -74,6 +75,7 @@ _STYLE_BY_GROUP = {
     "curses": "red",
     "gifts": "bright_green",
     "effects": "cyan",
+    "draughts": "#c98fe0",
     "statuses": "yellow",
 }
 
@@ -304,7 +306,7 @@ def paste_sidebar(image, state, cols, rows, cell_w, cell_h, small, now: float | 
 
     y = top
     # The glance groups.
-    for kind in ("curses", "gifts", "effects", "statuses"):
+    for kind in ("curses", "gifts", "effects", "draughts", "statuses"):
         if y + small.cell_h > rows * cell_h:
             break
         draw(kind, left, y, dim)
@@ -442,9 +444,14 @@ def hud_lines(state: GameState) -> list[tuple[str, str]]:
     if state.at_the_rift:
         lines.append(("The rift hums.", "bold bright_cyan"))
 
-    potions = sum(1 for item in state.inventory if item.heal > 0)
-    draughts = f"Gold {state.gold}   Draughts {potions}/{state.pack_capacity}"
-    if potions:
+    # The whole pack, not just the medicine: a strange bottle takes a slot, and
+    # a counter that said 1/2 while the pack was full was a counter that lied
+    # about the only number on the line that is a limit.
+    healing = sum(1 for item in state.inventory if item.heal > 0)
+    draughts = (
+        f"Gold {state.gold}   Draughts {len(state.inventory)}/{state.pack_capacity}"
+    )
+    if healing:
         draughts += " q"
     lines.append((draughts, "bold yellow"))
 
@@ -588,6 +595,16 @@ def marks_names(state: GameState, kind: str) -> list[str]:
             gift = gift_by_key(key)
             if gift is not None:
                 names.append(gift.name)
+        return names
+    if kind == "draughts":
+        # The strange bottles, while they work. They count against the pack
+        # and they change the floor, so they belong beside the gifts and the
+        # effects rather than only in the pack screen.
+        names = []
+        for key in sorted(state.floor_draughts):
+            draught = draught_by_key(key)
+            if draught is not None:
+                names.append(draught.name)
         return names
     if kind == "statuses":
         names = []

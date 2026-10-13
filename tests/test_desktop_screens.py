@@ -1659,3 +1659,47 @@ def test_the_carrion_tongue_marks_the_floors_dead():
     assert glyph == "·", "the tongue showed no blood"
     assert style.fg.name() == "#8b1a1a", f"the stain is {style.fg.name()}, not blood"
     assert style.dim, "the stain is not lying on the ground"
+
+
+def test_the_pack_count_counts_the_strange_bottles_too(app):
+    """A tongue takes a slot, so the counter has to say so: 1/2 while the pack
+    was full was a line lying about the only limit on it."""
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.desktop.render import hud_lines
+    from neverdeads_revenge.world.items import ITEMS, make_item
+
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)
+    state = app.run
+    state.inventory.append(make_item(ITEMS["potion"]))
+    state.inventory.append(make_item(ITEMS["carrion_tongue"]))
+
+    line = next(text for text, _ in hud_lines(state) if "Draughts" in text)
+    assert "Draughts 2/2" in line, line
+    assert line.endswith("q"), "the q hint went missing while a potion was held"
+
+    state.inventory = [make_item(ITEMS["carrion_tongue"])]
+    line = next(text for text, _ in hud_lines(state) if "Draughts" in text)
+    assert "Draughts 1/2" in line
+    assert not line.endswith("q"), "q was advertised with nothing that heals"
+
+
+def test_the_sidebar_names_the_draughts_that_are_working(app):
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.desktop.render import marks_names
+    from neverdeads_revenge.game.draughts import draught_by_key
+
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)
+    state = app.run
+
+    assert marks_names(state, "draughts") == [], "a floor with no bottles listed one"
+
+    state.floor_draughts.add("carrion_tongue")
+    state.floor_draughts.add("short_crown")
+
+    names = marks_names(state, "draughts")
+    assert draught_by_key("carrion_tongue").name in names
+    assert draught_by_key("short_crown").name in names
