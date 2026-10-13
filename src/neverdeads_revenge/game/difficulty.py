@@ -43,6 +43,8 @@ __all__ = [
     "FORTRESS_VIEW",
     "BELL_RADIUS",
     "BASE_PACK_SLOTS",
+    "HOARFROST_PER_STACK",
+    "BELL_RING_PER_STACK",
     "enemy_speed",
     "weight_at_depth",
 ]
@@ -131,6 +133,12 @@ FORTRESS_VIEW = 3
 #: Walkyrion's bell rings for this many paces around him, measured the way
 #: everything in the dungeon measures: Chebyshev, so the field is a square.
 BELL_RADIUS = 3
+
+#: How much a bloodline's chance grows per stack. Both read as "a coin in
+#: three, then two, then half" -- a real chance at one stack and a reliable
+#: rule at three, without ever being certain.
+HOARFROST_PER_STACK = 0.15
+BELL_RING_PER_STACK = 0.20
 
 #: What the pack holds before any upgrade. Two draughts, so the limit is felt
 #: on the first floor rather than admired: the shop sells the rest, one slot at

@@ -44,7 +44,9 @@ from .curses import CURSES, Curse
 from .difficulty import (
     ATRITAS_VIEW,
     BASE_PACK_SLOTS,
+    BELL_RING_PER_STACK,
     FORTRESS_VIEW,
+    HOARFROST_PER_STACK,
     ULTIMATE_LEVEL,
     potency,
 )
@@ -268,6 +270,18 @@ class GameState:
     #: How many things the pack holds. Base plus whatever the shop sold, so a
     #: run that bought slots carries them for its whole life.
     pack_capacity: int = BASE_PACK_SLOTS
+    # -- the bloodlines ------------------------------------------------------
+    #
+    # Bought once, folded into the run at its start, and only for the hero they
+    # belong to. Numbers rather than a lookup, for the same reason the wilds
+    # are: nothing in the hot path should have to ask the save file what an
+    # upgrade does.
+    #: Noxx: turns a crit's wound lasts *longer* by this much.
+    bleed_on_crit: int = 0
+    #: Yeti: chance that whoever lands a blow on him freezes.
+    freeze_chance: float = 0.0
+    #: Walkyrion: chance that a landing blow throws its target.
+    pushback_chance: float = 0.0
     #: The strange draughts drunk on this floor, by key. A set rather than a
     #: single slot because nothing stops a player drinking two, and every one
     #: of them is emptied by :meth:`build_floor` -- a rule carried down the
@@ -1146,6 +1160,24 @@ def _apply_upgrades(state: GameState, upgrades: dict[str, int]) -> None:
             state.sight_bonus += upgrade.sight * stacks
         if upgrade.pack_slots:
             state.pack_capacity += upgrade.pack_slots * stacks
+        if upgrade.damage:
+            player.stats.damage = (
+                player.stats.damage[0] + upgrade.damage * stacks,
+                player.stats.damage[1] + upgrade.damage * stacks,
+            )
+        if upgrade.crit:
+            player.stats.crit_chance += upgrade.crit * stacks
+        if upgrade.hero:
+            # A bloodline only works for its own hero. Checked here rather than
+            # in the shop, because the shop stands before the hero is chosen.
+            if upgrade.hero != state.hero.key:
+                continue
+            if upgrade.key == "bleeding_edge":
+                state.bleed_on_crit = stacks
+            elif upgrade.key == "hoarfrost":
+                state.freeze_chance = HOARFROST_PER_STACK * stacks
+            elif upgrade.key == "bell_ring":
+                state.pushback_chance = BELL_RING_PER_STACK * stacks
 
     # A run starts whole. Bought health you do not have is not bought health,
     # and the blood bargain's whole point is that the missing part is gone.

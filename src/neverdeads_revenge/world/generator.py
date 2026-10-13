@@ -131,7 +131,12 @@ ESCAPE_DEPTH = 10
 #: staircase costs a walk; one you have to carry for three floors is a decision
 #: about whether the chest was worth opening at all, which is the decision the
 #: chest is meant to be.
-SPRING_CHANCE = 0.30
+SPRING_CHANCE = 0.45
+
+#: The floor from which a second spring may stand. Deep enough that the chests
+#: have had time to charge a few curses, and late enough that it does not make
+#: the early floors soft.
+SECOND_SPRING_DEPTH = 5
 
 
 @dataclass(frozen=True, slots=True)
@@ -200,8 +205,12 @@ class GeneratedFloor:
     exit_tile: Tile = Tile.STAIRS_DOWN
     #: Where the loot ended up, for tests and for the map to draw.
     items: dict[Pos, GroundItem] = field(default_factory=dict)
-    #: Where the cleansing spring is, or ``None`` on a floor without one.
+    #: Where the cleansing spring is, or ``None`` on a floor without one. The
+    #: first of them: ``springs`` holds every one.
     spring: Pos | None = None
+    #: Every spring on the floor. One, usually; two from the fifth floor down,
+    #: where the chests have had time to pile curses on.
+    springs: tuple[Pos, ...] = ()
     #: Who is standing about, as ``(position, key)``. Usually nobody.
     npcs: list[tuple[Pos, str]] = field(default_factory=list)
 
@@ -395,6 +404,17 @@ def generate_floor(
         rng, dungeon_map, candidates, exit_pos, depth,
         avoid=(hunter,) if hunter is not None else (),
     )
+    springs: list[Pos] = [spring] if spring is not None else []
+    if depth >= SECOND_SPRING_DEPTH:
+        # A second spring down where the curses pile up: chests are one a
+        # floor and each charges a curse, and a single 45% spring could not
+        # keep up with a player who opens them all.
+        second = _place_spring(
+            rng, dungeon_map, candidates, exit_pos, depth,
+            avoid=(hunter,) if hunter is not None else (),
+        )
+        if second is not None:
+            springs.append(second)
 
     # Somebody, sometimes. Placed before the loot so the loot's plain-floor rule
     # keeps their cell clear the same way it keeps the spring's -- and the
@@ -430,6 +450,7 @@ def generate_floor(
         exit_tile=exit_tile,
         items=items,
         spring=spring,
+        springs=tuple(springs),
         npcs=npcs,
     )
 

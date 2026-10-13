@@ -23,8 +23,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from typing import Callable
+
 from neverdeads_revenge.core.rng import Rng
 from neverdeads_revenge.game.amulets import AMULETS, blurb_for
+from neverdeads_revenge.game.difficulty import BELL_RING_PER_STACK, HOARFROST_PER_STACK
 from neverdeads_revenge.game.draughts import draught_by_key
 from neverdeads_revenge.game.statuses import status_by_key
 from neverdeads_revenge.world.items import ITEMS, ItemTemplate
@@ -74,6 +77,20 @@ class MetaUpgrade:
     sight: int = 0
     #: Pack slots bought, per stack.
     pack_slots: int = 0
+    #: Flat damage per stack. The axis the shop was missing: everything it
+    #: sold made the hero live longer or move faster, and nothing made them
+    #: kill faster.
+    damage: int = 0
+    #: Crit chance per stack, as a fraction.
+    crit: float = 0.0
+    #: A *bloodline*: the upgrade works only for this hero, and the shop says
+    #: which. ``None`` for the ones every hero carries.
+    hero: str | None = None
+    #: The effect line for a gift that is a *rule* rather than a number, given
+    #: the stack count. A callable because a bloodline's sentence has
+    #: arithmetic in it ("a wound 2 turns longer per stack") that a fixed
+    #: string cannot say.
+    note_for: Callable[[int], str] | None = None
     max_stacks: int = 3
     #: What each further stack adds to the price. A step rather than a
     #: multiplier: multiplying turned the fourth slot into a 560-coin luxury,
@@ -97,6 +114,12 @@ class MetaUpgrade:
             parts.append(f"{self.sight * stacks:+d} sight")
         if self.pack_slots:
             parts.append(f"{self.pack_slots * stacks:+d} pack slots")
+        if self.damage:
+            parts.append(f"{self.damage * stacks:+d} damage")
+        if self.crit:
+            parts.append(f"{self.crit * stacks:+.0%} crit")
+        if self.note_for is not None:
+            parts.append(self.note_for(stacks))
         return ", ".join(parts)
 
 
@@ -108,17 +131,40 @@ META_UPGRADES: dict[str, MetaUpgrade] = {
         key="vigour",
         name="Vigour",
         description="the body remembers being killed and grows back thicker",
+        # Five stacks now, on a ladder that climbs: more to save for, without
+        # making the same three steps cheaper. Health is linear against a
+        # scaling dungeon, so it is the one axis safe to widen.
         price=140,
+        price_step=60,
         max_hp=5,
-        max_stacks=3,
+        max_stacks=5,
     ),
     "haste": MetaUpgrade(
         key="haste",
         name="Haste",
         description="the feet remember the way out",
+        # Three, not four: speed is *actions*, and the whole turn economy is
+        # what a fourth stack would quietly solve.
         price=220,
+        price_step=90,
         speed=0.12,
-        max_stacks=2,
+        max_stacks=3,
+    ),
+    "whetstone": MetaUpgrade(
+        key="whetstone",
+        name="Whetstone",
+        description="the blade is kept by a hand that has done this before",
+        price=140,
+        damage=1,
+        max_stacks=3,
+    ),
+    "edge": MetaUpgrade(
+        key="edge",
+        name="Edge",
+        description="you have learned where the soft parts are",
+        price=180,
+        crit=0.05,
+        max_stacks=3,
     ),
     "lantern": MetaUpgrade(
         key="lantern",
@@ -140,6 +186,38 @@ META_UPGRADES: dict[str, MetaUpgrade] = {
         pack_slots=1,
         max_stacks=5,
         price_step=50,
+    ),
+    # -- the bloodlines -----------------------------------------------------
+    #
+    # One per hero, and each only works for its own: the shop stands before
+    # the hero choice, so all three are always on the shelf and the picking
+    # happens in the run. They are the reason to play all three.
+    "bleeding_edge": MetaUpgrade(
+        key="bleeding_edge",
+        note_for=lambda n: f"a crit leaves a wound {2 * n} turns longer",
+        name="Bleeding Edge",
+        description="a wound you open with a lucky blow keeps opening",
+        price=180,
+        hero="noxx",
+        max_stacks=3,
+    ),
+    "hoarfrost": MetaUpgrade(
+        key="hoarfrost",
+        note_for=lambda n: f"{round(HOARFROST_PER_STACK * n * 100)}% chance to freeze whoever strikes you",
+        name="Hoarfrost",
+        description="whoever strikes you takes the cold home",
+        price=180,
+        hero="yeti",
+        max_stacks=3,
+    ),
+    "bell_ring": MetaUpgrade(
+        key="bell_ring",
+        note_for=lambda n: f"{round(BELL_RING_PER_STACK * n * 100)}% chance to throw what you hit",
+        name="Ring of the Bell",
+        description="your blows throw what they land on",
+        price=180,
+        hero="walkyrion",
+        max_stacks=3,
     ),
     "blood_deal": MetaUpgrade(
         key="blood_deal",
@@ -322,7 +400,14 @@ WILD_SLOTS = 2
 
 
 #: The shelves, in the order the shop draws them.
-SECTIONS: tuple[str, ...] = ("SUPPLIES", "GEAR", "AMULETS", "UPGRADES", "WILD OFFERS")
+SECTIONS: tuple[str, ...] = (
+    "SUPPLIES",
+    "GEAR",
+    "AMULETS",
+    "UPGRADES",
+    "BLOODLINES",
+    "WILD OFFERS",
+)
 
 
 class ShopError(Exception):
@@ -445,13 +530,24 @@ def build_stock(progress) -> list[Offer]:
             continue
         owned = progress.upgrades.get(key, 0)
         price = upgrade.price_at(owned)
+        detail = (
+            upgrade.effect(owned + 1)
+            if not owned >= upgrade.max_stacks
+            else upgrade.effect(owned)
+        )
+        if upgrade.hero:
+            # A bloodline says whose it is: the shelf is shared, the gift is
+            # not, and a row that did not say so would be a row bought by
+            # mistake.
+            from neverdeads_revenge.game.actors import HEROES
+
+            detail = f"{HEROES[upgrade.hero].name}: {detail}"
         offers.append(
             Offer(
                 key=key,
-                section="UPGRADES",
+                section="BLOODLINES" if upgrade.hero else "UPGRADES",
                 label=upgrade.name,
-                detail=upgrade.effect(owned + 1) if not owned >= upgrade.max_stacks
-                else upgrade.effect(owned),
+                detail=detail,
                 price=price,
                 owned=owned,
                 limit=upgrade.max_stacks,
@@ -539,7 +635,7 @@ def buy(progress, offer: Offer) -> str:
 
     progress.gold -= offer.price
 
-    if offer.section == "UPGRADES":
+    if offer.section in ("UPGRADES", "BLOODLINES"):
         progress.upgrades[offer.key] = progress.upgrades.get(offer.key, 0) + 1
         return f"{offer.label} improved. It will still be there next time."
 
