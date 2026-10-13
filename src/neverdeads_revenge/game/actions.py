@@ -238,7 +238,13 @@ def _tick_statuses(state: GameState, actor: Actor) -> None:
             return
 
 
-def _inflict(state: GameState, target: Actor, keys: tuple[str, ...]) -> None:
+def _inflict(
+    state: GameState,
+    target: Actor,
+    keys: tuple[str, ...],
+    *,
+    turns_bonus: int = 0,
+) -> None:
     """Leave something running on whoever was just hit.
 
     Refreshed rather than stacked. A second wound on a bleeding thing makes the
@@ -254,7 +260,13 @@ def _inflict(state: GameState, target: Actor, keys: tuple[str, ...]) -> None:
         if status is None:
             continue
         fresh = key not in target.statuses
-        target.statuses[key] = max(target.statuses.get(key, 0), status.turns)
+        # The bonus is the one per-actor knob the status system has: it holds
+        # turns, not strength, so a bloodline that deepens a wound deepens its
+        # *duration* -- which is what ``_inflict`` already believes a second
+        # wound does.
+        target.statuses[key] = max(
+            target.statuses.get(key, 0), status.turns + turns_bonus
+        )
         if not fresh:
             continue
         if target.is_player:
@@ -941,6 +953,19 @@ def _resolve_player_attack(state: GameState, target: Actor) -> None:
         if first and state.has_gift("open_wound"):
             opening += ("bleed",)
         _inflict(state, target, opening)
+        if outcome.crit and state.bleed_on_crit:
+            # BLEEDING EDGE. A lucky blow leaves a wound that keeps opening:
+            # the bleed, and turns enough longer to matter.
+            _inflict(
+                state,
+                target,
+                ("bleed",),
+                turns_bonus=BLEED_EDGE_TURNS * state.bleed_on_crit,
+            )
+        if state.pushback_chance and state.rng.chance(state.pushback_chance):
+            # RING OF THE BELL. Walkyrion's blows throw what they land on --
+            # the same shove the dead weight amulet buys, on a coin.
+            _knock_back(state, target)
     if outcome.killed:
         _remove_corpse(state, target)
         return
@@ -1982,6 +2007,10 @@ LAST_BREATH_EVASION = 2
 HUNGRY_ROAD_DAMAGE = 5
 HUNGRY_ROAD_TRAIL = 10
 
+#: How much longer a crit's wound bleeds per BLEEDING EDGE stack, in the
+#: victim's turns.
+BLEED_EDGE_TURNS = 2
+
 #: What NOTHING WASTED puts into everything beside the drinker.
 NOTHING_WASTED_DAMAGE = 4
 
@@ -2178,6 +2207,17 @@ def _resolve_enemy_attack(state: GameState, attacker: Actor, player: Actor) -> N
         # floor" is what the amulet says, and a swing that missed was not one.
         state.ward_ready = False
         state.say("The ward takes half of it, and is spent.", LogKind.GOOD)
+
+    if (
+        outcome.hit
+        and state.freeze_chance
+        and state.player.alive
+        and state.rng.chance(state.freeze_chance)
+    ):
+        # HOARFROST. Whoever lands a blow on Yeti takes the cold home with
+        # them: the chill the status table already knows, on a coin.
+        _inflict(state, attacker, ("chill",))
+        state.say(f"The cold comes off you onto the {attacker.name}.", LogKind.GOOD)
 
     if outcome.hit and state.has_passive("mirror"):
         # Whatever struck you wears it. Two points is small against a deep-floor

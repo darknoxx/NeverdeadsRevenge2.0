@@ -802,3 +802,131 @@ def test_a_floor_holds_medicine_and_curiosities_apart():
     strange = [t for t in ITEMS.values() if t.kind == "strange"]
     assert len(strange) == 5
     assert all(t.heal == 0 and t.draught for t in strange), "a strange bottle heals"
+
+
+# -- the new permanent axes ------------------------------------------------------
+def test_the_shop_sells_damage_and_crit_now():
+    """The two levers it never had: everything it sold made the hero live
+    longer or move faster, and nothing made them kill faster."""
+    from neverdeads_revenge.game.actors import HEROES
+    from neverdeads_revenge.game.shop import META_UPGRADES
+    from neverdeads_revenge.game.state import start_run
+
+    whet = META_UPGRADES["whetstone"]
+    edge = META_UPGRADES["edge"]
+    assert whet.damage == 1 and whet.max_stacks == 3
+    assert edge.crit == 0.05 and edge.max_stacks == 3
+
+    state = start_run(HEROES["noxx"], 5, upgrades={"whetstone": 2, "edge": 2})
+    assert state.player.stats.damage == (6, 8), "two stones did not sharpen"
+    assert abs(state.player.stats.crit_chance - 0.35) < 1e-9
+
+
+def test_the_ladders_climb_and_the_caps_are_where_they_were_said_to_be():
+    from neverdeads_revenge.game.shop import META_UPGRADES
+
+    vigour = META_UPGRADES["vigour"]
+    haste = META_UPGRADES["haste"]
+    assert vigour.max_stacks == 5
+    assert [vigour.price_at(i) for i in range(5)] == [140, 200, 260, 320, 380]
+    assert haste.max_stacks == 3
+    assert [haste.price_at(i) for i in range(3)] == [220, 310, 400]
+    # speed stays capped where the turn economy can take it
+    assert haste.speed * haste.max_stacks == 0.36
+
+
+# -- the bloodlines ---------------------------------------------------------------
+def test_a_bloodline_only_works_for_its_own_hero():
+    from neverdeads_revenge.game.actors import HEROES
+    from neverdeads_revenge.game.state import start_run
+
+    noxx = start_run(HEROES["noxx"], 5, upgrades={"hoarfrost": 3, "bell_ring": 3})
+    assert noxx.freeze_chance == 0.0, "Yeti's cold worked for Noxx"
+    assert noxx.pushback_chance == 0.0
+
+    yeti = start_run(HEROES["yeti"], 5, upgrades={"hoarfrost": 3})
+    assert abs(yeti.freeze_chance - 0.45) < 1e-9, "the hoarfrost did not settle"
+
+    walkyrion = start_run(HEROES["walkyrion"], 5, upgrades={"bell_ring": 2})
+    assert abs(walkyrion.pushback_chance - 0.40) < 1e-9
+
+
+def test_bleeding_edge_makes_a_crits_wound_keep_opening():
+    """Noxx's bloodline: a lucky blow leaves a bleed that lasts longer, which
+    is the only knob the status system has -- and the one ``_inflict`` already
+    believes a second wound turns."""
+    from neverdeads_revenge.game.actors import HEROES
+    from neverdeads_revenge.game.actions import perform_action
+    from neverdeads_revenge.game.state import start_run
+    from neverdeads_revenge.world.tiles import Tile
+
+    state = start_run(HEROES["noxx"], 5, upgrades={"bleeding_edge": 3})
+    square = (state.player.position[0] + 1, state.player.position[1])
+    state.dungeon_map.set_tile(square, Tile.FLOOR)
+    enemy = _stage_enemy_at_square(state, square, hp=99)
+    enemy.stats.evasion = -99  # nothing dodges this test
+    state.player.stats.crit_chance = 1.0  # and every blow is lucky
+
+    perform_action(state, Action.MOVE_EAST)
+
+    assert "bleed" in enemy.statuses
+    assert enemy.statuses["bleed"] >= 3 + 2 * 3, (
+        f"the wound lasts {enemy.statuses['bleed']} turns, not the nine a "
+        f"three-stack crit should leave"
+    )
+
+
+def test_hoarfrost_freezes_whoever_strikes_yeti():
+    from neverdeads_revenge.game.actors import HEROES
+    from neverdeads_revenge.game.state import start_run
+    from neverdeads_revenge.world.tiles import Tile
+
+    state = start_run(HEROES["yeti"], 5, upgrades={"hoarfrost": 3})
+    state.freeze_chance = 1.0  # a certainty, for the test
+    square = (state.player.position[0] + 1, state.player.position[1])
+    state.dungeon_map.set_tile(square, Tile.FLOOR)
+    enemy = _stage_enemy_at_square(state, square, hp=99)
+    enemy.stats.accuracy = 99
+
+    _wait(state, 3)
+
+    assert "chill" in enemy.statuses, "the cold never came off Yeti"
+
+
+def test_the_bell_ring_throws_what_walkyrion_lands_on():
+    from neverdeads_revenge.game.actors import HEROES
+    from neverdeads_revenge.game.state import start_run
+    from neverdeads_revenge.world.tiles import Tile
+
+    state = start_run(HEROES["walkyrion"], 5, upgrades={"bell_ring": 3})
+    state.pushback_chance = 1.0
+    here = state.player.position
+    square = (here[0] + 1, here[1])
+    state.dungeon_map.set_tile(square, Tile.FLOOR)
+    for dx in range(-3, 4):
+        for dy in range(-3, 4):
+            state.dungeon_map.set_tile((here[0] + dx, here[1] + dy), Tile.FLOOR)
+    enemy = _stage_enemy_at_square(state, square, hp=99)
+
+    perform_action(state, Action.MOVE_EAST)
+
+    assert enemy.alive
+    assert enemy.position != square, "the bell did not throw it"
+    assert chebyshev(enemy.position, here) > 1, "it was thrown into the hero"
+
+
+# -- the springs ------------------------------------------------------------------
+def test_the_floor_can_hold_two_springs_down_where_the_curses_pile_up():
+    from neverdeads_revenge.game.actors import HEROES
+    from neverdeads_revenge.game.state import start_run
+    from neverdeads_revenge.world.generator import SPRING_CHANCE
+
+    assert SPRING_CHANCE == 0.45
+
+    found = 0
+    for seed in range(1, 25):
+        state = start_run(HEROES["noxx"], seed)
+        built = state.build_floor(5)
+        if len(built.springs) >= 2:
+            found += 1
+    assert found > 0, "twenty-four floors at depth five held no double spring"

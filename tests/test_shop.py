@@ -150,7 +150,10 @@ def test_buying_an_upgrade_is_permanent_and_stacks():
         buy(progress, offer_for(progress, "vigour"))
 
     assert progress.upgrades["vigour"] == 2
-    assert progress.gold == price * 4 - price * 2
+    # Vigour's ladder climbs now, so the second stack costs more than the
+    # first: the gold is what the two steps actually cost.
+    ladder = sum(META_UPGRADES["vigour"].price_at(i) for i in range(2))
+    assert progress.gold == price * 4 - ladder
     assert progress.pending == [], "an upgrade is not consumed by a run"
 
 
@@ -567,12 +570,25 @@ def test_the_permanent_set_is_a_grind_and_not_a_wall():
     """
     from neverdeads_revenge.game.shop import AMULETS_FOR_SALE, GEAR, SUPPLIES
 
+    # The ladders climb now, so the price of a set is the sum of its steps.
+    def ladder(upgrade) -> int:
+        return sum(upgrade.price_at(i) for i in range(upgrade.max_stacks))
+
     full = sum(
-        upgrade.price * upgrade.max_stacks
-        for upgrade in META_UPGRADES.values()
-        if not upgrade.wild
+        ladder(upgrade) for upgrade in META_UPGRADES.values() if not upgrade.wild
     )
-    assert 800 <= full <= 1600, f"the permanent set costs {full}"
+    # Everything: the five-step ladders and all three bloodlines. About forty
+    # good runs -- that is the *everything* price, not the price of a hero
+    # that can play.
+    assert 4000 <= full <= 8000, f"the permanent set costs {full}"
+
+    # What a new player actually saves for: health, a blade, room, a light.
+    core = sum(
+        ladder(META_UPGRADES[key])
+        for key in ("vigour", "whetstone", "pack", "lantern")
+    )
+    assert 2000 <= core <= 3500, f"the core set costs {core}"
+    assert core <= full
 
     # And something has to be buyable after a bad run, or the first ten runs are
     # a wall with nothing to spend on.
