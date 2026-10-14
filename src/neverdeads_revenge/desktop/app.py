@@ -292,7 +292,8 @@ class DesktopApp(QMainWindow):
             for screen in self.screens
         )
         breathing = self._void_is_breathing()
-        playing = getattr(self.screens[-1], "busy", False)
+        top = self.screens[-1]
+        playing = getattr(top, "busy", False) or getattr(top, "animating", False)
         if not (
             holding
             or playing
@@ -304,8 +305,10 @@ class DesktopApp(QMainWindow):
             return
         if playing:
             # A screen with something to play gets a beat per frame: the battle
-            # lands its blows one at a time instead of printing a round at once.
-            self.screens[-1].step(0.033, self)
+            # lands its blows one at a time instead of printing a round at once
+            # -- and a screen with something *moving* gets the same clock, which
+            # is what the arena breathes on.
+            top.step(0.033, self)
         if breathing and not (
             holding or self.effects.active or self.view.is_shaking()
         ):

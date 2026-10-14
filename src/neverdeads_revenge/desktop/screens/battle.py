@@ -23,7 +23,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-from PySide6.QtGui import QColor, QFontMetrics, QPainter, QTransform
+from PySide6.QtGui import QColor, QFontMetrics, QImage, QPainter, QTransform
 
 from ...game.battle import (
     ATTACK,
@@ -102,6 +102,18 @@ ARROW = "▼"
 BEAT = 0.42
 #: How long a number hangs in the air over a head.
 POPUP_LIFE = 0.85
+#: The idle breath: how fast a figure rises and falls, and how far. Small on
+#: purpose -- two pixels is the difference between a fight and a photograph.
+BOB_SPEED = 2.3
+BOB_HEIGHT = 2
+#: How long a strike takes, and when inside it the blow lands. A blink: out
+#: where the striker stands, back in beside what it is hitting, and gone again
+#: before the beat that started it is over.
+STRIKE = 0.62
+IMPACT_AT = STRIKE * 0.46
+#: How long a struck figure shakes, and how far.
+JOLT = 0.26
+JOLT_PIXELS = 3
 #: How many lines of the fight are readable at once.
 LOG_LINES = 3
 
@@ -214,6 +226,16 @@ class BattleScreen(Screen):
         self._shown: dict[int, int] = {}
         self.verdict: str | None = None
         self._size: tuple[int, int] | None = None
+        #: The arena's own clock, in seconds. The idle breath and every phase of
+        #: a strike are read off it, so nothing here owns a timer.
+        self._clock = 0.0
+        #: Who is mid-strike: ``id(attacker) -> (id(target), when it began)``.
+        self._strikes: dict[int, tuple[int, float]] = {}
+        #: Who was struck, and when the blow inside their strike landed.
+        self._hurts: dict[int, float] = {}
+        #: White silhouettes of the sprites, made once and reused: a hit flash is
+        #: the figure painted solid white for a few frames.
+        self._flashes: dict[int, QImage] = {}
 
     # -- the contract -------------------------------------------------------
     def draw(self, buffer: PatternBuffer, app) -> None:
@@ -231,20 +253,25 @@ class BattleScreen(Screen):
         self._draw_commands(buffer, *areas["commands"])
 
     def paste(self, image, app) -> None:
-        """The room and the models: walls, letters, the arrow, and the numbers.
+        """The room, the models, and everything that moves in them.
 
         Drawn here rather than in the grid because neither a monster nor a block
-        of masonry fits in a cell -- the whole look of the game is one fixed
-        cell, and this is the one place that has to leave it.
+        of masonry fits in a cell -- and drawn in two passes, because a striker
+        lands *in front of* what it is hitting: everybody stands first, and the
+        one mid-blow is painted over the top of them.
         """
         cols, rows = self._dims(app)
         figures = self._figures(cols, rows, app.font)
+        field = self._field(cols, rows, app.font.cell_w, app.font.cell_h)
         painter = QPainter(image)
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, False)
-        field = self._field(cols, rows, app.font.cell_w, app.font.cell_h)
         self._paste_walls(painter, field)
+        strikers = [figure for figure in figures if id(figure.actor) in self._strikes]
         for figure in figures:
-            self._paste_model(painter, figure, app.font.cell_h)
+            if figure not in strikers:
+                self._paste_figure(painter, figure, app, figures)
+        for figure in strikers:
+            self._paste_figure(painter, figure, app, figures)
         for figure in figures:
             if figure.chosen:
                 self._paste_arrow(painter, figure, app.font.cell_h)
@@ -253,6 +280,119 @@ class BattleScreen(Screen):
         if self.verdict is not None:
             self._paste_verdict(painter, cols, rows, app)
         painter.end()
+
+    # -- where a figure stands, this frame ---------------------------------
+    def _paste_figure(self, painter: QPainter, figure: Staged, app, figures) -> None:
+        """One figure, where its own breath and its own strike put it.
+
+        Every moving part of a fight is decided here and nowhere else: a figure
+        stands where the stage says, rises and falls on the arena's clock, and --
+        while it is striking -- is somewhere else and see-through.
+        """
+        cell_w, cell_h = app.font.cell_w, app.font.cell_h
+        # A figure breathes on its own phase, taken from its own place on the
+        # floor: a row of monsters rising together would look like a wave.
+        raise_px = 0
+        if figure.actor.stats.alive:
+            raise_px = round(
+                math.sin(self._clock * BOB_SPEED + figure.cx / 40.0) * BOB_HEIGHT
+            )
+        home = figure.row * cell_h - THICKNESS
+        cx, baseline, opacity = figure.cx, home - raise_px, 1.0
+        pose = self._strike_pose(figure, figures, home, cell_w, cell_h)
+        if pose is not None:
+            cx, baseline, opacity = pose
+        else:
+            cx += self._jolt(figure)
+        self._paste_model(painter, figure, cx, baseline, opacity, app.font)
+
+    def _strike_pose(
+        self,
+        figure: Staged,
+        figures,
+        home: int,
+        cell_w: int,
+        cell_h: int,
+    ) -> tuple[int, int, float] | None:
+        """Where a striker is and how solid, or ``None`` if it is standing still.
+
+        The blow is a blink: the striker goes out where it stands, comes back in
+        beside whatever it is hitting, and is gone again before the beat that
+        started it is over. Nothing *travels* -- a fight this size has no room for
+        a walk, and a monster that walked over would make every round twice as
+        long as the blow it holds -- but the eye reads the two places as one
+        movement, which is the whole trick.
+        """
+        strike = self._strikes.get(id(figure.actor))
+        if strike is None:
+            return None
+        target_id, began = strike
+        progress = (self._clock - began) / STRIKE
+        if progress >= 1.0:
+            del self._strikes[id(figure.actor)]
+            return None
+        near_x, near_y = self._beside_target(
+            figure, target_id, figures, home, cell_w, cell_h
+        )
+        if progress < 0.20:  # out, where it stands
+            return figure.cx, home, 1.0 - progress / 0.20
+        if progress < 0.34:  # in, beside the one being hit
+            return near_x, near_y, (progress - 0.20) / 0.14
+        if progress < 0.70:  # the blow itself
+            return near_x, near_y, 1.0
+        if progress < 0.84:  # out again, over there
+            return near_x, near_y, 1.0 - (progress - 0.70) / 0.14
+        return figure.cx, home, (progress - 0.84) / 0.16  # back where it belongs
+
+    @staticmethod
+    def _beside_target(
+        figure: Staged,
+        target_id: int,
+        figures,
+        home: int,
+        cell_w: int,
+        cell_h: int,
+    ) -> tuple[int, int]:
+        """Where a striker appears: in front of, and a little to the left of, the
+        one it is hitting.
+
+        Left far enough that the *edge* of the striker stands beside the middle
+        of the one being hit, and low enough to be standing in front of it -- so
+        the blow reads as two figures and not as one figure wearing another.
+        """
+        for other in figures:
+            if id(other.actor) == target_id:
+                return other.cx - cell_w * 3, other.row * cell_h + cell_h * 4 // 5
+        return figure.cx, home
+
+    def _jolt(self, figure: Staged) -> int:
+        """How far a struck figure is shaking, in pixels, right now."""
+        struck = self._hurts.get(id(figure.actor))
+        if struck is None:
+            return 0
+        age = self._clock - struck
+        if age < 0:
+            return 0
+        if age > JOLT:
+            del self._hurts[id(figure.actor)]
+            return 0
+        return round(math.sin(age * 46.0) * JOLT_PIXELS)
+
+    def _flash(self, image: QImage) -> QImage:
+        """The figure as a white silhouette, made once and kept."""
+        cached = self._flashes.get(id(image))
+        if cached is None:
+            cached = QImage(image.size(), QImage.Format.Format_ARGB32)
+            cached.fill(QColor(0, 0, 0, 0))
+            painter = QPainter(cached)
+            painter.drawImage(0, 0, image)
+            painter.setCompositionMode(
+                QPainter.CompositionMode.CompositionMode_SourceIn
+            )
+            painter.fillRect(cached.rect(), QColor("#ffffff"))
+            painter.end()
+            self._flashes[id(image)] = cached
+        return cached
 
     def _paste_verdict(
         self, painter: QPainter, cols: int, rows: int, app
@@ -339,8 +479,18 @@ class BattleScreen(Screen):
 
     @property
     def busy(self) -> bool:
-        """Whether the fight still has something to say or show."""
+        """Whether the fight still has something to say or show.
+
+        Talking, and only talking: the keyboard is held while the round is being
+        played, because a player drumming on enter would be choosing the next
+        verb for a blow they have not seen land.
+        """
         return bool(self._queue) or self._beat > 0 or bool(self._popups)
+
+    @property
+    def animating(self) -> bool:
+        """A fight always breathes, so the arena is always being repainted."""
+        return True
 
     def step(self, dt: float, app) -> None:
         """A frame went by: age the numbers, and land the next event.
@@ -349,6 +499,7 @@ class BattleScreen(Screen):
         the life of a damage number -- because a screen that kept a timer of its
         own would keep running after the window it is drawn in has gone.
         """
+        self._clock += dt
         for popup in self._popups:
             popup.age += dt
         self._popups = [popup for popup in self._popups if popup.age < Popup.LIFE]
@@ -447,6 +598,12 @@ class BattleScreen(Screen):
                 point = self._point_of(struck.target, app)
                 if point is not None:
                     app.view.shake(strength=4 if outcome.crit else 2, seconds=0.16)
+        # The strike is recorded whether or not it lands: a swing that missed
+        # was still a swing, and a hero who did not move would look like a hero
+        # who did nothing.
+        self._strikes[id(struck.actor)] = (id(struck.target), self._clock)
+        if outcome.hit and not outcome.dodged:
+            self._hurts[id(struck.target)] = self._clock + IMPACT_AT
         if not outcome.hit:
             return
         if struck.actor is self.battle.hero:
@@ -698,48 +855,67 @@ class BattleScreen(Screen):
         cap = QFontMetrics(letter_font(probe).bold).capHeight() or probe
         return max(12, int(probe * band / cap))
 
-    def _paste_model(self, painter: QPainter, figure: Staged, cell_h: int) -> None:
+    def _paste_model(
+        self,
+        painter: QPainter,
+        figure: Staged,
+        cx: int,
+        baseline: int,
+        opacity: float,
+        font,
+    ) -> None:
         """One figure on the floor: its picture if the sheets have one, its
-        letter if they do not.
+        letter if they do not, with its own opacity and its own place.
 
         The sprite is drawn at its own size and not scaled -- these are painted
-        figures, and a painted figure put through a nearest-neighbour resize
-        looks like a mistake -- so what the sheets made is what the arena shows.
-        The letter is the fallback and is drawn exactly as it was before: the
-        whole game looked like that, and a monster the sheets have never heard
-        of should not be the one fight with nothing on the floor.
+        figures, and a painted figure put through a nearest-neighbour resize looks
+        like a mistake -- so what the sheets made is what the arena shows.
         """
-        baseline = figure.row * cell_h - THICKNESS
+        struck = self._hurts.get(id(figure.actor))
+        flash_age = None if struck is None else self._clock - struck
+        if flash_age is not None and 0 <= flash_age <= JOLT:
+            pass
+        else:
+            flash_age = None
+
         if figure.sprite is not None:
             image = figure.sprite
-            faded = not figure.actor.stats.alive
-            left = figure.cx - image.width() // 2
-            if faded:
+            left = cx - image.width() // 2
+            top = baseline - image.height()
+            if not figure.actor.stats.alive:
                 # A monster that is out of the fight stays where it fell, dimmed
                 # rather than removed: a corpse that vanished on the last blow
                 # would make the end of a fight unreadable.
-                painter.setOpacity(0.45)
-            painter.drawImage(left, baseline - image.height(), image)
+                opacity *= 0.45
+            painter.setOpacity(opacity)
+            painter.drawImage(left, top, image)
+            if flash_age is not None:
+                painter.setOpacity(opacity * (1.0 - flash_age / JOLT) * 0.85)
+                painter.drawImage(left, top, self._flash(image))
             painter.setOpacity(1.0)
             return
 
-        font = letter_font(figure.size)
-        painter.setFont(font.bold)
-        metrics = QFontMetrics(font.bold)
-        left = figure.cx - metrics.horizontalAdvance(figure.glyph) // 2
+        glyph_font = letter_font(figure.size)
+        painter.setFont(glyph_font.bold)
+        metrics = QFontMetrics(glyph_font.bold)
+        left = cx - metrics.horizontalAdvance(figure.glyph) // 2
         ink = parse_style(figure.colour).fg
-        dead = not figure.actor.stats.alive
+        if not figure.actor.stats.alive:
+            faded = QColor(ink)
+            faded.setRed((faded.red() + 20) // 3)
+            faded.setGreen((faded.green() + 20) // 3)
+            faded.setBlue((faded.blue() + 20) // 3)
+            ink = faded
+        painter.setOpacity(opacity)
         painter.setPen(ink.darker(320))
         painter.drawText(left, baseline + THICKNESS, figure.glyph)
-        if dead:
-            faded_ink = QColor(ink)
-            faded_ink.setRed((faded_ink.red() + 20) // 3)
-            faded_ink.setGreen((faded_ink.green() + 20) // 3)
-            faded_ink.setBlue((faded_ink.blue() + 20) // 3)
-            painter.setPen(faded_ink)
+        if flash_age is not None:
+            painter.setPen(QColor("#ffffff"))
+            painter.setOpacity(opacity * (1.0 - flash_age / JOLT) * 0.85)
         else:
             painter.setPen(ink)
         painter.drawText(left, baseline, figure.glyph)
+        painter.setOpacity(1.0)
 
     def _paste_arrow(self, painter: QPainter, figure: Staged, cell_h: int) -> None:
         """The blade over the chosen one -- the menus' marker, standing up.

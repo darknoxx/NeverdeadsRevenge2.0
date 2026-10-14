@@ -59,6 +59,12 @@ class Screen:
     #: read the clock themselves and the particles live in the effects layer.
     busy: bool = False
 
+    #: Whether something on this screen is *moving*, which is not the same as
+    #: talking: a fight breathes while the player is deciding what to do, and a
+    #: screen that is moving is repainted every frame without taking the keyboard
+    #: away. Nothing else in this game moves on its own.
+    animating: bool = False
+
     def step(self, dt: float, app) -> None:
         """A frame went by. Only the screens with something to play override it."""
         return None
