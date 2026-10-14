@@ -14,13 +14,23 @@ four is a character, which is the entire effect.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtGui import QFont, QFontMetrics
 
-__all__ = ["BitmapFont"]
+__all__ = ["BitmapFont", "FONTS_DIR"]
 
-#: Faces tried in order. Every one is monospaced and present on the common
-#: desktops; Qt substitutes if none is there, and a substitute monospace still
-#: gives the cell the layout needs.
+#: The faces that travel with the game. The look is one fixed cell, and a cell
+#: is a font *metric*: a machine whose mono face is a little wider -- Consolas,
+#: on Windows -- gets a different grid and a smaller character. So the font is
+#: shipped like the sounds and registered before anything is measured, and the
+#: cell is the same on every machine.
+FONTS_DIR = Path(__file__).resolve().parent / "fonts"
+
+#: Faces tried in order. The first is the one that travels with the game; the
+#: rest are monospaced faces present on the common desktops, and Qt substitutes
+#: if none is there -- a substitute monospace still gives the cell the layout
+#: needs.
 FAMILIES = (
     "DejaVu Sans Mono",
     "Liberation Mono",
@@ -32,11 +42,26 @@ FAMILIES = (
     "monospace",
 )
 
+_LOADED = False
+
+
+def _load_bundled() -> None:
+    """Register the fonts that travel with the game, once."""
+    global _LOADED
+    if _LOADED:
+        return
+    _LOADED = True
+    from PySide6.QtGui import QFontDatabase
+
+    for path in sorted(FONTS_DIR.glob("*.ttf")):
+        QFontDatabase.addApplicationFont(str(path))
+
 
 class BitmapFont:
     """A monospaced font with a measured cell, drawn without antialiasing."""
 
     def __init__(self, pixel_size: int = 16, family: str | None = None) -> None:
+        _load_bundled()
         self.pixel_size = pixel_size
         self.family = family or self._first_available()
         self.normal = self._make(bold=False)

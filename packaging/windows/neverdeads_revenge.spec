@@ -22,13 +22,19 @@ ROOT = os.path.abspath(os.path.join(HERE, os.pardir, os.pardir))
 SRC = os.path.join(ROOT, "src")
 
 sounds = os.path.join(SRC, "neverdeads_revenge", "sounds")
+fonts = os.path.join(SRC, "neverdeads_revenge", "desktop", "fonts")
 
 a = Analysis(
     [os.path.join(HERE, "run.py")],
     pathex=[SRC],
     binaries=[],
-    # ``SOUNDS_DIR`` is ``<package>/sounds``; mirror it inside the bundle.
-    datas=[(sounds, os.path.join("neverdeads_revenge", "sounds"))],
+    # What the game reads at runtime and mirrors where it looks for it: the
+    # sounds (``<package>/sounds``) and the font that travels with it
+    # (``<package>/desktop/fonts``).
+    datas=[
+        (sounds, os.path.join("neverdeads_revenge", "sounds")),
+        (fonts, os.path.join("neverdeads_revenge", "desktop", "fonts")),
+    ],
     hiddenimports=[
         # Imported lazily by the audio layer, so static analysis misses it.
         "miniaudio",
