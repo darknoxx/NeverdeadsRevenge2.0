@@ -23,7 +23,7 @@ from neverdeads_revenge.game.actions import (
     SALT_CIRCLE_WAITS,
     Action,
     _player_takes_damage,
-    _resolve_player_attack,
+    resolve_player_attack,
     _talk,
     perform_action,
     take_turn,
@@ -200,7 +200,7 @@ def test_the_debt_is_owed_back_on_the_next_blow():
     state.blood_debt = 7
     enemy = _beside(state, hp=999)
 
-    _resolve_player_attack(state, enemy)
+    resolve_player_attack(state, enemy)
 
     assert enemy.hp == 999 - (10 + 7)
     assert state.blood_debt == 0, "the debt was not cleared"
@@ -225,7 +225,7 @@ def test_a_miss_does_not_spend_the_debt():
     enemy.stats.evasion = 99
 
     for _ in range(5):
-        _resolve_player_attack(state, enemy)
+        resolve_player_attack(state, enemy)
 
     assert state.blood_debt == 9, "a swing that missed is not the blow it was owed on"
 
@@ -246,7 +246,7 @@ def test_a_cornered_blow_lands_twice():
     state.player.stats.hp = LAST_BREATH_HP
     enemy = _beside(state, hp=999)
 
-    _resolve_player_attack(state, enemy)
+    resolve_player_attack(state, enemy)
 
     assert enemy.hp == 999 - 20
 
@@ -257,7 +257,7 @@ def test_above_the_line_the_blow_is_ordinary():
     state.player.stats.hp = LAST_BREATH_HP + 1
     enemy = _beside(state, hp=999)
 
-    _resolve_player_attack(state, enemy)
+    resolve_player_attack(state, enemy)
 
     assert enemy.hp == 999 - 10
 
@@ -276,12 +276,12 @@ def test_the_cornered_hero_is_harder_to_hit(monkeypatch):
     enemy = _beside(state)
 
     state.player.stats.hp = LAST_BREATH_HP
-    actions_module._resolve_enemy_attack(state, enemy, state.player)
+    actions_module.resolve_enemy_attack(state, enemy, state.player)
     assert seen["evasion_bonus"] == LAST_BREATH_EVASION
 
     seen.clear()
     state.player.stats.hp = LAST_BREATH_HP + 1
-    actions_module._resolve_enemy_attack(state, enemy, state.player)
+    actions_module.resolve_enemy_attack(state, enemy, state.player)
     assert seen["evasion_bonus"] == 0
 
 

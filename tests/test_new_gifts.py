@@ -11,7 +11,7 @@ import pytest
 from neverdeads_revenge.game.actions import (
     SLOW_KNITTING_EVERY,
     Action,
-    _resolve_player_attack,
+    resolve_player_attack,
     perform_action,
 )
 from neverdeads_revenge.game.actors import ENEMIES, NOXX, make_enemy
@@ -31,7 +31,7 @@ def _beside(state, key: str = "ghoul"):
 def _until_hit(state, enemy, key: str, tries: int = 300):
     """Swing until the status lands. The dice are the dice."""
     for _ in range(tries):
-        _resolve_player_attack(state, enemy)
+        resolve_player_attack(state, enemy)
         if key in enemy.statuses:
             return
     pytest.fail(f"{key} never landed in {tries} swings")
@@ -52,7 +52,7 @@ def test_without_the_mark_a_plain_blade_leaves_nothing():
     enemy = _beside(state)
 
     for _ in range(20):
-        _resolve_player_attack(state, enemy)
+        resolve_player_attack(state, enemy)
 
     assert enemy.statuses == {}
 

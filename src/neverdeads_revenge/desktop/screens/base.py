@@ -52,3 +52,13 @@ class Screen:
         alphabet of the dungeon drawn big enough to fight.
         """
         return None
+
+    #: Whether the screen is in the middle of something it has to finish.
+    #: A screen that says yes is stepped once per frame and repainted while it
+    #: does, because nothing else in this game needs a heartbeat: the hold bars
+    #: read the clock themselves and the particles live in the effects layer.
+    busy: bool = False
+
+    def step(self, dt: float, app) -> None:
+        """A frame went by. Only the screens with something to play override it."""
+        return None

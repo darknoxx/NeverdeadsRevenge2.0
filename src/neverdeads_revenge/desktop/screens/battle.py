@@ -1,53 +1,55 @@
-"""The battle stage: the isometric view, drawn but not yet played.
+"""The arena: the isometric stage, the five verbs, and the fight being played.
 
-This is **M0**, and it is a picture. There is no turn order, no command that
-does anything, no damage and no enemy: three figures stand on receding ground,
-the hero stands at the front of it, and two panels sit at the bottom with the
-verbs a fight will have. The question this file exists to answer is the only
-one that can be answered cheaply -- *does a stage look like this game?* -- and
-everything expensive (a battle state, a timeline, balance) is deliberately
-absent until that is settled.
+**M1.** M0 was a picture; this one is a fight. The stage is unchanged in
+ambition -- the dungeon's alphabet, enlarged: a monster is the letter it always
+was, the room is the dungeon's ``#``, and both are pasted onto the frame because
+neither fits in a character cell. What is new is that the letters *are* the
+monsters: the actors standing on the floor are the ones staged here, with their
+own health under them and their own name in the log when they fall.
 
-**The models are the letters, and so are the walls.** The dungeon is an
-alphabet: a ghoul is a green ``g`` on the map, a ``#`` is a wall, and the stage
-does not replace that, it *enlarges* it. A monster is the letter it always was,
-drawn in the game's own font at the size the fight needs and in the colour the
-dungeon draws it in; the room is the dungeon's ``#``, big enough to be masonry.
-A letter that size does not fit in a character cell -- a cell is the look of the
-whole rest of the game -- so letters and walls are the things pasted straight
-onto the frame (see :meth:`BattleScreen.paste`).
+**The fight is played, not printed.** :class:`~neverdeads_revenge.game.battle.Battle`
+decides a whole round at once and hands back a list of events; this screen keeps
+them in a queue and plays one per beat, so a blow lands when it is shown to land
+rather than when it was rolled. The health bars follow the *playback* and not
+the state, for the same reason: a bar that had already dropped before the sword
+came down would be telling the player about the future.
 
-The walls are not *placed*, they are *projected*. Each wall is a plane, and a
-plane in this view has two axes: one is vertical, and the other is the floor's
-own edge -- which is why the three walls are three affine transforms of the same
-``#``, each sheared along the edge it stands on. A wall that converged its own
-way would be a second opinion about where the room goes, and the whole illusion
-is one opinion: the floor's.
-
-The ground is the same bargain. A cell is 10x20 pixels, so two cells side by
-side are a square: a floor tile. Two rows of those, staggered half a tile, are
-a checkerboard, and a checkerboard whose rows narrow and darken as they go up is
-a floor in perspective.
+Nothing here knows a rule. It knows where things stand, what the five verbs are
+called, which sound a landed blow makes, and how long a beat lasts.
 """
 
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 
 from PySide6.QtGui import QColor, QFontMetrics, QPainter, QTransform
 
+from ...game.battle import (
+    ATTACK,
+    DEFEND,
+    FLEE,
+    ITEM,
+    SPECIAL,
+    VERBS,
+    Battle,
+    Guarded,
+    Over,
+    Said,
+    Struck,
+)
 from ..buffer import PatternBuffer
-from ..chrome import ASH, BLOOD, BONE, box, menu
+from ..chrome import ASH, BLOOD, BONE, box, rule
 from ..font import BitmapFont
+from ..render import log_style
 from ..theme import Style, parse_style
 from .base import Screen
 
-__all__ = ["BattleScreen", "Staged", "VERBS"]
+__all__ = ["BattleScreen", "Popup", "Staged"]
 
-#: The floor's two tile tones at the hero's feet, and the same two at the
-#: horizon. Distance is shade here, not size: the far rows fade into the dark
-#: the way a remembered wall does, because the phosphor fades rather than
-#: switches off.
+#: The floor's two tile tones at the hero's feet, and the same two at the far
+#: edge. Distance is shade here, not size: the far rows fade into the dark the
+#: way a remembered wall does, because the phosphor fades rather than switches.
 FLOOR_NEAR = QColor("#2c2c36")
 FLOOR_NEAR_ALT = QColor("#202028")
 FLOOR_FAR = QColor("#16161c")
@@ -57,35 +59,36 @@ FLOOR_FAR_ALT = QColor("#101014")
 #: under a figure instead of as a stripe across the floor.
 SHADOW = QColor("#07070a")
 SHADOW_EDGE = QColor("#131318")
-#: The wall. The dungeon draws a remembered wall in grey19 and a seen one in
-#: grey37; the arena is lit by whatever the fight is, so it sits between the two
-#: -- the far wall darkest, the near end of the side walls lightest.
+#: The wall: the dungeon's remembered greys. The far wall is darkest, the near
+#: end of the side walls lightest, and the fade between them is the depth.
 WALL_NEAR = "grey30"
 WALL_MID = "grey23"
 WALL_FAR = "grey19"
-#: How thick a letter is: the dark copy sits this many pixels below the bright
-#: one, and the bright one is drawn over it.
+#: How thick a letter is: a dark copy of it sits this many pixels lower, and the
+#: bright one is drawn over it, so what shows is the slab's edge.
 THICKNESS = 5
-#: How far apart the floor's tiles turn, as a share of the width. This is the
-#: *only* perspective number: the walls are derived from it, so a room that is
-#: deeper or shallower is one edit and not four.
+#: How far the floor's edges are pulled in at the back, as a share of the width.
+#: This is the *only* perspective number: the walls are derived from it, so a
+#: room that is deeper or shallower is one edit and not four.
 TAPER = 0.18
+#: The most monsters the stage holds. A crowd is a second row and a wider glass,
+#: which is M3's business; three is what a fight of this shape is about.
+STAGE = 3
 
-#: How big each letter stands, in font pixels, by how far away it is. The hero
-#: is nearest and largest; the monsters scale with their depth.
-SIZES = (62, 52, 46)
+#: How big a letter stands, in font pixels. The hero is nearest and largest; the
+#: monsters scale with their depth.
+MONSTER_SIZES = (62, 52, 46)
 HERO_SIZE = 88
 #: The arrow over the one the choice is on.
 ARROW = "▼"
+#: How long one event holds the stage. A fight that printed a whole round at
+#: once would be a spreadsheet with letters drawn on it.
+BEAT = 0.42
+#: How long a number hangs in the air over a head.
+POPUP_LIFE = 0.85
+#: How many lines of the fight are readable at once.
+LOG_LINES = 3
 
-#: The verbs a fight will have. Nothing answers them yet.
-VERBS = (
-    ("a", "ATTACK"),
-    ("s", "SPECIAL"),
-    ("i", "ITEM"),
-    ("d", "DEFEND"),
-    ("f", "FLEE"),
-)
 
 _LETTERS: dict[int, BitmapFont] = {}
 
@@ -104,117 +107,341 @@ def letter_font(size: int) -> BitmapFont:
     return font
 
 
-class Staged:
-    """One figure on the stage: who it is, and where it stands.
+@dataclass(slots=True)
+class Popup:
+    """A number that was just dealt, hanging over the head it landed on.
 
-    The letters are drawn in pixels, so a figure is placed in pixels too -- a
-    centre and a baseline -- and its *shadow* is drawn in cells underneath it,
-    because that is where the floor is. :meth:`BattleScreen._stage` computes
-    both from the one layout, so they cannot disagree.
+    Its own clock rather than a timer: it is drawn by the same frames that draw
+    everything else, and a popup that outlived the fight would be a number
+    floating over a screen nobody is fighting on any more.
     """
 
-    __slots__ = ("name", "glyph", "colour", "size", "cx", "foot", "cells", "chosen")
+    text: str
+    colour: str
+    x: int
+    y: int
+    crit: bool = False
+    age: float = 0.0
+
+    #: Not a field: the same life for every number, and the only place it lives.
+    LIFE = POPUP_LIFE
+
+
+class Staged:
+    """One figure on the stage: which actor it is, and where it stands.
+
+    The letters are drawn in pixels, so a figure is placed in pixels too -- a
+    centre and a cell row -- and the *shadow* and the health bar under it are
+    drawn in cells, because that is where the floor is. One layout produces both,
+    so a monster cannot be drawn in one place and stand in another.
+    """
+
+    __slots__ = ("actor", "glyph", "colour", "size", "cx", "row", "cells", "chosen")
 
     def __init__(
         self,
-        name: str,
+        actor,
         glyph: str,
         colour: str,
         size: int,
         cx: int,
-        foot: int,
+        row: int,
         cells: int,
         chosen: bool = False,
     ) -> None:
-        self.name = name
+        self.actor = actor
         self.glyph = glyph
         self.colour = colour
         self.size = size
-        #: Where the letter stands: the centre of it, in pixels.
+        #: The centre of the letter, in pixels.
         self.cx = cx
-        #: The cell row it stands on. The letter's baseline is the bottom of the
-        #: row *above* the shadow, so the pool of shadow lies in front of it.
-        self.foot = foot
+        #: The cell row it stands on: the top of the pool of shadow, so the
+        #: figure stands behind its own shadow rather than on top of it.
+        self.row = row
         self.cells = cells
         self.chosen = chosen
 
 
-def _monsters() -> list[tuple[str, str, str]]:
-    """Three out of the bestiary, by key: ``(name, glyph, colour)``.
-
-    Real monsters, so the letters and their colours are the game's and not a
-    mock-up's: a ghoul is a green ``g`` here for the same reason it is a green
-    ``g`` on the map.
-    """
-    from neverdeads_revenge.game.actors import ENEMIES
-
-    out = []
-    for key in ("ghoul", "bone", "wraith"):
-        template = ENEMIES.get(key)
-        if template is None:
-            out.append((key, key[0], "white"))
-        else:
-            out.append((template.name, template.glyph, template.color))
-    return out
-
-
 class BattleScreen(Screen):
-    """The stage, the two panels, and nothing else. Yet.
+    """The stage, and one fight, played a beat at a time."""
 
-    Escape leaves: M0 is reached from the title with ``--battle-scene``, so the
-    way out has to exist before the way in does anything interesting.
-    """
+    def __init__(self, battle: Battle) -> None:
+        self.battle = battle
+        self.state = battle.state
+        self.verb = 0
+        self.target = 0
+        #: The fight's last few lines, in the log's own colours.
+        self.lines: list[Said] = []
+        #: The round being played back, one event per beat.
+        self._queue: list = []
+        self._beat = 0.0
+        self._popups: list[Popup] = []
+        #: What the health bars show, which lags the state by exactly the blows
+        #: that have been played rather than the ones that have been rolled.
+        self._shown: dict[int, int] = {}
+        self.verdict: str | None = None
+        self._size: tuple[int, int] | None = None
 
+    # -- the contract -------------------------------------------------------
     def draw(self, buffer: PatternBuffer, app) -> None:
+        #: The size this screen is being drawn at, remembered: the letters are
+        #: placed in pixels and the paste step has to agree with the grid pass
+        #: about where the floor is, and the grid pass is the one that knows.
+        self._size = (buffer.cols, buffer.rows)
         buffer.clear()
         areas = self._areas(buffer.cols, buffer.rows)
         self._draw_ground(buffer, areas["ground"])
         self._draw_shadows(buffer, areas["ground"])
+        self._draw_health(buffer, areas["ground"])
         self._draw_log(buffer, areas["log"])
         self._draw_plate(buffer, *areas["plate"])
         self._draw_commands(buffer, *areas["commands"])
 
     def paste(self, image, app) -> None:
-        """The room and the models: walls first, then the letters, then the arrow.
+        """The room and the models: walls, letters, the arrow, and the numbers.
 
         Drawn here rather than in the grid because neither a monster nor a block
         of masonry fits in a cell -- the whole look of the game is one fixed
         cell, and this is the one place that has to leave it.
         """
-        buffer = app._buffer
-        if buffer is None:
-            return
-        field = self._field(buffer.cols, buffer.rows, app.font.cell_w, app.font.cell_h)
-        staged = self._stage(field)
+        cols, rows = self._dims(app)
+        figures = self._figures(cols, rows, app.font)
         painter = QPainter(image)
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, False)
+        field = self._field(cols, rows, app.font.cell_w, app.font.cell_h)
         self._paste_walls(painter, field)
-        for figure in staged:
+        for figure in figures:
             self._paste_letter(painter, figure, app.font.cell_h)
-        for figure in staged:
+        for figure in figures:
             if figure.chosen:
                 self._paste_arrow(painter, figure, app.font.cell_h)
+        for popup in self._popups:
+            self._paste_popup(painter, popup)
+        if self.verdict is not None:
+            self._paste_verdict(painter, cols, rows, app)
         painter.end()
+
+    def _paste_verdict(
+        self, painter: QPainter, cols: int, rows: int, app
+    ) -> None:
+        """What the fight came to, over the room and over the letters in it.
+
+        Drawn in the paste rather than in the grid because the monsters are
+        pasted *after* the grid: a panel drawn into the buffer would have a
+        hero's letter standing through the middle of it. A little buffer of its
+        own keeps the game's own chrome -- the box, the rule, the hint -- and
+        still lands on top of everything the stage put down.
+
+        Set on the *stage* and not in the middle of the glass: the last lines of
+        the fight are the only account of how it ended, and a panel dropped over
+        them would be covering the story with its title.
+        """
+        text = self.verdict or ""
+        width = min(cols - 6, max(24, len(text) + 10))
+        height = 5
+        areas = self._areas(cols, rows)
+        _, wall_y, _, wall_h = areas["wall"]
+        _, log_y, _, _ = areas["log"]
+        top = wall_y + wall_h
+        x = max(0, (cols - width) // 2)
+        y = max(0, min(log_y - height, top + (log_y - top - height) // 2))
+
+        panel = PatternBuffer(width, height, app.font)
+        colour = {"YOU DIED": BLOOD, "VICTORY": "bright_yellow"}.get(text, ASH)
+        box(panel, 0, 0, width, height, border=colour, fill=True)
+        ink = parse_style(f"bold {BONE}")
+        left = 3 + max(0, (width - 6 - len(text)) // 2)
+        panel.text(left, 2, text, ink)
+        rule(panel, 1, height - 2, width - 2, ASH)
+        panel.text(2, height - 1, "enter  leave the arena", parse_style(ASH))
+        painter.drawImage(x * app.font.cell_w, y * app.font.cell_h, panel.render())
+
+    def _dims(self, app) -> tuple[int, int]:
+        """The grid this screen is drawn into: its own record, or the app's."""
+        if self._size is not None:
+            return self._size
+        buffer = getattr(app, "_buffer", None)
+        if buffer is None:
+            return (0, 0)
+        return (buffer.cols, buffer.rows)
 
     def key(self, name: str, event, app) -> bool:
         if name == "escape":
             app.return_to_title()
             return True
-        return False
+        if self.battle.over:
+            # The fight is decided, but the arena may still be playing the last
+            # blow: leaving on a keypress before the verdict has been shown would
+            # be the player skipping the one thing they just earned.
+            if not self.busy and name in ("enter", "return", "space"):
+                app.return_to_title()
+            return True
+        if self.busy:
+            # The fight is talking. It will not be interrupted mid-sentence, or
+            # a player drumming on the keyboard would be choosing the next verb
+            # for a blow they have not seen land yet.
+            return True
+        living = self._targets()
+        if name in ("left", "h") and living:
+            self.target = (self.target - 1) % len(living)
+            return True
+        if name in ("right", "l") and living:
+            self.target = (self.target + 1) % len(living)
+            return True
+        if name == "up":
+            self.verb = (self.verb - 1) % len(VERBS)
+            return True
+        if name == "down":
+            self.verb = (self.verb + 1) % len(VERBS)
+            return True
+        shortcut = {"a": ATTACK, "s": SPECIAL, "i": ITEM, "d": DEFEND, "f": FLEE}
+        if name in shortcut:
+            self.verb = VERBS.index(shortcut[name])
+            self._choose(app)
+            return True
+        if name in ("enter", "return", "space"):
+            self._choose(app)
+            return True
+        return True
 
-    # -- the shape of the screen --------------------------------------------
+    @property
+    def busy(self) -> bool:
+        """Whether the fight still has something to say or show."""
+        return bool(self._queue) or self._beat > 0 or bool(self._popups)
+
+    def step(self, dt: float, app) -> None:
+        """A frame went by: age the numbers, and land the next event.
+
+        Everything the fight does is on this clock -- the beat between blows and
+        the life of a damage number -- because a screen that kept a timer of its
+        own would keep running after the window it is drawn in has gone.
+        """
+        for popup in self._popups:
+            popup.age += dt
+        self._popups = [popup for popup in self._popups if popup.age < Popup.LIFE]
+        if self._beat > 0:
+            self._beat = max(0.0, self._beat - dt)
+            return
+        if not self._queue:
+            self._resync()
+            return
+        self._play(self._queue.pop(0), app)
+        self._beat = BEAT
+
+    # -- the fight, played ------------------------------------------------
+    def _targets(self) -> list:
+        """Who the choice can be on: the monsters the stage is actually showing.
+
+        The stage holds three. A bigger fight is a second row and a wider glass
+        (M3), and until there is one, an arrow that could point at a monster the
+        player cannot see would be pointing at nothing.
+        """
+        return [enemy for enemy in self.battle.enemies[:STAGE] if enemy.stats.alive]
+
+    def _choose(self, app) -> None:
+        """Take the highlighted verb, and queue the round it sets off."""
+        living = self._targets()
+        target = living[self.target % len(living)] if living else None
+        # The state is decided the instant the player commits; what the screen
+        # shows is not, and this is where the two are told apart.
+        self._snapshot()
+        self._queue = list(self.battle.choose(VERBS[self.verb], target))
+        self._beat = 0.0
+        if VERBS[self.verb] == SPECIAL:
+            app.play("void")
+        elif VERBS[self.verb] == ITEM:
+            app.play("item")
+        if not living:
+            self._resync()
+
+    def _snapshot(self) -> None:
+        """Freeze what the bars say, so the playback can move them itself."""
+        for actor in [self.battle.hero, *self.battle.enemies]:
+            self._shown[id(actor)] = actor.stats.hp
+
+    def _resync(self) -> None:
+        """Truth, once the round has finished being played."""
+        for actor in [self.battle.hero, *self.battle.enemies]:
+            self._shown[id(actor)] = actor.stats.hp
+
+    def _play(self, event, app) -> None:
+        """One event, on the screen and in the ear."""
+        if isinstance(event, Said):
+            self.lines = [*self.lines, event][-LOG_LINES:]
+            return
+        if isinstance(event, Guarded):
+            point = self._point_of(self.battle.hero, app)
+            if point is not None:
+                app.effects.spark(point, "grey70", count=8)
+            return
+        if isinstance(event, Over):
+            self.verdict = (
+                "VICTORY"
+                if event.won
+                else "YOU GOT AWAY"
+                if event.escaped
+                else "YOU DIED"
+            )
+            app.play("victory" if event.won else "stairs" if event.escaped else "death")
+            return
+        if isinstance(event, Struck):
+            self._land(event, app)
+
+    def _land(self, struck: Struck, app) -> None:
+        """A blow landing: a number, a shove, and a sound that matches it."""
+        outcome = struck.outcome
+        figure = self._figure_of(struck.target, app)
+        if outcome.hit and not outcome.dodged:
+            before = self._shown.get(id(struck.target), struck.target.stats.hp)
+            self._shown[id(struck.target)] = max(0, before - outcome.damage)
+        if figure is not None:
+            text = str(outcome.damage) if outcome.hit else "miss"
+            colour = (
+                "#ffd34d"
+                if outcome.crit
+                else struck.target.color
+                if outcome.hit
+                else "grey70"
+            )
+            self._popups.append(self._popup(text, colour, figure, app, outcome.crit))
+            if outcome.hit:
+                point = self._point_of(struck.target, app)
+                if point is not None:
+                    app.view.shake(strength=4 if outcome.crit else 2, seconds=0.16)
+        if not outcome.hit:
+            return
+        if struck.actor is self.battle.hero:
+            app.play("kill" if outcome.killed else "crit" if outcome.crit else "hit")
+        else:
+            app.play("hurt")
+
+    @staticmethod
+    def _popup(text: str, colour: str, figure: Staged, app, crit: bool) -> Popup:
+        """A number placed over the head it landed on, ready to rise.
+
+        Above the *arrow* as well as above the letter: the two cannot share a
+        spot, or the number a player is reading would be standing exactly where
+        the target marker is, on the frame where both matter most.
+        """
+        cap = QFontMetrics(letter_font(figure.size).bold).capHeight()
+        arrow = QFontMetrics(letter_font(max(16, figure.size // 2)).bold).height()
+        baseline = figure.row * app.font.cell_h - THICKNESS - cap - arrow - 4
+        return Popup(text=text, colour=colour, x=figure.cx, y=baseline, crit=crit)
+
+    # -- where things are --------------------------------------------------
     def _areas(self, cols: int, rows: int) -> dict[str, tuple[int, int, int, int]]:
         """Where the pieces sit, in cells: wall, ground, log, plate, commands.
 
-        Four bands, bottom to top: the panels, a line for the fight to speak in,
+        Five bands, bottom to top: the panels, the lines the fight speaks in,
         the floor, and the strip the walls stand up into. The wall strip is
         reserved rather than overlaid -- a wall drawn over the floor would be a
-        wall in front of the hero.
+        wall standing in front of the hero.
         """
         margin = max(1, min(3, cols // 24))
         panel_h = 7 if rows >= 26 else 5 if rows >= 16 else 3
         panel_y = max(1, rows - panel_h - margin)
-        log_y = max(1, panel_y - 1)
+        log_h = 3 if rows >= 26 else 2 if rows >= 18 else 1
+        log_y = max(1, panel_y - log_h)
         wall_h = max(2, min(3, rows // 8))
         wall_y = margin
         ground_y = min(log_y - 1, wall_y + wall_h)
@@ -223,7 +450,7 @@ class BattleScreen(Screen):
         return {
             "wall": (margin, wall_y, max(1, cols - margin * 2), wall_h),
             "ground": (margin, ground_y, max(1, cols - margin * 2), ground_h),
-            "log": (margin, log_y, max(1, cols - margin * 2), 1),
+            "log": (margin, log_y, max(1, cols - margin * 2), log_h),
             "plate": (margin, panel_y, panel_w, panel_h),
             "commands": (max(0, cols - margin - panel_w), panel_y, panel_w, panel_h),
         }
@@ -234,9 +461,8 @@ class BattleScreen(Screen):
         """The floor in pixels, plus the one number the walls are built from.
 
         Everything that has to agree about the room reads this: the tiles, the
-        shadows, the two side walls and their shear. ``inset`` is how far the
-        floor's far edge is pulled in on each side, and ``edge`` is the direction
-        of a side edge -- one point of floor going away from the viewer.
+        shadows, the two side walls and their shear. ``edge`` is one point of
+        floor going away from the viewer.
         """
         x0, y0, width, height = self._areas(cols, rows)["ground"]
         inset = max(1, round(width * TAPER))
@@ -255,72 +481,70 @@ class BattleScreen(Screen):
             "inset_px": dx,
             "cell_w": cell_w,
             "cell_h": cell_h,
-            #: The floor's own rectangle, in cells, for everything drawn in the
-            #: grid rather than in pixels.
             "cells_x0": x0,
             "cells_y0": y0,
             "cells_w": width,
             "cells_h": height,
-            #: One point of the left edge, going away from the viewer.
             "edge_x": dx / length,
             "edge_y": -dy / length,
             "edge_len": length,
         }
 
-    def _stage(self, field: dict[str, float]) -> list[Staged]:
-        """Who stands where: the monsters at three depths, the hero in front.
+    def _figures(self, cols: int, rows: int, font) -> list[Staged]:
+        """The staged figures for this window.
 
-        One layout for the letters and the shadows under them, so a figure
-        cannot be drawn in one place and stand in another. A figure stands on a
-        *cell row* and at a *pixel* centre, because that is the two halves of
-        the stage: the floor is the grid, and the letter is bigger than it.
+        Worked out per call rather than kept: the staging carries *which* monster
+        the choice is on, and a cache that remembered the arrow would leave it
+        pointing at whoever was chosen when the window was last resized.
+        """
+        return self._stage(self._field(cols, rows, font.cell_w, font.cell_h))
+
+    def _stage(self, field: dict[str, float]) -> list[Staged]:
+        """Who stands where: the monsters in the far half, the hero in front.
+
+        The monsters are the actors themselves, in the order they were met --
+        their glyph, their colour, their size by their depth. Nothing is
+        invented here: a fight against three vipers is three v's on the floor.
         """
         cell_w = int(field["cell_w"])
         x0, y0 = int(field["cells_x0"]), int(field["cells_y0"])
         width, height = int(field["cells_w"]), int(field["cells_h"])
         centre = x0 + width // 2
-        # A monster that keeps its size on a wide glass is a monster standing in
-        # a cathedral: the room is sized in cells and the letters are sized in
-        # pixels, so the two only stay in proportion if one of them follows.
+        living = self._targets()
+        marked = living[self.target % len(living)] if living else None
         scale = 1.35 if width >= 120 else 1.0
-        sizes = tuple(round(size * scale) for size in SIZES)
-        hero_size = round(HERO_SIZE * scale)
-        staged: list[Staged] = []
-        # Rows, far to near: the left one hangs back, the right one is the
-        # closest, which is what makes a row of three read as a row.
         places = (
             (centre - max(4, width // 4), y0 + max(1, height // 3)),
             (centre - max(1, width // 12), y0 + max(0, height // 6)),
             (centre + max(4, width // 4), y0 + max(1, height // 2)),
         )
-        for index, ((name, glyph, colour), (cell_x, foot)) in enumerate(
-            zip(_monsters(), places)
-        ):
-            size = sizes[index]
+        staged: list[Staged] = []
+        for index, enemy in enumerate(self.battle.enemies[:STAGE]):
+            cell_x, row = places[min(index, len(places) - 1)]
+            size = round(MONSTER_SIZES[min(index, len(MONSTER_SIZES) - 1)] * scale)
             staged.append(
                 Staged(
-                    name=name,
-                    glyph=glyph,
-                    colour=colour,
+                    actor=enemy,
+                    glyph=enemy.glyph,
+                    colour=enemy.color,
                     size=size,
                     cx=(cell_x + 1) * cell_w,
-                    foot=foot,
-                    cells=self._letter_cells(glyph, size, cell_w),
-                    chosen=index == 0,
+                    row=row,
+                    cells=self._letter_cells(enemy.glyph, size, cell_w),
+                    chosen=enemy is marked,
                 )
             )
-
-        from neverdeads_revenge.game.actors import NOXX
-
+        hero = self.battle.hero
+        size = round(HERO_SIZE * scale)
         staged.append(
             Staged(
-                name=NOXX.name,
-                glyph=NOXX.glyph,
-                colour=NOXX.color,
-                size=hero_size,
+                actor=hero,
+                glyph=hero.glyph,
+                colour=hero.color,
+                size=size,
                 cx=(centre + 1) * cell_w,
-                foot=y0 + height - 1,
-                cells=self._letter_cells(NOXX.glyph, hero_size, cell_w),
+                row=y0 + height - 1,
+                cells=self._letter_cells(hero.glyph, size, cell_w),
             )
         )
         return staged
@@ -331,6 +555,28 @@ class BattleScreen(Screen):
         font = letter_font(size)
         advance = QFontMetrics(font.bold).horizontalAdvance(glyph)
         return max(2, round(advance / cell_w))
+
+    def _figure_of(self, actor, app) -> Staged | None:
+        cols, rows = self._dims(app)
+        for figure in self._figures(cols, rows, app.font):
+            if figure.actor is actor:
+                return figure
+        return None
+
+    def _point_of(self, actor, app) -> tuple[float, float] | None:
+        """Where a figure stands on the frame, in pixels, for the picture stuff."""
+        figure = self._figure_of(actor, app)
+        if figure is None:
+            return None
+        cell_w, cell_h = app.font.cell_w, app.font.cell_h
+        return (figure.cx, figure.row * cell_h)
+
+    @staticmethod
+    def _place_popup(popup: Popup, figure: Staged, app) -> None:
+        """Hang a number over the head it landed on."""
+        cap = QFontMetrics(letter_font(figure.size).bold).capHeight()
+        baseline = figure.row * app.font.cell_h - THICKNESS
+        popup.y = baseline - cap - 6
 
     # -- what is pasted -----------------------------------------------------
     def _paste_walls(self, painter: QPainter, field: dict[str, float]) -> None:
@@ -348,7 +594,6 @@ class BattleScreen(Screen):
         painter.setFont(font.bold)
         advance = QFontMetrics(font.bold).horizontalAdvance("#")
 
-        # -- the far wall, standing on the floor's far edge
         painter.setPen(parse_style(WALL_FAR).fg)
         span = field["width_px"] - field["inset_px"] * 2
         count = max(1, round(span / advance))
@@ -356,9 +601,6 @@ class BattleScreen(Screen):
         for i in range(count):
             painter.drawText(int(start + i * advance), int(field["top"]), "#")
 
-        # -- the two side walls, each sheared along the edge it stands on. The
-        # masonry is smaller here on purpose: the same texture foreshortened
-        # along the wall it runs down, which is what turning a corner does.
         side_size = max(12, int(size * 0.62))
         side_font = letter_font(side_size)
         painter.setFont(side_font.bold)
@@ -383,8 +625,6 @@ class BattleScreen(Screen):
                 t = (i + 0.5) / steps
                 ax = ax0 + (ax1 - ax0) * t
                 ay = ay0 + (ay1 - ay0) * t
-                # The wall fades the way everything else does with distance:
-                # grey30 at the near corner, grey19 up at the far one.
                 painter.setPen(
                     QColor(
                         int(far_ink.red() + (near_ink.red() - far_ink.red()) * t),
@@ -393,9 +633,7 @@ class BattleScreen(Screen):
                     )
                 )
                 painter.save()
-                painter.setTransform(
-                    QTransform(ux, uy, 0.0, 1.0, ax, ay), combine=True
-                )
+                painter.setTransform(QTransform(ux, uy, 0.0, 1.0, ax, ay), combine=True)
                 painter.drawText(0, 0, "#")
                 painter.restore()
 
@@ -412,24 +650,30 @@ class BattleScreen(Screen):
         cap = QFontMetrics(letter_font(probe).bold).capHeight() or probe
         return max(12, int(probe * band / cap))
 
-    def _paste_letter(
-        self, painter: QPainter, figure: Staged, cell_h: int
-    ) -> None:
+    def _paste_letter(self, painter: QPainter, figure: Staged, cell_h: int) -> None:
         """One letter, standing behind its own shadow, with a slab of thickness.
 
-        The baseline is the *top* of the shadow row rather than its bottom: the
-        pool of shadow is cast in front of whatever cast it, so the figure has
-        to stand behind it.
+        A monster that is out of the fight is dimmed rather than removed: it is
+        still lying where it fell, and a corpse that vanished the moment it
+        stopped being a target would make the last blow of a fight unreadable.
         """
         font = letter_font(figure.size)
         painter.setFont(font.bold)
         metrics = QFontMetrics(font.bold)
         left = figure.cx - metrics.horizontalAdvance(figure.glyph) // 2
-        baseline = figure.foot * cell_h - THICKNESS
+        baseline = figure.row * cell_h - THICKNESS
         ink = parse_style(figure.colour).fg
+        dead = not figure.actor.stats.alive
         painter.setPen(ink.darker(320))
         painter.drawText(left, baseline + THICKNESS, figure.glyph)
-        painter.setPen(ink)
+        if dead:
+            faded = QColor(ink)
+            faded.setRed((faded.red() + 20) // 3)
+            faded.setGreen((faded.green() + 20) // 3)
+            faded.setBlue((faded.blue() + 20) // 3)
+            painter.setPen(faded)
+        else:
+            painter.setPen(ink)
         painter.drawText(left, baseline, figure.glyph)
 
     def _paste_arrow(self, painter: QPainter, figure: Staged, cell_h: int) -> None:
@@ -444,12 +688,32 @@ class BattleScreen(Screen):
         metrics = QFontMetrics(font.bold)
         ink = parse_style(figure.colour).fg
         cap = QFontMetrics(letter_font(figure.size).bold).capHeight()
-        baseline = figure.foot * cell_h - THICKNESS - cap - metrics.height() // 3
+        baseline = figure.row * cell_h - THICKNESS - cap - metrics.height() // 3
         left = figure.cx - metrics.horizontalAdvance(ARROW) // 2
         painter.setPen(ink.darker(320))
         painter.drawText(left, baseline + THICKNESS, ARROW)
         painter.setPen(ink)
         painter.drawText(left, baseline, ARROW)
+
+    def _paste_popup(self, painter: QPainter, popup: Popup) -> None:
+        """A number on its way up and out: the only thing here that moves."""
+        font = letter_font(34 if popup.crit else 26)
+        painter.setFont(font.bold)
+        metrics = QFontMetrics(font.bold)
+        rise = int(popup.age / Popup.LIFE * 26)
+        left = popup.x - metrics.horizontalAdvance(popup.text) // 2
+        baseline = popup.y - rise
+        ink = QColor(popup.colour)
+        # Fading toward the dark the way everything else in this game fades:
+        # a number does not shrink away, the phosphor just stops holding it.
+        fade = max(0.25, 1.0 - popup.age / Popup.LIFE)
+        ink = QColor(
+            int(ink.red() * fade), int(ink.green() * fade), int(ink.blue() * fade)
+        )
+        painter.setPen(ink.darker(240))
+        painter.drawText(left, baseline + 3, popup.text)
+        painter.setPen(ink)
+        painter.drawText(left, baseline, popup.text)
 
     # -- the ground ---------------------------------------------------------
     def _draw_ground(
@@ -489,68 +753,117 @@ class BattleScreen(Screen):
     def _draw_shadows(
         self, buffer: PatternBuffer, area: tuple[int, int, int, int]
     ) -> None:
-        """In front of each letter: the tiles it stands on, gone nearly black.
+        """In front of each figure: the tiles it stands on, gone nearly black.
 
         A row *below* the feet rather than under them, because a figure stands
         behind its own shadow, and the ends fade instead of stopping so the pool
         reads as a shape rather than as a stripe.
         """
         font = buffer.font
-        field = self._field(buffer.cols, buffer.rows, font.cell_w, font.cell_h)
-        for figure in self._stage(field):
+        for figure in self._figures(buffer.cols, buffer.rows, font):
             span = figure.cells + 2
             left = round(figure.cx / font.cell_w) - span // 2
             for i in range(span):
                 edge = i in (0, span - 1)
                 tile = SHADOW_EDGE if edge else SHADOW
-                buffer.put(left + i, figure.foot, " ", Style(bg=tile))
+                buffer.put(left + i, figure.row, " ", Style(bg=tile))
 
-    # -- the log ------------------------------------------------------------
-    def _draw_log(self, buffer: PatternBuffer, area: tuple[int, int, int, int]) -> None:
-        """The line the fight speaks in.
+    def _draw_health(
+        self, buffer: PatternBuffer, area: tuple[int, int, int, int]
+    ) -> None:
+        """Under each monster, the part of it that is left.
 
-        Placeholder prose for M0 -- nothing has happened yet -- but it is the
-        real thing in the two ways that matter: the words are the dungeon log's
-        words, and the number is the orange a damage line is drawn in there.
+        Not a name: the letter *is* the monster, and who did what to whom is the
+        log's business. What the letter cannot say is how much of it there is,
+        and that is the one number a fight is actually about.
         """
-        x, y, width, _ = area
-        if width < 30:
+        font = buffer.font
+        for figure in self._figures(buffer.cols, buffer.rows, font):
+            if figure.actor is self.battle.hero:
+                continue
+            total = max(1, figure.actor.max_hp)
+            shown = self._shown.get(id(figure.actor), figure.actor.stats.hp)
+            cells = max(3, min(8, figure.cells))
+            left = round(figure.cx / font.cell_w) - cells // 2
+            self._bar(buffer, left, figure.row + 1, cells, shown / total)
+
+    def _draw_log(self, buffer: PatternBuffer, area: tuple[int, int, int, int]) -> None:
+        """The lines the fight speaks in, newest last, in the dungeon's colours.
+
+        The same mapping the dungeon log uses, which is the point: a curse is
+        the same red here as it is down there, and a kill is the same bad news.
+        """
+        x, y, width, height = area
+        if width < 20:
             return
-        buffer.text(x + 2, y, "►", parse_style("bright_white"))
-        buffer.text(x + 4, y, "Noxx attacks the ghoul!", parse_style("bright_white"))
-        buffer.text(x + 28, y, "20 damage", parse_style("orange1"))
+        shown = self.lines[-height:]
+        for index, line in enumerate(shown):
+            text = line.text[: max(0, width - 4)]
+            style = parse_style(log_style(line.kind))
+            buffer.text(x + 2, y + index, text, style)
+            if index == len(shown) - 1:
+                buffer.put(x, y + index, "►", style)
 
     # -- the panels ---------------------------------------------------------
     def _draw_plate(
         self, buffer: PatternBuffer, x: int, y: int, width: int, height: int
     ) -> None:
         """The hero's plate: who he is, how much of him is left, what he carries."""
-        from neverdeads_revenge.game.actors import NOXX
-
-        title = NOXX.name.upper()
+        hero = self.battle.hero
+        title = hero.name.upper()
         box(buffer, x, y, width, height, title=title, border=BLOOD, fill=True)
         if height < 4 or width < 14:
             return
+        shown = self._shown.get(id(hero), hero.stats.hp)
+        total = max(1, hero.max_hp)
         bar = min(12, max(4, width - 22))
         buffer.text(x + 2, y + 1, "HP", parse_style(ASH))
-        self._bar(buffer, x + 5, y + 1, bar, 0.72)
-        buffer.text(x + 6 + bar, y + 1, " 22/30", parse_style(BONE))
+        self._bar(buffer, x + 5, y + 1, bar, shown / total)
+        buffer.text(x + 6 + bar, y + 1, f" {shown:>2}/{total}", parse_style(BONE))
         if height >= 5:
-            buffer.text(x + 2, y + 2, "DRGT  ● ● ○", parse_style("dim #a855f7"))
+            draughts = len(self.state.floor_draughts)
+            marks = "●" * min(3, draughts) + "○" * max(0, 3 - draughts)
+            pack = len([item for item in self.state.inventory if item.heal > 0])
+            buffer.text(x + 2, y + 2, f"PACK {pack}", parse_style(ASH))
+            buffer.text(x + 10, y + 2, marks, parse_style("dim #a855f7"))
         if height >= 6:
+            ready = self.battle.special_ready()
             buffer.text(x + 2, y + 3, "THE VOID", parse_style(ASH))
-            buffer.text(x + 12, y + 3, "ready", parse_style("bold bright_yellow"))
+            buffer.text(
+                x + 12,
+                y + 3,
+                "ready" if ready else "spent",
+                parse_style("bold bright_yellow" if ready else "grey30"),
+            )
         if height >= 7:
-            buffer.text(x + 2, y + height - 2, "esc  leave the stage", parse_style(ASH))
+            buffer.text(x + 2, y + height - 2, "esc  leave the arena", parse_style(ASH))
 
     def _draw_commands(
         self, buffer: PatternBuffer, x: int, y: int, width: int, height: int
     ) -> None:
-        """The verbs, arranged the way every menu in this game is."""
+        """The verbs, arranged the way every menu in this game is.
+
+        The ask is drawn dim when the dark will not answer: a verb that costs a
+        turn to refuse is a verb that punishes curiosity.
+        """
         box(buffer, x, y, width, height, title="COMMAND", border=BLOOD, fill=True)
         if height < 4 or width < 12:
             return
-        menu(buffer, x + 2, y + 1, list(VERBS[: height - 2]), index=0)
+        keys = {ATTACK: "a", SPECIAL: "s", ITEM: "i", DEFEND: "d", FLEE: "f"}
+        rows = [(keys[verb], verb.upper()) for verb in VERBS[: height - 2]]
+        chosen = self.verb if self.verb < len(rows) else 0
+        ready = self.battle.special_ready()
+        for index, (key, label) in enumerate(rows):
+            lit = index == chosen
+            marker = "►" if lit else " "
+            verb = VERBS[index]
+            if lit:
+                style = parse_style(f"bold {BONE}")
+            elif verb == SPECIAL and not ready:
+                style = parse_style("grey23")
+            else:
+                style = parse_style(ASH)
+            buffer.text(x + 2, y + 1 + index, f"{marker} {key}  {label}", style)
 
     @staticmethod
     def _bar(buffer: PatternBuffer, x: int, y: int, cells: int, ratio: float) -> None:

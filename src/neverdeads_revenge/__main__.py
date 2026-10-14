@@ -41,7 +41,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--battle-scene",
         action="store_true",
-        help="open the battle stage straight away (a picture; M0 of the fights)",
+        help="open the arena straight away, against a fresh floor's first monsters",
     )
     args = parser.parse_args(argv)
 

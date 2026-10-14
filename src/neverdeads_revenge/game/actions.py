@@ -66,6 +66,10 @@ __all__ = [
     "drink",
     "drop",
     "MAX_ENEMY_ACTIONS_PER_PLAYER_TURN",
+    # The two blows, by name: the arena resolves the same ones the dungeon does.
+    "resolve_player_attack",
+    "resolve_enemy_attack",
+    "ultimate_refusal",
 ]
 
 
@@ -700,7 +704,7 @@ def _try_move(state: GameState, direction: Direction) -> tuple[bool, bool]:
             # A wall of your own ice. It is not a fight, and it is not a door.
             state.say("The ice is yours. It is not going anywhere.", LogKind.PLAIN)
             return False, False
-        _resolve_player_attack(state, blocker)
+        resolve_player_attack(state, blocker)
         return True, True
 
     # THE LONG REACH. A direction with something hostile one square beyond an
@@ -715,7 +719,7 @@ def _try_move(state: GameState, direction: Direction) -> tuple[bool, bool]:
         if state.dungeon_map.in_bounds(beyond):
             far = state.actor_at(beyond)
             if far is not None and far.kind is ActorKind.ENEMY and far.alive:
-                _resolve_player_attack(state, far)
+                resolve_player_attack(state, far)
                 return True, True
 
     # THE HESITATION. Every so many turns the hero does not take the step, and
@@ -889,7 +893,15 @@ def _bleed(state: GameState) -> None:
     state.say("You are bleeding.", LogKind.DAMAGE)
 
 
-def _resolve_player_attack(state: GameState, target: Actor) -> None:
+def resolve_player_attack(state: GameState, target: Actor) -> AttackOutcome:
+    """The hero's blow, with everything the dark has loaded into it.
+
+    Public because the arena resolves the same blow the dungeon does: a fight
+    that swung with its own dice would be a second opinion about what a gift or
+    a curse is worth, and the player would be right to trust neither. Returns
+    the outcome -- the arena says the number and shakes the frame with it, and
+    cannot read either off the log without parsing its own prose.
+    """
     # The patient knife only makes the *first* blow count double, so something
     # has to remember whether there has been one. The flag is cleared on every
     # descent, with the monsters it belonged to.
@@ -920,7 +932,7 @@ def _resolve_player_attack(state: GameState, target: Actor) -> None:
         # a landing blow spends it -- and the two amulets disagreeing about what
         # "the first blow" means was a bug, not a rule.
         state.say(f"You swing at the {target.name} and miss.", LogKind.PLAIN)
-        return
+        return outcome
 
     target.struck = True
 
@@ -968,10 +980,11 @@ def _resolve_player_attack(state: GameState, target: Actor) -> None:
             _knock_back(state, target)
     if outcome.killed:
         _remove_corpse(state, target)
-        return
+        return outcome
 
     if state.has_passive("dead_weight"):
         _knock_back(state, target)
+    return outcome
 
 
 def _knock_back(state: GameState, target: Actor) -> None:
@@ -1260,6 +1273,21 @@ def _rewind(state: GameState) -> ActionResult:
     return _outcome(state, consumed_turn=False, acted=True)
 
 
+def ultimate_refusal(state: GameState) -> str | None:
+    """Why the dark will not answer, or ``None`` when it will.
+
+    The two gates in one place, because the arena offers the same ask the
+    dungeon does: a level the hero has not reached and a floor the dark has
+    already had are refusals in a fight exactly as they are on the map, and the
+    words for them should not have to be written twice to stay the same words.
+    """
+    if state.level < state.ultimate_level:
+        return f"Not yet. The dark answers at level {state.ultimate_level}."
+    if not state.ultimate_available:
+        return "The dark has already had this floor. It does not ask twice."
+    return None
+
+
 def _ultimate(state: GameState) -> ActionResult:
     """The hero's own ask, once a floor, from the level the dark answers at.
 
@@ -1267,17 +1295,9 @@ def _ultimate(state: GameState) -> ActionResult:
     than three verbs so the key, the gate, the once-a-floor rule and the
     sidebar's promise have exactly one place to be true.
     """
-    if state.level < state.ultimate_level:
-        state.say(
-            f"Not yet. The dark answers at level {state.ultimate_level}.",
-            LogKind.PLAIN,
-        )
-        return ActionResult(consumed_turn=False, acted=False)
-    if not state.ultimate_available:
-        state.say(
-            "The dark has already had this floor. It does not ask twice.",
-            LogKind.PLAIN,
-        )
+    refusal = ultimate_refusal(state)
+    if refusal is not None:
+        state.say(refusal, LogKind.PLAIN)
         return ActionResult(consumed_turn=False, acted=False)
 
     builders = {
@@ -2108,7 +2128,7 @@ def take_turn(state: GameState, actor: Actor) -> bool:
         if lure is not None:
             _resolve_attack_on_fortress(state, actor, lure)
         else:
-            _resolve_enemy_attack(state, actor, player)
+            resolve_enemy_attack(state, actor, player)
         return True
 
     if _move_towards_player(state, actor, player, distance, towards=target):
@@ -2148,7 +2168,18 @@ def _resolve_attack_on_fortress(state: GameState, attacker: Actor, fortress: Act
     )
 
 
-def _resolve_enemy_attack(state: GameState, attacker: Actor, player: Actor) -> None:
+def resolve_enemy_attack(
+    state: GameState, attacker: Actor, player: Actor, *, guard: bool = False
+) -> AttackOutcome | None:
+    """One monster's blow, with everything the floor has loaded into it.
+
+    Public for the same reason the hero's is: the arena and the dungeon resolve
+    the same blow. ``guard`` is the arena's own verb -- the hero set his feet --
+    and it is half a blow, the same half the grave ward takes, folded in before
+    the ward because setting your feet is not wearing an amulet. Returns ``None``
+    when nothing was resolved at all -- a circle, a borrowed face -- because a
+    fight that called that a miss would report a blow that was never thrown.
+    """
     if state.salt_ward:
         # THE SALT CIRCLE. The whole of what it buys: this one turn, nothing
         # lands. Checked before anything else, because a circle that let a blow
@@ -2157,14 +2188,14 @@ def _resolve_enemy_attack(state: GameState, attacker: Actor, player: Actor) -> N
             f"The {attacker.name} strikes at the circle and cannot find you.",
             LogKind.PLAIN,
         )
-        return
+        return None
 
     if state.shrouded and state.has_passive("borrowed_face"):
         state.say(
             f"The {attacker.name} strikes at where you were, and finds nothing.",
             LogKind.PLAIN,
         )
-        return
+        return None
 
     warded = state.ward_ready and state.has_passive("grave_ward")
     # THE LAST BREATH, the defensive half: a cornered hero is harder to land on,
@@ -2179,7 +2210,7 @@ def _resolve_enemy_attack(state: GameState, attacker: Actor, player: Actor) -> N
         attacker,
         player,
         state.rng,
-        damage_scale=0.5 if warded else 1.0,
+        damage_scale=(0.5 if warded else 1.0) * (0.5 if guard else 1.0),
         evasion_bonus=evasion,
     )
 
@@ -2233,6 +2264,7 @@ def _resolve_enemy_attack(state: GameState, attacker: Actor, player: Actor) -> N
             # so it pays out like any other kill.
             _on_death(state, attacker)
             _remove_corpse(state, attacker)
+    return outcome
 
 
 def _move_towards_player(

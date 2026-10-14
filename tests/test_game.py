@@ -2325,7 +2325,7 @@ def test_the_flash_lasts_exactly_one_action():
 
 
 def test_the_mirror_marks_what_it_strikes_back():
-    from neverdeads_revenge.game.actions import _resolve_enemy_attack
+    from neverdeads_revenge.game.actions import resolve_enemy_attack
 
     state = start_run(NOXX, seed=3, loadout=Loadout(pending=("mirror",)))
     ghoul = make_enemy(ENEMIES["ghoul"], (state.player.position[0] + 1, state.player.position[1]))
@@ -2337,7 +2337,7 @@ def test_the_mirror_marks_what_it_strikes_back():
 
     for _ in range(40):
         state.hits.clear()
-        _resolve_enemy_attack(state, ghoul, state.player)
+        resolve_enemy_attack(state, ghoul, state.player)
         if ghoul.position in state.hits:
             break
 

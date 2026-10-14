@@ -292,14 +292,20 @@ class DesktopApp(QMainWindow):
             for screen in self.screens
         )
         breathing = self._void_is_breathing()
+        playing = getattr(self.screens[-1], "busy", False)
         if not (
             holding
+            or playing
             or self.effects.active
             or self.view.is_shaking()
             or self.glass_note is not None
             or breathing
         ):
             return
+        if playing:
+            # A screen with something to play gets a beat per frame: the battle
+            # lands its blows one at a time instead of printing a round at once.
+            self.screens[-1].step(0.033, self)
         if breathing and not (
             holding or self.effects.active or self.view.is_shaking()
         ):
@@ -438,15 +444,30 @@ class DesktopApp(QMainWindow):
         self.push(ChronicleScreen())
 
     def open_battle_scene(self) -> None:
-        """M0: the battle stage as a picture, reached with ``--battle-scene``.
+        """M1's dev door: a fight against the first monsters of a fresh floor.
 
-        The stack is *replaced* rather than pushed onto. A battle is not a
-        dialog over the dungeon -- it is somewhere else, with the run standing
-        still underneath it -- and a dialog is exactly what this is not.
+        In M2 an encounter opens the arena from the dungeon -- the hero walks
+        into something and the fight is over that monster. Until then the only
+        way in is ``--battle-scene``, and it starts a run of its own so the
+        fight is over real actors standing on a real floor, with real coins in
+        their pockets and a real corpse to leave behind.
         """
+        from ..game.actors import HEROES
+        from ..game.battle import Battle
+        from ..game.state import start_run
         from .screens.battle import BattleScreen
 
-        self.screens = [BattleScreen()]
+        if self.run is None:
+            if not self.seed_locked:
+                self.seed = random.SystemRandom().randrange(2**32)
+            self.run = start_run(
+                HEROES["noxx"],
+                self.seed,
+                ultimate_level=1 if self.testrun else None,
+            )
+            self._seen_log = len(self.run.log)
+        battle = Battle(self.run, self.run.enemies[:3])
+        self.screens = [BattleScreen(battle)]
         self.redraw()
 
     def open_delete_progress(self) -> None:

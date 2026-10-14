@@ -1738,29 +1738,26 @@ def test_the_tongue_paints_the_dead_even_under_the_coins(app):
         "the dead square is not painted under the loot"
     )
 
+# -- the arena (M1) ----------------------------------------------------------
+def arena(seed: int = 1, count: int = 3, *, ultimate_level: int = 1):
+    """A fight, out of a real run, over the floor's own first monsters."""
+    from neverdeads_revenge.game.actors import HEROES
+    from neverdeads_revenge.game.battle import Battle
+    from neverdeads_revenge.game.state import start_run
 
-# -- the battle stage (M0) ---------------------------------------------------
-def test_the_battle_stage_stands_its_figures_on_a_floor(font):
-    """M0 is a picture, and a picture of a fight has to have the fight in it.
+    state = start_run(HEROES["noxx"], seed, ultimate_level=ultimate_level)
+    return Battle(state, state.enemies[:count])
 
-    The verbs are all five, because a stage whose menu is missing three of its
-    words is a stage nobody trusts, and the hero's plate is his. What is *not*
-    on the stage is anybody's name: a monster is its letter, and who did what to
-    whom is the log's business -- ``s`` is a skeleton and the log can say so.
-    """
+
+def drawn(screen, app, font, cols: int = 96, rows: int = 27):
+    """Draw the screen the way the app does, and hand back buffer and image."""
     from neverdeads_revenge.desktop.buffer import PatternBuffer
-    from neverdeads_revenge.desktop.screens.battle import VERBS, BattleScreen
 
-    buffer = PatternBuffer(150, 50, font)
-    BattleScreen().draw(buffer, None)
-    text = "\n".join("".join(cell.char for cell in row) for row in buffer.cells)
-
-    for _, label in VERBS:
-        assert label in text, f"the command menu lost {label}"
-    assert "NOXX" in text, "the hero has no plate"
-    assert "attacks" in text, "the fight has nowhere to speak"
-    for name in ("skeleton", "wraith"):
-        assert name not in text, f"{name}'s name is on the stage instead of in the log"
+    buffer = PatternBuffer(cols, rows, font)
+    screen.draw(buffer, app)
+    image = buffer.render()
+    screen.paste(image, app)
+    return buffer, image
 
 
 def _is_colour(colour, rgb, tolerance: int = 60) -> bool:
@@ -1773,41 +1770,147 @@ def _is_colour(colour, rgb, tolerance: int = 60) -> bool:
     )
 
 
+def test_the_arena_stages_the_actors_it_is_fighting(font):
+    """The models are the monsters, not a mock-up of them.
+
+    A fight against three vipers is three v's in their own colour, and the hero
+    is the hero: the stage reads the actors the fight will spend.
+    """
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+
+    battle = arena(count=3)
+    screen = BattleScreen(battle)
+    figures = screen._figures(96, 27, font)
+
+    assert [figure.actor for figure in figures] == [*battle.enemies, battle.hero]
+    assert [figure.glyph for figure in figures] == [
+        enemy.glyph for enemy in battle.enemies
+    ] + [battle.hero.glyph]
+
+
 def test_the_models_are_the_letters(app, font):
-    """The models are the alphabet, drawn big: a ghoul is a green ``g``.
+    """The models are the alphabet, drawn big: the monsters are their glyphs.
 
     The whole look of the game is one fixed cell, and a letter the size of a
     monster does not fit in one -- so the monsters are the single thing pasted
     onto the frame, which means this test has to look at the *frame*: a body of
-    green pixels where the ghoul stands, taller than the cell it stands on.
+    pixels in the monster's own colour, taller than the cell it stands on.
     """
-    from neverdeads_revenge.desktop.buffer import PatternBuffer
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
-    from neverdeads_revenge.desktop.theme import NAMED
+    from neverdeads_revenge.desktop.theme import parse_style
 
-    screen = BattleScreen()
-    buffer = PatternBuffer(96, 27, font)
-    screen.draw(buffer, None)
-    image = buffer.render()
-    screen.paste(image, app)
+    battle = arena(count=3)
+    screen = BattleScreen(battle)
+    _, image = drawn(screen, app, font)
 
-    green = NAMED["green"]
+    enemy = battle.enemies[0]
+    rgb = parse_style(enemy.color).fg
     rows = [
         y
         for y in range(image.height())
-        if any(_is_colour(image.pixelColor(x, y), green) for x in range(image.width()))
+        if any(
+            _is_colour(image.pixelColor(x, y), (rgb.red(), rgb.green(), rgb.blue()))
+            for x in range(image.width())
+        )
     ]
-    assert rows, "no ghoul-green letter anywhere on the stage"
+    assert rows, f"no {enemy.color} letter anywhere on the stage"
     ink = sum(
         1
         for y in rows
         for x in range(image.width())
-        if _is_colour(image.pixelColor(x, y), green)
+        if _is_colour(image.pixelColor(x, y), (rgb.red(), rgb.green(), rgb.blue()))
     )
-    assert ink > 200, f"the ghoul is only {ink} pixels of letter"
+    assert ink > 200, f"the {enemy.name} is only {ink} pixels of letter"
     assert rows[-1] - rows[0] > font.cell_h, (
-        "the ghoul's letter is no taller than a cell, so it was never drawn big"
+        "the monster's letter is no taller than a cell, so it was never drawn big"
     )
+
+
+def test_the_monsters_carry_their_health_under_them(app, font):
+    """A bar under every monster, and none under the hero.
+
+    The letter is the monster and the log is the story, so the one thing a
+    monster cannot say about itself is how much of it is left -- and the hero's
+    own numbers live on his plate, not on the floor.
+    """
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+
+    battle = arena(count=3)
+    screen = BattleScreen(battle)
+    buffer, _ = drawn(screen, app, font)
+    x0, y0, width, height = screen._areas(96, 27)["ground"]
+
+    def bar_cells(row: int) -> int:
+        return sum(1 for cell in buffer.cells[row] if cell.char == "█")
+
+    on_the_floor = sum(
+        bar_cells(row) for row in range(y0, y0 + height)
+    )
+    assert on_the_floor >= 3 * len(battle.enemies), (
+        f"{on_the_floor} cells of bar for {len(battle.enemies)} monsters"
+    )
+    hero_row = screen._figures(96, 27, font)[-1].row
+    assert bar_cells(hero_row + 1) == 0, "the hero's health is on the floor as well"
+
+
+def test_a_whole_fight_plays_out_by_keys(app, font):
+    """M1's promise: a fight that can be *played*, to the end, with the keys.
+
+    Driven through the app rather than the screen, because the part that could
+    quietly not work is the wiring: the arena has to be able to say it is busy,
+    the frame tick has to step it, and the input has to be refused while the
+    fight is still talking about the last thing the player did.
+    """
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+
+    battle = arena(count=3)
+    for enemy in battle.enemies:
+        enemy.stats.hp = 1  # one blow each, so the test is about the wiring
+    screen = BattleScreen(battle)
+    app.screens = [screen]
+    app.redraw()
+
+    guard = 0
+    while guard < 400:
+        guard += 1
+        if screen.busy:
+            app._tick()
+            continue
+        if battle.over:
+            break
+        press(app, Qt.Key.Key_Return)
+
+    assert battle.over, "the fight never ended"
+    assert battle.won, "three one-hit monsters were not beaten"
+    assert screen.verdict == "VICTORY", f"the arena says {screen.verdict!r}"
+    assert screen.lines, "the fight said nothing on the way"
+
+
+def test_the_fight_is_not_interrupted_while_it_talks(app, font):
+    """A drummed enter must not choose the next verb before the blow is shown.
+
+    The round is decided the moment the player commits, so the only thing
+    standing between a player and accidentally acting on a hit they have not
+    seen is that the arena refuses the keyboard while it is busy.
+    """
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+
+    battle = arena(count=3)
+    screen = BattleScreen(battle)
+    app.screens = [screen]
+    app.redraw()
+
+    press(app, Qt.Key.Key_Return)
+    assert screen.busy, "the fight had nothing to play"
+    verb, queue = screen.verb, len(screen._queue)
+    for _ in range(5):
+        press(app, Qt.Key.Key_Return)
+    assert screen.verb == verb, "a key got through while the fight was talking"
+    assert len(screen._queue) <= queue, "a second round was set off mid-beat"
 
 
 def test_the_arena_is_walled_in_the_dungeons_own_glyph(app, font):
@@ -1819,19 +1922,13 @@ def test_the_arena_is_walled_in_the_dungeons_own_glyph(app, font):
     leftmost wall pixel at the far end of the room is further in than the one at
     the near end, because the walls are placed from the floor's own taper.
     """
-    from neverdeads_revenge.desktop.buffer import PatternBuffer
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
     from neverdeads_revenge.desktop.theme import parse_style
 
-    screen = BattleScreen()
-    buffer = PatternBuffer(96, 27, font)
-    screen.draw(buffer, None)
-    image = buffer.render()
-    screen.paste(image, app)
-    field = screen._field(buffer.cols, buffer.rows, font.cell_w, font.cell_h)
+    screen = BattleScreen(arena(count=3))
+    _, image = drawn(screen, app, font)
+    field = screen._field(96, 27, font.cell_w, font.cell_h)
 
-    #: The wall greys are brighter than any floor tone, and grey: the floor is
-    #: dark and slightly blue, so one test separates the masonry from the ground.
     def is_wall(x: int, y: int) -> bool:
         colour = image.pixelColor(x, y)
         floor = parse_style("grey19").fg.red()
@@ -1842,7 +1939,10 @@ def test_the_arena_is_walled_in_the_dungeons_own_glyph(app, font):
 
     top, bottom = int(field["top"]), int(field["bottom"])
     back = sum(
-        1 for y in range(max(0, top - 2), top) for x in range(image.width()) if is_wall(x, y)
+        1
+        for y in range(max(0, top - 2), top)
+        for x in range(image.width())
+        if is_wall(x, y)
     )
     assert back > 200, "there is no wall behind the floor"
 
@@ -1852,8 +1952,18 @@ def test_the_arena_is_walled_in_the_dungeons_own_glyph(app, font):
                 return x
         return None
 
-    far, near = leftmost(top + 4), leftmost(bottom - 4)
-    assert far is not None and near is not None, "there is no wall on the left"
+    # Every row of the room that has wall on its left, from the far end of the
+    # room to the near one. The masonry does not reach the very last row -- a
+    # wall of stone-sized hashes stops where the last one fits -- so the
+    # question is which way the line of them leans, not where it ends.
+    walled = [
+        (row, leftmost(row))
+        for row in range(top, bottom)
+        if leftmost(row) is not None
+    ]
+    assert len(walled) > 3, "there is no wall on the left"
+    (far_row, far), (near_row, near) = walled[0], walled[-1]
+    assert far_row < near_row, "the wall does not run down the room"
     assert far > near, "the side walls do not converge with the floor"
 
     centre = (int(field["left"]) + int(field["right"])) // 2
@@ -1861,20 +1971,18 @@ def test_the_arena_is_walled_in_the_dungeons_own_glyph(app, font):
     assert not is_wall(centre, floor_y), "the masonry is standing on the floor"
 
 
-def test_the_battle_floor_recedes(font):
+def test_the_battle_floor_recedes(app, font):
     """The floor is the one thing that has to *look* like a place.
 
     Perspective here is two facts and no arithmetic worth hiding behind a
     shader: the far row is narrower than the near one, and it is darker. Both
     are asserted on the buffer, because both are what the player sees.
     """
-    from neverdeads_revenge.desktop.buffer import PatternBuffer
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
 
-    screen = BattleScreen()
-    buffer = PatternBuffer(150, 50, font)
-    screen.draw(buffer, None)
-    x, y, width, height = screen._areas(150, 50)["ground"]
+    screen = BattleScreen(arena(count=3))
+    buffer, _ = drawn(screen, app, font)
+    x, y, width, height = screen._areas(96, 27)["ground"]
 
     # A column nobody is standing on: the hero and the monsters cast a shadow,
     # and a shadow is darker than the floor it is cast on, which is the whole
@@ -1894,22 +2002,15 @@ def test_the_battle_floor_recedes(font):
     )
 
 
-def test_the_battle_stage_survives_any_window(app, font):
-    """A stage drawn into a window too small for it draws what fits, or nothing.
-
-    The buffer is sized from the glass, and the glass can be tiny: every menu in
-    this game is drawn to a size it did not choose, and the one that raises is
-    the one that took the whole game down with it. The letters are pasted in
-    pixels, outside the grid's bounds checking, so they are drawn here too.
-    """
-    from neverdeads_revenge.desktop.buffer import PatternBuffer
+def test_the_arena_survives_any_window(app, font):
+    """Drawn into a window too small for it: what fits, or nothing, but never a
+    crash. Every menu in this game is drawn at a size it did not choose, and the
+    one that raises is the one that took the whole game down with it."""
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
 
     for cols, rows in ((12, 6), (24, 10), (40, 12), (80, 24), (200, 60)):
-        screen = BattleScreen()
-        buffer = PatternBuffer(cols, rows, font)
-        screen.draw(buffer, None)
-        screen.paste(buffer.render(), app)
+        screen = BattleScreen(arena(count=3))
+        drawn(screen, app, font, cols, rows)
 
 
 def test_the_battle_scene_opens_and_leaves(qapp):
@@ -1920,8 +2021,7 @@ def test_the_battle_scene_opens_and_leaves(qapp):
 
     window = DesktopApp(seed=3, no_sound=True, battle_scene=True)
     window.view.resize(1280, 800)
-    assert top(window) == "BattleScreen", "the switch did not open the stage"
+    assert top(window) == "BattleScreen", "the switch did not open the arena"
 
     press(window, Qt.Key.Key_Escape)
-    assert top(window) == "TitleScreen", "escape did not leave the stage"
-
+    assert top(window) == "TitleScreen", "escape did not leave the arena"
