@@ -1743,11 +1743,10 @@ def test_the_tongue_paints_the_dead_even_under_the_coins(app):
 def test_the_battle_stage_stands_its_figures_on_a_floor(font):
     """M0 is a picture, and a picture of a fight has to have the fight in it.
 
-    The monsters are the bestiary's own, by name and colour, so the stage can be
-    read as *this* game: a ghoul is green up here for the same reason it is
-    green on the map. The names are labels under the letters -- ``s`` is a
-    skeleton and not an ``s`` -- and the verbs are all five, because a stage
-    whose menu is missing three of its words is a stage nobody trusts.
+    The verbs are all five, because a stage whose menu is missing three of its
+    words is a stage nobody trusts, and the hero's plate is his. What is *not*
+    on the stage is anybody's name: a monster is its letter, and who did what to
+    whom is the log's business -- ``s`` is a skeleton and the log can say so.
     """
     from neverdeads_revenge.desktop.buffer import PatternBuffer
     from neverdeads_revenge.desktop.screens.battle import VERBS, BattleScreen
@@ -1756,10 +1755,12 @@ def test_the_battle_stage_stands_its_figures_on_a_floor(font):
     BattleScreen().draw(buffer, None)
     text = "\n".join("".join(cell.char for cell in row) for row in buffer.cells)
 
-    for name in ("ghoul", "skeleton", "wraith", "Noxx"):
-        assert name in text, f"the stage lost {name}"
     for _, label in VERBS:
         assert label in text, f"the command menu lost {label}"
+    assert "NOXX" in text, "the hero has no plate"
+    assert "attacks" in text, "the fight has nowhere to speak"
+    for name in ("skeleton", "wraith"):
+        assert name not in text, f"{name}'s name is on the stage instead of in the log"
 
 
 def _is_colour(colour, rgb, tolerance: int = 60) -> bool:
@@ -1809,33 +1810,55 @@ def test_the_models_are_the_letters(app, font):
     )
 
 
-def test_the_arena_is_walled_in_the_dungeons_own_glyph(font):
+def test_the_arena_is_walled_in_the_dungeons_own_glyph(app, font):
     """The room is ``#``, the same wall the map draws, and it converges.
 
-    A wall that went its own way would be a second opinion about where the room
-    goes: the sides are placed from the floor's own taper, cell for cell, so the
-    far end of the room is narrower than the near end. That is the assertion --
-    not "there are hashes on the glass".
+    The walls are pasted, not drawn in the grid, so this asks the *frame*: grey
+    pixels where masonry goes -- above the floor's far edge, and down both sides
+    -- and none on the floor itself. The convergence is the second half: the
+    leftmost wall pixel at the far end of the room is further in than the one at
+    the near end, because the walls are placed from the floor's own taper.
     """
     from neverdeads_revenge.desktop.buffer import PatternBuffer
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.desktop.theme import parse_style
 
     screen = BattleScreen()
     buffer = PatternBuffer(96, 27, font)
     screen.draw(buffer, None)
-    x, y, width, height = screen._areas(96, 27)["ground"]
+    image = buffer.render()
+    screen.paste(image, app)
+    field = screen._field(buffer.cols, buffer.rows, font.cell_w, font.cell_h)
 
-    def left_wall(row: int) -> int | None:
-        for cell in range(width):
-            if buffer.cells[row][x + cell].char == "#":
-                return cell
+    #: The wall greys are brighter than any floor tone, and grey: the floor is
+    #: dark and slightly blue, so one test separates the masonry from the ground.
+    def is_wall(x: int, y: int) -> bool:
+        colour = image.pixelColor(x, y)
+        floor = parse_style("grey19").fg.red()
+        return (
+            colour.red() == colour.green() == colour.blue()
+            and colour.red() >= floor
+        )
+
+    top, bottom = int(field["top"]), int(field["bottom"])
+    back = sum(
+        1 for y in range(max(0, top - 2), top) for x in range(image.width()) if is_wall(x, y)
+    )
+    assert back > 200, "there is no wall behind the floor"
+
+    def leftmost(row: int) -> int | None:
+        for x in range(image.width()):
+            if is_wall(x, row):
+                return x
         return None
 
-    far, middle = left_wall(y), left_wall(y + height // 2)
-    assert far is not None and middle is not None, "there is no wall on the left"
-    assert far > middle, "the side walls do not converge with the floor"
-    # and the back wall is above the floor's far edge
-    assert buffer.cells[y - 1][x + width // 2].char == "#", "there is no back wall"
+    far, near = leftmost(top + 4), leftmost(bottom - 4)
+    assert far is not None and near is not None, "there is no wall on the left"
+    assert far > near, "the side walls do not converge with the floor"
+
+    centre = (int(field["left"]) + int(field["right"])) // 2
+    floor_y = (top + bottom) // 2
+    assert not is_wall(centre, floor_y), "the masonry is standing on the floor"
 
 
 def test_the_battle_floor_recedes(font):
