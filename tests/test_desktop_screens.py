@@ -1799,13 +1799,13 @@ def test_the_arena_stages_the_actors_it_is_fighting(font):
     ] + [battle.hero.glyph]
 
 
-def test_the_models_are_the_letters(app, font):
-    """The models are the alphabet, drawn big: the monsters are their glyphs.
+def test_the_arena_draws_whatever_art_there_is(app, font):
+    """Every figure is on the floor: as a picture if the sheets have one, as its
+    letter if they do not.
 
-    The whole look of the game is one fixed cell, and a letter the size of a
-    monster does not fit in one -- so the monsters are the single thing pasted
-    onto the frame, which means this test has to look at the *frame*: a body of
-    pixels in the monster's own colour, taller than the cell it stands on.
+    Both halves are asserted because both are the truth the game lives with --
+    the art is optional and the alphabet is not. A fight is never missing a
+    fighter, only sometimes missing a picture of one.
     """
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
     from neverdeads_revenge.desktop.theme import parse_style
@@ -1813,28 +1813,65 @@ def test_the_models_are_the_letters(app, font):
     battle = arena(count=3)
     screen = BattleScreen(battle)
     _, image = drawn(screen, app, font)
+    figures = screen._figures(96, 27, font)
 
-    enemy = battle.enemies[0]
-    rgb = parse_style(enemy.color).fg
+    for figure in figures:
+        if figure.sprite is not None:
+            left = figure.cx - figure.sprite.width() // 2
+            top = figure_baseline(figure, font) - figure.sprite.height()
+            inked = sum(
+                1
+                for y in range(top, top + figure.sprite.height(), 3)
+                for x in range(left, left + figure.sprite.width(), 3)
+                if image.pixelColor(x, y).alpha() > 0
+            )
+            assert inked > 40, f"the picture of {figure.actor.name} was not drawn"
+            continue
+        ink = parse_style(figure.colour).fg
+        found = [
+            y
+            for y in range(image.height())
+            if any(
+                _is_colour(image.pixelColor(x, y), (ink.red(), ink.green(), ink.blue()))
+                for x in range(image.width())
+            )
+        ]
+        assert found, f"{figure.actor.name} has neither a picture nor a letter"
+        assert found[-1] - found[0] > font.cell_h, "the letter is not a letter"
+
+
+def test_a_monster_the_sheets_never_heard_of_is_still_a_letter(app, font):
+    """The fallback: no picture means the alphabet, which is what the whole
+    game looked like before the art arrived -- and a fight is never missing a
+    fighter, only sometimes missing a picture of one."""
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.desktop.theme import parse_style
+
+    battle = arena(count=1)
+    battle.enemies[0].name = "unknowable"
+    screen = BattleScreen(battle)
+    _, image = drawn(screen, app, font)
+
+    figure = screen._figures(96, 27, font)[0]
+    assert figure.sprite is None, "the sheets have a picture of the unknowable"
+    ink = parse_style(figure.colour).fg
     rows = [
         y
         for y in range(image.height())
         if any(
-            _is_colour(image.pixelColor(x, y), (rgb.red(), rgb.green(), rgb.blue()))
+            _is_colour(image.pixelColor(x, y), (ink.red(), ink.green(), ink.blue()))
             for x in range(image.width())
         )
     ]
-    assert rows, f"no {enemy.color} letter anywhere on the stage"
-    ink = sum(
-        1
-        for y in rows
-        for x in range(image.width())
-        if _is_colour(image.pixelColor(x, y), (rgb.red(), rgb.green(), rgb.blue()))
-    )
-    assert ink > 200, f"the {enemy.name} is only {ink} pixels of letter"
-    assert rows[-1] - rows[0] > font.cell_h, (
-        "the monster's letter is no taller than a cell, so it was never drawn big"
-    )
+    assert rows, "the fallback letter was never drawn"
+    assert rows[-1] - rows[0] > font.cell_h, "the fallback letter is not a letter"
+
+
+def figure_baseline(figure, font) -> int:
+    """Where a figure's feet are, as the stage draws them."""
+    from neverdeads_revenge.desktop.screens.battle import THICKNESS
+
+    return figure.row * font.cell_h - THICKNESS
 
 
 def test_the_monsters_carry_their_health_under_them(app, font):

@@ -42,6 +42,7 @@ from ..buffer import PatternBuffer
 from ..chrome import ASH, BLOOD, BONE, box, rule
 from ..font import BitmapFont
 from ..render import log_style
+from ..sprites import sprite as sprite_for
 from ..theme import Style, parse_style
 from .base import Screen
 
@@ -151,7 +152,17 @@ class Staged:
     so a monster cannot be drawn in one place and stand in another.
     """
 
-    __slots__ = ("actor", "glyph", "colour", "size", "cx", "row", "cells", "chosen")
+    __slots__ = (
+        "actor",
+        "glyph",
+        "colour",
+        "size",
+        "cx",
+        "row",
+        "cells",
+        "chosen",
+        "sprite",
+    )
 
     def __init__(
         self,
@@ -163,8 +174,12 @@ class Staged:
         row: int,
         cells: int,
         chosen: bool = False,
+        sprite=None,
     ) -> None:
         self.actor = actor
+        #: The painted sprite for this actor, if the sheets have one. ``None``
+        #: means draw the letter, which is a fallback and not a failure.
+        self.sprite = sprite
         self.glyph = glyph
         self.colour = colour
         self.size = size
@@ -229,7 +244,7 @@ class BattleScreen(Screen):
         field = self._field(cols, rows, app.font.cell_w, app.font.cell_h)
         self._paste_walls(painter, field)
         for figure in figures:
-            self._paste_letter(painter, figure, app.font.cell_h)
+            self._paste_model(painter, figure, app.font.cell_h)
         for figure in figures:
             if figure.chosen:
                 self._paste_arrow(painter, figure, app.font.cell_h)
@@ -544,6 +559,7 @@ class BattleScreen(Screen):
         for index, enemy in enumerate(monsters):
             lane, depth = places[min(index, len(places) - 1)]
             size = round(MONSTER_SIZES[min(index, len(MONSTER_SIZES) - 1)] * scale)
+            art = sprite_for(enemy.name)
             staged.append(
                 Staged(
                     actor=enemy,
@@ -552,12 +568,14 @@ class BattleScreen(Screen):
                     size=size,
                     cx=(centre + round(lane * width) + 1) * cell_w,
                     row=y0 + max(1, round(depth * height)),
-                    cells=self._letter_cells(enemy.glyph, size, cell_w),
+                    cells=self._span(enemy.glyph, size, cell_w, art),
                     chosen=enemy is marked,
+                    sprite=art,
                 )
             )
         hero = self.battle.hero
         size = round(HERO_SIZE * scale)
+        art = sprite_for(hero.name)
         staged.append(
             Staged(
                 actor=hero,
@@ -566,14 +584,22 @@ class BattleScreen(Screen):
                 size=size,
                 cx=(centre + 1) * cell_w,
                 row=y0 + height - 1,
-                cells=self._letter_cells(hero.glyph, size, cell_w),
+                cells=self._span(hero.glyph, size, cell_w, art),
+                sprite=art,
             )
         )
         return staged
 
     @staticmethod
-    def _letter_cells(glyph: str, size: int, cell_w: int) -> int:
-        """How many cells wide the pool of shadow under a letter has to be."""
+    def _span(glyph: str, size: int, cell_w: int, art=None) -> int:
+        """How many cells wide the pool of shadow under a figure has to be.
+
+        A sprite's own width when there is one, and the letter's advance when
+        there is not: the shadow is the figure's footprint, and it should be the
+        footprint of what is standing there.
+        """
+        if art is not None:
+            return max(2, round(art.width() / cell_w))
         font = letter_font(size)
         advance = QFontMetrics(font.bold).horizontalAdvance(glyph)
         return max(2, round(advance / cell_w))
@@ -672,28 +698,45 @@ class BattleScreen(Screen):
         cap = QFontMetrics(letter_font(probe).bold).capHeight() or probe
         return max(12, int(probe * band / cap))
 
-    def _paste_letter(self, painter: QPainter, figure: Staged, cell_h: int) -> None:
-        """One letter, standing behind its own shadow, with a slab of thickness.
+    def _paste_model(self, painter: QPainter, figure: Staged, cell_h: int) -> None:
+        """One figure on the floor: its picture if the sheets have one, its
+        letter if they do not.
 
-        A monster that is out of the fight is dimmed rather than removed: it is
-        still lying where it fell, and a corpse that vanished the moment it
-        stopped being a target would make the last blow of a fight unreadable.
+        The sprite is drawn at its own size and not scaled -- these are painted
+        figures, and a painted figure put through a nearest-neighbour resize
+        looks like a mistake -- so what the sheets made is what the arena shows.
+        The letter is the fallback and is drawn exactly as it was before: the
+        whole game looked like that, and a monster the sheets have never heard
+        of should not be the one fight with nothing on the floor.
         """
+        baseline = figure.row * cell_h - THICKNESS
+        if figure.sprite is not None:
+            image = figure.sprite
+            faded = not figure.actor.stats.alive
+            left = figure.cx - image.width() // 2
+            if faded:
+                # A monster that is out of the fight stays where it fell, dimmed
+                # rather than removed: a corpse that vanished on the last blow
+                # would make the end of a fight unreadable.
+                painter.setOpacity(0.45)
+            painter.drawImage(left, baseline - image.height(), image)
+            painter.setOpacity(1.0)
+            return
+
         font = letter_font(figure.size)
         painter.setFont(font.bold)
         metrics = QFontMetrics(font.bold)
         left = figure.cx - metrics.horizontalAdvance(figure.glyph) // 2
-        baseline = figure.row * cell_h - THICKNESS
         ink = parse_style(figure.colour).fg
         dead = not figure.actor.stats.alive
         painter.setPen(ink.darker(320))
         painter.drawText(left, baseline + THICKNESS, figure.glyph)
         if dead:
-            faded = QColor(ink)
-            faded.setRed((faded.red() + 20) // 3)
-            faded.setGreen((faded.green() + 20) // 3)
-            faded.setBlue((faded.blue() + 20) // 3)
-            painter.setPen(faded)
+            faded_ink = QColor(ink)
+            faded_ink.setRed((faded_ink.red() + 20) // 3)
+            faded_ink.setGreen((faded_ink.green() + 20) // 3)
+            faded_ink.setBlue((faded_ink.blue() + 20) // 3)
+            painter.setPen(faded_ink)
         else:
             painter.setPen(ink)
         painter.drawText(left, baseline, figure.glyph)
@@ -709,8 +752,11 @@ class BattleScreen(Screen):
         painter.setFont(font.bold)
         metrics = QFontMetrics(font.bold)
         ink = parse_style(figure.colour).fg
-        cap = QFontMetrics(letter_font(figure.size).bold).capHeight()
-        baseline = figure.row * cell_h - THICKNESS - cap - metrics.height() // 3
+        if figure.sprite is not None:
+            top = figure.sprite.height()
+        else:
+            top = QFontMetrics(letter_font(figure.size).bold).capHeight()
+        baseline = figure.row * cell_h - THICKNESS - top - metrics.height() // 3
         left = figure.cx - metrics.horizontalAdvance(ARROW) // 2
         painter.setPen(ink.darker(320))
         painter.drawText(left, baseline + THICKNESS, ARROW)
