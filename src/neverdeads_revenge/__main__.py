@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import tempfile
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -21,9 +22,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--sound-log",
         nargs="?",
-        const="/tmp/ndr2-sound.log",
+        const="",
         metavar="PATH",
-        help="write every sound decision to PATH (default /tmp/ndr2-sound.log)",
+        help="write every sound decision to PATH (default: sound.log in the temp dir)",
     )
     parser.add_argument(
         "--seed",
@@ -39,8 +40,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    if args.sound_log:
-        os.environ["NEVERDEADS_REVENGE_SOUND_LOG"] = args.sound_log
+    if args.sound_log is not None:
+        # No value means the temp directory, which exists and is writable on
+        # every platform -- a hard "/tmp" is a path Windows does not have.
+        path = args.sound_log or os.path.join(
+            tempfile.gettempdir(), "ndr2-sound.log"
+        )
+        os.environ["NEVERDEADS_REVENGE_SOUND_LOG"] = path
 
     # Wayland's input-method plumbing logs a protest at every surface change
     # ("trying to disable a surface nothing is focused on") -- a known Qt

@@ -36,8 +36,15 @@ a = Analysis(
         (fonts, os.path.join("neverdeads_revenge", "desktop", "fonts")),
     ],
     hiddenimports=[
-        # Imported lazily by the audio layer, so static analysis misses it.
+        # Imported lazily by the audio layer, so static analysis misses it --
+        # and ``_cffi_backend`` with it, which is what the cffi extension
+        # ``_miniaudio`` needs *at import time*. It is loaded by the extension
+        # rather than imported by name, so nothing sees it: without it the
+        # import fails, the audio layer catches the failure by design and stays
+        # silent, and the game looks perfectly fine and makes no sound.
         "miniaudio",
+        "cffi",
+        "_cffi_backend",
     ],
     hookspath=[],
     runtime_hooks=[],
