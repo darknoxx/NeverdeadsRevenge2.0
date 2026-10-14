@@ -443,6 +443,93 @@ class DesktopApp(QMainWindow):
 
         self.push(ChronicleScreen())
 
+    def open_encounter(self) -> bool:
+        """The floor handed over a fight: open the arena over it.
+
+        Returns whether there was one to open, so a caller can ask without
+        looking first. The arena is *pushed*, not swapped in: the dungeon is
+        still standing underneath, holding the run, and a fight is a room the
+        hero walks into and back out of.
+        """
+        if self.run is None or self.run.encounter is None:
+            return False
+        from ..game.battle import Battle, encounter_around
+        from .screens.battle import BattleScreen
+
+        trigger = self.run.encounter
+        # Cleared before the arena opens: the domain is done with it the moment
+        # it is set, and a fight that is asked for twice would be two fights.
+        self.run.encounter = None
+        battle = Battle(self.run, encounter_around(self.run, trigger))
+        self.push(BattleScreen(battle))
+        return True
+
+    def leave_battle(self) -> None:
+        """The fight is over: back to the floor, or home if there is no floor.
+
+        The dev door (``--battle-scene``) opens the arena with nothing under it,
+        which is the one case where leaving means going back to the title. If the
+        dungeon is what is underneath, it is told the fight is over: the floor has
+        a kill on it now, and the pixels for that are the floor's to throw.
+        """
+        if len(self.screens) > 1:
+            self.pop()
+        else:
+            self.return_to_title()
+        screen = self.screens[-1] if self.screens else None
+        if screen is not None:
+            catch_up = getattr(screen, "catch_up", None)
+            if catch_up is not None:
+                catch_up(self)
+
+    def show_game_over(self, won: bool = False) -> None:
+        """The run has ended, here or in the arena: hand it to the summary.
+
+        On the app rather than on the dungeon screen because the arena ends runs
+        too, and a fight that killed the hero should be followed by exactly the
+        ending a monster on the floor would have given him.
+        """
+        from .screens.game_over import GameOverScreen
+
+        state = self.run
+        if state is None:
+            return
+        self.play("victory" if won else "death")
+        self.push(
+            GameOverScreen(
+                state=state,
+                won=won,
+                best=max(self.progress.best_score, state.score),
+                can_rewind=state.rewind_ready and not won,
+                on_done=lambda answer: self.after_summary(answer),
+            )
+        )
+
+    def after_summary(self, answer) -> None:
+        """The summary is answered: either a name goes on the board, or the
+        borrowed hour takes the ending back."""
+        from ..game.actions import Action, perform_action
+        from .screens.game_over import REWIND, NameEntryScreen
+
+        state = self.run
+        if state is None:
+            return
+        if answer != REWIND:
+            def done(name: str) -> None:
+                self.record_run(state, name or "???")
+                self.return_to_title()
+
+            self.push(
+                NameEntryScreen(
+                    state.score,
+                    self.progress.last_name,
+                    on_done=done,
+                )
+            )
+            return
+        perform_action(state, Action.REWIND)
+        self.redraw()
+
     def open_battle_scene(self) -> None:
         """M1's dev door: a fight against the first monsters of a fresh floor.
 

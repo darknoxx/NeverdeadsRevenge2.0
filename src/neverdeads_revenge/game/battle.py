@@ -25,6 +25,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from neverdeads_revenge.core.direction import chebyshev
+
 from .actions import (
     Action,
     perform_action,
@@ -42,13 +44,20 @@ __all__ = [
     "FLEE",
     "ITEM",
     "SPECIAL",
+    "STAGE",
     "VERBS",
     "Battle",
     "Guarded",
     "Over",
     "Said",
     "Struck",
+    "encounter_around",
+    "open_fight",
 ]
+
+#: How many monsters one fight holds. The stage draws three in a row, and a
+#: fourth wants a second row -- which is a wider glass, and M3's business.
+STAGE = 3
 
 #: The five verbs, in the order a fight offers them: the blade first, because it
 #: is what a player does most, and running last, because it is what they should
@@ -108,6 +117,49 @@ class Over:
 Event = Said | Struck | Guarded | Over
 
 
+def open_fight(state: GameState, trigger: Actor | None = None) -> Battle | None:
+    """The fight the floor handed over, ready to play -- or ``None`` if none is.
+
+    Cleared as it is taken, because a fight that could be asked for twice would
+    be two fights. The app calls this the moment it notices ``state.encounter``;
+    a test calls it to play a turn of contact without building a screen.
+    """
+    trigger = trigger if trigger is not None else state.encounter
+    if trigger is None or not trigger.stats.alive:
+        return None
+    if state.encounter is trigger:
+        state.encounter = None
+    return Battle(state, encounter_around(state, trigger))
+
+
+#: How far from the hero the room reaches. A fight takes whoever is standing in
+#: the same room, and "the same room" is a distance rather than a graph of walls:
+#: two squares is close enough to join in, and a monster across the floor is not.
+ROOM = 2
+
+
+def encounter_around(
+    state: GameState, trigger: Actor, limit: int = STAGE
+) -> list[Actor]:
+    """The monsters that join the fight the floor handed over.
+
+    The one the hero met first, then whoever is standing near enough to be in the
+    same room -- within :data:`ROOM` squares of *the hero*, because the room is
+    where he is and not where the monster he bumped into happens to be standing.
+    A monster that watches its neighbour cut apart two feet away and does nothing
+    is a monster nobody believes in.
+    """
+    group = [trigger]
+    for other in state.enemies:
+        if other is trigger or not other.stats.alive:
+            continue
+        if chebyshev(other.position, state.player.position) <= ROOM:
+            group.append(other)
+            if len(group) >= limit:
+                break
+    return group
+
+
 class Battle:
     """One fight, from the first round to the last event.
 
@@ -127,13 +179,14 @@ class Battle:
         #: This round's order, and how far into it the fight has got.
         self._round: list[Actor] = []
         self._taken = 0
-        #: How many rounds a cautious monster has spent circling, by actor. Keyed
-        #: by identity rather than by name: two ghouls are two monsters, and one
-        #: of them hanging back should not make the other one hesitate.
-        self._circles: dict[int, int] = {}
         self.over = False
         self.won = False
         self.escaped = False
+        #: Whether the round is standing still, waiting on the hero. The one
+        #: piece of bookkeeping that makes a *round* out of everybody's turns:
+        #: the hero's command is the command of his place in it, and the round
+        #: does not hand him a second turn for free.
+        self._hero_up = False
 
     # -- what the hero is offered -------------------------------------------
     def commands(self) -> list[str]:
@@ -170,10 +223,21 @@ class Battle:
         return events
 
     def choose(self, command: str, target: Actor | None = None) -> list[Event]:
-        """Take the hero's verb, and let the round run on from it."""
+        """Take the hero's verb, and let the round run on from it.
+
+        If nobody has asked the hero yet -- a fight that was opened without
+        :meth:`begin` -- the round is entered first, so that his command is the
+        command of his place in it. Otherwise a caller could give the hero a free
+        action bolted onto the front of a round he is already standing in.
+        """
         events: list[Event] = []
         if self.over:
             return events
+        if not self._hero_up:
+            self._advance(events)
+        if self.over:
+            return events
+        self._hero_up = False
         if self._hero_acts(command, target, events):
             self._advance(events)
         return events
@@ -186,6 +250,7 @@ class Battle:
                 return
             actor = self._next()
             if actor is self.hero:
+                self._hero_up = True
                 return
             self._enemy_acts(actor, events)
 
@@ -199,6 +264,10 @@ class Battle:
         """
         while True:
             if self._taken >= len(self._round):
+                if self._round:
+                    # A round that was *played* has ended; the first one is being
+                    # built, and nothing has happened yet to run out.
+                    self._lapse()
                 self._round = self._order()
                 self._taken = 0
                 self._guarded = False
@@ -206,6 +275,20 @@ class Battle:
             self._taken += 1
             if actor.stats.alive:
                 return actor
+
+    def _lapse(self) -> None:
+        """A round has gone by: the counters that run out by the turn run out.
+
+        The dungeon ticks these in ``advance_world`` after its own enemy phase,
+        which is exactly this moment -- the end of a round -- so a borrowed face
+        or a salt circle covers one round's worth of answers here too. Without
+        this a shrouding raised by a kill would last the whole fight, and the
+        amulet that sells it would be selling a different, much longer, promise.
+        """
+        if self.state.shrouded:
+            self.state.shrouded -= 1
+        if self.state.salt_ward:
+            self.state.salt_ward -= 1
 
     def _order(self) -> list[Actor]:
         """Everyone alive, quickest first. Never empty: the fight is decided
@@ -307,25 +390,14 @@ class Battle:
             events.append(Struck(self.hero, enemy, outcome))
 
     def _enemy_acts(self, attacker: Actor, events: list[Event]) -> None:
-        """One monster's turn.
+        """One monster's turn: it swings at the hero.
 
-        Aggressive things close and swing. A cautious one -- the skeleton is the
-        only monster in the bestiary carrying the label -- hangs back every other
-        round, which is this arena's reading of "waits until the player closes":
-        in a room there is nowhere to hang back *to*, so holding its ground
-        costs it a turn instead. The behaviour table says one thing and this is
-        the one place that reads it.
+        Aggressive or cautious, there is no *distance* in a room to hang back
+        into. The cautious label is a rule about closing -- a skeleton holds its
+        ground on the floor until the hero comes to it -- and that rule still
+        lives where closing happens. Inventing a second reading of it for the
+        arena would be two opinions about one word.
         """
-        if attacker.behaviour == "cautious":
-            circles = self._circles.get(id(attacker), 0)
-            self._circles[id(attacker)] = circles + 1
-            if circles % 2 == 0:
-                before = len(self.state.log)
-                self.state.say(
-                    f"The {attacker.name} circles, and does not close.", LogKind.PLAIN
-                )
-                self._splice(before, events)
-                return
         before = len(self.state.log)
         outcome = resolve_enemy_attack(
             self.state, attacker, self.hero, guard=self._guarded

@@ -28,7 +28,7 @@ from .dialogs import (
     PageScreen,
     SpringScreen,
 )
-from .game_over import GameOverScreen, NameEntryScreen
+from .game_over import REWIND as REWIND
 
 #: Which sound each hero's ultimate makes. Kept here rather than in the audio
 #: layer because it is a casting decision -- the sound module only knows how
@@ -40,9 +40,6 @@ ULTIMATE_SOUND: dict[str, str] = {
 }
 
 __all__ = ["GameScreen", "REWIND"]
-
-#: The answer that takes the ending back, if there is a borrowed hour in hand.
-REWIND = "rewind"
 
 
 class GameScreen(Screen):
@@ -58,6 +55,11 @@ class GameScreen(Screen):
     def __init__(self, state: GameState) -> None:
         self.state = state
         self._last_move: dict[str, float] = {}
+        #: What the floor looked like when it handed a fight over, so that it can
+        #: catch up when the fight is done: the coins a kill dropped, the blood
+        #: it left, the level it paid. Kept here rather than on the state because
+        #: it is a *view* of two moments, not a rule about either.
+        self._pending: tuple | None = None
 
     # -- drawing ------------------------------------------------------------
     def draw(self, buffer, app) -> None:
@@ -124,6 +126,15 @@ class GameScreen(Screen):
         ultimate_ready = run.ultimate_available
 
         result = perform_action(run, action)
+        if run.encounter is not None:
+            # The step walked into something. The floor hands the fight over,
+            # and everything the map would have done about it -- the blow, the
+            # blood, the log line -- is the arena's business from here. What the
+            # numbers are *now* is kept, because the fight will move them and the
+            # floor still has a coin to throw and a stain to lay down.
+            self._pending = (hp, gold, gifts, curses, before[2])
+            app.open_encounter()
+            return
         if action is Action.ULTIMATE and ultimate_ready and not run.ultimate_available:
             # The dark answers with its own note, not the log's second reading
             # -- and its own note per hero, because the three asks sound like
@@ -226,6 +237,25 @@ class GameScreen(Screen):
         if len(run.curses) > curses:
             fx.spark(here, "#c81e1e", count=16)
 
+    def catch_up(self, app) -> None:
+        """The fight is over: show what it did to the floor.
+
+        What a fight moved -- the coins a kill dropped, the blood it left, the
+        level it paid -- is drawn by the *map*, because the map is where it
+        happened. The snapshot was taken when the floor handed the fight over,
+        because by the time it is over the numbers have already moved and the
+        state does not keep the past. No sound: the arena made its own, and the
+        floor answering a blow it did not see would be a second report of it.
+        """
+        pending = self._pending
+        self._pending = None
+        run = self.state
+        if pending is None or run is None or run.over:
+            return
+        hp, gold, gifts, curses, level = pending
+        self._effects(app, hp, gold, gifts, curses, level)
+        app.redraw()
+
     def _ask(self, result, app) -> None:
         if result.prompt_kind == "spring":
             app.push(SpringScreen(result.prompt, lambda v: self._spring(app, v)))
@@ -280,32 +310,7 @@ class GameScreen(Screen):
 
     # -- the end ------------------------------------------------------------
     def _game_over(self, app, won: bool = False) -> None:
-        state = self.state
-        app.play("victory" if won else "death")
-        best = max(app.progress.best_score, state.score)
-        app.push(
-            GameOverScreen(
-                state=state,
-                won=won,
-                best=best,
-                can_rewind=state.rewind_ready and not won,
-                on_done=lambda answer: self._after_summary(app, answer),
-            )
-        )
-
-    def _after_summary(self, app, answer) -> None:
-        if answer != REWIND:
-            app.push(
-                NameEntryScreen(
-                    self.state.score,
-                    app.progress.last_name,
-                    on_done=lambda name: self._record(app, name),
-                )
-            )
-            return
-        perform_action(self.state, Action.REWIND)
-        app.redraw()
-
-    def _record(self, app, name: str) -> None:
-        app.record_run(self.state, name or "???")
-        app.return_to_title()
+        """The run ended. The app owns the ending, because the arena ends runs
+        too, and a fight that killed the hero has to be followed by exactly the
+        ending a monster on the floor would have given him."""
+        app.show_game_over(won=won)

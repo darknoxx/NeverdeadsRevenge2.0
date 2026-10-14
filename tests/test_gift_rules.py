@@ -159,7 +159,7 @@ def test_the_charge_is_spent_on_the_blow():
         perform_action(state, Action.MOVE_EAST)
     enemy = _beside(state, hp=999)
 
-    perform_action(state, Action.MOVE_EAST)  # the attack, into the monster
+    resolve_player_attack(state, enemy)  # the blow, the way the arena makes it
 
     assert enemy.hp == 999 - (10 + 2), "the walk did not load the blow"
     assert state.momentum == 0, "the charge was not spent"
@@ -293,6 +293,14 @@ def test_three_waits_in_a_row_close_the_circle():
 
     for _ in range(SALT_CIRCLE_WAITS):
         perform_action(state, Action.WAIT)
+
+    # The ward is raised; the line it writes is written when a blow is turned
+    # aside, and blows land in the arena now.
+    from neverdeads_revenge.game.battle import DEFEND, open_fight
+
+    fight = open_fight(state, enemy)
+    assert fight is not None, "there was no fight to open"
+    fight.choose(DEFEND)
 
     assert any(
         "cannot find you" in entry.text and entry.kind is LogKind.PLAIN

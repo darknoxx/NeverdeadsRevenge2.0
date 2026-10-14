@@ -704,8 +704,12 @@ def _try_move(state: GameState, direction: Direction) -> tuple[bool, bool]:
             # A wall of your own ice. It is not a fight, and it is not a door.
             state.say("The ice is yours. It is not going anywhere.", LogKind.PLAIN)
             return False, False
-        resolve_player_attack(state, blocker)
-        return True, True
+        # Everything that is not a fight has been ruled out by now, so this is
+        # one: the floor *hands the monster over* rather than resolving a blow,
+        # and the arena does the swinging. The world does not get to answer --
+        # the fight is the answer -- so no turn is spent here.
+        state.raise_encounter(blocker)
+        return True, False
 
     # THE LONG REACH. A direction with something hostile one square beyond an
     # empty square is a blow rather than a step -- and the empty square is the
@@ -719,8 +723,8 @@ def _try_move(state: GameState, direction: Direction) -> tuple[bool, bool]:
         if state.dungeon_map.in_bounds(beyond):
             far = state.actor_at(beyond)
             if far is not None and far.kind is ActorKind.ENEMY and far.alive:
-                resolve_player_attack(state, far)
-                return True, True
+                state.raise_encounter(far)
+                return True, False
 
     # THE HESITATION. Every so many turns the hero does not take the step, and
     # the turn is spent anyway -- a price paid in *time*, which is half the
@@ -2128,7 +2132,11 @@ def take_turn(state: GameState, actor: Actor) -> bool:
         if lure is not None:
             _resolve_attack_on_fortress(state, actor, lure)
         else:
-            resolve_enemy_attack(state, actor, player)
+            # It reached the hero: that is a fight, and the arena is where the
+            # hero gets to answer it. Nothing is rolled here any more -- the
+            # whole of what a monster's arrival means is that the two of them
+            # are about to be in a room together.
+            state.raise_encounter(actor)
         return True
 
     if _move_towards_player(state, actor, player, distance, towards=target):
@@ -2383,7 +2391,10 @@ def advance_world(state: GameState) -> None:
     """
     state.refresh_passives()
     for _ in range(MAX_ENEMY_ACTIONS_PER_PLAYER_TURN):
-        if state.over:
+        if state.over or state.encounter is not None:
+            # A fight is owed. The floor stands still until it has happened --
+            # the monsters in it are the ones the hero is about to meet, and the
+            # ones outside it have no business moving while he is in a room.
             break
         actor = state.turn_queue.pop()
         if actor is None:
@@ -2400,10 +2411,16 @@ def advance_world(state: GameState) -> None:
 
     # Counted down here rather than once per turn, so the borrowed face covers
     # exactly the monsters that answer the kill and not the ones after them.
-    if state.shrouded:
-        state.shrouded -= 1
-    if state.salt_ward:
-        state.salt_ward -= 1
+    #
+    # Not counted down when the floor stopped to hand a fight over: the turn
+    # those counters cover has not happened yet -- it is about to, in the arena
+    # -- and a ward that lapsed on the way in would be a ward that guarded
+    # nothing. The arena ticks them at its own round boundary instead.
+    if state.encounter is None:
+        if state.shrouded:
+            state.shrouded -= 1
+        if state.salt_ward:
+            state.salt_ward -= 1
 
     # The shadow's beat sits after the monsters': the dark works while and
     # over the dungeon's own answering turn, and every fresh player turn is

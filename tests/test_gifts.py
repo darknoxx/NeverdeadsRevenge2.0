@@ -94,21 +94,22 @@ def test_a_run_is_never_offered_a_gift_it_already_holds():
 
 # -- THE LONG REACH -----------------------------------------------------------
 def test_a_long_reach_strikes_two_squares_away():
-    """The gift is that a *direction* reaches, not that a key does.
+    """The gift is that a *direction* makes contact, not that a key does.
 
-    Walking into a monster still attacks it. With the reach, a direction with
-    something hostile one square beyond an empty square is a blow instead of a
-    step -- which is the whole of the rule, and it means the player never has to
-    learn a second attack key.
+    Walking into a monster hands the fight over now, and the reach does the same
+    thing from one square further off: a direction with something hostile one
+    square beyond an empty square starts the fight instead of taking a step --
+    which is the whole of the rule, and it means the player never has to learn a
+    second attack key.
     """
     state = holding("long_reach")
     enemy = brute_at(state, 2)
-    before = (state.player.position, enemy.stats.hp)
+    before = state.player.position
 
     perform_action(state, Action.MOVE_EAST)
 
-    assert state.player.position == before[0], "the player walked instead of striking"
-    assert enemy.stats.hp < before[1], "nothing was hit"
+    assert state.player.position == before, "the player walked instead of striking"
+    assert state.encounter is enemy, "the reach did not make contact"
 
 
 def test_without_the_gift_a_square_two_away_is_just_a_step():
@@ -242,6 +243,28 @@ def test_the_hollow_road_can_finish_you():
 
 
 # -- THE BORROWED HOUR --------------------------------------------------------
+def _fight_until_dead(state) -> None:
+    """Wait for something to reach the hero, then play the fight out.
+
+    A run ends in the arena now: a monster that gets to the hero hands the fight
+    over instead of rolling a blow on the map, so "wait until it kills him" is
+    "wait, and then fight".
+    """
+    from neverdeads_revenge.game.battle import ATTACK, open_fight
+
+    for _ in range(20):
+        if state.over:
+            return
+        perform_action(state, Action.WAIT)
+        fight = open_fight(state)
+        if fight is None:
+            continue
+        fight.begin()
+        while not state.over and not fight.over:
+            living = fight.living_enemies()
+            fight.choose(ATTACK, living[0] if living else None)
+
+
 def test_the_borrowed_hour_gives_a_death_back():
     """The one verb that works after the run is over, because undoing a death is
     the whole of what the gift is for."""
@@ -251,10 +274,7 @@ def test_the_borrowed_hour_gives_a_death_back():
 
     enemy = brute_at(state, 1)
     enemy.stats.damage = (99, 99)
-    for _ in range(20):
-        perform_action(state, Action.WAIT)
-        if state.over:
-            break
+    _fight_until_dead(state)
     assert state.run_state is RunState.DEAD
 
     result = perform_action(state, Action.REWIND)

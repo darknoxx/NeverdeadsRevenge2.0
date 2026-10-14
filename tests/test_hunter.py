@@ -134,6 +134,7 @@ def test_the_glyph_is_free_and_is_not_a_hero_or_a_monster_letter():
 
 
 def test_a_floor_with_a_hunter_is_still_winnable_by_leaving():
+    from neverdeads_revenge.game.actions import Action, perform_action
     """It is a decision, not a wall: it can be left behind on the stairs."""
     state = start_run(NOXX, seed=3)
     hunter = _hunter(state)
@@ -141,7 +142,6 @@ def test_a_floor_with_a_hunter_is_still_winnable_by_leaving():
 
     # Walk the player onto the exit and take it.
     state.player.position = state.exit_pos
-    from neverdeads_revenge.game.actions import Action, perform_action
 
     perform_action(state, Action.DESCEND)
 
@@ -201,7 +201,7 @@ def _kill_adjacent(state, template, hp: int = 1):
     hit-chance ceiling (0.97), and this helper is not about the fight, it is
     about what the fight pays.
     """
-    from neverdeads_revenge.game.actions import Action, perform_action
+    from neverdeads_revenge.game.actions import resolve_player_attack
     from neverdeads_revenge.world.tiles import Tile
 
     pos = (state.player.position[0] + 1, state.player.position[1])
@@ -213,7 +213,9 @@ def _kill_adjacent(state, template, hp: int = 1):
     state.turn_queue = type(state.turn_queue)([state.player, enemy])
 
     for _ in range(20):
-        perform_action(state, Action.MOVE_EAST)
+        # The arena's own blow: walking into a monster hands the fight over, and
+        # the one place a blow is resolved is the one the arena calls.
+        resolve_player_attack(state, enemy)
         if state.kills:
             break
     assert state.kills, f"the {template.key} would not die"

@@ -15,7 +15,12 @@ from __future__ import annotations
 
 import pytest
 
-from neverdeads_revenge.game.actions import Action, perform_action, take_turn
+from neverdeads_revenge.game.actions import (
+    Action,
+    perform_action,
+    resolve_player_attack,
+    take_turn,
+)
 from neverdeads_revenge.game.amulets import (
     AMULETS,
     FOUND_ON_THE_FLOOR,
@@ -36,10 +41,29 @@ def wearing(key: str | None = None, seed: int = 3):
     return start_run(NOXX, seed=seed, loadout=loadout)
 
 
+def answer(state, brute) -> bool:
+    """Let ``brute`` get its blow in, and say whether it landed.
+
+    A monster's blow lands in the *arena* now. Reaching the hero hands the fight
+    over instead of rolling anything on the map, and the arena's opening round is
+    where a monster quicker than the hero swings before he has chosen anything
+    -- which is the beat every test about an answer is really asking about.
+    """
+    from neverdeads_revenge.game.battle import open_fight
+
+    brute.stats.speed = state.player.speed + 5.0
+    fight = open_fight(state, brute)
+    if fight is None:
+        return False
+    before = state.player.stats.hp
+    fight.begin()
+    return state.player.stats.hp < before
+
+
 def land_one_blow(state, brute) -> int:
     """Let ``brute`` swing until one lands, and report what it cost.
 
-    Driving the enemy turn directly rather than waiting on the queue: the tests
+    Driving the enemy's own phase rather than waiting on the queue: the tests
     that need a blow to land are about the blow, and a monster that acts once
     every hundred player turns makes them about the scheduler instead.
     """
@@ -47,8 +71,7 @@ def land_one_blow(state, brute) -> int:
     state.player.stats.evasion = 0
     state.player.stats.hp = state.player.max_hp
     for _ in range(200):
-        take_turn(state, brute)
-        if state.player.hp < state.player.max_hp:
+        if answer(state, brute):
             return state.player.max_hp - state.player.hp
     raise AssertionError("never landed a blow")
 
@@ -72,11 +95,22 @@ def duel(key: str | None, *, brute_hp: int = 400, brute_damage=(6, 6), seed: int
 
 
 def kill_it(state, target) -> None:
-    """Walk into ``target`` until it dies."""
+    """Kill ``target`` in the arena, and let whoever is standing with it answer.
+
+    Walking into a monster used to swing at it on the map, and the answer to the
+    kill was the dungeon's own turn. Both halves live in the arena now: the round
+    is the turn, and a monster still standing when its neighbour falls gets its
+    blow in inside that same round -- which is what the amulets *about* an answer
+    are asking about.
+    """
+    from neverdeads_revenge.game.battle import ATTACK, open_fight
+
+    fight = open_fight(state, target)
+    assert fight is not None, "there was no fight to open"
     for _ in range(40):
         if not target.alive:
             return
-        perform_action(state, Action.MOVE_EAST)
+        fight.choose(ATTACK, target)
     raise AssertionError("the player never landed the killing blow")
 
 
@@ -327,9 +361,7 @@ def test_a_missed_swing_does_not_spend_the_ward():
     # And the first blow that does land spends it.
     state.player.stats.hp = state.player.max_hp
     for _ in range(400):
-        before = state.player.hp
-        take_turn(state, brute)
-        if state.player.hp < before:
+        if answer(state, brute):
             break
     else:
         pytest.fail("it never landed a blow")
@@ -472,7 +504,7 @@ def test_the_dead_weight_throws_what_it_hits():
     brute.stats.evasion = 0
     before = brute.position
 
-    perform_action(state, Action.MOVE_EAST)
+    resolve_player_attack(state, brute)
 
     assert brute.position != before, "nothing was thrown back"
 
@@ -496,7 +528,7 @@ def test_the_dead_weight_does_not_throw_anything_through_a_wall():
     state.dungeon_map.set_tile(state.player.position, Tile.FLOOR)
     hp_before = brute.stats.hp
 
-    perform_action(state, Action.MOVE_EAST)
+    resolve_player_attack(state, brute)
 
     assert brute.stats.hp < hp_before, "the blow was lost with the throw"
 
@@ -521,7 +553,7 @@ def test_the_patient_knife_crits_the_first_blow_and_only_that_one():
     dealt: list[int] = []
     for _ in range(40):
         brute.stats.hp = 400
-        perform_action(state, Action.MOVE_EAST)
+        resolve_player_attack(state, brute)
         if brute.stats.hp < 400:
             dealt.append(400 - brute.stats.hp)
         if len(dealt) == 2:
@@ -540,7 +572,7 @@ def test_the_patient_knife_is_ready_again_for_a_new_monster():
     state.player.stats.crit_multiplier = 3.0
     state.player.stats.crit_chance = 0.0
     brute.stats.evasion = 0
-    perform_action(state, Action.MOVE_EAST)
+    resolve_player_attack(state, brute)
 
     fresh = make_enemy(ENEMIES["bone"], brute.position)
     fresh.stats.evasion = 0
@@ -552,7 +584,7 @@ def test_the_patient_knife_is_ready_again_for_a_new_monster():
     # is not the question this test is asking.
     for _ in range(40):
         fresh.stats.hp = 400
-        perform_action(state, Action.MOVE_EAST)
+        resolve_player_attack(state, fresh)
         if fresh.stats.hp < 400:
             break
 
@@ -579,7 +611,7 @@ def test_a_miss_does_not_spend_the_patient_knife():
     missed = False
     for _ in range(600):
         brute.stats.hp = 100_000
-        perform_action(state, Action.MOVE_EAST)
+        resolve_player_attack(state, brute)
         if 100_000 - brute.stats.hp == 0:
             assert not brute.struck, "a miss spent the knife"
             missed = True
@@ -593,7 +625,7 @@ def test_a_miss_does_not_spend_the_patient_knife():
     # Now land the next blow. It has to be the crit the miss did not take.
     for _ in range(600):
         brute.stats.hp = 100_000
-        perform_action(state, Action.MOVE_EAST)
+        resolve_player_attack(state, brute)
         dealt = 100_000 - brute.stats.hp
         if dealt:
             assert dealt == 30, "the miss spent the knife"
@@ -603,15 +635,20 @@ def test_a_miss_does_not_spend_the_patient_knife():
 
 # -- borrowed face -----------------------------------------------------------
 def _a_brute_beside(player, *, hp: int = 400):
-    """Something fast and certain, one square off, that will answer a kill.
+    """Something certain and slower than the hero, one square off, that answers.
 
     Certain on purpose: the hit chance floor is 30%, so at a normal accuracy the
     monster misses often enough that a test about whether a blow lands is really
     a test about the dice.
+
+    Slower on purpose too. The amulets here are about the answer to a kill, and
+    an answer comes *after* the killing blow -- which, in the arena's round, means
+    the monster has to be behind the hero in the order. A quicker one acts before
+    the kill it is supposed to be answering.
     """
     brute = make_enemy(ENEMIES["bone"], (player.position[0], player.position[1] - 1))
     brute.stats.hp = hp
-    brute.stats.speed = 3.0
+    brute.stats.speed = max(0.1, player.speed - 1.0)
     brute.stats.accuracy = 99
     player.stats.evasion = 0
     return brute

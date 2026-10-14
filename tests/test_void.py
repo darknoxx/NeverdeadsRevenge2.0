@@ -11,7 +11,11 @@ import pytest
 
 from neverdeads_revenge.core.direction import chebyshev
 from neverdeads_revenge.game.actors import ActorKind, ENEMIES, make_enemy
-from neverdeads_revenge.game.actions import Action, perform_action
+from neverdeads_revenge.game.actions import (
+    Action,
+    perform_action,
+    resolve_player_attack,
+)
 from neverdeads_revenge.game.actors import HEROES
 from neverdeads_revenge.game.difficulty import (
     ATRITAS_RADIUS,
@@ -26,6 +30,26 @@ def _run(ultimate_level: int | None = None, hero: str = "noxx", seed: int = 5):
         HEROES[hero], seed, ultimate_level=ultimate_level
     )
     return state
+
+
+def _let_it_strike(state) -> None:
+    """Play the fight the floor handed over, far enough for the monster to swing.
+
+    A monster's blow lands in the arena now: reaching the hero hands the fight
+    over rather than rolling anything on the map. One hero turn is all it takes
+    for the round to come round to the monster.
+    """
+    from neverdeads_revenge.game.actions import resolve_player_attack
+    from neverdeads_revenge.game.battle import DEFEND, open_fight
+
+    fight = open_fight(state)
+    if fight is None:
+        return
+    fight.begin()
+    living = fight.living_enemies()
+    if fight.over or not living:
+        return
+    fight.choose(DEFEND)
 
 
 def _wait(state, times: int = 1) -> None:
@@ -684,7 +708,7 @@ def test_the_veil_hides_until_the_hero_strikes():
     assert enemy.position == square, "the veiled hero was hunted anyway"
     assert state.player.hp == state.player.max_hp, "the veiled hero was bitten"
 
-    perform_action(state, Action.MOVE_EAST)  # the blow that tears it
+    resolve_player_attack(state, enemy)  # the blow that tears it
     assert not state.has_draught("thin_veil"), "the veil outlived the blow"
 
 
@@ -698,7 +722,7 @@ def test_the_kindled_breath_sets_every_blow_burning():
     _pack(state, "kindled_breath")
 
     drink(state, "kindled_breath")
-    perform_action(state, Action.MOVE_EAST)
+    resolve_player_attack(state, enemy)
 
     assert "burn" in enemy.statuses, "the breath did not kindle"
 
@@ -709,11 +733,11 @@ def test_the_short_crown_pays_the_charge_twice():
     state = _run()
     square = (state.player.position[0] + 1, state.player.position[1])
     state.dungeon_map.set_tile(square, Tile.FLOOR)
-    _stage_enemy_at_square(state, square, hp=1)
+    enemy = _stage_enemy_at_square(state, square, hp=1)
     _pack(state, "short_crown")
 
     drink(state, "short_crown")
-    perform_action(state, Action.MOVE_EAST)
+    resolve_player_attack(state, enemy)
 
     assert state.revenge_stacks == 2, "the crown paid the ordinary charge"
 
@@ -724,8 +748,8 @@ def test_the_carrion_tongue_feeds_on_the_floors_dead():
     state = _run()
     square = (state.player.position[0] + 1, state.player.position[1])
     state.dungeon_map.set_tile(square, Tile.FLOOR)
-    _stage_enemy_at_square(state, square, hp=1)
-    perform_action(state, Action.MOVE_EAST)  # the kill, and the square remembers
+    enemy = _stage_enemy_at_square(state, square, hp=1)
+    resolve_player_attack(state, enemy)  # the kill, and the square remembers
     assert square in state.death_squares
 
     _pack(state, "carrion_tongue")
@@ -751,8 +775,8 @@ def test_the_gallows_road_walls_the_dead_off_from_the_hunt():
     # the bottle makes it a wall.
     corpse = (here[0] + 1, here[1])
     state.dungeon_map.set_tile(corpse, Tile.FLOOR)
-    _stage_enemy_at_square(state, corpse, hp=1)
-    perform_action(state, Action.MOVE_EAST)  # the kill, on the corpse square
+    enemy = _stage_enemy_at_square(state, corpse, hp=1)
+    resolve_player_attack(state, enemy)  # the kill, on the corpse square
     assert corpse in state.death_squares
     state.dungeon_map.remove_item(corpse)
     state.player.position = (here[0] - 2, here[1])
@@ -867,7 +891,7 @@ def test_bleeding_edge_makes_a_crits_wound_keep_opening():
     enemy.stats.evasion = -99  # nothing dodges this test
     state.player.stats.crit_chance = 1.0  # and every blow is lucky
 
-    perform_action(state, Action.MOVE_EAST)
+    resolve_player_attack(state, enemy)
 
     assert "bleed" in enemy.statuses
     assert enemy.statuses["bleed"] >= 3 + 2 * 3, (
@@ -889,6 +913,7 @@ def test_hoarfrost_freezes_whoever_strikes_yeti():
     enemy.stats.accuracy = 99
 
     _wait(state, 3)
+    _let_it_strike(state)
 
     assert "chill" in enemy.statuses, "the cold never came off Yeti"
 
@@ -908,7 +933,7 @@ def test_the_bell_ring_throws_what_walkyrion_lands_on():
             state.dungeon_map.set_tile((here[0] + dx, here[1] + dy), Tile.FLOOR)
     enemy = _stage_enemy_at_square(state, square, hp=99)
 
-    perform_action(state, Action.MOVE_EAST)
+    resolve_player_attack(state, enemy)
 
     assert enemy.alive
     assert enemy.position != square, "the bell did not throw it"

@@ -400,12 +400,17 @@ def _one_weak_neighbour(state, hp: int = 1):
 
 
 def _kill_it(state, enemy) -> None:
-    from neverdeads_revenge.game.actions import Action, perform_action
+    """Hit it until it dies, with the arena's own blow.
+
+    Walking into a monster hands the fight over now, so a kill that pays out the
+    way the dungeon pays is a kill made the way the arena makes it.
+    """
+    from neverdeads_revenge.game.actions import resolve_player_attack
 
     for _ in range(40):
         if not enemy.alive:
             return
-        perform_action(state, Action.MOVE_EAST)
+        resolve_player_attack(state, enemy)
     raise AssertionError("the player never landed the killing blow")
 
 

@@ -172,8 +172,11 @@ class BattleScreen(Screen):
         self.target = 0
         #: The fight's last few lines, in the log's own colours.
         self.lines: list[Said] = []
-        #: The round being played back, one event per beat.
-        self._queue: list = []
+        #: The round being played back, one event per beat. The opening round is
+        #: queued here rather than in a call the caller has to remember: anything
+        #: quicker than the hero acts before the first command, and that has to
+        #: happen the moment the fight opens or it never happens at all.
+        self._queue = list(battle.begin())
         self._beat = 0.0
         self._popups: list[Popup] = []
         #: What the health bars show, which lags the state by exactly the blows
@@ -267,14 +270,14 @@ class BattleScreen(Screen):
 
     def key(self, name: str, event, app) -> bool:
         if name == "escape":
-            app.return_to_title()
+            app.leave_battle()
             return True
         if self.battle.over:
             # The fight is decided, but the arena may still be playing the last
             # blow: leaving on a keypress before the verdict has been shown would
             # be the player skipping the one thing they just earned.
             if not self.busy and name in ("enter", "return", "space"):
-                app.return_to_title()
+                app.leave_battle()
             return True
         if self.busy:
             # The fight is talking. It will not be interrupted mid-sentence, or
@@ -383,6 +386,12 @@ class BattleScreen(Screen):
                 else "YOU DIED"
             )
             app.play("victory" if event.won else "stairs" if event.escaped else "death")
+            if not event.won and not event.escaped:
+                # The run ended in here. The arena steps out of the way first:
+                # the summary is about the run, and the run is what is standing
+                # behind the arena.
+                app.leave_battle()
+                app.show_game_over(won=False)
             return
         if isinstance(event, Struck):
             self._land(event, app)
@@ -775,7 +784,9 @@ class BattleScreen(Screen):
 
         Not a name: the letter *is* the monster, and who did what to whom is the
         log's business. What the letter cannot say is how much of it there is,
-        and that is the one number a fight is actually about.
+        and that is the one number a fight is actually about. Drawn half a cell
+        tall and long -- a stripe on the floor rather than a slab of colour --
+        because a monster's bar is a fact about the room and not a panel.
         """
         font = buffer.font
         for figure in self._figures(buffer.cols, buffer.rows, font):
@@ -783,9 +794,9 @@ class BattleScreen(Screen):
                 continue
             total = max(1, figure.actor.max_hp)
             shown = self._shown.get(id(figure.actor), figure.actor.stats.hp)
-            cells = max(3, min(8, figure.cells))
+            cells = max(8, min(14, figure.cells * 2))
             left = round(figure.cx / font.cell_w) - cells // 2
-            self._bar(buffer, left, figure.row + 1, cells, shown / total)
+            self._bar(buffer, left, figure.row + 1, cells, shown / total, thin=True)
 
     def _draw_log(self, buffer: PatternBuffer, area: tuple[int, int, int, int]) -> None:
         """The lines the fight speaks in, newest last, in the dungeon's colours.
@@ -866,8 +877,22 @@ class BattleScreen(Screen):
             buffer.text(x + 2, y + 1 + index, f"{marker} {key}  {label}", style)
 
     @staticmethod
-    def _bar(buffer: PatternBuffer, x: int, y: int, cells: int, ratio: float) -> None:
+    def _bar(
+        buffer: PatternBuffer,
+        x: int,
+        y: int,
+        cells: int,
+        ratio: float,
+        thin: bool = False,
+    ) -> None:
+        """A health bar: filled, then empty, in the colour the ratio has earned.
+
+        ``thin`` draws it half a cell tall, which is what the floor wants -- a
+        stripe under a monster rather than a second panel -- and the plate in the
+        corner keeps its full height, because there the bar *is* the panel.
+        """
         filled = max(0, min(cells, round(cells * ratio)))
+        ink, hollow = ("▄", "▄") if thin else ("█", "░")
         colour = (
             "bright_green"
             if ratio > 0.5
@@ -875,5 +900,5 @@ class BattleScreen(Screen):
             if ratio > 0.25
             else "bright_red"
         )
-        buffer.text(x, y, "█" * filled, parse_style(colour))
-        buffer.text(x + filled, y, "░" * (cells - filled), parse_style("grey23"))
+        buffer.text(x, y, ink * filled, parse_style(colour))
+        buffer.text(x + filled, y, hollow * (cells - filled), parse_style("grey19"))

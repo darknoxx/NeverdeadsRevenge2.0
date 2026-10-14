@@ -323,7 +323,16 @@ def test_a_death_leaves_pixels_at_the_exact_square(app):
     state.turn_queue = type(state.turn_queue)([state.player, enemy])
 
     press(app, Qt.Key.Key_Right, "d")
+    assert top(app) == "BattleScreen", "the floor did not hand the fight over"
 
+    # Play the fight out: the blow lands in the arena now, and the floor throws
+    # the pixels for it when the hero comes back to it.
+    screen = app.screens[-1]
+    play_it_out(app, screen)
+
+    assert screen.battle.won, "a one-hit ghoul was not killed"
+    press(app, Qt.Key.Key_Return)  # the verdict: leave the arena
+    assert top(app) == "GameScreen", "the fight never gave the floor back"
     assert state.deaths == [square], (
         f"blood called at {state.deaths}, the square was {square}"
     )
@@ -1645,9 +1654,9 @@ def test_the_carrion_tongue_marks_the_floors_dead():
     enemy.stats.hp = 1
     state.enemies.append(enemy)
     state.turn_queue.add(enemy)
-    from neverdeads_revenge.game.actions import Action
+    from neverdeads_revenge.game.actions import resolve_player_attack
 
-    perform_action(state, Action.MOVE_EAST)  # the kill
+    resolve_player_attack(state, enemy)  # the kill
     assert square in state.death_squares
     state.dungeon_map.remove_item(square)  # the kill's coins are loot, not stain
 
@@ -1723,7 +1732,9 @@ def test_the_tongue_paints_the_dead_even_under_the_coins(app):
     enemy.stats.hp = 1
     state.enemies.append(enemy)
     state.turn_queue.add(enemy)
-    perform_action(state, Action.MOVE_EAST)  # the kill, and its coin
+    from neverdeads_revenge.game.actions import resolve_player_attack
+
+    resolve_player_attack(state, enemy)  # the kill, and its coin
     assert square in state.death_squares
 
     state.floor_draughts.add("carrion_tongue")
@@ -1841,12 +1852,12 @@ def test_the_monsters_carry_their_health_under_them(app, font):
     x0, y0, width, height = screen._areas(96, 27)["ground"]
 
     def bar_cells(row: int) -> int:
-        return sum(1 for cell in buffer.cells[row] if cell.char == "█")
+        return sum(1 for cell in buffer.cells[row] if cell.char == "▄")
 
     on_the_floor = sum(
         bar_cells(row) for row in range(y0, y0 + height)
     )
-    assert on_the_floor >= 3 * len(battle.enemies), (
+    assert on_the_floor >= 8 * len(battle.enemies), (
         f"{on_the_floor} cells of bar for {len(battle.enemies)} monsters"
     )
     hero_row = screen._figures(96, 27, font)[-1].row
@@ -2025,3 +2036,106 @@ def test_the_battle_scene_opens_and_leaves(qapp):
 
     press(window, Qt.Key.Key_Escape)
     assert top(window) == "TitleScreen", "escape did not leave the arena"
+
+
+# -- the floor hands a fight over (M2) ---------------------------------------
+def begin_run_in(app) -> None:
+    """Two enters: the hero select, then the floor itself."""
+    from PySide6.QtCore import Qt
+
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)
+
+
+def step_into_a_monster(app):
+    """Put a monster beside the hero and walk into it. Returns the monster."""
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.core.direction import Direction
+
+    state = app.run
+    enemy = state.enemies[0]
+    for direction, key in (
+        (Direction.EAST, Qt.Key.Key_Right),
+        (Direction.WEST, Qt.Key.Key_Left),
+        (Direction.NORTH, Qt.Key.Key_Up),
+        (Direction.SOUTH, Qt.Key.Key_Down),
+    ):
+        spot = direction.step(state.player.position)
+        if state.dungeon_map.is_walkable(spot) and state.actor_at(spot) is None:
+            enemy.position = spot
+            press(app, key)
+            return enemy
+    raise AssertionError("nowhere beside the hero to stand")
+
+
+def play_it_out(app, screen) -> None:
+    """Hold enter and let the ticks run until the arena is done with the player.
+
+    Stops the moment the arena is no longer on top: a fight that ended in a death
+    hands the stack to the summary, and ticking a screen nobody is looking at
+    would be ticking the wrong one.
+    """
+    from PySide6.QtCore import Qt
+
+    guard = 0
+    while guard < 600 and app.screens and app.screens[-1] is screen:
+        guard += 1
+        if screen.busy:
+            app._tick()
+            continue
+        if screen.battle.over:
+            break
+        press(app, Qt.Key.Key_Return)
+    while screen.busy and app.screens and app.screens[-1] is screen:
+        app._tick()
+
+
+def test_walking_into_a_monster_opens_the_arena(app):
+    """M2: the floor hands the fight over, and gets the hero back.
+
+    Driven through the app, because the wiring is the whole of what this test is
+    for: the walk raises the encounter, the app notices and opens the arena, the
+    fight happens in the arena, and the dungeon is still standing underneath it
+    -- with one fewer monster on it.
+    """
+    from PySide6.QtCore import Qt
+
+    begin_run_in(app)
+    enemy = step_into_a_monster(app)
+
+    assert top(app) == "BattleScreen", "the floor did not hand the fight over"
+    assert enemy.stats.hp == enemy.stats.max_hp, "the floor swung at it on the way"
+
+    screen = app.screens[-1]
+    assert enemy in screen.battle.enemies, "the monster the hero met is not in it"
+    for monster in screen.battle.enemies:
+        monster.stats.hp = 1  # one blow each: this is about the wiring
+    play_it_out(app, screen)
+
+    assert screen.battle.won, "a fight of one-hit monsters was not won"
+    press(app, Qt.Key.Key_Return)
+    assert top(app) == "GameScreen", "the arena did not give the floor back"
+    assert app.run.encounter is None, "a fight is still owed"
+    assert enemy not in app.run.enemies, "the corpse is still on the floor"
+
+
+def test_a_run_that_ends_in_the_arena_ends_where_it_always_did(app):
+    """Dying in a fight is dying: the summary, the board, the borrowed hour.
+
+    The arena does not get to end a run its own way. It steps out of the way and
+    asks the app for the ending the floor would have given -- which is what keeps
+    one ending in this game instead of two.
+    """
+    from PySide6.QtCore import Qt
+
+    begin_run_in(app)
+    step_into_a_monster(app)
+    screen = app.screens[-1]
+
+    app.run.player.stats.hp = 0  # already gone: the fight is decided
+    press(app, Qt.Key.Key_Return)
+    play_it_out(app, screen)
+
+    assert screen.battle.over and not screen.battle.won
+    assert top(app) == "GameOverScreen", "the run did not end the usual way"

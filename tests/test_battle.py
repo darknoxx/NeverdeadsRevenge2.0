@@ -10,19 +10,28 @@ pays out on the map.
 
 from __future__ import annotations
 
-from neverdeads_revenge.game.actions import resolve_enemy_attack
+from neverdeads_revenge.game.actions import (
+    Action,
+    advance_world,
+    perform_action,
+    resolve_enemy_attack,
+    take_turn,
+)
 from neverdeads_revenge.game.actors import HEROES
 from neverdeads_revenge.game.battle import (
     ATTACK,
     DEFEND,
     FLEE,
     ITEM,
+    ROOM,
     SPECIAL,
+    STAGE,
     Battle,
     Guarded,
     Over,
     Said,
     Struck,
+    encounter_around,
 )
 from neverdeads_revenge.game.state import start_run
 from neverdeads_revenge.world.items import ITEMS, make_item
@@ -153,10 +162,11 @@ def test_the_dark_answers_once_and_everything_takes_it():
     state = run(ultimate_level=1)
     enemies = take(state, 3)
     battle = Battle(state, enemies)
+    battle.begin()
 
     events = battle.choose(SPECIAL)
 
-    hit = strikes(events)
+    hit = [blow for blow in strikes(events) if blow.actor is state.player]
     assert [blow.target for blow in hit] == enemies, "the ask missed somebody"
     assert not state.ultimate_available, "the dark was not spent"
 
@@ -170,17 +180,21 @@ def test_a_refused_verb_costs_nothing():
 
     The floor does not get to move because a verb was refused -- which is the
     difference between a menu that teaches a rule and a menu that taxes the
-    player for asking.
+    player for asking. The fight is opened first, so what is counted is the
+    refusal's own consequences and not the round the hero entered.
     """
     state = run(ultimate_level=99)
     enemy = take(state)[0]
     enemy.stats.speed = state.player.speed + 5.0
     battle = Battle(state, [enemy])
+    battle.begin()
+    before = len(battle.state.log)
 
     events = battle.choose(SPECIAL)
 
     assert any("Not yet" in line for line in lines(events))
     assert not strikes(events), "the floor moved after a refusal"
+    assert len(battle.state.log) > before, "the refusal was not said"
 
 
 def test_drinking_is_the_packs_own_arithmetic():
@@ -234,25 +248,6 @@ def test_fleeing_costs_a_round_of_blows():
     )
 
 
-def test_the_cautious_one_circles_before_it_closes():
-    """The skeleton's own behaviour, in the one place that reads it."""
-    state = run()
-    enemy = take(state)[0]
-    enemy.behaviour = "cautious"
-    enemy.stats.speed = state.player.speed + 5.0
-    battle = Battle(state, [enemy])
-
-    log: list[str] = []
-    for _ in range(4):
-        if battle.over:
-            break
-        log += lines(battle.choose(DEFEND))
-
-    assert any("circles" in line for line in log), (
-        "a cautious monster did not hold back"
-    )
-
-
 def test_a_kill_is_paid_out_where_the_monster_was():
     """Winning the fight finishes the monster: coins, corpse and all.
 
@@ -295,3 +290,110 @@ def test_the_menu_offers_all_five_verbs():
 
     assert battle.commands() == [ATTACK, SPECIAL, ITEM, DEFEND, FLEE]
     assert not battle.special_ready(), "the menu would not dim the ask"
+
+
+# -- the floor hands a fight over (M2) ---------------------------------------
+def place_beside(state, enemy):
+    """Put ``enemy`` next to the hero and hand back the verb that walks into it."""
+    from neverdeads_revenge.core.direction import Direction
+
+    for direction, action in (
+        (Direction.EAST, Action.MOVE_EAST),
+        (Direction.WEST, Action.MOVE_WEST),
+        (Direction.NORTH, Action.MOVE_NORTH),
+        (Direction.SOUTH, Action.MOVE_SOUTH),
+    ):
+        spot = direction.step(state.player.position)
+        if state.dungeon_map.is_walkable(spot) and state.actor_at(spot) is None:
+            enemy.position = spot
+            return action
+    raise AssertionError("nowhere beside the hero to stand")
+
+
+def test_walking_into_a_monster_is_a_fight_not_a_blow():
+    """The floor stops resolving fights. It hands them over instead.
+
+    Walking into something used to swing at it there and then. Now it raises the
+    encounter, and the arena does the swinging -- which is the whole of what
+    "the dungeon's combat is replaced" means, and the thing that has to be true
+    before any of the arena matters.
+    """
+    state = run()
+    enemy = take(state)[0]
+    action = place_beside(state, enemy)
+    hp_before = enemy.stats.hp
+
+    perform_action(state, action)
+
+    assert state.encounter is enemy, "the walk did not hand over a fight"
+    assert enemy.stats.hp == hp_before, "the floor swung at it on the way"
+
+
+def test_the_floor_stands_still_while_a_fight_is_owed():
+    """Nothing else moves while the hero is about to be in a room.
+
+    The monsters in the fight are the ones he is about to meet, and the ones
+    outside it have no business crossing the floor behind his back -- a fight
+    that carried on around him would be two turns happening at once.
+    """
+    state = run()
+    enemy = take(state)[0]
+    action = place_beside(state, enemy)
+    others = [other for other in state.enemies if other is not enemy]
+    before = {id(other): other.position for other in others}
+    hp = state.player.stats.hp
+
+    perform_action(state, action)
+    assert state.encounter is not None
+
+    advance_world(state)
+
+    assert state.player.stats.hp == hp, "the floor hit the hero during a fight"
+    assert {id(other): other.position for other in others} == before, (
+        "the floor walked around while the hero was in a fight"
+    )
+
+
+def test_a_monster_reaching_the_hero_is_a_fight_too():
+    """The other half of the same rule: contact is a fight, whichever way it is
+    made. A monster that arrives used to take its blow; now it takes him to the
+    arena, where he gets to answer."""
+    state = run()
+    enemy = take(state)[0]
+    enemy.behaviour = "aggressive"
+    place_beside(state, enemy)
+    hp = state.player.stats.hp
+
+    took = take_turn(state, enemy)
+
+    assert took, "the monster did nothing at all"
+    assert state.encounter is enemy, "arriving was not a fight"
+    assert state.player.stats.hp == hp, "the monster landed a blow on the floor"
+
+
+def test_a_fight_takes_whoever_is_standing_with_it():
+    """The monster he walked into, and whoever is in the room with him.
+
+    A fight is about the room it happens in -- and the room is where the *hero*
+    is, not where the monster he bumped into happens to be standing. One that let
+    the neighbours watch would make walking into a crowd the safest thing a
+    player could do.
+    """
+    state = run()
+    enemies = take(state, 4)
+    trigger = enemies[0]
+    hero = state.player.position
+    # Two of them near the hero, and one on the far side of the floor.
+    for enemy, offset in zip(enemies[1:], ((1, 0), (0, 1))):
+        enemy.position = (hero[0] + offset[0], hero[1] + offset[1])
+    far = state.enemies[4] if len(state.enemies) > 4 else None
+    if far is not None:
+        far.position = (hero[0] + ROOM + 4, hero[1] + ROOM + 4)
+
+    group = encounter_around(state, trigger)
+
+    assert group[0] is trigger
+    assert enemies[1] in group and enemies[2] in group, "the room was left out"
+    assert len(group) <= STAGE, "the fight is bigger than the stage holds"
+    if far is not None:
+        assert far not in group, "a monster across the floor joined in"

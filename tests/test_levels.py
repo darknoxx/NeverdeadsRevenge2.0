@@ -247,7 +247,13 @@ def test_the_walk_into_a_monster_still_works_after_a_level():
         for _ in range(30):
             if not victim.alive:
                 break
+            # The walk hands the fight over, and the arena is where the blow is.
+            from neverdeads_revenge.game.battle import ATTACK, open_fight
+
             perform_action(state, Action.MOVE_EAST)
+            fight = open_fight(state)
+            if fight is not None:
+                fight.choose(ATTACK, victim)
 
     assert state.kills == KILLS_PER_LEVEL
     assert state.level == 2

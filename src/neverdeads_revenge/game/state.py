@@ -241,10 +241,8 @@ class GameState:
     #: Whether this floor's ultimate can still be asked for. Refilled by
     #: :meth:`build_floor`, spent by the cast, and carried through the save so
     #: an old save cannot lie its way into a second ask.
-    ultimate_available: bool = True
-    #: The level the ultimates start answering at. `--testrun` runs turn it to 2.
-    ultimate_level: int = ULTIMATE_LEVEL
-    #: The shadow itself, while it walks. Not in ``enemies`` -- nothing aims at
+    ultimate_available: bool = True    #: The level the ultimates start answering at. `--testrun` runs turn it to 2.
+    ultimate_level: int = ULTIMATE_LEVEL    #: The shadow itself, while it walks. Not in ``enemies`` -- nothing aims at
     #: it, nothing counts it as a monster, and nothing in the turn queue acts
     #: for it. It is driven alongside the scheduler in :func:`advance_world`
     #: and unsummoned by its own clock, which is why it does not live in the
@@ -260,6 +258,30 @@ class GameState:
     #: seen it. When the shadow leaves, the walls close back over what the
     #: hero never actually walked.
     void_sight: bool = False
+
+    # -- the arena -----------------------------------------------------------
+    #
+    # A fight is owed. The floor hands one over where it used to resolve a blow
+    # itself: walking into something, or something reaching the hero. Nothing
+    # about the fight lives here -- no rounds, no order, no pair of fighters --
+    # because the arena has its own module for that. This is only the sentence
+    # "the next thing that happens is a battle", and the whole reason it lives
+    # on the state rather than in a return value is that the *monsters* raise it
+    # too, from deep inside :func:`advance_world`, where there is nobody to
+    # return it to.
+    #: The monster the floor handed over, or ``None``. Cleared by whoever opens
+    #: the arena; the domain is finished with it the moment it is set.
+    encounter: Actor | None = None
+
+    def raise_encounter(self, actor: Actor) -> None:
+        """Hand a fight to whoever is drawing the floor. The first one wins.
+
+        First wins because two monsters arriving at the hero in the same breath
+        are one fight: the second is standing right next to the first, and the
+        arena takes whoever is beside the monster it was handed anyway.
+        """
+        if self.encounter is None:
+            self.encounter = actor
     #: Yeti's bastion, while it stands. Same shape of life as the shadow: not
     #: an enemy, not in the queue, kept by its own clock -- and the one thing
     #: on the floor every monster would rather bite than the hero.

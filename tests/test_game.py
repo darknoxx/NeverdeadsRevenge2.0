@@ -11,9 +11,10 @@ import pytest
 from neverdeads_revenge.core.direction import Direction, chebyshev
 from neverdeads_revenge.core.rng import Rng
 from neverdeads_revenge.game import actions as actions_module
-from neverdeads_revenge.game.actions import (
+from neverdeads_revenge.game.actions import (  # noqa: F401
     Action,
     perform_action,
+    resolve_player_attack,
 )
 from neverdeads_revenge.game.actors import (
     ENEMIES,
@@ -823,7 +824,7 @@ def test_killing_an_enemy_removes_it_from_the_floor():
     for _ in range(20):
         if state.over or not victim.alive:
             break
-        perform_action(state, Action.MOVE_EAST)
+        resolve_player_attack(state, victim)
     assert state.kills >= 1
     assert victim not in state.enemies
     assert victim not in state.turn_queue
@@ -835,7 +836,7 @@ def test_killing_grants_revenge_speed():
     for _ in range(20):
         if state.over or not victim.alive:
             break
-        perform_action(state, Action.MOVE_EAST)
+        resolve_player_attack(state, victim)
     assert state.revenge_stacks >= 1
     assert state.player.speed == pytest.approx(1.5 + 0.3 * state.revenge_stacks)
 
@@ -963,14 +964,33 @@ def test_a_faster_enemy_acts_more_often_than_a_slower_one(monkeypatch):
     )
 
 
+def _play_the_fight(state) -> None:
+    """Wait for something to reach the hero, then play the fight out.
+
+    A run ends in the arena now: a monster that gets to the hero hands the fight
+    over rather than rolling a blow on the map, so "wait until something kills
+    him" is "wait, and then fight".
+    """
+    from neverdeads_revenge.game.battle import ATTACK, open_fight
+
+    for _ in range(60):
+        if state.over:
+            return
+        perform_action(state, Action.WAIT)
+        fight = open_fight(state)
+        if fight is None:
+            continue
+        fight.begin()
+        while not state.over and not fight.over:
+            living = fight.living_enemies()
+            fight.choose(ATTACK, living[0] if living else None)
+
+
 def test_player_can_die():
     state = start_run(NOXX, seed=3)
     state.player.stats.hp = 1
     _place_adjacent_enemy(state)
-    for _ in range(60):
-        if state.over:
-            break
-        perform_action(state, Action.WAIT)
+    _play_the_fight(state)
     assert state.run_state is RunState.DEAD
     assert not state.player.alive
     assert state.over
@@ -980,10 +1000,7 @@ def test_no_actions_are_accepted_after_death():
     state = start_run(NOXX, seed=3)
     state.player.stats.hp = 1
     _place_adjacent_enemy(state)
-    for _ in range(60):
-        if state.over:
-            break
-        perform_action(state, Action.WAIT)
+    _play_the_fight(state)
     assert state.over
     before = state.turn
     result = perform_action(state, Action.MOVE_NORTH)
@@ -1351,7 +1368,7 @@ def test_a_wraiths_touch_never_repeats_a_curse_you_carry():
 
     for _ in range(400):
         state.player.stats.hp = state.player.stats.max_hp
-        take_turn(state, wraith)
+        _let_it_swing(state, wraith)
         keys = [curse.key for curse in state.curses]
         assert len(keys) == len(set(keys)), keys
 
@@ -1908,7 +1925,12 @@ def _place_adjacent_enemy(state: GameState) -> Actor:
 
 # -- coins ------------------------------------------------------------------
 def _kill_one(state: GameState, key: str = "ghoul") -> Actor:
-    """Put a one-hit monster beside the player and let the player kill it."""
+    """Put a one-hit monster beside the player and let the player kill it.
+
+    With the arena's own blow: walking into a monster hands the fight over now,
+    so the game has exactly one place where a blow is resolved, and a test that
+    wants what a kill pays asks for that blow.
+    """
     enemy = make_enemy(ENEMIES[key], (state.player.position[0] + 1, state.player.position[1]))
     enemy.stats.hp = 1
     state.enemies = [enemy]
@@ -1917,7 +1939,7 @@ def _kill_one(state: GameState, key: str = "ghoul") -> Actor:
     for _ in range(40):
         if not enemy.alive:
             break
-        perform_action(state, Action.MOVE_EAST)
+        resolve_player_attack(state, enemy)
     assert not enemy.alive, "the player never landed the hit"
     return enemy
 
@@ -1981,7 +2003,7 @@ def test_two_kills_in_the_same_spot_make_one_bigger_pile():
     for _ in range(40):
         if not enemy.alive:
             break
-        perform_action(state, Action.MOVE_EAST)
+        resolve_player_attack(state, enemy)
 
     pile = state.dungeon_map.item_at(pos)
     assert pile.kind == "coin"
@@ -2150,6 +2172,21 @@ def test_bleed_is_a_price_and_not_a_sentence():
 
 
 # -- the wraith's touch ------------------------------------------------------
+def _let_it_swing(state, monster) -> None:
+    """Let ``monster`` get its blow in, in the arena.
+
+    A monster's blow lands in the fight now. Quick on purpose: the arena's
+    opening round is where a monster faster than the hero swings before he has
+    chosen anything, which is the blow these tests are counting.
+    """
+    from neverdeads_revenge.game.battle import open_fight
+
+    monster.stats.speed = state.player.speed + 5.0
+    fight = open_fight(state, monster)
+    if fight is not None:
+        fight.begin()
+
+
 def _wraith_beside(state):
     """A wraith that always lands, so the test is about the curse and not the dice."""
     wraith = make_enemy(ENEMIES["wraith"], (state.player.position[0] + 1, state.player.position[1]))
@@ -2180,7 +2217,7 @@ def test_a_wraiths_touch_can_leave_a_curse():
         if state.curses:
             break
         state.player.stats.hp = state.player.stats.max_hp
-        take_turn(state, wraith)
+        _let_it_swing(state, wraith)
 
     assert state.curses, "the wraith never once left anything behind"
     assert any("touch goes through you" in entry.text for entry in state.log)
@@ -2223,7 +2260,7 @@ def test_the_wraiths_touch_is_never_wither():
             if state.curses:
                 break
             state.player.stats.hp = state.player.stats.max_hp
-            take_turn(state, wraith)
+            _let_it_swing(state, wraith)
         seen |= {curse.key for curse in state.curses}
 
     assert seen, "no curse ever landed"
@@ -2244,7 +2281,7 @@ def test_the_touch_is_rare():
             if state.curses:
                 break
             state.player.stats.hp = state.player.stats.max_hp
-            take_turn(state, wraith)
+            _let_it_swing(state, wraith)
             hits += 1
         cursed += bool(state.curses)
 
@@ -2260,7 +2297,7 @@ def test_a_killing_blow_does_not_curse_a_corpse():
     wraith = _wraith_beside(state)
     wraith.stats.damage = (999, 999)
 
-    take_turn(state, wraith)
+    _let_it_swing(state, wraith)
 
     assert state.run_state is RunState.DEAD
     assert not state.curses
@@ -2275,7 +2312,7 @@ def test_a_blow_that_lands_marks_the_cell_it_landed_on():
     state.turn_queue = type(state.turn_queue)([state.player, ghoul])
     state.refresh_vision()
 
-    perform_action(state, Action.MOVE_EAST)
+    resolve_player_attack(state, ghoul)
 
     assert ghoul.position in state.hits
 
@@ -2316,7 +2353,7 @@ def test_the_flash_lasts_exactly_one_action():
     state.enemies = [ghoul]
     state.turn_queue = type(state.turn_queue)([state.player, ghoul])
     state.refresh_vision()
-    perform_action(state, Action.MOVE_EAST)
+    resolve_player_attack(state, ghoul)
     assert state.hits
 
     perform_action(state, Action.WAIT)
