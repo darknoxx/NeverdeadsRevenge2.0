@@ -163,12 +163,21 @@ class MetaProgress:
 def data_dir() -> Path:
     """Return the directory the save file belongs in.
 
-    Honours ``XDG_DATA_HOME`` and falls back to the platform default, so the
-    source tree never collects save data.
+    Honours ``NEVERDEADS_REVENGE_HOME`` (the tests), then the platform's own
+    place: ``%LOCALAPPDATA%`` on Windows, ``XDG_DATA_HOME`` (or
+    ``~/.local/share``) everywhere else. The source tree never collects save
+    data, on any of them.
     """
     override = os.environ.get("NEVERDEADS_REVENGE_HOME")
     if override:
         return Path(override).expanduser()
+
+    if os.name == "nt":
+        # Windows has no XDG and no ~/.local/share; a game's save belongs under
+        # the user's local app data, beside every other application's.
+        base = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA")
+        root = Path(base) if base else Path.home() / "AppData" / "Local"
+        return root / "neverdeads_revenge2"
 
     base = os.environ.get("XDG_DATA_HOME")
     root = Path(base).expanduser() if base else Path.home() / ".local" / "share"

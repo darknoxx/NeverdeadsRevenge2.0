@@ -1,0 +1,52 @@
+name: Windows build
+
+# PyInstaller does not cross-compile, so the .exe is made on a Windows runner --
+# which is the only reason this workflow exists. It also runs the test suite,
+# because a Windows build that has never run the tests is a guess.
+#
+# The .exe is always attached as a workflow artifact. On a v* tag it is also
+# attached to that release, so a tag is the whole release process.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      # The desktop tests drive Qt; offscreen means no window and no display.
+      QT_QPA_PLATFORM: offscreen
+      NEVERDEADS_REVENGE_MUTE: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]" pyinstaller
+
+      - name: Test
+        run: python -m pytest -q
+
+      - name: Build the .exe
+        run: pyinstaller packaging/windows/neverdeads_revenge.spec
+
+      - name: Upload the artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeverdeadsRevenge2-windows
+          path: dist/NeverdeadsRevenge2.exe
+
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/NeverdeadsRevenge2.exe
