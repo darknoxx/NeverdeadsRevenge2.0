@@ -13,6 +13,12 @@ on:
     tags:
       - "v*"
 
+# Creating a release needs write access to the repository's contents; the
+# default token is read-only on a repository configured that way, which is how
+# the first tagged build failed at the last step after building fine.
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
