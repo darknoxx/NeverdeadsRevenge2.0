@@ -75,6 +75,21 @@ TAPER = 0.18
 #: which is M3's business; three is what a fight of this shape is about.
 STAGE = 3
 
+#: Where a row of monsters stands, by how many there are: the lane across the
+#: room and how far into it, both as fractions of the ground's width and height.
+#:
+#: A fight of *one* should look like a fight of one. The stage was built for
+#: three, and a single monster was being shoved into the left-hand slot of a row
+#: that was not there -- so the row is laid out by its own count: one in the
+#: middle of the room, two on either side of that middle, and three in the
+#: shallow arc the stage was drawn for, with the outer ones a little nearer, the
+#: way a line of anything stands.
+ROWS: dict[int, tuple[tuple[float, float], ...]] = {
+    1: ((0.0, 0.18),),
+    2: ((-0.26, 0.32), (0.26, 0.32)),
+    3: ((-0.40, 0.32), (-0.06, 0.14), (0.40, 0.48)),
+}
+
 #: How big a letter stands, in font pixels. The hero is nearest and largest; the
 #: monsters scale with their depth.
 MONSTER_SIZES = (62, 52, 46)
@@ -512,8 +527,9 @@ class BattleScreen(Screen):
         """Who stands where: the monsters in the far half, the hero in front.
 
         The monsters are the actors themselves, in the order they were met --
-        their glyph, their colour, their size by their depth. Nothing is
-        invented here: a fight against three vipers is three v's on the floor.
+        their glyph, their colour, their depth. Nothing is invented here: a fight
+        against three vipers is three v's on the floor, and a fight against one
+        is one v in the middle of it.
         """
         cell_w = int(field["cell_w"])
         x0, y0 = int(field["cells_x0"]), int(field["cells_y0"])
@@ -522,14 +538,11 @@ class BattleScreen(Screen):
         living = self._targets()
         marked = living[self.target % len(living)] if living else None
         scale = 1.35 if width >= 120 else 1.0
-        places = (
-            (centre - max(4, width // 4), y0 + max(1, height // 3)),
-            (centre - max(1, width // 12), y0 + max(0, height // 6)),
-            (centre + max(4, width // 4), y0 + max(1, height // 2)),
-        )
+        monsters = self.battle.enemies[:STAGE]
+        places = ROWS.get(len(monsters), ROWS[STAGE])
         staged: list[Staged] = []
-        for index, enemy in enumerate(self.battle.enemies[:STAGE]):
-            cell_x, row = places[min(index, len(places) - 1)]
+        for index, enemy in enumerate(monsters):
+            lane, depth = places[min(index, len(places) - 1)]
             size = round(MONSTER_SIZES[min(index, len(MONSTER_SIZES) - 1)] * scale)
             staged.append(
                 Staged(
@@ -537,8 +550,8 @@ class BattleScreen(Screen):
                     glyph=enemy.glyph,
                     colour=enemy.color,
                     size=size,
-                    cx=(cell_x + 1) * cell_w,
-                    row=row,
+                    cx=(centre + round(lane * width) + 1) * cell_w,
+                    row=y0 + max(1, round(depth * height)),
                     cells=self._letter_cells(enemy.glyph, size, cell_w),
                     chosen=enemy is marked,
                 )
