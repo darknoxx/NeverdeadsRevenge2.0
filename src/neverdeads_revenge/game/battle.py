@@ -29,13 +29,25 @@ from neverdeads_revenge.core.direction import chebyshev
 
 from .actions import (
     Action,
+    inflict,
     perform_action,
     resolve_enemy_attack,
     resolve_player_attack,
+    tick_statuses,
     ultimate_refusal,
 )
 from .actors import Actor
 from .combat import AttackOutcome
+from .specials import (
+    ATRITAS,
+    BETWEEN_BLOWS,
+    LEFT_HAND,
+    OPEN_VEIN,
+    SPECIALS,
+    VOID,
+    Special,
+    special_by_key,
+)
 from .state import GameState, LogKind
 
 __all__ = [
@@ -48,6 +60,7 @@ __all__ = [
     "VERBS",
     "Battle",
     "Guarded",
+    "Special",
     "Over",
     "Said",
     "Struck",
@@ -96,6 +109,10 @@ class Struck:
     actor: Actor
     target: Actor
     outcome: AttackOutcome
+    #: A word about *how* the blow was struck, for whoever is doing the showing:
+    #: the arena paints a different flash for a dagger than for the void. A name
+    #: and not a colour -- the rules have no business knowing what green is.
+    flair: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -131,6 +148,11 @@ def open_fight(state: GameState, trigger: Actor | None = None) -> Battle | None:
         state.encounter = None
     return Battle(state, encounter_around(state, trigger))
 
+
+#: What the dagger adds to a stab it makes sure of. Small, because the crit is
+#: already the point: this is the difference between a knife and a knife that was
+#: aimed.
+LEFT_HAND_BONUS = 3
 
 #: How far from the hero the room reaches. A fight takes whoever is standing in
 #: the same room, and "the same room" is a distance rather than a graph of walls:
@@ -187,6 +209,11 @@ class Battle:
         #: the hero's command is the command of his place in it, and the round
         #: does not hand him a second turn for free.
         self._hero_up = False
+        #: Which of the hero's tricks this *fight* has already spent. The void is
+        #: not in here: it is priced by the floor, and the floor's own flag says so.
+        self._used: set[str] = set()
+        #: BETWEEN BLOWS: until the end of this round, nothing finds the hero.
+        self._unseen = False
 
     # -- what the hero is offered -------------------------------------------
     def commands(self) -> list[str]:
@@ -198,13 +225,32 @@ class Battle:
         """
         return list(VERBS)
 
-    def special_ready(self) -> bool:
-        """Whether the dark would answer right now.
+    def specials(self) -> list[Special]:
+        """The hero's five tricks, in the order a fight offers them."""
+        return list(SPECIALS)
 
-        Asked by the menu, which dims the verb rather than letting the player
-        spend a turn finding out. The gate itself is the dungeon's, untouched.
+    def special_ready(self, special: Special | None = None) -> bool:
+        """Whether the dark would answer -- this one, or any of them.
+
+        Asked by the menu, which dims what cannot be spent rather than letting
+        the player spend a turn finding out. The gate itself is the dungeon's.
         """
-        return ultimate_refusal(self.state) is None
+        if special is not None:
+            return self.special_available(special)
+        return any(self.special_available(one) for one in SPECIALS)
+
+    def special_available(self, special: Special) -> bool:
+        """Whether this one can still be asked for, right now.
+
+        The void is the dungeon's ask and is priced by the dungeon: the level the
+        dark answers at, and the once-a-floor flag the floor refills. The other
+        four are the fight's, and are spent one by one inside it.
+        """
+        if special.uses_floor:
+            return ultimate_refusal(self.state) is None
+        if special.key in self._used:
+            return False
+        return self.state.level >= special.level
 
     def living_enemies(self) -> list[Actor]:
         """Everyone still standing, in the order they were met."""
@@ -222,7 +268,13 @@ class Battle:
         self._advance(events)
         return events
 
-    def choose(self, command: str, target: Actor | None = None) -> list[Event]:
+    def choose(
+        self,
+        command: str,
+        target: Actor | None = None,
+        *,
+        special: str | None = None,
+    ) -> list[Event]:
         """Take the hero's verb, and let the round run on from it.
 
         If nobody has asked the hero yet -- a fight that was opened without
@@ -238,7 +290,12 @@ class Battle:
         if self.over:
             return events
         self._hero_up = False
-        if self._hero_acts(command, target, events):
+        #: Which of the hero's tricks this *fight* has already spent. The void is
+        #: not in here: it is priced by the floor, and the floor's own flag says so.
+        self._used: set[str] = set()
+        #: BETWEEN BLOWS: until the end of this round, nothing finds the hero.
+        self._unseen = False
+        if self._hero_acts(command, target, events, special):
             self._advance(events)
         return events
 
@@ -289,6 +346,13 @@ class Battle:
             self.state.shrouded -= 1
         if self.state.salt_ward:
             self.state.salt_ward -= 1
+        self._unseen = False
+        # And the wounds run, for everybody: a poison hurt on the victim's own
+        # turn on the map, and a round is the arena's turn. Without this a bleed
+        # would be a sentence the fight never read out.
+        for actor in [self.hero, *self.enemies]:
+            if actor.stats.alive:
+                tick_statuses(self.state, actor)
 
     def _order(self) -> list[Actor]:
         """Everyone alive, quickest first. Never empty: the fight is decided
@@ -318,7 +382,11 @@ class Battle:
 
     # -- the two sides ------------------------------------------------------
     def _hero_acts(
-        self, command: str, target: Actor | None, events: list[Event]
+        self,
+        command: str,
+        target: Actor | None,
+        events: list[Event],
+        special: str | None = None,
     ) -> bool:
         """Resolve the hero's verb. Returns whether it cost him the turn.
 
@@ -337,12 +405,12 @@ class Battle:
             return True
 
         if command == SPECIAL:
-            refusal = ultimate_refusal(self.state)
-            if refusal is not None:
-                self.state.say(refusal, LogKind.PLAIN)
+            chosen = special_by_key(special) if special else self._first_ready()
+            if chosen is None or not self.special_available(chosen):
+                self.state.say(self._special_refusal(chosen), LogKind.PLAIN)
                 self._splice(before, events)
                 return False
-            self._ask_the_dark(events)
+            self._run_special(chosen, target, events)
             return True
 
         if command == ITEM:
@@ -368,26 +436,126 @@ class Battle:
 
         return False
 
-    def _ask_the_dark(self, events: list[Event]) -> None:
-        """The hero's own ask, in the arena.
+    # -- the hero's five tricks ---------------------------------------------
+    def _first_ready(self) -> Special | None:
+        """The first of the five that can be spent, for a caller with no opinion."""
+        for special in SPECIALS:
+            if self.special_available(special):
+                return special
+        return None
 
-        The dungeon's three answers each put something on the *map*: a shadow
-        that walks and sees through walls, a wall of ice, a bell that rings down
-        through the floor. None of that fits in a room, and M3 is where each hero
-        gets their arena shape. What already fits is the promise underneath all
-        three -- the dark answers, and everything in front of the hero takes it
-        at once -- and the price is the dungeon's own, so the ask cannot be spent
-        twice in one floor by making it in the right place.
+    def _special_refusal(self, special: Special | None) -> str:
+        """Why the dark will not do this one, in the dungeon's own words.
+
+        The void's refusal *is* the dungeon's -- the level the dark answers at,
+        and the floor it has already had -- because it is the same ask priced the
+        same way. The others are the fight's, and say so.
         """
+        if special is None:
+            return "The dark has nothing left to spend here."
+        if special.uses_floor:
+            return ultimate_refusal(self.state) or "The dark has already had this floor."
+        if special.key in self._used:
+            return f"{special.name} has already been spent in this fight."
+        if self.state.level < special.level:
+            return f"Not yet. {special.name} arrives at level {special.level}."
+        return "The dark is quiet."
+
+    def _run_special(self, special: Special, target: Actor | None, events: list[Event]) -> None:
+        """Spend one of the five, through the same blow as everything else.
+
+        Every one of them ends in `resolve_player_attack`, because that is where
+        a blow in this game is resolved: a special that swung with its own dice
+        would disagree with the dungeon about what a curse or a gift is worth.
+        """
+        run = {
+            LEFT_HAND: self._special_left_hand,
+            ATRITAS: self._special_atritas,
+            OPEN_VEIN: self._special_open_vein,
+            BETWEEN_BLOWS: self._special_between_blows,
+            VOID: self._special_the_void,
+        }[special.key]
+        run(target, events)
+        if not special.uses_floor:
+            self._used.add(special.key)
+
+    def _blow(
+        self,
+        enemy: Actor,
+        events: list[Event],
+        *,
+        flair: str = "",
+        force_crit: bool = False,
+        bonus: int = 0,
+    ) -> AttackOutcome:
+        """One hero's blow, said and shown, with the trick's own word on it."""
+        before = len(self.state.log)
+        outcome = resolve_player_attack(
+            self.state, enemy, force_crit=force_crit, bonus=bonus
+        )
+        self._splice(before, events)
+        events.append(Struck(self.hero, enemy, outcome, flair=flair))
+        return outcome
+
+    def _special_left_hand(self, target: Actor | None, events: list[Event]) -> None:
+        """The dagger: the stab it makes sure of, and it is a little deeper."""
+        enemy = self._pick(target)
+        if enemy is not None:
+            self._blow(enemy, events, flair=LEFT_HAND, force_crit=True, bonus=LEFT_HAND_BONUS)
+
+    def _special_atritas(self, target: Actor | None, events: list[Event]) -> None:
+        """The shadow leaves, and strikes twice while its owner stands still."""
+        enemy = self._pick(target)
+        if enemy is None:
+            return
+        before = len(self.state.log)
+        self.state.say("Your shadow peels off and goes for him.", LogKind.SYSTEM)
+        self._splice(before, events)
+        for _ in range(2):
+            if not enemy.stats.alive:
+                break
+            self._blow(enemy, events, flair=ATRITAS)
+
+    def _special_open_vein(self, target: Actor | None, events: list[Event]) -> None:
+        """A cut that will not close: small, and it keeps costing him."""
+        enemy = self._pick(target)
+        if enemy is None:
+            return
+        self._blow(enemy, events, flair=OPEN_VEIN)
+        if enemy.stats.alive:
+            before = len(self.state.log)
+            inflict(self.state, enemy, ("bleed",))
+            self._splice(before, events)
+
+    def _special_between_blows(self, target: Actor | None, events: list[Event]) -> None:
+        """He is not where they swing: nothing finds him this round, and the cut
+        still lands."""
+        enemy = self._pick(target)
+        if enemy is not None:
+            self._blow(enemy, events, flair=BETWEEN_BLOWS)
+        before = len(self.state.log)
+        self.state.say("You are already somewhere else.", LogKind.GOOD)
+        self._splice(before, events)
+        self._unseen = True
+
+    def _special_the_void(self, target: Actor | None, events: list[Event]) -> None:
+        """The dungeon's own ask, in the room: the dark answers, and everything
+        in front of him takes it at once."""
         self.state.ultimate_available = False
+        before = len(self.state.log)
         self.state.say("The dark answers.", LogKind.SYSTEM)
+        self._splice(before, events)
         for enemy in self.living_enemies():
             if not self.hero.stats.alive:
                 break
-            before = len(self.state.log)
-            outcome = resolve_player_attack(self.state, enemy)
-            self._splice(before, events)
-            events.append(Struck(self.hero, enemy, outcome))
+            self._blow(enemy, events, flair=VOID)
+
+    def _pick(self, target: Actor | None) -> Actor | None:
+        """The one being hit: the chosen one, or whoever is still standing."""
+        if target is not None and target.stats.alive:
+            return target
+        living = self.living_enemies()
+        return living[0] if living else None
 
     def _enemy_acts(self, attacker: Actor, events: list[Event]) -> None:
         """One monster's turn: it swings at the hero.
@@ -398,6 +566,14 @@ class Battle:
         lives where closing happens. Inventing a second reading of it for the
         arena would be two opinions about one word.
         """
+        if self._unseen:
+            # BETWEEN BLOWS: the swing goes through the place he was standing.
+            before = len(self.state.log)
+            self.state.say(
+                f"The {attacker.name} strikes at where you were.", LogKind.PLAIN
+            )
+            self._splice(before, events)
+            return
         before = len(self.state.log)
         outcome = resolve_enemy_attack(
             self.state, attacker, self.hero, guard=self._guarded

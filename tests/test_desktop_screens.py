@@ -2176,3 +2176,28 @@ def test_a_run_that_ends_in_the_arena_ends_where_it_always_did(app):
 
     assert screen.battle.over and not screen.battle.won
     assert top(app) == "GameOverScreen", "the run did not end the usual way"
+
+
+def test_a_trick_paints_its_own_colour_on_the_blow(app, font):
+    """A blow wears the word of the trick that made it.
+
+    The arena flashes a struck figure in the colour of the thing that hit it --
+    green for the dagger, petrol for the shadow, and the void's own pale light --
+    which is how the five are told apart from the other side of a room. The rules
+    deal in names; only the screen knows what green is.
+    """
+    from neverdeads_revenge.desktop.screens.battle import FLAIR_COLOURS, BattleScreen
+    from neverdeads_revenge.game.battle import Struck
+    from neverdeads_revenge.game.combat import AttackOutcome
+    from neverdeads_revenge.game.specials import LEFT_HAND
+
+    battle = arena(count=1)
+    screen = BattleScreen(battle)
+    target = battle.enemies[0]
+    outcome = AttackOutcome(hit=True, crit=True, damage=3, killed=False)
+    screen._queue = [Struck(battle.hero, target, outcome, flair=LEFT_HAND)]
+    screen._beat = 0.0
+
+    screen.step(0.5, app)
+
+    assert screen._hurts[id(target)][1] == FLAIR_COLOURS[LEFT_HAND]

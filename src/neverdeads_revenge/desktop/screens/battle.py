@@ -105,6 +105,16 @@ MONSTER_SIZES = (62, 52, 46)
 HERO_SIZE = 88
 #: The arrow over the one the choice is on.
 ARROW = "▼"
+#: What a blow's word is painted in -- the flash a struck figure wears. Green for
+#: the dagger, petrol for the shadow, red for the vein, and the void's own pale
+#: light: the tricks are asked for in words and answered in colour.
+FLAIR_COLOURS: dict[str, str] = {
+    "left_hand": "#5bd75b",
+    "atritas": "#2ee6cf",
+    "open_vein": "#d83a3a",
+    "between_blows": "#b06bff",
+    "the_void": "#e8ffff",
+}
 #: How long one event holds the stage. A fight that printed a whole round at
 #: once would be a spreadsheet with letters drawn on it.
 BEAT = 0.42
@@ -225,6 +235,11 @@ class BattleScreen(Screen):
         self.state = battle.state
         self.verb = 0
         self.target = 0
+        #: Whether the five are being looked at: SPECIAL opens a list rather than
+        #: spending the first one it finds, because a player who cannot choose is
+        #: not being offered anything.
+        self.picking = False
+        self.special = 0
         #: The fight's last few lines, in the log's own colours.
         self.lines: list[Said] = []
         #: The round being played back, one event per beat. The opening round is
@@ -244,11 +259,12 @@ class BattleScreen(Screen):
         self._clock = 0.0
         #: Who is mid-strike: ``id(attacker) -> (id(target), when it began)``.
         self._strikes: dict[int, tuple[int, float]] = {}
-        #: Who was struck, and when the blow inside their strike landed.
-        self._hurts: dict[int, float] = {}
+        #: Who was struck: when the blow inside their strike lands, and the
+        #: colour the trick that landed it is painted in.
+        self._hurts: dict[int, tuple[float, str]] = {}
         #: White silhouettes of the sprites, made once and reused: a hit flash is
         #: the figure painted solid white for a few frames.
-        self._flashes: dict[int, QImage] = {}
+        self._flashes: dict[tuple[int, str], QImage] = {}
 
     # -- the contract -------------------------------------------------------
     def draw(self, buffer: PatternBuffer, app) -> None:
@@ -434,7 +450,7 @@ class BattleScreen(Screen):
         struck = self._hurts.get(id(figure.actor))
         if struck is None:
             return 0
-        age = self._clock - struck
+        age = self._clock - struck[0]
         if age < 0:
             return 0
         if age > JOLT:
@@ -442,9 +458,9 @@ class BattleScreen(Screen):
             return 0
         return round(math.sin(age * 46.0) * JOLT_PIXELS)
 
-    def _flash(self, image: QImage) -> QImage:
-        """The figure as a white silhouette, made once and kept."""
-        cached = self._flashes.get(id(image))
+    def _flash(self, image: QImage, colour: str) -> QImage:
+        """The figure as a silhouette in ``colour``, made once and kept."""
+        cached = self._flashes.get((id(image), colour))
         if cached is None:
             cached = QImage(image.size(), QImage.Format.Format_ARGB32)
             cached.fill(QColor(0, 0, 0, 0))
@@ -453,9 +469,9 @@ class BattleScreen(Screen):
             painter.setCompositionMode(
                 QPainter.CompositionMode.CompositionMode_SourceIn
             )
-            painter.fillRect(cached.rect(), QColor("#ffffff"))
+            painter.fillRect(cached.rect(), QColor(colour))
             painter.end()
-            self._flashes[id(image)] = cached
+            self._flashes[(id(image), colour)] = cached
         return cached
 
     def _paste_verdict(
@@ -513,6 +529,10 @@ class BattleScreen(Screen):
             if not self.busy and name in ("enter", "return", "space"):
                 app.leave_battle()
             return True
+        if self.picking:
+            # The five, being looked at: everything goes to the list until it is
+            # closed, including escape, which is the way back and not the way out.
+            return self._pick_special(name, app)
         if self.busy:
             # The fight is talking. It will not be interrupted mid-sentence, or
             # a player drumming on the keyboard would be choosing the next verb
@@ -534,11 +554,47 @@ class BattleScreen(Screen):
         shortcut = {"a": ATTACK, "s": SPECIAL, "i": ITEM, "d": DEFEND, "f": FLEE}
         if name in shortcut:
             self.verb = VERBS.index(shortcut[name])
-            self._choose(app)
+            self._confirm(app)
             return True
         if name in ("enter", "return", "space"):
-            self._choose(app)
+            self._confirm(app)
             return True
+        return True
+
+    def _confirm(self, app) -> None:
+        """Take the highlighted verb -- or open the five, if it was SPECIAL.
+
+        SPECIAL is a door rather than a verb: the hero has five ways to spend a
+        turn and the player is entitled to pick which. The first available one is
+        not good enough, because a choice nobody can make is not a choice.
+        """
+        if VERBS[self.verb] == SPECIAL:
+            self.picking = True
+            self.special = 0
+            return
+        self._choose(app)
+
+    def _pick_special(self, name: str, app) -> bool:
+        """The five, being looked at: pick one, or come back."""
+        specials = self.battle.specials()
+        index = {"1": 0, "2": 1, "3": 2, "4": 3, "5": 4}.get(name)
+        if name == "escape":
+            self.picking = False
+            return True
+        if name in ("up", "w"):
+            self.special = (self.special - 1) % len(specials)
+            return True
+        if name in ("down", "s"):
+            self.special = (self.special + 1) % len(specials)
+            return True
+        if index is None and name in ("enter", "return", "space"):
+            index = self.special
+        if index is None or index >= len(specials):
+            return True
+        chosen = specials[index]
+        if self.battle.special_available(chosen):
+            self.picking = False
+            self._choose(app, special=chosen.key)
         return True
 
     @property
@@ -586,14 +642,14 @@ class BattleScreen(Screen):
         """
         return [enemy for enemy in self.battle.enemies[:STAGE] if enemy.stats.alive]
 
-    def _choose(self, app) -> None:
+    def _choose(self, app, *, special: str | None = None) -> None:
         """Take the highlighted verb, and queue the round it sets off."""
         living = self._targets()
         target = living[self.target % len(living)] if living else None
         # The state is decided the instant the player commits; what the screen
         # shows is not, and this is where the two are told apart.
         self._snapshot()
-        self._queue = list(self.battle.choose(VERBS[self.verb], target))
+        self._queue = list(self.battle.choose(VERBS[self.verb], target, special=special))
         self._beat = 0.0
         if VERBS[self.verb] == SPECIAL:
             app.play("void")
@@ -667,7 +723,10 @@ class BattleScreen(Screen):
         # who did nothing.
         self._strikes[id(struck.actor)] = (id(struck.target), self._clock)
         if outcome.hit and not outcome.dodged:
-            self._hurts[id(struck.target)] = self._clock + IMPACT_AT
+            self._hurts[id(struck.target)] = (
+                self._clock + IMPACT_AT,
+                FLAIR_COLOURS.get(struck.flair, "#ffffff"),
+            )
         if not outcome.hit:
             return
         if struck.actor is self.battle.hero:
@@ -940,7 +999,8 @@ class BattleScreen(Screen):
         like a mistake -- so what the sheets made is what the arena shows.
         """
         struck = self._hurts.get(id(figure.actor))
-        flash_age = None if struck is None else self._clock - struck
+        flash_age = None if struck is None else self._clock - struck[0]
+        colour = "#ffffff" if struck is None else struck[1]
         if flash_age is not None and 0 <= flash_age <= JOLT:
             pass
         else:
@@ -959,7 +1019,7 @@ class BattleScreen(Screen):
             painter.drawImage(left, top, image)
             if flash_age is not None:
                 painter.setOpacity(opacity * (1.0 - flash_age / JOLT) * 0.85)
-                painter.drawImage(left, top, self._flash(image))
+                painter.drawImage(left, top, self._flash(image, colour))
             painter.setOpacity(1.0)
             return
 
@@ -978,7 +1038,7 @@ class BattleScreen(Screen):
         painter.setPen(ink.darker(320))
         painter.drawText(left, baseline + THICKNESS, figure.glyph)
         if flash_age is not None:
-            painter.setPen(QColor("#ffffff"))
+            painter.setPen(QColor(colour))
             painter.setOpacity(opacity * (1.0 - flash_age / JOLT) * 0.85)
         else:
             painter.setPen(ink)
@@ -1144,6 +1204,19 @@ class BattleScreen(Screen):
         The ask is drawn dim when the dark will not answer: a verb that costs a
         turn to refuse is a verb that punishes curiosity.
         """
+        if self.picking:
+            # The list takes the whole strip rather than the verbs' half of it:
+            # five names and a sentence about the chosen one do not fit in a
+            # column three lines tall, and a list nobody can read is a list
+            # nobody can choose from.
+            self._draw_specials(
+                buffer,
+                self._areas(buffer.cols, buffer.rows)["plate"][0],
+                y,
+                buffer.cols - 2 * self._areas(buffer.cols, buffer.rows)["plate"][0],
+                height,
+            )
+            return
         box(buffer, x, y, width, height, title="COMMAND", border=BLOOD, fill=True)
         if height < 4 or width < 12:
             return
@@ -1162,6 +1235,57 @@ class BattleScreen(Screen):
             else:
                 style = parse_style(ASH)
             buffer.text(x + 2, y + 1 + index, f"{marker} {key}  {label}", style)
+
+    def _draw_specials(
+        self, buffer: PatternBuffer, x: int, y: int, width: int, height: int
+    ) -> None:
+        """The five, across the whole strip the panels share.
+
+        Two columns, because five names and a sentence about the chosen one do
+        not fit in a column three lines tall -- and the hint goes in the frame's
+        own title row, which is the one line of a panel nobody minds sharing.
+
+        The ones that cannot be spent are dim rather than hidden: a lock is a
+        promise, and a name the player can read is what makes a level worth
+        reaching for. *Why* one cannot be spent is the fight's to say, in the log,
+        when it is asked for; a panel of reasons would be a manual.
+        """
+        box(
+            buffer,
+            x,
+            y,
+            width,
+            height,
+            title="THE DARK      enter  ask      esc  back",
+            border=BLOOD,
+            fill=True,
+        )
+        if height < 4 or width < 24:
+            return
+        specials = self.battle.specials()
+        rows = max(1, height - 4)
+        column_w = width // 2
+        for index, special in enumerate(specials):
+            usable = self.battle.special_available(special)
+            chosen = index == self.special
+            marker = "►" if chosen else " "
+            line = f"{marker} {index + 1}  {special.name}"
+            if not usable:
+                style = parse_style("grey23")
+            elif chosen:
+                style = parse_style(f"bold {BONE}")
+            else:
+                style = parse_style(ASH)
+            buffer.text(
+                x + 2 + (index // rows) * column_w,
+                y + 1 + (index % rows),
+                line[: column_w - 2],
+                style,
+            )
+        if specials:
+            blurb = specials[min(self.special, len(specials) - 1)].blurb
+            rule(buffer, x + 1, y + height - 3, width - 2, ASH)
+            buffer.text(x + 2, y + height - 2, blurb[: width - 4], parse_style(ASH))
 
     @staticmethod
     def _bar(

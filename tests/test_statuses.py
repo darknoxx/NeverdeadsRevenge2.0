@@ -9,10 +9,10 @@ twice.
 from __future__ import annotations
 
 from neverdeads_revenge.game.actions import (
-    _inflict,
+    inflict,
     _inflicts_of,
     _thorns_of,
-    _tick_statuses,
+    tick_statuses,
 )
 from neverdeads_revenge.game.actors import ENEMIES, NOXX, make_enemy
 from neverdeads_revenge.game.state import start_run
@@ -32,8 +32,8 @@ def test_a_bleeding_thing_loses_health_on_its_own_turn():
     enemy = _enemy(state)
     before = enemy.hp
 
-    _inflict(state, enemy, ("bleed",))
-    _tick_statuses(state, enemy)
+    inflict(state, enemy, ("bleed",))
+    tick_statuses(state, enemy)
 
     assert enemy.hp == before - STATUSES["bleed"].damage
 
@@ -43,16 +43,16 @@ def test_a_status_runs_out_after_the_turns_it_promises():
     enemy = _enemy(state)
     before = enemy.hp
 
-    _inflict(state, enemy, ("bleed",))
+    inflict(state, enemy, ("bleed",))
     for _ in range(STATUSES["bleed"].turns):
-        _tick_statuses(state, enemy)
+        tick_statuses(state, enemy)
 
     assert "bleed" not in enemy.statuses, "it never wore off"
     # Every one of its turns hurt, including the last.
     assert enemy.hp == before - STATUSES["bleed"].damage * STATUSES["bleed"].turns
 
     # And then it is over.
-    _tick_statuses(state, enemy)
+    tick_statuses(state, enemy)
     assert enemy.hp == before - STATUSES["bleed"].damage * STATUSES["bleed"].turns
 
 
@@ -62,14 +62,14 @@ def test_a_second_wound_refreshes_rather_than_stacks():
     state = start_run(NOXX, seed=3)
     enemy = _enemy(state)
 
-    _inflict(state, enemy, ("bleed",))
+    inflict(state, enemy, ("bleed",))
     enemy.statuses["bleed"] = 1  # nearly over
-    _inflict(state, enemy, ("bleed",))
+    inflict(state, enemy, ("bleed",))
 
     assert enemy.statuses["bleed"] == STATUSES["bleed"].turns
 
     before = enemy.hp
-    _tick_statuses(state, enemy)
+    tick_statuses(state, enemy)
     assert enemy.hp == before - STATUSES["bleed"].damage, "it bled twice"
 
 
@@ -78,13 +78,13 @@ def test_chill_slows_the_victim_and_then_lets_it_go():
     enemy = _enemy(state)
     normal = enemy.speed
 
-    _inflict(state, enemy, ("chill",))
+    inflict(state, enemy, ("chill",))
 
     assert enemy.speed < normal
     assert enemy.speed == normal * STATUSES["chill"].speed_factor
 
     for _ in range(STATUSES["chill"].turns):
-        _tick_statuses(state, enemy)
+        tick_statuses(state, enemy)
 
     assert enemy.speed == normal, "the chill never let go"
 
@@ -97,8 +97,8 @@ def test_a_monster_that_bleeds_to_death_is_still_a_kill():
     enemy.stats.hp = 1
     kills = state.kills
 
-    _inflict(state, enemy, ("bleed",))
-    _tick_statuses(state, enemy)
+    inflict(state, enemy, ("bleed",))
+    tick_statuses(state, enemy)
 
     assert not enemy.alive
     assert state.kills == kills + 1
@@ -109,8 +109,8 @@ def test_the_player_can_bleed_to_death():
     state = start_run(NOXX, seed=3)
     state.player.stats.hp = 1
 
-    _inflict(state, state.player, ("bleed",))
-    _tick_statuses(state, state.player)
+    inflict(state, state.player, ("bleed",))
+    tick_statuses(state, state.player)
 
     assert state.over
 

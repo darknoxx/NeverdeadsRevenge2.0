@@ -32,6 +32,16 @@ from neverdeads_revenge.game.battle import (
     Said,
     Struck,
     encounter_around,
+    open_fight,
+)
+from neverdeads_revenge.game.specials import (
+    ATRITAS,
+    BETWEEN_BLOWS,
+    LEFT_HAND,
+    OPEN_VEIN,
+    SPECIALS,
+    VOID,
+    special_by_key,
 )
 from neverdeads_revenge.game.state import start_run
 from neverdeads_revenge.world.items import ITEMS, make_item
@@ -152,7 +162,7 @@ def test_defending_is_a_turn_the_fight_takes():
     assert any(isinstance(event, Guarded) for event in events)
 
 
-def test_the_dark_answers_once_and_everything_takes_it():
+def test_the_void_answers_once_and_everything_takes_it():
     """The hero's ask, in the arena: one blow on everybody, one per floor.
 
     The price is the dungeon's own -- ``ultimate_available`` is spent here the
@@ -164,13 +174,14 @@ def test_the_dark_answers_once_and_everything_takes_it():
     battle = Battle(state, enemies)
     battle.begin()
 
-    events = battle.choose(SPECIAL)
+    events = battle.choose(SPECIAL, special=VOID)
 
     hit = [blow for blow in strikes(events) if blow.actor is state.player]
     assert [blow.target for blow in hit] == enemies, "the ask missed somebody"
     assert not state.ultimate_available, "the dark was not spent"
+    assert {blow.flair for blow in hit} == {VOID}, "the blows wear no word"
 
-    again = battle.choose(SPECIAL)
+    again = battle.choose(SPECIAL, special=VOID)
     assert not strikes(again), "the dark answered twice"
     assert any("does not ask twice" in line for line in lines(again))
 
@@ -190,7 +201,7 @@ def test_a_refused_verb_costs_nothing():
     battle.begin()
     before = len(battle.state.log)
 
-    events = battle.choose(SPECIAL)
+    events = battle.choose(SPECIAL, special=LEFT_HAND)
 
     assert any("Not yet" in line for line in lines(events))
     assert not strikes(events), "the floor moved after a refusal"
@@ -397,3 +408,105 @@ def test_a_fight_takes_whoever_is_standing_with_it():
     assert len(group) <= STAGE, "the fight is bigger than the stage holds"
     if far is not None:
         assert far not in group, "a monster across the floor joined in"
+
+
+# -- the five tricks (M3) -----------------------------------------------------
+def levelled(level: int, count: int = 2, ultimate_level: int = 7):
+    """A fight at a chosen level, with the dark answering where it really does.
+
+    The void's gate is the dungeon's own -- the level the dark answers at -- so a
+    test about *levels* has to leave that gate where the game leaves it, or every
+    level would come with the void attached.
+    """
+    state = start_run(HEROES["noxx"], 1, ultimate_level=ultimate_level)
+    state.level = level
+    return Battle(state, take(state, count))
+
+
+def test_the_left_hand_is_a_stab_it_makes_sure_of():
+    """The dagger: a crit it does not have to roll for, and deeper than usual."""
+    battle = levelled(2)
+    enemy = battle.enemies[0]
+    enemy.stats.hp = 999
+
+    events = battle.choose(SPECIAL, enemy, special=LEFT_HAND)
+
+    blow = [one for one in strikes(events) if one.actor is battle.hero][0]
+    assert blow.outcome.crit, "the left hand did not make sure of it"
+    assert blow.flair == LEFT_HAND
+    assert not battle.special_available(special_by_key(LEFT_HAND)), (
+        "the knife was spent and can be spent again"
+    )
+
+
+def test_the_shadow_strikes_twice():
+    """ATRITAS goes on its own, and lands two blows while the hero stands still."""
+    battle = levelled(4)
+    enemy = battle.enemies[0]
+    enemy.stats.hp = 999
+
+    events = battle.choose(SPECIAL, enemy, special=ATRITAS)
+
+    hit = [one for one in strikes(events) if one.flair == ATRITAS]
+    assert len(hit) == 2, f"the shadow struck {len(hit)} times"
+
+
+def test_the_open_vein_keeps_costing_him():
+    """A wound that will not close: the status is left, and a round makes it bite."""
+    battle = levelled(5)
+    enemy = battle.enemies[0]
+    enemy.stats.hp = 999
+
+    battle.choose(SPECIAL, enemy, special=OPEN_VEIN)
+    assert "bleed" in enemy.statuses, "the vein was opened and nothing ran"
+
+    hp = enemy.stats.hp
+    battle.choose(DEFEND)  # a round goes by: the wound does its work
+    assert enemy.stats.hp < hp, "the bleed never bit"
+
+
+def test_between_blows_leaves_them_hitting_nothing():
+    """He is not where they swing: this round, nothing finds him."""
+    battle = levelled(6, count=1)
+    battle.enemies[0].stats.damage = (5, 5)
+    battle.enemies[0].stats.accuracy = 99
+    battle.hero.stats.evasion = 0
+    # Behind the hero in the order, so the trick is spent before it swings: the
+    # round it covers is the one it was cast in.
+    battle.enemies[0].stats.speed = 0.1
+    hp = battle.hero.stats.hp
+
+    battle.choose(SPECIAL, battle.enemies[0], special=BETWEEN_BLOWS)
+    assert battle.hero.stats.hp == hp, "something found him anyway"
+
+
+def test_the_five_arrive_with_levels():
+    """The gates, in one place: what a run can do at each level."""
+    def names_at(level: int) -> list[str]:
+        battle = levelled(level)
+        return [
+            special.key for special in SPECIALS if battle.special_available(special)
+        ]
+
+    assert names_at(2) == [LEFT_HAND]
+    assert names_at(4) == [LEFT_HAND, ATRITAS]
+    assert names_at(5) == [LEFT_HAND, ATRITAS, OPEN_VEIN]
+    assert names_at(6) == [LEFT_HAND, ATRITAS, OPEN_VEIN, BETWEEN_BLOWS]
+    assert names_at(7) == [one.key for one in SPECIALS], "the void never arrived"
+
+
+def test_only_the_void_costs_the_floor():
+    """Four of them are the fight's to spend; the fifth is the floor's.
+
+    A new fight has the four back, because a trick learned is a trick to use --
+    and the void is still gone, because that is the ask the dungeon prices.
+    """
+    state = run(ultimate_level=7)
+    state.level = 7
+    first = Battle(state, take(state, 2))
+    first.choose(SPECIAL, first.enemies[0], special=LEFT_HAND)
+    first.choose(SPECIAL, first.enemies[0], special=VOID)
+
+    second = Battle(state, take(state, 2))
+    assert second.special_available(special_by_key(LEFT_HAND)), "the knife did not come back"
+    assert not second.special_available(special_by_key(VOID)), "the void came back"

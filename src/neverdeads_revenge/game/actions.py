@@ -70,6 +70,10 @@ __all__ = [
     "resolve_player_attack",
     "resolve_enemy_attack",
     "ultimate_refusal",
+    # The two the arena needs to run a special: what a wound leaves running, and
+    # the beat on which it runs. Both were private until a fight had to read them.
+    "inflict",
+    "tick_statuses",
 ]
 
 
@@ -193,7 +197,7 @@ def _the(name: str) -> str:
     return name if name.startswith("the ") else f"the {name}"
 
 
-def _tick_statuses(state: GameState, actor: Actor) -> None:
+def tick_statuses(state: GameState, actor: Actor) -> None:
     """Run whatever a blow left behind, at the start of the actor's own turn.
 
     Counted in the *victim's* turns, which is what makes a poison mean different
@@ -242,7 +246,7 @@ def _tick_statuses(state: GameState, actor: Actor) -> None:
             return
 
 
-def _inflict(
+def inflict(
     state: GameState,
     target: Actor,
     keys: tuple[str, ...],
@@ -831,7 +835,7 @@ def _spring_the_trail(state: GameState, actor: Actor) -> None:
         _on_death(state, actor)
         _remove_corpse(state, actor)
         return
-    _inflict(state, actor, ("bleed",))
+    inflict(state, actor, ("bleed",))
 
 
 def _through_stone(
@@ -897,7 +901,13 @@ def _bleed(state: GameState) -> None:
     state.say("You are bleeding.", LogKind.DAMAGE)
 
 
-def resolve_player_attack(state: GameState, target: Actor) -> AttackOutcome:
+def resolve_player_attack(
+    state: GameState,
+    target: Actor,
+    *,
+    force_crit: bool = False,
+    bonus: int = 0,
+) -> AttackOutcome:
     """The hero's blow, with everything the dark has loaded into it.
 
     Public because the arena resolves the same blow the dungeon does: a fight
@@ -910,6 +920,7 @@ def resolve_player_attack(state: GameState, target: Actor) -> AttackOutcome:
     # has to remember whether there has been one. The flag is cleared on every
     # descent, with the monsters it belonged to.
     first = not target.struck
+    bonus_flat = bonus
     # Three gifts load the blow itself. The charge and the debt are read here and
     # spent below, and only on a *landing* blow -- a swing that missed was not
     # the blow either of them was waiting for, which is the rule the patient
@@ -924,10 +935,12 @@ def resolve_player_attack(state: GameState, target: Actor) -> AttackOutcome:
         state.player,
         target,
         state.rng,
-        force_crit=first and state.has_passive("patient_knife"),
+        # The knife's own rule, and the arena's: a special asks for the crit it
+        # paid for, and both of them are the same crit.
+        force_crit=force_crit or (first and state.has_passive("patient_knife")),
         damage_scale=2.0 if cornered else 1.0,
         spread=state.damage_spread,
-        bonus=bonus,
+        bonus=bonus + bonus_flat,
     )
 
     if not outcome.hit:
@@ -968,11 +981,11 @@ def resolve_player_attack(state: GameState, target: Actor) -> AttackOutcome:
             opening += ("burn",)
         if first and state.has_gift("open_wound"):
             opening += ("bleed",)
-        _inflict(state, target, opening)
+        inflict(state, target, opening)
         if outcome.crit and state.bleed_on_crit:
             # BLEEDING EDGE. A lucky blow leaves a wound that keeps opening:
             # the bleed, and turns enough longer to matter.
-            _inflict(
+            inflict(
                 state,
                 target,
                 ("bleed",),
@@ -2224,7 +2237,7 @@ def resolve_enemy_attack(
 
     _player_takes_damage(state, attacker, outcome)
     if outcome.hit and not outcome.killed:
-        _inflict(state, player, attacker.inflicts)
+        inflict(state, player, attacker.inflicts)
         thorns = _thorns_of(player)
         if thorns:
             back = attacker.stats.reflect(thorns)
@@ -2255,7 +2268,7 @@ def resolve_enemy_attack(
     ):
         # HOARFROST. Whoever lands a blow on Yeti takes the cold home with
         # them: the chill the status table already knows, on a coin.
-        _inflict(state, attacker, ("chill",))
+        inflict(state, attacker, ("chill",))
         state.say(f"The cold comes off you onto the {attacker.name}.", LogKind.GOOD)
 
     if outcome.hit and state.has_passive("mirror"):
@@ -2402,10 +2415,10 @@ def advance_world(state: GameState) -> None:
         if actor.is_player:
             # The player's own statuses run on the player's own turn, like
             # everybody else's.
-            _tick_statuses(state, actor)
+            tick_statuses(state, actor)
             break
         if actor.alive:
-            _tick_statuses(state, actor)
+            tick_statuses(state, actor)
             if actor.alive and not state.over:
                 take_turn(state, actor)
 
