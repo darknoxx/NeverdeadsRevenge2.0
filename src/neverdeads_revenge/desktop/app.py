@@ -78,6 +78,7 @@ class DesktopApp(QMainWindow):
         seed: int | None = None,
         no_sound: bool = False,
         testrun: bool = False,
+        battle_scene: bool = False,
     ) -> None:
         super().__init__()
         self.setWindowTitle("Neverdead's Revenge")
@@ -131,6 +132,12 @@ class DesktopApp(QMainWindow):
         palette.setColor(QPalette.ColorRole.Window, QColor("#000000"))
         self.setPalette(palette)
         self.setMinimumSize(640, 400)
+
+        if battle_scene:
+            # M0: the stage, before there is anything to fight. A switch rather
+            # than a key in the game, because a key in the game is a key the
+            # game has to stop listening to first.
+            self.open_battle_scene()
 
     # -- the frame ----------------------------------------------------------
     def showEvent(self, event) -> None:  # noqa: N802 - Qt's spelling
@@ -424,6 +431,18 @@ class DesktopApp(QMainWindow):
         from .screens.menus import ChronicleScreen
 
         self.push(ChronicleScreen())
+
+    def open_battle_scene(self) -> None:
+        """M0: the battle stage as a picture, reached with ``--battle-scene``.
+
+        The stack is *replaced* rather than pushed onto. A battle is not a
+        dialog over the dungeon -- it is somewhere else, with the run standing
+        still underneath it -- and a dialog is exactly what this is not.
+        """
+        from .screens.battle import BattleScreen
+
+        self.screens = [BattleScreen()]
+        self.redraw()
 
     def open_delete_progress(self) -> None:
         """Ask for the word, then erase everything.

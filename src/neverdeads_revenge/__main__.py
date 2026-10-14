@@ -38,6 +38,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="unlock the chronicle and fill the purse, then play (a test save)",
     )
+    parser.add_argument(
+        "--battle-scene",
+        action="store_true",
+        help="open the battle stage straight away (a picture; M0 of the fights)",
+    )
     args = parser.parse_args(argv)
 
     if args.sound_log is not None:
@@ -66,7 +71,12 @@ def main(argv: list[str] | None = None) -> int:
     from .desktop.app import DesktopApp
 
     app = QApplication(sys.argv[:1])
-    window = DesktopApp(seed=args.seed, no_sound=args.no_sound, testrun=args.testrun)
+    window = DesktopApp(
+        seed=args.seed,
+        no_sound=args.no_sound,
+        testrun=args.testrun,
+        battle_scene=args.battle_scene,
+    )
     window.resize(1280, 800)
     window.show()
     return app.exec()

@@ -1737,3 +1737,87 @@ def test_the_tongue_paints_the_dead_even_under_the_coins(app):
     assert cell.style.bg is not None and cell.style.bg.name() == BLOOD_TINT.name(), (
         "the dead square is not painted under the loot"
     )
+
+
+# -- the battle stage (M0) ---------------------------------------------------
+def test_the_battle_stage_stands_its_figures_on_a_floor(font):
+    """M0 is a picture, and a picture of a fight has to have the fight in it.
+
+    The monsters are the bestiary's own, by name and colour, so the stage can be
+    read as *this* game: a ghoul is green up here for the same reason it is
+    green on the map. And the verbs are on it, all five, because a stage whose
+    menu is missing three of its words is a stage nobody trusts.
+    """
+    from neverdeads_revenge.desktop.buffer import PatternBuffer
+    from neverdeads_revenge.desktop.screens.battle import VERBS, BattleScreen
+
+    buffer = PatternBuffer(150, 50, font)
+    BattleScreen().draw(buffer, None)
+    text = "\n".join("".join(cell.char for cell in row) for row in buffer.cells)
+
+    for name in ("ghoul", "skeleton", "wraith", "Noxx"):
+        assert name in text, f"the stage lost {name}"
+    for _, label in VERBS:
+        assert label in text, f"the command menu lost {label}"
+
+
+def test_the_battle_floor_recedes(font):
+    """The floor is the one thing that has to *look* like a place.
+
+    Perspective here is two facts and no arithmetic worth hiding behind a
+    shader: the far row is narrower than the near one, and it is darker. Both
+    are asserted on the buffer, because both are what the player sees.
+    """
+    from neverdeads_revenge.desktop.buffer import PatternBuffer
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+
+    screen = BattleScreen()
+    buffer = PatternBuffer(150, 50, font)
+    screen.draw(buffer, None)
+    x, y, width, height = screen._areas(150, 50)["ground"]
+
+    # A column nobody is standing on: the hero and the monsters cast a shadow,
+    # and a shadow is darker than the floor it is cast on, which is the whole
+    # point of it -- but it is not what this test is asking about.
+    column = x + width // 5
+    far = buffer.cells[y][column]
+    near = buffer.cells[y + height - 1][column]
+    assert far.style.bg is not None and near.style.bg is not None, (
+        "a row of the floor is not floor at all"
+    )
+    assert near.style.bg.lightness() > far.style.bg.lightness(), (
+        "the floor does not fade with distance"
+    )
+    assert buffer.cells[y][x].style.bg is None, "the far row is as wide as the near one"
+    assert buffer.cells[y + height - 1][x].style.bg is not None, (
+        "the near row does not reach the edge of the field"
+    )
+
+
+def test_the_battle_stage_survives_any_window(font):
+    """A stage drawn into a window too small for it draws what fits, or nothing.
+
+    The buffer is sized from the glass, and the glass can be tiny: every menu in
+    this game is drawn to a size it did not choose, and the one that raises is
+    the one that took the whole game down with it.
+    """
+    from neverdeads_revenge.desktop.buffer import PatternBuffer
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+
+    for cols, rows in ((12, 6), (24, 10), (40, 12), (80, 24), (200, 60)):
+        BattleScreen().draw(PatternBuffer(cols, rows, font), None)
+
+
+def test_the_battle_scene_opens_and_leaves(qapp):
+    """``--battle-scene`` is the only way in for now, and escape the way out."""
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.desktop.app import DesktopApp
+
+    window = DesktopApp(seed=3, no_sound=True, battle_scene=True)
+    window.view.resize(1280, 800)
+    assert top(window) == "BattleScreen", "the switch did not open the stage"
+
+    press(window, Qt.Key.Key_Escape)
+    assert top(window) == "TitleScreen", "escape did not leave the stage"
+
