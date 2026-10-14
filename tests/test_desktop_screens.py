@@ -2061,20 +2061,6 @@ def test_the_arena_survives_any_window(app, font):
         drawn(screen, app, font, cols, rows)
 
 
-def test_the_battle_scene_opens_and_leaves(qapp):
-    """``--battle-scene`` is the only way in for now, and escape the way out."""
-    from PySide6.QtCore import Qt
-
-    from neverdeads_revenge.desktop.app import DesktopApp
-
-    window = DesktopApp(seed=3, no_sound=True, battle_scene=True)
-    window.view.resize(1280, 800)
-    assert top(window) == "BattleScreen", "the switch did not open the arena"
-
-    press(window, Qt.Key.Key_Escape)
-    assert top(window) == "TitleScreen", "escape did not leave the arena"
-
-
 # -- the floor hands a fight over (M2) ---------------------------------------
 def begin_run_in(app) -> None:
     """Two enters: the hero select, then the floor itself."""
@@ -2178,6 +2164,27 @@ def test_a_run_that_ends_in_the_arena_ends_where_it_always_did(app):
     assert top(app) == "GameOverScreen", "the run did not end the usual way"
 
 
+def test_the_battle_scene_opens_and_leaves(qapp):
+    """``--battle-scene`` is the only way in for now, and the way out is the one
+    every fight has: flee it, or win it. Escape does not walk out of a battle --
+    that is the whole point of a fight -- so the dev door leaving is a *verb*."""
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.desktop.app import DesktopApp
+
+    window = DesktopApp(seed=3, no_sound=True, battle_scene=True)
+    window.view.resize(1280, 800)
+    assert top(window) == "BattleScreen", "the switch did not open the arena"
+
+    screen = window.screens[-1]
+    press(window, Qt.Key.Key_F, "f")  # flee: the honest way out of a fight
+    play_it_out(window, screen)
+    assert screen.battle.escaped, "the hero could not get away at all"
+    press(window, Qt.Key.Key_Return)
+
+    assert top(window) == "TitleScreen", "the dev door would not let go"
+
+
 def test_a_trick_paints_its_own_colour_on_the_blow(app, font):
     """A blow wears the word of the trick that made it.
 
@@ -2201,3 +2208,52 @@ def test_a_trick_paints_its_own_colour_on_the_blow(app, font):
     screen.step(0.5, app)
 
     assert screen._hurts[id(target)][1] == FLAIR_COLOURS[LEFT_HAND]
+
+
+def test_escape_does_not_leave_a_fight(app):
+    """There is no way out of a fight but through it.
+
+    Fleeing is a verb with a price -- everything still standing gets a blow at
+    the hero's back -- and a key that walks out for nothing would make every
+    encounter in the dungeon optional. Escape closes the five, and says so in
+    the log when there is nothing to close.
+    """
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+
+    battle = arena(count=1)
+    screen = BattleScreen(battle)
+    app.screens = [screen]
+
+    press(app, Qt.Key.Key_Escape)
+
+    assert top(app) == "BattleScreen", "escape walked out of the fight"
+    assert any("only way out" in line.text for line in screen.lines), (
+        "the fight said nothing about there being no way out"
+    )
+
+
+def test_the_five_can_be_walked_across_as_well_as_down(app):
+    """The list is two columns: up and down move inside one, left and right take
+    the choice into the other -- and a jump that would land outside the list
+    stays where it is rather than wrapping round to somewhere unrelated."""
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+
+    battle = arena(count=1)
+    screen = BattleScreen(battle)
+    app.screens = [screen]
+    screen.picking = True
+    rows = screen._list_rows(app)
+
+    press(app, Qt.Key.Key_Down)
+    assert screen.special == 1
+    press(app, Qt.Key.Key_Right)
+    assert screen.special == 1 + rows, "the right arrow did not cross a column"
+    press(app, Qt.Key.Key_Left)
+    assert screen.special == 1, "the left arrow did not come back"
+    screen.special = 0
+    press(app, Qt.Key.Key_Left)
+    assert screen.special == 0, "the choice wandered out of the list"

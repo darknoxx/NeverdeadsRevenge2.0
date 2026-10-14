@@ -46,6 +46,8 @@ from ...game.battle import (
     Said,
     Struck,
 )
+from ...game.specials import SPECIALS, Special
+from ...game.state import LogKind
 from ..buffer import PatternBuffer
 from ..chrome import ASH, BLOOD, BONE, box, rule
 from ..font import BitmapFont
@@ -520,7 +522,14 @@ class BattleScreen(Screen):
 
     def key(self, name: str, event, app) -> bool:
         if name == "escape":
-            app.leave_battle()
+            # There is no way out of a fight but through it. Fleeing is a *verb*
+            # with a price -- everything still standing gets a blow at the hero's
+            # back -- and a key that walks out for nothing would make every
+            # encounter in the dungeon optional.
+            self.lines = [
+                *self.lines,
+                Said("The only way out of this is through it.", LogKind.PLAIN),
+            ][-LOG_LINES:]
             return True
         if self.battle.over:
             # The fight is decided, but the arena may still be playing the last
@@ -574,6 +583,16 @@ class BattleScreen(Screen):
             return
         self._choose(app)
 
+    def _list_rows(self, app) -> int:
+        """How many names fit in one column of the list, as it is drawn now.
+
+        Asked rather than assumed: the wall the list is drawn on is sized from
+        the window, and a jump that used the wrong number would land in the
+        middle of the other column.
+        """
+        cols, rows = self._dims(app)
+        return max(1, self._areas(cols, rows)["commands"][3] - 4)
+
     def _pick_special(self, name: str, app) -> bool:
         """The five, being looked at: pick one, or come back."""
         specials = self.battle.specials()
@@ -581,11 +600,21 @@ class BattleScreen(Screen):
         if name == "escape":
             self.picking = False
             return True
+        rows = self._list_rows(app)
         if name in ("up", "w"):
             self.special = (self.special - 1) % len(specials)
             return True
         if name in ("down", "s"):
             self.special = (self.special + 1) % len(specials)
+            return True
+        if name in ("left", "h", "right", "l"):
+            # The list is two columns, so across is a whole column away -- and it
+            # stays where it is rather than wrapping, because a jump that lands
+            # somewhere unrelated is a jump that loses the player's place.
+            jump = -rows if name in ("left", "h") else rows
+            moved = self.special + jump
+            if 0 <= moved < len(specials):
+                self.special = moved
             return True
         if index is None and name in ("enter", "return", "space"):
             index = self.special
