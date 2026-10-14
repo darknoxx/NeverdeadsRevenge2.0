@@ -23,7 +23,15 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-from PySide6.QtGui import QColor, QFontMetrics, QImage, QPainter, QTransform
+from PySide6.QtCore import QPointF, QRectF, Qt
+from PySide6.QtGui import (
+    QColor,
+    QFontMetrics,
+    QImage,
+    QPainter,
+    QRadialGradient,
+    QTransform,
+)
 
 from ...game.battle import (
     ATTACK,
@@ -104,7 +112,7 @@ BEAT = 0.42
 POPUP_LIFE = 0.85
 #: The idle breath: how fast a figure rises and falls, and how far. Small on
 #: purpose -- two pixels is the difference between a fight and a photograph.
-BOB_SPEED = 2.3
+BOB_SPEED = 3.4
 BOB_HEIGHT = 2
 #: How long a strike takes, and when inside it the blow lands. A blink: out
 #: where the striker stands, back in beside what it is hitting, and gone again
@@ -174,6 +182,7 @@ class Staged:
         "cells",
         "chosen",
         "sprite",
+        "phase",
     )
 
     def __init__(
@@ -187,8 +196,12 @@ class Staged:
         cells: int,
         chosen: bool = False,
         sprite=None,
+        phase: float = 0.0,
     ) -> None:
         self.actor = actor
+        #: Where this figure is in its own breath. Different for every figure, or
+        #: a row of them would rise and fall like a wave.
+        self.phase = phase
         #: The painted sprite for this actor, if the sheets have one. ``None``
         #: means draw the letter, which is a fallback and not a failure.
         self.sprite = sprite
@@ -246,7 +259,6 @@ class BattleScreen(Screen):
         buffer.clear()
         areas = self._areas(buffer.cols, buffer.rows)
         self._draw_ground(buffer, areas["ground"])
-        self._draw_shadows(buffer, areas["ground"])
         self._draw_health(buffer, areas["ground"])
         self._draw_log(buffer, areas["log"])
         self._draw_plate(buffer, *areas["plate"])
@@ -266,11 +278,31 @@ class BattleScreen(Screen):
         painter = QPainter(image)
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, False)
         self._paste_walls(painter, field)
-        strikers = [figure for figure in figures if id(figure.actor) in self._strikes]
+        # The shadows first: they live on the floor, so a figure standing on one
+        # stands on it rather than carrying it around.
         for figure in figures:
-            if figure not in strikers:
+            self._paste_shadow(painter, figure, app.font.cell_w, app.font.cell_h)
+        # Then the ones in the wrong order -- a monster that came for the hero
+        # lands *behind* him and is covered by him, which is where it came from;
+        # the hero lands over whatever he is hitting. Everybody else is standing
+        # still and goes in the middle.
+        hero = self.battle.hero
+        behind = [
+            figure
+            for figure in figures
+            if id(figure.actor) in self._strikes and figure.actor is not hero
+        ]
+        front = [
+            figure
+            for figure in figures
+            if id(figure.actor) in self._strikes and figure.actor is hero
+        ]
+        for figure in behind:
+            self._paste_figure(painter, figure, app, figures)
+        for figure in figures:
+            if figure not in behind and figure not in front:
                 self._paste_figure(painter, figure, app, figures)
-        for figure in strikers:
+        for figure in front:
             self._paste_figure(painter, figure, app, figures)
         for figure in figures:
             if figure.chosen:
@@ -294,8 +326,11 @@ class BattleScreen(Screen):
         # floor: a row of monsters rising together would look like a wave.
         raise_px = 0
         if figure.actor.stats.alive:
+            # Off its own phase, taken from its place in the row: side by side,
+            # rising and falling together, they would read as one wave -- and the
+            # hero, who stands in front of all of them, has a phase of his own.
             raise_px = round(
-                math.sin(self._clock * BOB_SPEED + figure.cx / 40.0) * BOB_HEIGHT
+                math.sin(self._clock * BOB_SPEED + figure.phase) * BOB_HEIGHT
             )
         home = figure.row * cell_h - THICKNESS
         cx, baseline, opacity = figure.cx, home - raise_px, 1.0
@@ -305,6 +340,31 @@ class BattleScreen(Screen):
         else:
             cx += self._jolt(figure)
         self._paste_model(painter, figure, cx, baseline, opacity, app.font)
+
+    def _paste_shadow(
+        self, painter: QPainter, figure: Staged, cell_w: int, cell_h: int
+    ) -> None:
+        """A pool of ground under a figure, soft in *pixels*.
+
+        Drawn rather than written into the grid, because a shadow is the one
+        thing here that has to have soft edges: a rectangle of black cells under
+        a painted sprite reads as a hole in the floor, and the grid's whole charm
+        is that every cell of it has hard ones. The gradient goes to nothing at
+        the rim, so the pool fades into the floor instead of stopping.
+        """
+        width = max(20.0, float(figure.cells * cell_w) * 1.05)
+        height = max(6.0, width * 0.24)
+        centre_x = float(figure.cx)
+        centre_y = float(figure.row * cell_h) - 1.0
+        gradient = QRadialGradient(QPointF(centre_x, centre_y), width / 2.0)
+        gradient.setColorAt(0.0, QColor(0, 0, 0, 120))
+        gradient.setColorAt(0.55, QColor(0, 0, 0, 74))
+        gradient.setColorAt(1.0, QColor(0, 0, 0, 0))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(gradient)
+        painter.drawEllipse(
+            QRectF(centre_x - width / 2.0, centre_y - height / 2.0, width, height)
+        )
 
     def _strike_pose(
         self,
@@ -344,8 +404,8 @@ class BattleScreen(Screen):
             return near_x, near_y, 1.0 - (progress - 0.70) / 0.14
         return figure.cx, home, (progress - 0.84) / 0.16  # back where it belongs
 
-    @staticmethod
     def _beside_target(
+        self,
         figure: Staged,
         target_id: int,
         figures,
@@ -353,15 +413,19 @@ class BattleScreen(Screen):
         cell_w: int,
         cell_h: int,
     ) -> tuple[int, int]:
-        """Where a striker appears: in front of, and a little to the left of, the
-        one it is hitting.
+        """Where a striker appears, relative to the one it is hitting.
 
-        Left far enough that the *edge* of the striker stands beside the middle
-        of the one being hit, and low enough to be standing in front of it -- so
-        the blow reads as two figures and not as one figure wearing another.
+        The hero comes at the monsters from the front, so he lands low and to the
+        left of his target -- standing *in front of* it, both of them visible.
+        A monster comes for the hero from beyond him, so it lands high and to the
+        right: behind him, and under him, because the floor runs away towards the
+        top of the room and the hero is standing nearer to the player than it is.
         """
+        behind = figure.actor is not self.battle.hero
         for other in figures:
             if id(other.actor) == target_id:
+                if behind:
+                    return other.cx + cell_w * 3, other.row * cell_h - cell_h
                 return other.cx - cell_w * 3, other.row * cell_h + cell_h * 4 // 5
         return figure.cx, home
 
@@ -728,6 +792,7 @@ class BattleScreen(Screen):
                     cells=self._span(enemy.glyph, size, cell_w, art),
                     chosen=enemy is marked,
                     sprite=art,
+                    phase=index * 1.9,
                 )
             )
         hero = self.battle.hero
@@ -743,6 +808,9 @@ class BattleScreen(Screen):
                 row=y0 + height - 1,
                 cells=self._span(hero.glyph, size, cell_w, art),
                 sprite=art,
+                # In front of the row and out of step with it: the hero breathes
+                # on his own, as somebody standing still in front of a crowd does.
+                phase=len(monsters) * 1.9 + 0.9,
             )
         )
         return staged
@@ -994,24 +1062,6 @@ class BattleScreen(Screen):
             int(far.blue() + (near.blue() - far.blue()) * depth),
         )
 
-    def _draw_shadows(
-        self, buffer: PatternBuffer, area: tuple[int, int, int, int]
-    ) -> None:
-        """In front of each figure: the tiles it stands on, gone nearly black.
-
-        A row *below* the feet rather than under them, because a figure stands
-        behind its own shadow, and the ends fade instead of stopping so the pool
-        reads as a shape rather than as a stripe.
-        """
-        font = buffer.font
-        for figure in self._figures(buffer.cols, buffer.rows, font):
-            span = figure.cells + 2
-            left = round(figure.cx / font.cell_w) - span // 2
-            for i in range(span):
-                edge = i in (0, span - 1)
-                tile = SHADOW_EDGE if edge else SHADOW
-                buffer.put(left + i, figure.row, " ", Style(bg=tile))
-
     def _draw_health(
         self, buffer: PatternBuffer, area: tuple[int, int, int, int]
     ) -> None:
@@ -1031,7 +1081,9 @@ class BattleScreen(Screen):
             shown = self._shown.get(id(figure.actor), figure.actor.stats.hp)
             cells = max(8, min(14, figure.cells * 2))
             left = round(figure.cx / font.cell_w) - cells // 2
-            self._bar(buffer, left, figure.row + 1, cells, shown / total, thin=True)
+            # In the figure's own row, which is the one its feet are at the top
+            # of: a bar a row lower was a bar floating about on its own.
+            self._bar(buffer, left, figure.row, cells, shown / total, thin=True)
 
     def _draw_log(self, buffer: PatternBuffer, area: tuple[int, int, int, int]) -> None:
         """The lines the fight speaks in, newest last, in the dungeon's colours.
