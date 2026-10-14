@@ -510,3 +510,25 @@ def test_only_the_void_costs_the_floor():
     second = Battle(state, take(state, 2))
     assert second.special_available(special_by_key(LEFT_HAND)), "the knife did not come back"
     assert not second.special_available(special_by_key(VOID)), "the void came back"
+
+
+def test_a_testrun_opens_the_whole_song():
+    """`--testrun` makes the dark speak at level one, and a dark that talks does
+    not keep the hero's own tricks secret: every one of the five is in hand.
+
+    It is the same gate the void has always had, used for what it means -- and in
+    an ordinary run the cap changes nothing, because the four arrive at two, four,
+    five and six and the void at seven.
+    """
+    testing = levelled(1, ultimate_level=1)
+
+    assert all(
+        testing.special_available(special) for special in SPECIALS
+    ), "a testrun left something locked"
+
+    ordinary = levelled(1, ultimate_level=7)
+    assert [
+        special.key
+        for special in SPECIALS
+        if ordinary.special_available(special)
+    ] == [], "an ordinary run at level one started with tricks"

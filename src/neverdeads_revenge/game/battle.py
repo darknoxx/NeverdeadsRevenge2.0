@@ -245,12 +245,20 @@ class Battle:
         The void is the dungeon's ask and is priced by the dungeon: the level the
         dark answers at, and the once-a-floor flag the floor refills. The other
         four are the fight's, and are spent one by one inside it.
+
+        Their level is capped by the level the dark answers at, which is the one
+        place a test can lower: `--testrun` runs make the dark speak at level one,
+        and a run the dark talks through does not keep four of the hero's tricks
+        secret. In an ordinary run nothing changes -- the void arrives at seven
+        and the other four are all in hand by six -- so the cap only ever opens
+        what was going to open anyway, earlier.
         """
         if special.uses_floor:
             return ultimate_refusal(self.state) is None
         if special.key in self._used:
             return False
-        return self.state.level >= special.level
+        gate = min(special.level, self.state.ultimate_level)
+        return self.state.level >= gate
 
     def living_enemies(self) -> list[Actor]:
         """Everyone still standing, in the order they were met."""
