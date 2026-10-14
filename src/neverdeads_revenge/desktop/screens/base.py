@@ -41,3 +41,14 @@ class Screen:
         """The key went up. Only the hold screens care; everything else
         answers a press, never a release."""
         return False
+
+    def paste(self, image, app) -> None:
+        """Draw straight onto the rendered frame, in pixels.
+
+        The exception, not the rule: everything else writes characters into the
+        grid, and the grid is the look. This exists for the two cases that need
+        a size the grid cannot give them -- the log and the sidebar, which are a
+        smaller face of the same font, and the battle's monsters, which are the
+        alphabet of the dungeon drawn big enough to fight.
+        """
+        return None

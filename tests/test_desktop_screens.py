@@ -1745,8 +1745,9 @@ def test_the_battle_stage_stands_its_figures_on_a_floor(font):
 
     The monsters are the bestiary's own, by name and colour, so the stage can be
     read as *this* game: a ghoul is green up here for the same reason it is
-    green on the map. And the verbs are on it, all five, because a stage whose
-    menu is missing three of its words is a stage nobody trusts.
+    green on the map. The names are labels under the letters -- ``s`` is a
+    skeleton and not an ``s`` -- and the verbs are all five, because a stage
+    whose menu is missing three of its words is a stage nobody trusts.
     """
     from neverdeads_revenge.desktop.buffer import PatternBuffer
     from neverdeads_revenge.desktop.screens.battle import VERBS, BattleScreen
@@ -1759,6 +1760,82 @@ def test_the_battle_stage_stands_its_figures_on_a_floor(font):
         assert name in text, f"the stage lost {name}"
     for _, label in VERBS:
         assert label in text, f"the command menu lost {label}"
+
+
+def _is_colour(colour, rgb, tolerance: int = 60) -> bool:
+    """Whether a pixel is (roughly) the colour the dungeon draws something in."""
+    return (
+        abs(colour.red() - rgb[0]) <= tolerance
+        and abs(colour.green() - rgb[1]) <= tolerance
+        and abs(colour.blue() - rgb[2]) <= tolerance
+        and colour.alpha() > 0
+    )
+
+
+def test_the_models_are_the_letters(app, font):
+    """The models are the alphabet, drawn big: a ghoul is a green ``g``.
+
+    The whole look of the game is one fixed cell, and a letter the size of a
+    monster does not fit in one -- so the monsters are the single thing pasted
+    onto the frame, which means this test has to look at the *frame*: a body of
+    green pixels where the ghoul stands, taller than the cell it stands on.
+    """
+    from neverdeads_revenge.desktop.buffer import PatternBuffer
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.desktop.theme import NAMED
+
+    screen = BattleScreen()
+    buffer = PatternBuffer(96, 27, font)
+    screen.draw(buffer, None)
+    image = buffer.render()
+    screen.paste(image, app)
+
+    green = NAMED["green"]
+    rows = [
+        y
+        for y in range(image.height())
+        if any(_is_colour(image.pixelColor(x, y), green) for x in range(image.width()))
+    ]
+    assert rows, "no ghoul-green letter anywhere on the stage"
+    ink = sum(
+        1
+        for y in rows
+        for x in range(image.width())
+        if _is_colour(image.pixelColor(x, y), green)
+    )
+    assert ink > 200, f"the ghoul is only {ink} pixels of letter"
+    assert rows[-1] - rows[0] > font.cell_h, (
+        "the ghoul's letter is no taller than a cell, so it was never drawn big"
+    )
+
+
+def test_the_arena_is_walled_in_the_dungeons_own_glyph(font):
+    """The room is ``#``, the same wall the map draws, and it converges.
+
+    A wall that went its own way would be a second opinion about where the room
+    goes: the sides are placed from the floor's own taper, cell for cell, so the
+    far end of the room is narrower than the near end. That is the assertion --
+    not "there are hashes on the glass".
+    """
+    from neverdeads_revenge.desktop.buffer import PatternBuffer
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+
+    screen = BattleScreen()
+    buffer = PatternBuffer(96, 27, font)
+    screen.draw(buffer, None)
+    x, y, width, height = screen._areas(96, 27)["ground"]
+
+    def left_wall(row: int) -> int | None:
+        for cell in range(width):
+            if buffer.cells[row][x + cell].char == "#":
+                return cell
+        return None
+
+    far, middle = left_wall(y), left_wall(y + height // 2)
+    assert far is not None and middle is not None, "there is no wall on the left"
+    assert far > middle, "the side walls do not converge with the floor"
+    # and the back wall is above the floor's far edge
+    assert buffer.cells[y - 1][x + width // 2].char == "#", "there is no back wall"
 
 
 def test_the_battle_floor_recedes(font):
@@ -1794,18 +1871,22 @@ def test_the_battle_floor_recedes(font):
     )
 
 
-def test_the_battle_stage_survives_any_window(font):
+def test_the_battle_stage_survives_any_window(app, font):
     """A stage drawn into a window too small for it draws what fits, or nothing.
 
     The buffer is sized from the glass, and the glass can be tiny: every menu in
     this game is drawn to a size it did not choose, and the one that raises is
-    the one that took the whole game down with it.
+    the one that took the whole game down with it. The letters are pasted in
+    pixels, outside the grid's bounds checking, so they are drawn here too.
     """
     from neverdeads_revenge.desktop.buffer import PatternBuffer
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
 
     for cols, rows in ((12, 6), (24, 10), (40, 12), (80, 24), (200, 60)):
-        BattleScreen().draw(PatternBuffer(cols, rows, font), None)
+        screen = BattleScreen()
+        buffer = PatternBuffer(cols, rows, font)
+        screen.draw(buffer, None)
+        screen.paste(buffer.render(), app)
 
 
 def test_the_battle_scene_opens_and_leaves(qapp):

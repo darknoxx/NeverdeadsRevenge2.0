@@ -228,6 +228,11 @@ class DesktopApp(QMainWindow):
                 self.font.cell_h,
                 self.font_small,
             )
+        # A screen may paste straight onto the frame once the grid is drawn: the
+        # log and the sidebar do it because they are a smaller face of the same
+        # font, and the battle does it because a monster is a letter too big for
+        # one cell. Drawn before the pixels, so a particle still lands on top.
+        self.screens[-1].paste(image, self)
         self.effects.draw(image)
         self.view.set_frame(image)
 

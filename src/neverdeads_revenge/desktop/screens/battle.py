@@ -8,31 +8,39 @@ one that can be answered cheaply -- *does a stage look like this game?* -- and
 everything expensive (a battle state, a timeline, balance) is deliberately
 absent until that is settled.
 
-The ground is built out of the one thing a cell grid is good at. A cell is
-10x20 pixels, so two cells side by side are a square: a floor tile. Two rows of
-those, staggered half a tile from each other, are a checkerboard -- and a
-checkerboard whose rows narrow and darken as they go up *is* a floor in
-perspective, seen from above and behind the hero. The tiles are filled rather
-than dotted: a floor is a surface, and the first attempt at this drew it as
-`░` on black, which read as static rather than as ground.
+**The models are the letters.** The dungeon is an alphabet: a ghoul is a green
+``g`` on the map and a ``#`` is a wall, and the stage does not replace that, it
+*enlarges* it -- so a monster is the letter it always was, drawn in the game's
+own font at the biggest size the fight needs, in the colour the dungeon draws it
+in. A letter cannot be drawn large inside the character grid, which is one fixed
+cell, so the letters are the one thing pasted straight onto the frame in pixels
+(see :meth:`BattleScreen.paste`); every cell that matters -- the floor, the
+walls, the shadows, the panels -- is still drawn in the grid, where the rest of
+the game draws.
 
-Figures are silhouettes: a head, a body, a base, in the colour the dungeon
-already draws them in (a ghoul is green there, so it is green here), sized by
-how far away they stand. Their names sit underneath in their own colour, and
-the one the player has chosen wears the blade the menus already use for the
-chosen line.
+Each letter also carries a dark copy of itself a few pixels lower. That is the
+whole of the depth trick and it is enough of one: the letter reads as a slab
+standing on the floor with thickness, rather than as a sticker on the glass.
+
+The ground is the same bargain. A cell is 10x20 pixels, so two cells side by
+side are a square: a floor tile. Two rows of those, staggered half a tile, are
+a checkerboard, and a checkerboard whose rows narrow and darken as they go up is
+a floor in perspective. Its edges are walls -- the dungeon's own ``#``, in the
+dungeon's own dim greys -- so the floor is a room rather than a shape, and the
+side walls follow the same taper, which is what makes the room go somewhere.
 """
 
 from __future__ import annotations
 
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QFontMetrics, QPainter
 
 from ..buffer import PatternBuffer
 from ..chrome import ASH, BLOOD, BONE, box, menu
+from ..font import BitmapFont
 from ..theme import Style, parse_style
 from .base import Screen
 
-__all__ = ["BattleScreen", "Staged"]
+__all__ = ["BattleScreen", "Staged", "VERBS"]
 
 #: The floor's two tile tones at the hero's feet, and the same two at the
 #: horizon. Distance is shade here, not size: the far rows fade into the dark
@@ -44,61 +52,19 @@ FLOOR_FAR = QColor("#16161c")
 FLOOR_FAR_ALT = QColor("#101014")
 #: Where something is standing: the tiles under it go nearly black.
 SHADOW = QColor("#08080a")
-#: The floor's own edge, and the dark above it.
-EDGE = "grey30"
+#: The wall behind and beside the floor. The dungeon draws a remembered wall in
+#: grey19 and a seen one in grey37; the arena is lit by whatever the fight is,
+#: so it sits between the two and goes darker with the distance.
+WALL_NEAR = "grey30"
+WALL_FAR = "grey19"
+#: How thick a letter is: the dark copy sits this many pixels below the bright
+#: one, and the bright one is drawn over it.
+THICKNESS = 5
 
-
-class Staged:
-    """One figure on the stage, before there is anything to fight about.
-
-    A stand-in for an ``EnemyTemplate`` and a hero to be read into later: M0
-    needs a name, a colour, and how big somebody stands.
-    """
-
-    __slots__ = ("name", "colour", "width", "height", "legs")
-
-    def __init__(
-        self, name: str, colour: str, width: int, height: int, legs: bool = False
-    ) -> None:
-        self.name = name
-        self.colour = colour
-        self.width = width
-        self.height = height
-        #: A pair of legs rather than a base. Only the hero has them: a monster
-        #: is a thing that stands, a person is a thing that walks.
-        self.legs = legs
-
-
-def _stage_figures(field: int) -> list[Staged]:
-    """The three the picture is drawn with, straight out of the bestiary.
-
-    Real monsters by key, so the names and the colours are the game's and not a
-    mock-up's -- a ghoul is green here for the same reason it is green on the
-    map. They differ in size because depth is the only size cue a flat grid has,
-    and they grow with the field: a monster that keeps its five cells on a wide
-    glass is a monster standing in a cathedral.
-    """
-    from neverdeads_revenge.game.actors import ENEMIES
-
-    big = field >= 110
-    wanted = (
-        ("ghoul", 6 if big else 5, 4 if big else 3),
-        ("bone", 6 if big else 5, 4 if big else 3),
-        ("wraith", 5 if big else 4, 4 if big else 3),
-    )
-    figures: list[Staged] = []
-    for key, cells, height in wanted:
-        template = ENEMIES.get(key)
-        figures.append(
-            Staged(
-                name=template.name if template else key,
-                colour=template.color if template else "white",
-                width=cells,
-                height=height,
-            )
-        )
-    return figures
-
+#: How big each letter stands, in font pixels, by how far away it is. The hero
+#: is nearest and largest; the monsters scale with their depth.
+SIZES = (62, 52, 46)
+HERO_SIZE = 88
 
 #: The verbs a fight will have. Nothing answers them yet.
 VERBS = (
@@ -108,6 +74,77 @@ VERBS = (
     ("d", "DEFEND"),
     ("f", "FLEE"),
 )
+
+_LETTERS: dict[int, BitmapFont] = {}
+
+
+def letter_font(size: int) -> BitmapFont:
+    """The font a letter is drawn in, measured once per size.
+
+    A frame is drawn thirty times a second and a font is four faces plus their
+    metrics, so the sizes are kept: there are four of them, and they are the
+    same four for the whole game.
+    """
+    font = _LETTERS.get(size)
+    if font is None:
+        font = BitmapFont(pixel_size=size)
+        _LETTERS[size] = font
+    return font
+
+
+class Staged:
+    """One figure on the stage: who it is, and where it stands.
+
+    The letters are drawn in pixels, so a figure is placed in pixels too -- a
+    centre and a baseline -- and the *shadow* is drawn in cells underneath it,
+    because that is where the floor is. :func:`BattleScreen._stage` computes
+    both from the one layout, so they cannot disagree.
+    """
+
+    __slots__ = ("name", "glyph", "colour", "size", "cx", "foot", "cells", "chosen")
+
+    def __init__(
+        self,
+        name: str,
+        glyph: str,
+        colour: str,
+        size: int,
+        cx: int,
+        foot: int,
+        cells: int,
+        chosen: bool = False,
+    ) -> None:
+        self.name = name
+        self.glyph = glyph
+        self.colour = colour
+        self.size = size
+        #: Where the letter stands: the centre of it, in pixels.
+        self.cx = cx
+        #: The cell row it stands on. Its baseline is the bottom of that row, so
+        #: the shadow in the grid and the letter in the pixels line up.
+        self.foot = foot
+        self.cells = cells
+        self.chosen = chosen
+
+
+def _monsters() -> list[tuple[str, str, str]]:
+    """Three out of the bestiary, by key: ``(name, glyph, colour)``.
+
+    Real monsters, so the letters and their colours are the game's and not a
+    mock-up's: a ghoul is a green ``g`` here for the same reason it is a green
+    ``g`` on the map.
+    """
+    from neverdeads_revenge.game.actors import ENEMIES
+
+    keys = ("ghoul", "bone", "wraith")
+    out = []
+    for key in keys:
+        template = ENEMIES.get(key)
+        if template is None:
+            out.append((key, key[0], "white"))
+        else:
+            out.append((template.name, template.glyph, template.color))
+    return out
 
 
 class BattleScreen(Screen):
@@ -121,9 +158,38 @@ class BattleScreen(Screen):
         buffer.clear()
         areas = self._areas(buffer.cols, buffer.rows)
         self._draw_ground(buffer, *areas["ground"])
-        self._draw_figures(buffer, *areas["ground"])
+        self._draw_shadows(buffer, *areas["ground"])
+        self._draw_names(buffer, *areas["ground"])
         self._draw_plate(buffer, *areas["plate"])
         self._draw_commands(buffer, *areas["commands"])
+
+    def paste(self, image, app) -> None:
+        """The models: the letters, big, over the floor the grid drew.
+
+        Drawn here rather than in the grid because a letter the size of a
+        monster does not fit in a cell -- the whole look of the game is one
+        fixed cell, and this is the one place that has to leave it.
+        """
+        buffer = app._buffer
+        if buffer is None:
+            return
+        staged = self._stage(buffer.cols, buffer.rows, app.font.cell_w, app.font.cell_h)
+        painter = QPainter(image)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, False)
+        for figure in staged:
+            font = letter_font(figure.size)
+            painter.setFont(font.bold)
+            metrics = QFontMetrics(font.bold)
+            left = figure.cx - metrics.horizontalAdvance(figure.glyph) // 2
+            baseline = (figure.foot + 1) * app.font.cell_h - THICKNESS
+            ink = parse_style(figure.colour).fg
+            # The slab: the same letter, dark, sitting a few pixels lower. The
+            # bright one is drawn over it, so what shows is the thickness.
+            painter.setPen(ink.darker(320))
+            painter.drawText(left, baseline + THICKNESS, figure.glyph)
+            painter.setPen(ink)
+            painter.drawText(left, baseline, figure.glyph)
+        painter.end()
 
     def key(self, name: str, event, app) -> bool:
         if name == "escape":
@@ -153,6 +219,66 @@ class BattleScreen(Screen):
             "commands": (max(0, cols - margin - panel_w), panel_y, panel_w, panel_h),
         }
 
+    def _stage(
+        self, cols: int, rows: int, cell_w: int, cell_h: int
+    ) -> list[Staged]:
+        """Who stands where: the monsters at three depths, the hero in front.
+
+        One layout for the letters and the shadows under them, so a figure
+        cannot be drawn in one place and stand in another.
+        """
+        x0, y0, width, height = self._areas(cols, rows)["ground"]
+        centre = x0 + width // 2
+        monsters = _monsters()
+        # Cell positions, far to near: the left one hangs back, the right one is
+        # the closest, which is what makes a row of three read as a row.
+        places = (
+            (centre - max(8, width // 4), y0 + max(2, height // 3)),
+            (centre - max(2, width // 12), y0 + max(1, height // 5)),
+            (centre + max(8, width // 4), y0 + max(2, height // 2)),
+        )
+        staged: list[Staged] = []
+        for index, ((name, glyph, colour), (cx_cell, foot)) in enumerate(
+            zip(monsters, places)
+        ):
+            size = SIZES[index]
+            staged.append(
+                Staged(
+                    name=name,
+                    glyph=glyph,
+                    colour=colour,
+                    size=size,
+                    cx=(cx_cell + 1) * cell_w,
+                    foot=foot,
+                    cells=self._letter_cells(glyph, size, cell_w),
+                    chosen=index == 0,
+                )
+            )
+
+        from neverdeads_revenge.game.actors import NOXX
+
+        size = HERO_SIZE
+        glyph = NOXX.glyph
+        staged.append(
+            Staged(
+                name=NOXX.name,
+                glyph=glyph,
+                colour=NOXX.color,
+                size=size,
+                cx=((centre + 0) * cell_w),
+                foot=y0 + height - 1,
+                cells=self._letter_cells(glyph, size, cell_w),
+            )
+        )
+        return staged
+
+    @staticmethod
+    def _letter_cells(glyph: str, size: int, cell_w: int) -> int:
+        """How many cells wide the shadow under a letter has to be."""
+        font = letter_font(size)
+        advance = QFontMetrics(font.bold).horizontalAdvance(glyph)
+        return max(2, round(advance / cell_w))
+
     # -- the ground ---------------------------------------------------------
     def _draw_ground(
         self, buffer: PatternBuffer, x0: int, y0: int, width: int, height: int
@@ -176,7 +302,7 @@ class BattleScreen(Screen):
             for x in range(inset, width - inset):
                 alt = ((x + phase) // 2) % 2 == 0
                 buffer.put(x0 + x, y0 + i, " ", Style(bg=self._tile(depth, alt)))
-        self._draw_horizon(buffer, x0, y0, width, back_inset)
+        self._draw_walls(buffer, x0, y0, width, height, back_inset)
 
     @staticmethod
     def _tile(depth: float, alt: bool) -> QColor:
@@ -188,92 +314,81 @@ class BattleScreen(Screen):
             int(far.blue() + (near.blue() - far.blue()) * depth),
         )
 
-    def _draw_horizon(
-        self, buffer: PatternBuffer, x0: int, y0: int, width: int, back_inset: int
+    def _draw_walls(
+        self,
+        buffer: PatternBuffer,
+        x0: int,
+        y0: int,
+        width: int,
+        height: int,
+        back_inset: int,
     ) -> None:
-        """The far edge of the floor, and two shapes that end it.
+        """The arena: the dungeon's ``#``, as a back wall and two side walls.
 
-        The line runs along the *back edge of the floor* rather than the whole
-        glass: a horizon wider than the floor it ends is a horizon nobody
-        believes.
+        The sides follow the floor's own taper cell for cell, which is the whole
+        of the perspective -- a wall that converged its own way would be a
+        second opinion about where the room goes. Both fade with the distance
+        the way a remembered wall does: the near end of the room is ``grey30``,
+        the far end ``grey19``, and the far wall is what the floor recedes into.
         """
-        left = x0 + back_inset
-        span = width - back_inset * 2
-        if span < 6:
-            return
-        for x in range(left, left + span):
-            buffer.put(x, y0 - 1, "─", parse_style(EDGE))
-        # Two blocks of stone at the ends of it: enough to say the stage stands
-        # *in* the dungeon rather than floating in a void, and not enough to be
-        # a room that has to be drawn.
-        buffer.text(left, y0 - 1, "▓▓", parse_style(EDGE))
-        buffer.text(left + span - 2, y0 - 1, "▓▓", parse_style(EDGE))
+        near = parse_style(WALL_NEAR)
+        far = parse_style(WALL_FAR)
+        # -- the back wall: two courses of bricks above the floor's far edge.
+        # Solid rather than spaced: the side walls are solid, and a back wall of
+        # dashes reads as a fence across the top of the room.
+        for course in range(2 if width >= 30 else 1):
+            y = y0 - 1 - course
+            if y < 0:
+                break
+            shade = Style(fg=far.fg if course else near.fg)
+            for x in range(back_inset, width - back_inset):
+                buffer.put(x0 + x, y, "#", shade)
+        # -- the side walls: one cell out from the floor, converging with it
+        for i in range(height):
+            depth = i / max(1, height - 1)
+            inset = int(round((1.0 - depth) * back_inset))
+            left, right = inset - 1, width - inset
+            for x in (left, right):
+                if 0 <= x < width:
+                    buffer.put(x0 + x, y0 + i, "#", near if depth > 0.5 else far)
 
-    # -- the figures --------------------------------------------------------
-    def _draw_figures(
+    def _draw_shadows(
         self, buffer: PatternBuffer, x0: int, y0: int, width: int, height: int
     ) -> None:
-        if width < 24 or height < 8:
-            return
-        centre = x0 + width // 2
-        # The enemies stand in the far half, at three depths, so the row reads
-        # as a row standing *on* the floor rather than pasted across it.
-        places = (
-            (centre - max(8, width // 4), y0 + max(2, height // 4), 0),
-            (centre - max(2, width // 12), y0 + max(1, height // 5), 1),
-            (centre + max(8, width // 4), y0 + max(3, height // 3), 2),
-        )
-        for figure, (x, y, index) in zip(_stage_figures(width), places):
-            self._figure(buffer, x, y, figure, chosen=index == 0)
+        """Under each letter: the tiles it stands on, gone nearly black."""
+        font = buffer.font
+        for figure in self._stage(buffer.cols, buffer.rows, font.cell_w, font.cell_h):
+            left = round(figure.cx / font.cell_w) - 1 - figure.cells // 2
+            for i in range(figure.cells):
+                buffer.put(left + i, figure.foot, " ", Style(bg=SHADOW))
 
-        big = width >= 110
-        hero = Staged("Noxx", "#a855f7", 9 if big else 7, 7 if big else 5, legs=True)
-        self._figure(
-            buffer,
-            centre - hero.width // 2,
-            y0 + height - hero.height,
-            hero,
-            chosen=False,
-        )
-
-    def _figure(
-        self, buffer: PatternBuffer, x: int, y: int, figure: Staged, chosen: bool
+    def _draw_names(
+        self, buffer: PatternBuffer, x0: int, y0: int, width: int, height: int
     ) -> None:
-        """One silhouette: a head, a body, a base, its pool of shadow, its name.
+        """Who is who, under the letter that already says it.
 
-        The shadow goes onto the floor *first* -- the tiles where it stands go
-        nearly black -- so the figure lands on the ground instead of hovering a
-        cell above it.
+        The letter is the model, so a name is not how the player *finds* a
+        monster -- but ``s`` is a skeleton and not an ``s``, and the one the
+        choice is on wears the blade the menus use for the chosen line.
         """
-        ink = parse_style(f"bold {figure.colour}")
-        name_ink = ink if chosen else parse_style(figure.colour)
-        for i in range(-1, figure.width + 1):
-            buffer.put(x + i, y + figure.height - 1, " ", Style(bg=SHADOW))
-
-        head = max(2, figure.width - 2)
-        head_x = x + (figure.width - head) // 2
-        buffer.text(head_x, y, "█" * head, ink)
-        for j in range(1, figure.height - 1):
-            buffer.text(x, y + j, "█" * figure.width, ink)
-        foot = y + figure.height - 1
-        if figure.legs:
-            for i in (1, figure.width - 2):
-                buffer.put(x + i, foot, "█", ink)
-        else:
-            base = max(2, figure.width - 2)
-            buffer.text(x + (figure.width - base) // 2, foot, "█" * base, ink)
-
-        marker = "►" if chosen else " "
-        label = f"{marker} {figure.name}"
-        name_x = max(0, x + figure.width // 2 - len(label) // 2)
-        buffer.text(name_x, y + figure.height, label, name_ink)
+        font = buffer.font
+        for figure in self._stage(buffer.cols, buffer.rows, font.cell_w, font.cell_h):
+            marker = "►" if figure.chosen else " "
+            label = f"{marker} {figure.name}"
+            centre = round(figure.cx / font.cell_w) - 1
+            chosen = parse_style(f"bold {figure.colour}")
+            style = chosen if figure.chosen else parse_style(figure.colour)
+            buffer.text(centre - len(label) // 2, figure.foot + 1, label, style)
 
     # -- the panels ---------------------------------------------------------
     def _draw_plate(
         self, buffer: PatternBuffer, x: int, y: int, width: int, height: int
     ) -> None:
         """The hero's plate: who he is, how much of him is left, what he carries."""
-        box(buffer, x, y, width, height, title="NOXX", border=BLOOD, fill=True)
+        from neverdeads_revenge.game.actors import NOXX
+
+        title = NOXX.name.upper()
+        box(buffer, x, y, width, height, title=title, border=BLOOD, fill=True)
         if height < 4 or width < 14:
             return
         bar = min(12, max(4, width - 22))
