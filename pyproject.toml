@@ -8,14 +8,14 @@ version = "0.1.0"
 description = "Neverdead's Revenge 2.0 -- the same dungeon, rendered as a CRT."
 readme = "README.md"
 requires-python = ">=3.12"
-license = { text = "MIT" }
+license = { text = "AGPL-3.0-or-later" }
 license-files = ["LICENSE"]
 authors = [{ name = "darknoxx" }]
 keywords = ["roguelite", "desktop", "pyside6", "qt", "crt", "game"]
 classifiers = [
     "Environment :: X11 Applications :: Qt",
     "Intended Audience :: End Users/Desktop",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
     "Programming Language :: Python :: 3",
     "Topic :: Games/Entertainment :: Role-Playing",
 ]

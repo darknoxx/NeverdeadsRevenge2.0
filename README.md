@@ -342,4 +342,8 @@ run's scores or chronicle, and the other way around.
 
 ## Licence
 
-MIT. See `LICENSE`.
+AGPL-3.0-or-later. See `LICENSE` for the text.
+
+In short: play it, read it, change it, share it, sell it — but a copy you pass
+on carries its source with it, under this same licence, and so does a version
+you put on a server for others to play. There is no warranty.
