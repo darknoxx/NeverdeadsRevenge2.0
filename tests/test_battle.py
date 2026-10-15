@@ -26,6 +26,8 @@ from neverdeads_revenge.game.battle import (
     ROOM,
     SPECIAL,
     STAGE,
+    DEEP_BLEED,
+    SIPHON,
     Battle,
     Flourish,
     Guarded,
@@ -36,8 +38,10 @@ from neverdeads_revenge.game.battle import (
     open_fight,
 )
 from neverdeads_revenge.game.specials import (
-    ATRITAS,
     AVALANCHE,
+    DEVOURING_DARKNESS,
+    FLEETING_SHADOW,
+    FRIENDS_LIKE_THESE,
     BELLS_THROW,
     BETWEEN_BLOWS,
     ECHOING_CUT,
@@ -45,6 +49,7 @@ from neverdeads_revenge.game.specials import (
     HOARFROST,
     LEFT_HAND,
     OPEN_VEIN,
+    ORB_OF_PTAMERA,
     RIME,
     SHATTERED_BELL,
     SPECIALS,
@@ -55,6 +60,7 @@ from neverdeads_revenge.game.specials import (
     special_by_key,
 )
 from neverdeads_revenge.game.state import start_run
+from neverdeads_revenge.game.statuses import status_by_key
 from neverdeads_revenge.world.items import ITEMS, make_item
 
 
@@ -450,16 +456,99 @@ def test_the_left_hand_is_a_stab_it_makes_sure_of():
     )
 
 
-def test_the_shadow_strikes_twice():
-    """ATRITAS goes on its own, and lands two blows while the hero stands still."""
+def test_the_orb_hunts_crits_without_promising_them():
+    """A chance and not a certainty: that is the whole difference between the orb
+    and the knife, and the same dice show it -- every fight here is the same seed
+    with the same rolls, so what changes is only the odds the orb is thrown at.
+    """
+    def crits(special, times: int = 60) -> int:
+        wins = 0
+        for index in range(times):
+            # A fresh *seed* every time as well as a fresh fight: the same seed
+            # rolled the same two dice sixty times and the measurement said
+            # nothing about the odds at all.
+            state = start_run(HEROES["noxx"], 1000 + index, ultimate_level=7)
+            state.level = 3
+            battle = Battle(state, take(state, 1))
+            enemy = battle.enemies[0]
+            enemy.stats.hp = 9999
+            # The patient knife makes the *first* blow on anything a crit, and
+            # every fight here is a fresh one: what is being measured is the odds
+            # of an ordinary blow, so the target has to have been hit before.
+            enemy.struck = True
+            events = (
+                battle.choose(ATTACK, enemy)
+                if special is None
+                else battle.choose(SPECIAL, enemy, special=special)
+            )
+            wins += sum(1 for one in strikes(events) if one.outcome.crit)
+        return wins
+
+    plain = crits(None)
+    orbed = crits(ORB_OF_PTAMERA)
+    assert orbed > plain * 1.5, f"the orb crit {orbed} times against a plain {plain}"
+    assert orbed < 60, "the orb never missed a crit: that is the knife, not the orb"
+
+
+def test_fleeting_shadow_is_out_before_anything_moves():
+    """Turning your back costs a swing from everything standing, and this is not
+    turning your back: nothing in the room gets to answer for it."""
     battle = levelled(4)
+    battle.enemies[0].stats.damage = (5, 5)
+    battle.enemies[0].stats.accuracy = 99
+    battle.hero.stats.evasion = 0
+    hp = battle.hero.stats.hp
+
+    events = battle.choose(SPECIAL, None, special=FLEETING_SHADOW)
+
+    assert battle.over and battle.escaped, "the shadow did not get him out"
+    assert battle.hero.stats.hp == hp, "something got a swing at his back anyway"
+    assert not strikes(events), "the fight swung at a hero who was not there"
+    assert any(isinstance(event, Over) and event.escaped for event in events), (
+        "the fight never said he was gone"
+    )
+
+
+def test_devouring_darkness_keeps_half_of_what_it_bites():
+    """The steal: half of the damage, back to him -- and never nothing, because a
+    mouthful of a mouthful is still a mouthful."""
+    battle = levelled(5)
     enemy = battle.enemies[0]
-    enemy.stats.hp = 999
+    enemy.stats.hp = 9999
+    battle.hero.stats.hp = 1
+    battle.hero.stats.max_hp = 99
 
-    events = battle.choose(SPECIAL, enemy, special=ATRITAS)
+    events = battle.choose(SPECIAL, enemy, special=DEVOURING_DARKNESS)
 
-    hit = [one for one in strikes(events) if one.flair == ATRITAS]
-    assert len(hit) == 2, f"the shadow struck {len(hit)} times"
+    hit = [one for one in strikes(events) if one.flair == DEVOURING_DARKNESS]
+    assert hit, "the dark did not bite at all"
+    kept = battle.hero.stats.hp - 1
+    assert kept == max(1, round(hit[0].outcome.damage * SIPHON)), (
+        f"{kept} came back out of {hit[0].outcome.damage}"
+    )
+    assert any(isinstance(event, Flourish) for event in events), "nothing was shown"
+
+
+def test_friends_like_these_opens_all_of_them():
+    """Atritas comes, and he does not come alone: every one of them is left
+    bleeding *deeply* -- longer, because a wound refreshes and does not stack."""
+    battle = levelled(6, count=3)
+    for enemy in battle.enemies:
+        enemy.stats.hp = 999
+
+    events = battle.choose(SPECIAL, None, special=FRIENDS_LIKE_THESE)
+
+    assert all(DEEP_BLEED in enemy.statuses for enemy in battle.enemies), "someone was missed"
+    # Heavier *and* longer than the vein's own cut: what it costs per turn is the
+    # part that makes a whole turn spent on it worth spending.
+    deep = status_by_key(DEEP_BLEED)
+    vein = status_by_key("bleed")
+    assert deep.damage > vein.damage, "'heavy' costs no more than the vein's cut"
+    assert deep.turns > vein.turns, "'heavy' does not last any longer either"
+    assert any(
+        isinstance(event, Flourish) and event.flair == FRIENDS_LIKE_THESE
+        for event in events
+    ), "Atritas did not come"
 
 
 def test_the_open_vein_keeps_costing_him():
@@ -526,17 +615,32 @@ def test_the_five_arrive_with_levels():
         ]
 
     assert names_at(2) == [LEFT_HAND]
-    assert names_at(4) == [LEFT_HAND, ATRITAS]
-    assert names_at(5) == [LEFT_HAND, ATRITAS, OPEN_VEIN]
-    assert names_at(6) == [LEFT_HAND, ATRITAS, OPEN_VEIN, BETWEEN_BLOWS]
+    assert names_at(3) == [LEFT_HAND, ORB_OF_PTAMERA]
+    assert names_at(4) == [LEFT_HAND, ORB_OF_PTAMERA, FLEETING_SHADOW]
+    assert names_at(5) == [
+        LEFT_HAND,
+        ORB_OF_PTAMERA,
+        FLEETING_SHADOW,
+        DEVOURING_DARKNESS,
+        OPEN_VEIN,
+    ]
+    assert names_at(6) == [
+        LEFT_HAND,
+        ORB_OF_PTAMERA,
+        FLEETING_SHADOW,
+        DEVOURING_DARKNESS,
+        OPEN_VEIN,
+        FRIENDS_LIKE_THESE,
+        BETWEEN_BLOWS,
+    ]
     assert names_at(7) == [one.key for one in SPECIALS], "the void never arrived"
 
 
 def test_only_the_void_costs_the_floor():
-    """Four of them are the fight's to spend; the fifth is the floor's.
+    """The others are the fight's to spend; the void is the floor's.
 
-    A new fight has the four back, because a trick learned is a trick to use --
-    and the void is still gone, because that is the ask the dungeon prices.
+    A new fight has them back, because a trick learned is a trick to use -- and
+    the void is still gone, because that is the ask the dungeon prices.
     """
     state = run(ultimate_level=7)
     state.level = 7
@@ -579,19 +683,30 @@ def duel(hero: str, level: int = 7, count: int = 2):
     return Battle(state, take(state, count))
 
 
-def test_each_hero_has_their_own_five():
+def test_each_hero_has_their_own_kit():
     """The tricks follow whoever is standing there: Yeti's glacier is not Noxx's
-    shadow, and a menu of somebody else's moves is a menu with nothing in it."""
+    shadow, and a menu of somebody else's moves is a menu with nothing in it.
+
+    Noxx's is the deepest of the three by four -- the orb, the shadow, the
+    devouring and the friends are his -- and each one still opens on its own
+    first trick and closes on its own ultimate.
+    """
+    kits = {}
     for hero, first in (
         ("noxx", LEFT_HAND),
         ("yeti", AVALANCHE),
         ("walkyrion", FIRST_NOTE),
     ):
         kit = duel(hero).specials()
-        assert len(kit) == 5, f"{hero} has {len(kit)} tricks"
+        kits[hero] = {special.key for special in kit}
+        assert len(kit) >= 5, f"{hero} has {len(kit)} tricks"
         assert kit[0].key == first and kit[-1].uses_floor, (
             f"{hero}'s kit is in the wrong order or has no ultimate"
         )
+    assert len(kits["noxx"]) > len(kits["yeti"]), "Noxx's kit did not grow"
+    assert not kits["noxx"] & kits["yeti"], "the two share a trick"
+    assert not kits["noxx"] & kits["walkyrion"], "the two share a trick"
+    assert not kits["yeti"] & kits["walkyrion"], "the two share a trick"
 
 
 def test_the_avalanche_lands_like_a_mountain():

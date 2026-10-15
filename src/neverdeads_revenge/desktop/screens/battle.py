@@ -127,9 +127,12 @@ ARROW = "▼"
 #: the dagger, petrol for the shadow, red for the vein, and the void's own pale
 #: light: the tricks are asked for in words and answered in colour.
 FLAIR_COLOURS: dict[str, str] = {
-    # Noxx: the dagger, the shadow, the opened vein, the step, the void.
+    # Noxx: the dagger, the orb, the shadow, the vein, the step, the void.
     "left_hand": "#5bd75b",
-    "atritas": "#2ee6cf",
+    "orb_of_ptamera": "#2ee6cf",
+    "fleeting_shadow": "#8ff0e0",
+    "devouring_darkness": "#a45cff",
+    "friends_like_these": "#2ee6cf",
     "open_vein": "#d83a3a",
     "between_blows": "#b06bff",
     "the_void": "#e8ffff",
@@ -153,6 +156,7 @@ FLAIR_COLOURS: dict[str, str] = {
 #: without reading a word of the log.
 STATUS_COLOURS: dict[str, str] = {
     "bleed": "#e03131",
+    "maul": "#ff5a4a",
     "poison": "#5bd75b",
     "burn": "#ff7a1f",
     "chill": "#9fd8f5",
@@ -161,6 +165,7 @@ STATUS_COLOURS: dict[str, str] = {
 #: through the room as a wave of heat, and the cold leaves crystals.
 STATUS_LOOKS: dict[str, str] = {
     "bleed": "bleed",
+    "maul": "bleed",
     "poison": "poison",
     "burn": "burn",
     "chill": "frost",
@@ -169,6 +174,7 @@ STATUS_LOOKS: dict[str, str] = {
 #: already has a wet one, a bad one, a sharp one and a cold one.
 STATUS_SOUNDS: dict[str, str] = {
     "bleed": "hurt",
+    "maul": "hurt",
     "poison": "curse",
     "burn": "crit",
     "chill": "ice",
@@ -180,6 +186,15 @@ STATUS_GLOW = 88
 STATUS_PULSE = 2.6
 #: How long a wall of ice stands in front of the hero after it is raised.
 WALL_LIFE = 1.2
+#: How long Atritas stands there after FRIENDS LIKE THESE has called him. Longer
+#: than a flourish, because he *is* the trick: a shadow the player never got a
+#: look at is a shadow the trick did not really have.
+SHADOW_LIFE = 1.3
+#: How far out of his own outline the shadow stands, in cells, and how wide the
+#: light behind him is. Far enough to read as a second figure: Noxx is petrol
+#: himself, so a petrol silhouette in his own place is a silhouette nobody sees.
+SHADOW_OFFSET = 2.6
+SHADOW_LIGHT = 4.6
 #: How long a blow's own flourish lasts. Inside the beat that carries it, so the
 #: fight still reads one blow at a time -- but long enough to be *seen*, which is
 #: the whole point of fifteen tricks looking like fifteen tricks.
@@ -189,6 +204,9 @@ FLOURISH_LIFE = 0.40
 SPARKS: dict[str, int] = {
     "slash": 14,
     "shadow": 22,
+    "orb": 26,
+    "drain": 24,
+    "fleet": 18,
     "bleed": 18,
     "trail": 16,
     "dissolve": 30,
@@ -203,16 +221,19 @@ SPARKS: dict[str, int] = {
     "wave": 36,
     "wall": 20,
 }
-#: The three shapes that belong to the *hero* and not to what he hit: an ice
-#: wall in front of him, a glow on him, and a cold ring out of him. They are the
-#: tricks that are not blows, so they have nowhere else to be seen.
-SELF_LOOKS: frozenset[str] = frozenset({"wall", "aura", "pulse"})
+#: The shapes that belong to the *hero* and not to what he hit: an ice wall in
+#: front of him, a glow on him, a cold ring out of him, and the smoke he leaves
+#: when he is simply not there any more. They are the tricks that are not blows
+#: aimed at anybody, so they have nowhere else to be seen.
+SELF_LOOKS: frozenset[str] = frozenset({"wall", "aura", "pulse", "fleet"})
 #: And how hard each one knocks the camera. The ultimates land like a floor.
 SHAKES: dict[str, int] = {
     "shatter": 6,
     "wave": 6,
     "dissolve": 7,
     "throw": 4,
+    "orb": 4,
+    "drain": 3,
 }
 #: Everything that lands *moves* what it hit: the figure is shoved a fraction of
 #: its own height up the room and drifts back. A thrown monster goes the whole
@@ -220,6 +241,8 @@ SHAKES: dict[str, int] = {
 #: says how much it cost. Weight is a thing that is seen and not only read.
 THROWN = 1.2
 SHOVES: dict[str, float] = {
+    "orb": 0.45,
+    "drain": 0.35,
     "shatter": 0.7,
     "wave": 0.6,
     "dissolve": 0.8,
@@ -241,6 +264,8 @@ CRIT_SHOVE = 1.6
 HITSTOP = 0.045
 CRIT_STOP = 0.075
 HITSTOPS: dict[str, float] = {
+    "orb": 0.07,
+    "drain": 0.06,
     "shatter": 0.09,
     "wave": 0.09,
     "dissolve": 0.11,
@@ -658,10 +683,11 @@ class BattleScreen(Screen):
         near_x, near_y = self._beside_target(
             figure, target_id, figures, home, cell_w, cell_h
         )
-        if look in ("shadow", "trail"):
-            # Neither of these moves the hero. The shadow is a second figure
-            # going instead of him, and the trail is where he *is*: a step so
-            # quick that the room cannot follow it.
+        if look in ("shadow", "trail", "orb"):
+            # None of these moves the hero. The shadow is a second figure going
+            # instead of him, the trail is where he *is* -- a step so quick that
+            # the room cannot follow it -- and the orb is *thrown*: he stands
+            # still and the dark does the travelling.
             return figure.cx, home, 1.0
         if look == "dissolve":
             # Giving in: he is not in the room for the middle of it.
@@ -742,6 +768,30 @@ class BattleScreen(Screen):
             )
             painter.setOpacity(1.0)
             return
+        if look == "orb":
+            # The flight is timed to the *blow* and not to the swing, so the orb
+            # is at the throat on the frame the number comes off it. Anything
+            # else and the fight would be showing two different moments.
+            lands = IMPACT_AT / STRIKE
+            if not 0.05 < progress < lands:
+                return
+            other = self._figure_at(figures, target_id)
+            if other is None:
+                return
+            where = (progress - 0.05) / (lands - 0.05)
+            start_x, start_y = figure.cx + cell_w * 2.0, home - image.height() * 0.62
+            end_x, end_y = other.cx, other.row * cell_h - cell_h * 1.5
+            length = math.hypot(end_x - start_x, end_y - start_y) or 1.0
+            self._orb(
+                painter,
+                start_x + (end_x - start_x) * where,
+                start_y + (end_y - start_y) * where,
+                (end_x - start_x) / length,
+                (end_y - start_y) / length,
+                FLAIR_COLOURS.get(flair, "#ffffff"),
+                float(cell_w) * 1.5,
+            )
+            return
         if look == "trail":
             for dx, fade in ((9, 0.32), (18, 0.20), (27, 0.11)):
                 painter.setOpacity(fade)
@@ -749,6 +799,42 @@ class BattleScreen(Screen):
                     figure.cx - image.width() // 2 + dx, home - image.height(), image
                 )
             painter.setOpacity(1.0)
+
+    @staticmethod
+    def _figure_at(figures, target_id: int) -> Staged | None:
+        """The figure standing at an actor id, or ``None``."""
+        for other in figures:
+            if id(other.actor) == target_id:
+                return other
+        return None
+
+    def _orb(self, painter: QPainter, x, y, ux, uy, colour, size) -> None:
+        """The orb of Ptamera in flight: a hole with a rim on it.
+
+        Black, because it is made of the absence of anything -- and the rim is
+        what makes an absence visible at all. A black ball on a dark floor is a
+        smudge; a black ball with a lit edge is a hole in the room, travelling.
+        """
+        painter.setPen(Qt.PenStyle.NoPen)
+        for step in (3, 2, 1):
+            trail = QColor(colour)
+            trail.setAlpha(20 + step * 16)
+            painter.setBrush(trail)
+            radius = size * (1.0 - step * 0.22)
+            painter.drawEllipse(
+                QRectF(
+                    x - ux * step * size * 0.75 - radius / 2,
+                    y - uy * step * size * 0.75 - radius / 2,
+                    radius,
+                    radius,
+                )
+            )
+        painter.setBrush(QColor("#04060a"))
+        painter.drawEllipse(QRectF(x - size / 2, y - size / 2, size, size))
+        rim = QColor(colour)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(QPen(rim, 2))
+        painter.drawEllipse(QRectF(x - size / 2, y - size / 2, size, size))
 
     def _shadow(self, image: QImage) -> QImage:
         """The same figure, in the colour his shadow is.
@@ -802,13 +888,30 @@ class BattleScreen(Screen):
                 QRectF(figure.cx - width / 2, baseline - height, width, height * 0.22)
             )
             return
+        if look == "shadow":
+            # Handled above the gate the other flourishes share, because it lives
+            # longer than they do: see SHADOW_LIFE.
+            self._paste_atritas(painter, figure, cell_w, cell_h, baseline, colour, age)
+            return
         if age > FLOURISH_LIFE * 1.5:
             return
-        if look == "aura":
+        if look == "aura" or look == "drain":
+            # "drain" on the hero is the other half of the steal: the darkness
+            # went down out of the monster and arrived here, and what it looks
+            # like on this end is *him* glowing. The same pool of colour, and the
+            # same reason: something is happening to the hero and it has to be
+            # visible on him.
             self._glow(painter, figure.cx, baseline, cell_w, cell_h, colour, age)
             return
         if look == "pulse":
             self._ripple(painter, figure.cx, baseline - cell_h, colour, age, reach=4.0)
+            return
+        if look == "fleet":
+            # Smoke where he was: nothing is left of him but what he was standing
+            # in, and it is already going.
+            self._climb(painter, figure.cx, baseline - cell_h, cell_h, colour, age, count=9, up=True)
+            self._glow(painter, figure.cx, baseline, cell_w, cell_h, colour, age)
+            return
 
     def _paste_flourish(
         self, painter: QPainter, figure: Staged, cell_w: int, cell_h: int, baseline: int
@@ -854,6 +957,13 @@ class BattleScreen(Screen):
             # coming off the figure the whole time it burns.
             self._band(painter, figure.cx, top, cell_w, colour, age)
             self._climb(painter, figure.cx, top, cell_h, colour, age, count=8, up=True)
+        elif look == "orb":
+            # Where the hole came apart: a ring going out, and the dark climbing
+            # off the wound it left.
+            self._ripple(painter, figure.cx, top, colour, age, reach=2.6)
+            self._climb(painter, figure.cx, top, cell_h, colour, age, count=6)
+        elif look == "drain":
+            self._siphon(painter, figure.cx, top, cell_h, colour, age)
         elif look == "ring":
             self._ripple(painter, figure.cx, top, colour, age, reach=3.4)
         elif look == "wave":
@@ -867,6 +977,42 @@ class BattleScreen(Screen):
             self._climb(painter, figure.cx, top, cell_h, colour, age, count=6)
         else:
             self._climb(painter, figure.cx, top, cell_h, colour, age, count=4)
+
+    def _paste_atritas(
+        self, painter: QPainter, figure: Staged, cell_w: int, cell_h: int, baseline: int, colour: str, age: float
+    ) -> None:
+        """Atritas steps out of him, and stands there a while.
+
+        His *own* silhouette in petrol and not a second drawing -- there is no
+        second set of art for him -- put out to the side far enough to read as a
+        second figure, with a light behind it. Noxx is petrol himself, so a petrol
+        silhouette in his own place would be a silhouette nobody ever saw: what
+        makes the shadow visible is the *room* behind it lighting up.
+        """
+        if age > SHADOW_LIFE or figure.sprite is None:
+            return
+        image = figure.sprite
+        # In fast, out slow: he is *there* for most of it and gone at the end.
+        rise = min(1.0, age / 0.12)
+        fall = max(0.0, (age - SHADOW_LIFE * 0.6) / (SHADOW_LIFE * 0.4))
+        solid = max(0.0, rise - fall)
+        if solid <= 0:
+            return
+        cx = figure.cx + cell_w * SHADOW_OFFSET
+        cy = baseline - image.height() * 0.5
+        radius = cell_w * SHADOW_LIGHT
+        tint = QColor(colour)
+        gradient = QRadialGradient(QPointF(cx, cy), radius)
+        gradient.setColorAt(0.0, QColor(tint.red(), tint.green(), tint.blue(), int(120 * solid)))
+        gradient.setColorAt(1.0, QColor(tint.red(), tint.green(), tint.blue(), 0))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(gradient)
+        painter.drawEllipse(QRectF(cx - radius, cy - radius, radius * 2, radius * 2))
+        painter.setOpacity(solid * 0.95)
+        painter.drawImage(
+            cx - image.width() // 2, baseline - image.height(), self._shadow(image)
+        )
+        painter.setOpacity(1.0)
 
     def _wound_keys(self, figure: Staged) -> list[str]:
         """Which wounds a figure is wearing, in a stable order."""
@@ -1072,6 +1218,25 @@ class BattleScreen(Screen):
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.setPen(QPen(QColor(colour), max(1, int(step * 3 * (1 - t)))))
             painter.drawEllipse(QRectF(cx - radius, cy - radius * 0.55, radius * 2, radius * 1.1))
+
+    def _siphon(self, painter, cx, top, cell_h, colour, age) -> None:
+        """Darkness leaving him *downwards*.
+
+        The hero is always at the bottom of the frame, so the way a stolen thing
+        travels needs no second address: it goes down, and the eye follows it home.
+        """
+        fall = min(1.0, age / FLOURISH_LIFE)
+        fade = 1.0 - fall
+        for index in range(5):
+            x = cx - 20 + index * 10
+            head = top + fall * cell_h * 2.4 + index * 4
+            streak = QColor(colour)
+            streak.setAlpha(int(210 * fade))
+            painter.setPen(QPen(streak, 2))
+            painter.drawLine(QPointF(x, head - 14), QPointF(x, head))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(streak)
+            painter.drawEllipse(QRectF(x - 2, head - 2, 4, 4))
 
     def _band(self, painter, cx, top, cell_w, colour, age) -> None:
         """A wave: a bar of sound going out through the room, both ways."""
@@ -2314,7 +2479,11 @@ class BattleScreen(Screen):
             return
         specials = self.battle.specials()
         rows = max(1, height - 4)
-        column_w = width // 2
+        # The list is as many columns as its tricks need and no more: two for a
+        # kit of five or six, three for Noxx's eight. A fixed two columns would
+        # have run his last three names off the right-hand edge of the panel.
+        columns = max(1, min(3, math.ceil(len(specials) / rows)))
+        column_w = width // columns
         for index, special in enumerate(specials):
             usable = self.battle.special_available(special)
             chosen = index == self.special

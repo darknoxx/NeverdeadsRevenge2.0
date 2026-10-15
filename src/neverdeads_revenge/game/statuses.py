@@ -46,6 +46,11 @@ class Status:
 
 STATUSES: dict[str, Status] = {
     "bleed": Status(key="bleed", name="bleeding", damage=2, turns=3),
+    #: And the deep one: what Atritas leaves when he brings company. Four a turn
+    #: and not two, so "heavy" is heavier and not only longer -- a wound that
+    #: costs the same per turn and simply lasts would not be worth a turn of its
+    #: own, and the trick is meant to be.
+    "maul": Status(key="maul", name="bleeding badly", damage=4, turns=4),
     "poison": Status(key="poison", name="poisoned", damage=1, turns=8),
     "burn": Status(key="burn", name="burning", damage=3, turns=2),
     "chill": Status(key="chill", name="chilled", speed_factor=0.6, turns=4),

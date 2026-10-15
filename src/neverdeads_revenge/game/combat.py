@@ -107,6 +107,7 @@ def attack(
     rng: Rng,
     *,
     force_crit: bool = False,
+    crit_bonus: float = 0.0,
     damage_scale: float = 1.0,
     spread: float = 1.0,
     bonus: int = 0,
@@ -122,7 +123,9 @@ def attack(
     ward takes half of one, and THE FEVER widens the roll. All three are passed
     in rather than read from the actors, because the rules behind them live in
     ``game/`` and this function deliberately knows nothing about amulets or
-    curses.
+    curses. ``crit_bonus`` is the fourth: a *chance* and not a promise, for the
+    weapons that are loaded rather than certain -- the orb of Ptamera hunts crits
+    and does not always get one.
 
     ``bonus`` is flat damage added after everything else -- MOMENTUM's charge,
     the DEBT OF BLOOD paid back -- and ``evasion_bonus`` is the defender's
@@ -134,7 +137,7 @@ def attack(
         return AttackOutcome(hit=False, crit=False, damage=0, killed=False, dodged=True)
 
     base = attacker.damage_roll(rng, spread)
-    crit = force_crit or rng.chance(attacker.crit_chance)
+    crit = force_crit or rng.chance(min(1.0, attacker.crit_chance + crit_bonus))
     damage = int(round(base * attacker.crit_multiplier)) if crit else base
     if damage_scale != 1.0:
         # Never nothing. A ward that turned a blow into a no-op would be a

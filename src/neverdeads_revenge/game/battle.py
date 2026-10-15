@@ -40,8 +40,10 @@ from .actors import Actor
 from .combat import AttackOutcome
 from .statuses import status_by_key
 from .specials import (
-    ATRITAS,
     AVALANCHE,
+    DEVOURING_DARKNESS,
+    FLEETING_SHADOW,
+    FRIENDS_LIKE_THESE,
     BELLS_THROW,
     BETWEEN_BLOWS,
     ECHOING_CUT,
@@ -49,6 +51,7 @@ from .specials import (
     HOARFROST,
     LEFT_HAND,
     OPEN_VEIN,
+    ORB_OF_PTAMERA,
     RIME,
     SHATTERED_BELL,
     STILLNESS,
@@ -187,6 +190,18 @@ TRUE_NOTE_DAMAGE = 3
 #: already the point: this is the difference between a knife and a knife that was
 #: aimed.
 LEFT_HAND_BONUS = 3
+
+#: The orb of Ptamera is *loaded* and not promised: it hunts the throat without
+#: ever being certain of it, which is the one thing that tells it apart from the
+#: knife -- and the knife is the one that always crits.
+ORB_CRIT = 0.5
+#: Devouring Darkness: the share of what it bites that he keeps.
+SIPHON = 0.5
+#: Friends Like These: the shadow brings a wound with it, and the wound is deep.
+#: ''It'' and not only ''longer'': two a turn for three turns is the vein's own
+#: cut, and a trick that cost a whole turn and a whole fight to hand out the same
+#: wound would be a trick nobody spends twice.
+DEEP_BLEED = "maul"
 
 #: How far from the hero the room reaches. A fight takes whoever is standing in
 #: the same room, and "the same room" is a distance rather than a graph of walls:
@@ -566,7 +581,10 @@ class Battle:
         """
         run = {
             LEFT_HAND: self._special_left_hand,
-            ATRITAS: self._special_atritas,
+            ORB_OF_PTAMERA: self._special_orb_of_ptamera,
+            FLEETING_SHADOW: self._special_fleeting_shadow,
+            DEVOURING_DARKNESS: self._special_devouring_darkness,
+            FRIENDS_LIKE_THESE: self._special_friends_like_these,
             OPEN_VEIN: self._special_open_vein,
             BETWEEN_BLOWS: self._special_between_blows,
             VOID: self._special_the_void,
@@ -592,6 +610,7 @@ class Battle:
         *,
         flair: str = "",
         force_crit: bool = False,
+        crit_bonus: float = 0.0,
         bonus: int = 0,
         damage_scale: float = 1.0,
     ) -> AttackOutcome:
@@ -601,6 +620,7 @@ class Battle:
             self.state,
             enemy,
             force_crit=force_crit,
+            crit_bonus=crit_bonus,
             bonus=bonus,
             damage_scale=damage_scale,
         )
@@ -614,18 +634,80 @@ class Battle:
         if enemy is not None:
             self._blow(enemy, events, flair=LEFT_HAND, force_crit=True, bonus=LEFT_HAND_BONUS)
 
-    def _special_atritas(self, target: Actor | None, events: list[Event]) -> None:
-        """The shadow leaves, and strikes twice while its owner stands still."""
+    def _special_orb_of_ptamera(self, target: Actor | None, events: list[Event]) -> None:
+        """The orb: a dark thing thrown instead of carried, and loaded for the throat.
+
+        The only trick in the game that reaches into the *odds* rather than the
+        numbers: it is not a promised crit, it is a blow that hunts one, which is
+        what makes it the knife's opposite and not its bigger brother.
+        """
         enemy = self._pick(target)
         if enemy is None:
             return
         before = len(self.state.log)
-        self.state.say("Your shadow peels off and goes for him.", LogKind.SYSTEM)
+        self.state.say("The orb leaves your hand and goes for him.", LogKind.SYSTEM)
         self._splice(before, events)
-        for _ in range(2):
-            if not enemy.stats.alive:
-                break
-            self._blow(enemy, events, flair=ATRITAS)
+        self._blow(enemy, events, flair=ORB_OF_PTAMERA, crit_bonus=ORB_CRIT)
+
+    def _special_fleeting_shadow(self, target: Actor | None, events: list[Event]) -> None:
+        """Out -- and not the way a run is out.
+
+        Fleeing is the floor noticing: everything standing gets a swing at the
+        hero's back, which is the whole price of turning around. This is nobody
+        noticing. He is not in the room before anything in it moves, and nothing
+        in it gets to answer for that.
+        """
+        before = len(self.state.log)
+        self.state.say("You are somewhere else before they move.", LogKind.GOOD)
+        self._splice(before, events)
+        events.append(Flourish(self.hero, FLEETING_SHADOW))
+        self.over = True
+        self.escaped = True
+        self.won = False
+        events.append(Over(won=False, escaped=True))
+
+    def _special_devouring_darkness(self, target: Actor | None, events: list[Event]) -> None:
+        """It eats him, and he keeps what it ate.
+
+        Half of what the bite took, and never nothing: a mouthful of a mouthful
+        is still a mouthful, and a steal that rounded down to zero would be a
+        sentence the fight did not mean.
+        """
+        enemy = self._pick(target)
+        if enemy is None:
+            return
+        outcome = self._blow(enemy, events, flair=DEVOURING_DARKNESS)
+        if not outcome.hit:
+            return
+        kept = max(1, round(outcome.damage * SIPHON))
+        # `stats.heal` and not the draught path: FAMINE is worded as "half of what
+        # every draught is worth", and this is not a draught. What the dark bites
+        # out of a monster is not something a curse about bottles can reach.
+        gained = self.hero.stats.heal(kept)
+        before = len(self.state.log)
+        if gained:
+            self.state.say(f"You keep {gained} of it.", LogKind.GOOD)
+        else:
+            self.state.say("There is nothing left of you to give it back to.", LogKind.PLAIN)
+        self._splice(before, events)
+        events.append(Flourish(self.hero, DEVOURING_DARKNESS))
+
+    def _special_friends_like_these(self, target: Actor | None, events: list[Event]) -> None:
+        """Atritas comes, and he does not come alone.
+
+        On *every* one of them, and deep: the vein's own cut is two a turn for
+        three turns, and this is four a turn for four -- a room of three opened at
+        once is a room that is over before the floor runs dry.
+        """
+        before = len(self.state.log)
+        self.state.say("Atritas comes, and he does not come alone.", LogKind.SYSTEM)
+        self._splice(before, events)
+        events.append(Flourish(self.hero, FRIENDS_LIKE_THESE))
+        for enemy in self.living_enemies():
+            before = len(self.state.log)
+            self.state.say(f"Something in the {enemy.name} opens.", LogKind.GOOD)
+            inflict(self.state, enemy, (DEEP_BLEED,))
+            self._splice(before, events)
 
     def _special_open_vein(self, target: Actor | None, events: list[Event]) -> None:
         """A cut that will not close: small, and it keeps costing him."""

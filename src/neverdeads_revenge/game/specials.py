@@ -13,8 +13,8 @@ this game goes through, which is what keeps a special from being a second game
 hidden inside the first.
 
 The gates are levels, spread across the first three floors: kills teach one level
-each four of them, so the knife arrives on floor one, the shadow and the vein by
-the middle of floor two, the step and the void by floor three.
+each four of them, so the knife arrives on floor one, the orb and the shadow by
+the middle of floor two, the rest of them and the void by floor three.
 """
 
 from __future__ import annotations
@@ -22,15 +22,18 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 __all__ = [
-    "ATRITAS",
     "AVALANCHE",
     "BELLS_THROW",
     "BETWEEN_BLOWS",
+    "DEVOURING_DARKNESS",
     "ECHOING_CUT",
     "FIRST_NOTE",
+    "FLEETING_SHADOW",
+    "FRIENDS_LIKE_THESE",
     "HOARFROST",
     "LEFT_HAND",
     "OPEN_VEIN",
+    "ORB_OF_PTAMERA",
     "RIME",
     "SHATTERED_BELL",
     "SPECIALS",
@@ -45,7 +48,10 @@ __all__ = [
 
 #: The keys, so a caller never has to spell one out.
 LEFT_HAND = "left_hand"
-ATRITAS = "atritas"
+ORB_OF_PTAMERA = "orb_of_ptamera"
+FLEETING_SHADOW = "fleeting_shadow"
+DEVOURING_DARKNESS = "devouring_darkness"
+FRIENDS_LIKE_THESE = "friends_like_these"
 OPEN_VEIN = "open_vein"
 BETWEEN_BLOWS = "between_blows"
 VOID = "the_void"
@@ -109,12 +115,29 @@ SPECIALS: tuple[Special, ...] = (
         level=2,
     ),
     Special(
-        key=ATRITAS,
-        effect="the shadow strikes him twice",
-        look="shadow",
-        name="ATRITAS",
-        blurb="the shadow goes on its own, and strikes twice",
+        key=ORB_OF_PTAMERA,
+        effect="a dark orb: nearly always a crit",
+        look="orb",
+        name="ORB OF PTAMERA",
+        blurb="the black of it is thrown, and it goes for the throat",
+        level=3,
+    ),
+    Special(
+        key=FLEETING_SHADOW,
+        effect="out at once; nothing gets a swing",
+        needs_target=False,
+        look="fleet",
+        name="FLEETING SHADOW",
+        blurb="he was never in the room; the room was in him",
         level=4,
+    ),
+    Special(
+        key=DEVOURING_DARKNESS,
+        effect="a bite; half the damage comes back",
+        look="drain",
+        name="DEVOURING DARKNESS",
+        blurb="it eats him, and he keeps what it ate",
+        level=5,
     ),
     Special(
         key=OPEN_VEIN,
@@ -123,6 +146,15 @@ SPECIALS: tuple[Special, ...] = (
         name="THE OPEN VEIN",
         blurb="a cut that will not close, and keeps costing him",
         level=5,
+    ),
+    Special(
+        key=FRIENDS_LIKE_THESE,
+        effect="the shadow comes; all bleed badly",
+        needs_target=False,
+        look="shadow",
+        name="FRIENDS LIKE THESE",
+        blurb="atritas comes, and he does not come alone",
+        level=6,
     ),
     Special(
         key=BETWEEN_BLOWS,

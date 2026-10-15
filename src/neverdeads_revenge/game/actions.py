@@ -906,6 +906,7 @@ def resolve_player_attack(
     target: Actor,
     *,
     force_crit: bool = False,
+    crit_bonus: float = 0.0,
     bonus: int = 0,
     damage_scale: float = 1.0,
 ) -> AttackOutcome:
@@ -939,6 +940,7 @@ def resolve_player_attack(
         # The knife's own rule, and the arena's: a special asks for the crit it
         # paid for, and both of them are the same crit.
         force_crit=force_crit or (first and state.has_passive("patient_knife")),
+        crit_bonus=crit_bonus,
         damage_scale=(2.0 if cornered else 1.0) * damage_scale,
         spread=state.damage_spread,
         bonus=bonus + bonus_flat,
