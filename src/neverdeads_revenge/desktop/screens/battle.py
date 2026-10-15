@@ -105,10 +105,15 @@ AIMED: tuple[str, ...] = (ATTACK, SPECIAL)
 #: middle of the room, two on either side of that middle, and three in the
 #: shallow arc the stage was drawn for, with the outer ones a little nearer, the
 #: way a line of anything stands.
+#:
+#: Nothing stands at the rim. The floor tapers, so the far corners of it are
+#: *wall* -- an outer monster at the very edge was standing in the masonry with
+#: its health bar running off the frame, and the row was as wide as the room
+#: instead of as wide as a row. The arc is the same shape, pulled in.
 ROWS: dict[int, tuple[tuple[float, float], ...]] = {
     1: ((0.0, 0.18),),
-    2: ((-0.26, 0.32), (0.26, 0.32)),
-    3: ((-0.40, 0.32), (-0.06, 0.14), (0.40, 0.48)),
+    2: ((-0.20, 0.30), (0.20, 0.30)),
+    3: ((-0.30, 0.30), (-0.02, 0.10), (0.30, 0.46)),
 }
 
 #: How big a letter stands, in font pixels. The hero is nearest and largest; the
@@ -1106,13 +1111,10 @@ class BattleScreen(Screen):
             # a player drumming on the keyboard would be choosing the next verb
             # for a blow they have not seen land yet.
             return True
-        living = self._targets()
-        if name in ("left", "h") and living:
-            self._walk(-1, app)
-            return True
-        if name in ("right", "l") and living:
-            self._walk(1, app)
-            return True
+        # No arrow here. A target is picked *after* the trick is picked, in the
+        # one place where the fight is going to read it: aiming at a monster
+        # before knowing what is being aimed would be choosing the answer to a
+        # question nobody has been asked yet.
         if name == "up":
             self.verb = (self.verb - 1) % len(VERBS)
             return True
@@ -1568,7 +1570,10 @@ class BattleScreen(Screen):
         width, height = int(field["cells_w"]), int(field["cells_h"])
         centre = x0 + width // 2
         living = self._targets()
-        marked = living[self.target % len(living)] if living else None
+        # The arrow is out only while something is being aimed: it marks the
+        # *question*, and there is no question on the floor until a trick has
+        # asked one.
+        marked = living[self.target % len(living)] if self.aiming and living else None
         scale = 1.35 if width >= 120 else 1.0
         monsters = self.battle.enemies[:STAGE]
         places = ROWS.get(len(monsters), ROWS[STAGE])
@@ -1788,12 +1793,12 @@ class BattleScreen(Screen):
 
         It hangs above the letter rather than beside it, because beside a letter
         is where the next monster is: an arrow that means "this one" has to point
-        at the one it means.
+        at the one it means. It only exists while something is being aimed -- it
+        marks the question, and there is no question until a trick has asked one.
 
-        While it is being *aimed*, it also breathes: the same figure rising and
-        falling, so the one the arrow is on is moving while all the others are
-        still. A marker that stands as still as everything under it is a marker a
-        player has to hunt for.
+        And it breathes, one pixel either way: the monster the arrow is on is
+        moving while all the others are still. A marker that stands as still as
+        everything under it is a marker a player has to hunt for.
         """
         font = letter_font(max(16, figure.size // 2))
         painter.setFont(font.bold)
@@ -1804,8 +1809,7 @@ class BattleScreen(Screen):
         else:
             top = QFontMetrics(letter_font(figure.size).bold).capHeight()
         baseline = figure.row * cell_h - THICKNESS - top - metrics.height() // 3
-        if self.aiming:
-            baseline -= round(math.sin(self._clock * 5.0) * 2) - 1
+        baseline -= round(math.sin(self._clock * 5.0) * 2) - 1
         left = figure.cx - metrics.horizontalAdvance(ARROW) // 2
         painter.setPen(ink.darker(320))
         painter.drawText(left, baseline + THICKNESS, ARROW)
