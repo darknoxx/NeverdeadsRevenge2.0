@@ -191,20 +191,24 @@ STATUS_PULSE = 2.6
 #: darkness over the top of it -- the same idea, one layer up. Light enough that
 #: the masonry still reads as masonry: a wall nobody can see is not a wall.
 FAR_LIGHT = 0.62
-#: Which stone goes where in a wall. Mostly plain, with a bone or a vine here and
-#: there, because a room where every stone is decorated is a room with a pattern
-#: in it -- and the scatter is picked from the *place* and not from a dice roll,
-#: so the room is the same room on every frame. A vine that moved between frames
-#: would be a vine nobody believes.
+#: Which stone goes where in a wall. Mostly plain, with a vine here and there,
+#: because a room where every stone is decorated is a room with a pattern in it --
+#: and the scatter is picked from the *place* and not from a dice roll, so the
+#: room is the same room on every frame. A vine that moved between frames would
+#: be a vine nobody believes.
 WALL_STONES: tuple[str, ...] = (
     "wall",
     "wall",
     "wall_vines",
     "wall",
-    "wall_bones",
     "wall",
     "wall_vines",
+    "wall",
 )
+#: And what is lying on the floor: nothing, mostly. Bone belongs on the ground
+#: and not in the wall -- on masonry it reads as a trophy somebody hung up, and
+#: on the ground as somebody who did not get up.
+FLOOR_BONES = 17
 #: How long a monster takes to go, once the blow that killed it has *landed*.
 #: It does not wink out and it is not a dimmed corpse left standing: the room
 #: keeps it for half a second and then does not. See GONE_LIFE's use in _fade.
@@ -640,7 +644,8 @@ class BattleScreen(Screen):
             x = left + inset - (row % 2) * (tw // 2)
             index = 0
             while x < right - inset:
-                painter.drawImage(int(x), int(y), light if index % 2 == 0 else dark)
+                stone = self._floor_stone(index, row, index % 2 == 0)
+                painter.drawImage(int(x), int(y), stone or (light if index % 2 == 0 else dark))
                 x += tw
                 index += 1
             fade = int(140 * (1.0 - depth))
@@ -2329,6 +2334,19 @@ class BattleScreen(Screen):
                     )
                 painter.restore()
         painter.restore()
+
+    @staticmethod
+    def _floor_stone(along: int, row: int, light: bool):
+        """Which flagstone is here: the tone the checker wants, and sometimes what
+        is lying on it.
+
+        Chosen from the place and not rolled for, for the same reason the wall's
+        scatter is: bones stay where they were left.
+        """
+        tone = "a" if light else "b"
+        if (along * 7 + row * 5) % FLOOR_BONES == 0:
+            return tile(f"floor_{tone}_bones") or tile(f"floor_{tone}")
+        return tile(f"floor_{tone}")
 
     @staticmethod
     def _stone(along: int, course: int):

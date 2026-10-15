@@ -125,11 +125,10 @@ def paint_wall(decor: str = "") -> Stone:
     stacked joints are the one thing that reads as wallpaper instead of
     masonry: every course is laid half a brick along from the one below it.
 
-    ``decor`` is what has grown on this stone since it was laid: ``"bones"`` for
-    something that died against it and ``"vines"`` for something that did not.
-    Decorated stones are scattered through the wall by the arena rather than
-    tiled, because a skull every forty pixels is not a dungeon, it is wallpaper
-    with a motif.
+    ``decor`` is what has grown on this stone since it was laid: ``"vines"`` for
+    the only green thing down here. Decorated stones are scattered through the
+    wall by the arena rather than tiled, because a vine every forty pixels is not
+    a dungeon, it is wallpaper with a motif.
     """
     wall = Stone(WALL_W, WALL_H)
     noise = random.Random(NOISE)
@@ -165,20 +164,7 @@ def paint_wall(decor: str = "") -> Stone:
                 wall.put((start + 1) % WALL_W, y, DARK)
     for _ in range(60):
         wall.put(noise.randrange(WALL_W), noise.randrange(WALL_H), DEEP)
-    if decor == "bones":
-        # High in the bottom course, at the foot of the wall: things die where
-        # they are cornered, and they are cornered against the floor.
-        _stamp(wall, SKULL, 7, TILE_H + 6)
-        for bone in range(2):
-            y = TILE_H + 15 + bone * 3
-            x0 = 20 + bone * 9
-            for step in range(6):
-                wall.put(x0 + step, y, BONE)
-            wall.put(x0 - 1, y - 1, BONE)
-            wall.put(x0 - 1, y, BONE)
-            wall.put(x0 + 6, y, BONE)
-            wall.put(x0 + 6, y + 1, BONE)
-    elif decor == "vines":
+    if decor == "vines":
         _grow_vine(wall, noise, 6)
         _grow_vine(wall, noise, WALL_W - 9)
     return wall
@@ -199,14 +185,31 @@ SKULL = (
 )
 
 
-def _stamp(wall: Stone, art, x0: int, y0: int) -> None:
-    """Put a letter-art picture on the wall, bone for ``#`` and mortar for ``o``."""
+def _stamp(stone: Stone, art, x0: int, y0: int) -> None:
+    """Put a letter-art picture on the stone, bone for ``#`` and dark for ``o``."""
     for y, row in enumerate(art):
         for x, glyph in enumerate(row):
             if glyph == "#":
-                wall.put(x0 + x, y0 + y, BONE)
+                stone.put(x0 + x, y0 + y, BONE)
             elif glyph == "o":
-                wall.put(x0 + x, y0 + y, DEEP)
+                stone.put(x0 + x, y0 + y, DEEP)
+
+
+def _lay_bone(stone: Stone, x0: int, y0: int, length: int) -> None:
+    """A bone lying on the floor: a bar with a knob at either end, and a shadow.
+
+    On the *floor* and not in the wall: bone on masonry reads as a trophy someone
+    hung up, and bone on the ground reads as somebody who did not get up. The
+    floor is the one that is true.
+    """
+    for step in range(length):
+        stone.put(x0 + step, y0 + 1, DEEP)  # what it is lying on
+    for step in range(length):
+        stone.put(x0 + step, y0, BONE)
+    for edge in (x0 - 1, x0 + length):
+        for dy in (-1, 0, 1):
+            stone.put(edge, y0 + dy, BONE)
+        stone.put(edge, y0 + 2, DEEP)
 
 
 def _grow_vine(wall: Stone, noise: random.Random, x0: int) -> None:
@@ -232,15 +235,18 @@ def _grow_vine(wall: Stone, noise: random.Random, x0: int) -> None:
         wall.put(x0 + noise.randrange(-1, 2), WALL_H - 1 - plant, MOSS)
 
 
-def paint_floor(variant: int) -> Stone:
+def paint_floor(variant: int, decor: str = "") -> Stone:
     """One flagstone: a joint along its top and left, a lit bevel, a face.
 
     Two variants, because the grid floor has always drawn two tones in a checker
     and the arena should not suddenly be a chessboard: the *second* one is the
     darker of the two, and the floor's own fade does the rest.
+
+    ``decor`` is what is lying on this stone: what is left of somebody, which the
+    floor keeps and the wall does not.
     """
     floor = Stone(TILE_W, TILE_H)
-    noise = random.Random(NOISE + variant)
+    noise = random.Random(NOISE + variant + len(decor))
     face = (MID, DARK)[variant]
     for y in range(TILE_H):
         for x in range(TILE_W):
@@ -255,16 +261,27 @@ def paint_floor(variant: int) -> Stone:
                 if noise.random() < 0.10:
                     colour = MID if face is DARK else DARK
             floor.put(x, y, colour)
+    if decor == "bones":
+        if variant == 0:
+            _stamp(floor, SKULL, 3, 6)
+            _lay_bone(floor, 12, 12, 5)
+        else:
+            _lay_bone(floor, 2, 4, 6)
+            _lay_bone(floor, 9, 14, 4)
     return floor
 
 
 #: What gets written, and what it is called. The list *is* the tile set.
 TILES: dict[str, callable] = {
+    # The walls: stone, and the only green thing down here.
     "wall": paint_wall,
-    "wall_bones": lambda: paint_wall("bones"),
     "wall_vines": lambda: paint_wall("vines"),
+    # The floor: two tones in a checker, either of them with somebody's remains
+    # lying on it. Bone belongs on the ground -- on a wall it is a trophy.
     "floor_a": lambda: paint_floor(0),
     "floor_b": lambda: paint_floor(1),
+    "floor_a_bones": lambda: paint_floor(0, "bones"),
+    "floor_b_bones": lambda: paint_floor(1, "bones"),
 }
 
 

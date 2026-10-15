@@ -36,7 +36,7 @@ def qapp():
 #: Every tile the arena asks for. If the screen asks for a name that is not here,
 #: that part of the room is quietly the room it used to be -- which is safe and
 #: also silent, so it is checked here instead.
-NAMES = ("wall", "wall_bones", "wall_vines", "floor_a", "floor_b")
+NAMES = ("wall", "wall_vines", "floor_a", "floor_b", "floor_a_bones", "floor_b_bones")
 
 
 # -- the files -----------------------------------------------------------------
@@ -60,11 +60,16 @@ def test_the_stone_is_the_size_the_floor_is_laid_out_in(qapp):
     floor = tiles.tile("floor_a")
     wall = tiles.tile("wall")
     assert floor is not None and wall is not None
-    for name in ("wall_bones", "wall_vines"):
+    assert floor.width() == make_tiles.TILE_W and floor.height() == make_tiles.TILE_H
+    for name, plain in (
+        ("wall_vines", wall),
+        ("floor_a_bones", floor),
+        ("floor_b_bones", floor),
+    ):
         decorated = tiles.tile(name)
         assert decorated is not None, name
-        assert (decorated.width(), decorated.height()) == (wall.width(), wall.height()), (
-            f"{name} is a different size from the wall it is laid in"
+        assert (decorated.width(), decorated.height()) == (plain.width(), plain.height()), (
+            f"{name} is a different size from the stone it is laid among"
         )
     assert floor.width() == make_tiles.TILE_W == make_tiles.CELL_W * 2
     assert floor.height() == make_tiles.TILE_H == make_tiles.CELL_H
@@ -77,18 +82,22 @@ def test_the_stone_is_small_enough_to_ship():
     assert total < 40_000, f"the tiles are {total / 1024:.0f} kB"
 
 
-def test_the_wall_is_scattered_and_not_tiled(qapp):
-    """A bone or a vine here and there, and the scatter is *placed*.
+def test_the_dungeon_is_scattered_and_not_tiled(qapp):
+    """A vine here, a bone there, and the scatter is *placed*.
 
-    A room where every stone is decorated is a room with a pattern in it, and a
+    A room where every stone is dressed is a room with a pattern in it, and a
     scatter that moved between frames would be a room made of flicker: the plain
-    stones outnumber the decorated ones and an undecorated wall is in the set.
+    stones outnumber the decorated ones, and the bones are on the floor while the
+    vines are on the wall -- bone on masonry reads as a trophy somebody hung up,
+    and on the ground as somebody who did not get up.
     """
-    from neverdeads_revenge.desktop.screens.battle import WALL_STONES
+    from neverdeads_revenge.desktop.screens.battle import FLOOR_BONES, WALL_STONES
 
     assert "wall" in WALL_STONES, "nothing plain to lay a wall out of"
     assert WALL_STONES.count("wall") > len(WALL_STONES) / 2, "too much decoration"
     assert len(set(WALL_STONES)) > 1, "the wall is one repeated stone"
+    assert not any("bones" in name for name in WALL_STONES), "bone in the wall"
+    assert FLOOR_BONES > 8, "the floor is more bone than stone"
 
 
 def test_the_committed_tiles_are_what_the_generator_produces(tmp_path):
