@@ -41,6 +41,7 @@ from ...game.battle import (
     SPECIAL,
     VERBS,
     Battle,
+    Flourish,
     Guarded,
     Over,
     Said,
@@ -111,12 +112,27 @@ ARROW = "▼"
 #: the dagger, petrol for the shadow, red for the vein, and the void's own pale
 #: light: the tricks are asked for in words and answered in colour.
 FLAIR_COLOURS: dict[str, str] = {
+    # Noxx: the dagger, the shadow, the opened vein, the step, the void.
     "left_hand": "#5bd75b",
     "atritas": "#2ee6cf",
     "open_vein": "#d83a3a",
     "between_blows": "#b06bff",
     "the_void": "#e8ffff",
+    # Yeti: the mountain, the rime, the hoarfrost, the stillness, the wall.
+    "avalanche": "#cfe8ff",
+    "rime": "#9fd8f5",
+    "hoarfrost": "#bff0ff",
+    "stillness": "#7fd4ff",
+    "frozen_fortress": "#dff4ff",
+    # Walkyrion: the note, the throw, the true note, the echo, the bell.
+    "first_note": "#ffd34d",
+    "bells_throw": "#ffc21f",
+    "true_note": "#ffb000",
+    "echoing_cut": "#ffe9a8",
+    "shattered_bell": "#fff3c4",
 }
+#: How long a wall of ice stands in front of the hero after it is raised.
+WALL_LIFE = 1.6
 #: How long one event holds the stage. A fight that printed a whole round at
 #: once would be a spreadsheet with letters drawn on it.
 BEAT = 0.42
@@ -269,6 +285,10 @@ class BattleScreen(Screen):
         self._flashes: dict[tuple[int, str], QImage] = {}
         #: The hero's sprite washed petrol, for the shadow that goes in his place.
         self._shadows: dict[int, QImage] = {}
+        #: A trick that was not a blow: its word, and when it happened. Only the
+        #: hero raises one, and only one at a time -- a wall and an aura at once
+        #: would be two answers to one turn.
+        self._flourish: tuple[str, float] | None = None
 
     # -- the contract -------------------------------------------------------
     def draw(self, buffer: PatternBuffer, app) -> None:
@@ -361,6 +381,8 @@ class BattleScreen(Screen):
             cx += self._jolt(figure)
         self._paste_extra(painter, figure, app, figures, cell_w, cell_h, baseline)
         self._paste_model(painter, figure, cx, baseline, opacity, app.font)
+        if figure.actor is self.battle.hero:
+            self._paste_wall(painter, figure, cell_w, cell_h, baseline)
 
     def _paste_shadow(
         self, painter: QPainter, figure: Staged, cell_w: int, cell_h: int
@@ -528,6 +550,43 @@ class BattleScreen(Screen):
             painter.end()
             self._shadows[id(image)] = cached
         return cached
+
+    def _paste_wall(
+        self, painter: QPainter, figure: Staged, cell_w: int, cell_h: int, baseline: int
+    ) -> None:
+        """The wall of ice, standing in front of him while it lasts.
+
+        Drawn in front of the hero and not around him: the whole point of the
+        fortress is that the floor has to get *through* it, and a wall that is
+        behind a figure is a wall nobody is standing behind.
+        """
+        if self._flourish is None:
+            return
+        flair, when = self._flourish
+        age = self._clock - when
+        if age > WALL_LIFE or self._look(flair) != "wall":
+            return
+        width = float(figure.cells * cell_w) * 1.25
+        # He stands *behind* it: tall enough to cover his legs and no taller, so
+        # the wall reads as the thing between him and the floor's teeth.
+        height = float(cell_h) * 1.2
+        # Up out of the floor and away again: the ice arrives and goes, so the
+        # frame it is standing is the one the player remembers.
+        fade = 1.0 - age / WALL_LIFE
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(190, 233, 255, int(120 * fade)))
+        painter.drawRect(
+            QRectF(
+                figure.cx - width / 2,
+                baseline - height,
+                width,
+                height,
+            )
+        )
+        painter.setBrush(QColor(255, 255, 255, int(90 * fade)))
+        painter.drawRect(
+            QRectF(figure.cx - width / 2, baseline - height, width, height * 0.22)
+        )
 
     def _jolt(self, figure: Staged) -> int:
         """How far a struck figure is shaking, in pixels, right now."""
@@ -783,6 +842,16 @@ class BattleScreen(Screen):
         """One event, on the screen and in the ear."""
         if isinstance(event, Said):
             self.lines = [*self.lines, event][-LOG_LINES:]
+            return
+        if isinstance(event, Flourish):
+            self._flourish = (event.flair, self._clock)
+            look = self._look(event.flair)
+            if look == "aura":
+                point = self._point_of(event.actor, app)
+                if point is not None:
+                    app.effects.spark(
+                        point, FLAIR_COLOURS.get(event.flair, "#ffffff"), 26
+                    )
             return
         if isinstance(event, Guarded):
             point = self._point_of(self.battle.hero, app)

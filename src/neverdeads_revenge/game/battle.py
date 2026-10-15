@@ -40,13 +40,23 @@ from .actors import Actor
 from .combat import AttackOutcome
 from .specials import (
     ATRITAS,
+    AVALANCHE,
+    BELLS_THROW,
     BETWEEN_BLOWS,
+    ECHOING_CUT,
+    FIRST_NOTE,
+    HOARFROST,
     LEFT_HAND,
     OPEN_VEIN,
-    SPECIALS,
+    RIME,
+    SHATTERED_BELL,
+    STILLNESS,
+    TRUE_NOTE,
     VOID,
+    FORTRESS,
     Special,
     special_by_key,
+    specials_for,
 )
 from .state import GameState, LogKind
 
@@ -59,6 +69,7 @@ __all__ = [
     "STAGE",
     "VERBS",
     "Battle",
+    "Flourish",
     "Guarded",
     "Special",
     "Over",
@@ -116,6 +127,20 @@ class Struck:
 
 
 @dataclass(frozen=True, slots=True)
+class Flourish:
+    """Something a trick did that was not a blow: an aura, a wall, a disappearance.
+
+    The five are not all swings. One raises the armour, one sets the frost, one
+    takes the hero out of the room -- and a screen that only ever heard about
+    blows would have nothing to show for them. This carries the *word* and
+    nothing else, the same way :class:`Struck` does.
+    """
+
+    actor: Actor
+    flair: str
+
+
+@dataclass(frozen=True, slots=True)
 class Guarded:
     """The hero set his feet: everything aimed at him this round is halved."""
 
@@ -131,7 +156,7 @@ class Over:
 
 
 #: Everything a fight can say to a screen.
-Event = Said | Struck | Guarded | Over
+Event = Said | Struck | Flourish | Guarded | Over
 
 
 def open_fight(state: GameState, trigger: Actor | None = None) -> Battle | None:
@@ -148,6 +173,14 @@ def open_fight(state: GameState, trigger: Actor | None = None) -> Battle | None:
         state.encounter = None
     return Battle(state, encounter_around(state, trigger))
 
+
+#: What the hammer multiplies a blow by, what the stillness adds to the armour,
+#: and what the true note adds to every blow after it. Three numbers in one place
+#: because they are the whole balance of two kits, and they should be readable at
+#: a glance rather than hunted for.
+AVALANCHE_SCALE = 1.8
+STILLNESS_ARMOUR = 2
+TRUE_NOTE_DAMAGE = 3
 
 #: What the dagger adds to a stab it makes sure of. Small, because the crit is
 #: already the point: this is the difference between a knife and a knife that was
@@ -214,6 +247,14 @@ class Battle:
         self._used: set[str] = set()
         #: BETWEEN BLOWS: until the end of this round, nothing finds the hero.
         self._unseen = False
+        #: THE HOARFROST: until the end of this round, whoever lands a blow on him
+        #: takes the cold home with them.
+        self._frost = False
+        #: THE BELL'S THROW, and the shattered one: these act last this round.
+        #: Kept as a set of actors rather than by shuffling the round, because the
+        #: round is being walked while a blow lands and moving its floor under the
+        #: walk is how a turn gets skipped.
+        self._slow: set[int] = set()
 
     # -- what the hero is offered -------------------------------------------
     def commands(self) -> list[str]:
@@ -226,8 +267,13 @@ class Battle:
         return list(VERBS)
 
     def specials(self) -> list[Special]:
-        """The hero's five tricks, in the order a fight offers them."""
-        return list(SPECIALS)
+        """The hero's own five, in the order a fight offers them.
+
+        Per hero and not per game: the tricks follow whoever is standing there,
+        because Yeti's glacier is not Noxx's shadow and a menu of somebody else's
+        moves is a menu with nothing in it.
+        """
+        return list(specials_for(self.state.hero.key))
 
     def special_ready(self, special: Special | None = None) -> bool:
         """Whether the dark would answer -- this one, or any of them.
@@ -237,7 +283,7 @@ class Battle:
         """
         if special is not None:
             return self.special_available(special)
-        return any(self.special_available(one) for one in SPECIALS)
+        return any(self.special_available(one) for one in self.specials())
 
     def special_available(self, special: Special) -> bool:
         """Whether this one can still be asked for, right now.
@@ -303,6 +349,14 @@ class Battle:
         self._used: set[str] = set()
         #: BETWEEN BLOWS: until the end of this round, nothing finds the hero.
         self._unseen = False
+        #: THE HOARFROST: until the end of this round, whoever lands a blow on him
+        #: takes the cold home with them.
+        self._frost = False
+        #: THE BELL'S THROW, and the shattered one: these act last this round.
+        #: Kept as a set of actors rather than by shuffling the round, because the
+        #: round is being walked while a blow lands and moving its floor under the
+        #: walk is how a turn gets skipped.
+        self._slow: set[int] = set()
         if self._hero_acts(command, target, events, special):
             self._advance(events)
         return events
@@ -334,6 +388,9 @@ class Battle:
                     # built, and nothing has happened yet to run out.
                     self._lapse()
                 self._round = self._order()
+                # Read by the order that was just built, and finished with: a
+                # throw that lasted two rounds would be a throw with no rule.
+                self._slow.clear()
                 self._taken = 0
                 self._guarded = False
             actor = self._round[self._taken]
@@ -355,6 +412,7 @@ class Battle:
         if self.state.salt_ward:
             self.state.salt_ward -= 1
         self._unseen = False
+        self._frost = False
         # And the wounds run, for everybody: a poison hurt on the victim's own
         # turn on the map, and a round is the arena's turn. Without this a bleed
         # would be a sentence the fight never read out.
@@ -367,7 +425,9 @@ class Battle:
         before this is asked, so somebody is always still standing."""
         return sorted(
             [actor for actor in [self.hero, *self.enemies] if actor.stats.alive],
-            key=lambda actor: -actor.speed,
+            # Whoever the bell threw acts last, and everything else is quickest
+            # first: two keys, one order, and no reshuffling of a round in flight.
+            key=lambda actor: (id(actor) in self._slow, -actor.speed),
         )
 
     def _decide(self, events: list[Event]) -> bool:
@@ -447,7 +507,7 @@ class Battle:
     # -- the hero's five tricks ---------------------------------------------
     def _first_ready(self) -> Special | None:
         """The first of the five that can be spent, for a caller with no opinion."""
-        for special in SPECIALS:
+        for special in self.specials():
             if self.special_available(special):
                 return special
         return None
@@ -482,6 +542,16 @@ class Battle:
             OPEN_VEIN: self._special_open_vein,
             BETWEEN_BLOWS: self._special_between_blows,
             VOID: self._special_the_void,
+            AVALANCHE: self._special_avalanche,
+            RIME: self._special_rime,
+            HOARFROST: self._special_hoarfrost,
+            STILLNESS: self._special_stillness,
+            FORTRESS: self._special_frozen_fortress,
+            FIRST_NOTE: self._special_first_note,
+            BELLS_THROW: self._special_bells_throw,
+            TRUE_NOTE: self._special_true_note,
+            ECHOING_CUT: self._special_echoing_cut,
+            SHATTERED_BELL: self._special_shattered_bell,
         }[special.key]
         run(target, events)
         if not special.uses_floor:
@@ -495,11 +565,16 @@ class Battle:
         flair: str = "",
         force_crit: bool = False,
         bonus: int = 0,
+        damage_scale: float = 1.0,
     ) -> AttackOutcome:
         """One hero's blow, said and shown, with the trick's own word on it."""
         before = len(self.state.log)
         outcome = resolve_player_attack(
-            self.state, enemy, force_crit=force_crit, bonus=bonus
+            self.state,
+            enemy,
+            force_crit=force_crit,
+            bonus=bonus,
+            damage_scale=damage_scale,
         )
         self._splice(before, events)
         events.append(Struck(self.hero, enemy, outcome, flair=flair))
@@ -558,6 +633,125 @@ class Battle:
                 break
             self._blow(enemy, events, flair=VOID)
 
+    # -- Yeti: the glacier and the wall ------------------------------------
+    def _special_avalanche(self, target: Actor | None, events: list[Event]) -> None:
+        """The hammer, with the mountain behind it: slow, and it lands hard."""
+        enemy = self._pick(target)
+        if enemy is not None:
+            self._blow(enemy, events, flair=AVALANCHE, damage_scale=AVALANCHE_SCALE)
+
+    def _special_rime(self, target: Actor | None, events: list[Event]) -> None:
+        """A shallow cut, and the cold gets into the legs: it acts later now."""
+        enemy = self._pick(target)
+        if enemy is None:
+            return
+        self._blow(enemy, events, flair=RIME)
+        if enemy.stats.alive:
+            before = len(self.state.log)
+            inflict(self.state, enemy, ("chill",))
+            self._splice(before, events)
+
+    def _special_hoarfrost(self, target: Actor | None, events: list[Event]) -> None:
+        """He does not swing: this round, the cold answers for him."""
+        before = len(self.state.log)
+        self.state.say("You let the cold do the answering.", LogKind.GOOD)
+        self._splice(before, events)
+        self._frost = True
+
+    def _special_stillness(self, target: Actor | None, events: list[Event]) -> None:
+        """He sets his feet: half of everything that lands, and the ice under it."""
+        self._guarded = True
+        self.state.player.stats.armor += STILLNESS_ARMOUR
+        before = len(self.state.log)
+        self.state.say("You set your feet, and the ice does not care.", LogKind.GOOD)
+        self._splice(before, events)
+        events.append(Flourish(self.hero, STILLNESS))
+
+    def _special_frozen_fortress(self, target: Actor | None, events: list[Event]) -> None:
+        """The wall with twice his blood in it, and the floor's whole teeth.
+
+        The dungeon's fortress is a thing on the *map* that everything would
+        rather bite; what fits in a room is what it is made of -- the armour is
+        doubled, and this round the blows are halved against the ice.
+        """
+        self.state.ultimate_available = False
+        player = self.state.player
+        player.stats.armor += max(2, player.stats.armor)
+        self._guarded = True
+        before = len(self.state.log)
+        self.state.say("You build the Frozen Fortress.", LogKind.GOOD)
+        self.state.say("The floor spends its teeth on the ice.", LogKind.SYSTEM)
+        self._splice(before, events)
+        events.append(Flourish(self.hero, FORTRESS))
+
+    # -- Walkyrion: the note, and the bell ---------------------------------
+    def _special_first_note(self, target: Actor | None, events: list[Event]) -> None:
+        """One cut, and the note of it carries to whatever is behind him."""
+        enemy = self._pick(target)
+        if enemy is None:
+            return
+        self._blow(enemy, events, flair=FIRST_NOTE)
+        others = [one for one in self.living_enemies() if one is not enemy]
+        if others:
+            self._blow(others[0], events, flair=FIRST_NOTE, damage_scale=0.6)
+
+    def _throw_back(self, enemy: Actor) -> None:
+        """Send what was struck to the back of the round.
+
+        If it has not gone yet, it goes last *now* -- the round is being walked
+        and moving a name that is still ahead of the walk is safe, because the
+        walk only ever steps forward. If it has already gone, the throw is for
+        the round after this one, and the order picks it up when it is built.
+        """
+        ahead = self._round[self._taken :]
+        if any(one is enemy for one in ahead):
+            self._round = [one for one in self._round if one is not enemy]
+            self._round.append(enemy)
+        else:
+            self._slow.add(id(enemy))
+
+    def _special_bells_throw(self, target: Actor | None, events: list[Event]) -> None:
+        """The ring of it throws what it lands on to the back of the round."""
+        enemy = self._pick(target)
+        if enemy is None:
+            return
+        self._blow(enemy, events, flair=BELLS_THROW)
+        self._throw_back(enemy)
+        before = len(self.state.log)
+        self.state.say("The ring of it throws him back on his heels.", LogKind.GOOD)
+        self._splice(before, events)
+
+    def _special_true_note(self, target: Actor | None, events: list[Event]) -> None:
+        """He finds the note the sword is for, and keeps it: every blow after."""
+        self.state.player.damage_bonus += TRUE_NOTE_DAMAGE
+        before = len(self.state.log)
+        self.state.say("You find the note the sword is for.", LogKind.GOOD)
+        self._splice(before, events)
+        events.append(Flourish(self.hero, TRUE_NOTE))
+
+    def _special_echoing_cut(self, target: Actor | None, events: list[Event]) -> None:
+        """The cut lands once and is heard three times."""
+        enemy = self._pick(target)
+        if enemy is None:
+            return
+        self._blow(enemy, events, flair=ECHOING_CUT)
+        for other in self.living_enemies():
+            if other is not enemy:
+                self._blow(other, events, flair=ECHOING_CUT, damage_scale=0.5)
+
+    def _special_shattered_bell(self, target: Actor | None, events: list[Event]) -> None:
+        """He shatters the bell, and the note goes down through the floor."""
+        self.state.ultimate_available = False
+        before = len(self.state.log)
+        self.state.say("You shatter the golden bell.", LogKind.GOOD)
+        self.state.say("The note goes down through the floor.", LogKind.SYSTEM)
+        self._splice(before, events)
+        for enemy in self.living_enemies():
+            if not self.hero.stats.alive:
+                break
+            self._blow(enemy, events, flair=SHATTERED_BELL)
+            self._throw_back(enemy)
+
     def _pick(self, target: Actor | None) -> Actor | None:
         """The one being hit: the chosen one, or whoever is still standing."""
         if target is not None and target.stats.alive:
@@ -586,6 +780,12 @@ class Battle:
         outcome = resolve_enemy_attack(
             self.state, attacker, self.hero, guard=self._guarded
         )
+        if self._frost and outcome is not None and outcome.hit and not outcome.killed:
+            # THE HOARFROST: the cold comes off him onto whatever touched him.
+            inflict(self.state, attacker, ("chill",))
+            self.state.say(
+                f"The cold comes off him onto the {attacker.name}.", LogKind.GOOD
+            )
         self._splice(before, events)
         if outcome is not None:
             events.append(Struck(attacker, self.hero, outcome))

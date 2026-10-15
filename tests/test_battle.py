@@ -36,11 +36,21 @@ from neverdeads_revenge.game.battle import (
 )
 from neverdeads_revenge.game.specials import (
     ATRITAS,
+    AVALANCHE,
+    BELLS_THROW,
     BETWEEN_BLOWS,
+    ECHOING_CUT,
+    FIRST_NOTE,
+    HOARFROST,
     LEFT_HAND,
     OPEN_VEIN,
+    RIME,
+    SHATTERED_BELL,
     SPECIALS,
+    STILLNESS,
+    TRUE_NOTE,
     VOID,
+    FORTRESS,
     special_by_key,
 )
 from neverdeads_revenge.game.state import start_run
@@ -532,3 +542,165 @@ def test_a_testrun_opens_the_whole_song():
         for special in SPECIALS
         if ordinary.special_available(special)
     ] == [], "an ordinary run at level one started with tricks"
+
+
+# -- Yeti and Walkyrion (M3) --------------------------------------------------
+def duel(hero: str, level: int = 7, count: int = 2):
+    """A fight as another hero, at a level where the whole kit is in hand."""
+    state = start_run(HEROES[hero], 1, ultimate_level=7)
+    state.level = level
+    return Battle(state, take(state, count))
+
+
+def test_each_hero_has_their_own_five():
+    """The tricks follow whoever is standing there: Yeti's glacier is not Noxx's
+    shadow, and a menu of somebody else's moves is a menu with nothing in it."""
+    for hero, first in (
+        ("noxx", LEFT_HAND),
+        ("yeti", AVALANCHE),
+        ("walkyrion", FIRST_NOTE),
+    ):
+        kit = duel(hero).specials()
+        assert len(kit) == 5, f"{hero} has {len(kit)} tricks"
+        assert kit[0].key == first and kit[-1].uses_floor, (
+            f"{hero}'s kit is in the wrong order or has no ultimate"
+        )
+
+
+def test_the_avalanche_lands_like_a_mountain():
+    """The hammer is not cleverer than a sword, it is heavier: same dice, more."""
+    heavy, light = duel("yeti", 4), duel("yeti", 4)
+    for fight in (heavy, light):
+        fight.enemies[0].stats.hp = 999
+        fight.enemies[0].stats.evasion = 0
+        fight.enemies[0].stats.armor = 0
+        fight.hero.stats.accuracy = 99
+    fight = heavy
+    mountain = [
+        one.outcome.damage
+        for one in strikes(fight.choose(SPECIAL, fight.enemies[0], special=AVALANCHE))
+        if one.actor is fight.hero
+    ][0]
+    pin = [
+        one.outcome.damage
+        for one in strikes(light.choose(ATTACK, light.enemies[0]))
+        if one.actor is light.hero
+    ][0]
+
+    assert mountain > pin, f"the hammer hit for {mountain} and a cut for {pin}"
+
+
+def test_the_rime_slows_what_it_cuts():
+    """The cold gets into the legs: slower, and the round order reads it."""
+    battle = duel("yeti", 4)
+    enemy = battle.enemies[0]
+    enemy.stats.hp = 999
+    before = enemy.speed
+
+    battle.choose(SPECIAL, enemy, special=RIME)
+
+    assert "chill" in enemy.statuses, "the rime left nothing running"
+    assert enemy.speed < before, "the chill did not reach the legs"
+
+
+def test_the_hoarfrost_punishes_what_touches_him():
+    """He does not swing: whoever lands a blow on him takes the cold home."""
+    battle = duel("yeti", 5, count=1)
+    enemy = battle.enemies[0]
+    enemy.stats.accuracy = 99
+    enemy.stats.speed = 0.1  # behind him, so the trick is set before it swings
+    battle.hero.stats.evasion = 0
+
+    battle.choose(SPECIAL, enemy, special=HOARFROST)
+
+    assert "chill" in enemy.statuses, "the frost never came off him"
+
+
+def test_the_stillness_raises_the_ice():
+    """He sets his feet: the armour is his own, and it stays for the fight."""
+    battle = duel("yeti", 6)
+    armor = battle.hero.armor
+
+    battle.choose(SPECIAL, battle.enemies[0], special=STILLNESS)
+
+    assert battle.hero.armor > armor, "setting his feet raised nothing"
+
+
+def test_the_fortress_doubles_the_ice_and_costs_the_floor():
+    """His own ultimate: the wall with twice his blood in it, priced by the floor."""
+    battle = duel("yeti", 1)
+    battle.state.level = 7
+    armor = battle.hero.stats.armor
+
+    battle.choose(SPECIAL, battle.enemies[0], special=FORTRESS)
+
+    assert battle.hero.stats.armor >= armor * 2, "the wall was made of paper"
+    assert not battle.state.ultimate_available, "the floor was not spent"
+
+
+def test_the_bells_throw_sends_them_to_the_back():
+    """The ring of it throws what it lands on: it acts after everyone who has
+    not gone yet -- and if it has already gone, then next round it goes last.
+
+    Asked of the mechanic itself, because the round it reorders is over by the
+    time the round it was thrown in has been played: what the *special* owes is
+    the throw and the sentence, and both are checked here.
+    """
+    battle = duel("walkyrion", 4, count=3)
+    enemy = battle.enemies[1]
+    battle._round = [battle.hero, *battle.enemies]
+    battle._taken = 1
+
+    battle._throw_back(enemy)
+
+    assert battle._round[-1] is enemy, "it was not sent to the back"
+
+    battle = duel("walkyrion", 4, count=3)
+    enemy = battle.enemies[1]
+    enemy.stats.hp = 999
+
+    events = battle.choose(SPECIAL, enemy, special=BELLS_THROW)
+
+    assert any("throws him back" in line for line in lines(events)), (
+        "the ring said nothing about throwing it"
+    )
+
+
+def test_the_true_note_makes_every_blow_after_it_hit_harder():
+    battle = duel("walkyrion", 5)
+    before = battle.hero.damage_bonus
+
+    battle.choose(SPECIAL, battle.enemies[0], special=TRUE_NOTE)
+
+    assert battle.hero.damage_bonus > before, "the note was found and lost again"
+
+
+def test_the_echoing_cut_is_heard_three_times():
+    """The cut lands once and is heard on everything else, for less."""
+    battle = duel("walkyrion", 6, count=3)
+    for enemy in battle.enemies:
+        enemy.stats.hp = 999
+    battle.hero.stats.accuracy = 99
+    for enemy in battle.enemies:
+        enemy.stats.evasion = 0
+
+    events = battle.choose(SPECIAL, battle.enemies[0], special=ECHOING_CUT)
+
+    hit = [one for one in strikes(events) if one.actor is battle.hero]
+    assert len(hit) == 3, f"the echo was heard {len(hit)} times"
+
+
+def test_the_shattered_bell_takes_everyone_and_the_floor():
+    battle = duel("walkyrion", 1, count=3)
+    battle.state.level = 7
+    for enemy in battle.enemies:
+        enemy.stats.hp = 999
+    battle.hero.stats.accuracy = 99
+    for enemy in battle.enemies:
+        enemy.stats.evasion = 0
+
+    events = battle.choose(SPECIAL, battle.enemies[0], special=SHATTERED_BELL)
+
+    hit = [one for one in strikes(events) if one.actor is battle.hero]
+    assert len(hit) == 3, "the note did not go round"
+    assert not battle.state.ultimate_available, "the floor was not spent"

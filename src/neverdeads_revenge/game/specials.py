@@ -22,14 +22,25 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 __all__ = [
+    "ATRITAS",
+    "AVALANCHE",
+    "BELLS_THROW",
     "BETWEEN_BLOWS",
+    "ECHOING_CUT",
+    "FIRST_NOTE",
+    "HOARFROST",
     "LEFT_HAND",
     "OPEN_VEIN",
+    "RIME",
+    "SHATTERED_BELL",
     "SPECIALS",
+    "SPECIALS_BY_HERO",
+    "STILLNESS",
+    "TRUE_NOTE",
     "VOID",
-    "ATRITAS",
     "Special",
     "special_by_key",
+    "specials_for",
 ]
 
 #: The keys, so a caller never has to spell one out.
@@ -38,6 +49,16 @@ ATRITAS = "atritas"
 OPEN_VEIN = "open_vein"
 BETWEEN_BLOWS = "between_blows"
 VOID = "the_void"
+AVALANCHE = "avalanche"
+RIME = "rime"
+HOARFROST = "hoarfrost"
+STILLNESS = "stillness"
+FORTRESS = "frozen_fortress"
+FIRST_NOTE = "first_note"
+BELLS_THROW = "bells_throw"
+TRUE_NOTE = "true_note"
+ECHOING_CUT = "echoing_cut"
+SHATTERED_BELL = "shattered_bell"
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,7 +123,103 @@ SPECIALS: tuple[Special, ...] = (
     ),
 )
 
-_BY_KEY = {special.key: special for special in SPECIALS}
+#: Yeti, "the unmoved": slow as a glacier and about as easy to move, and
+#: everything that reaches him gets through the armour first. His kit is the
+#: glacier and the wall -- a hammer that comes down, a cold that gets into the
+#: legs, and the one thing he is famous for: standing there.
+YETI_SPECIALS: tuple[Special, ...] = (
+    Special(
+        key=AVALANCHE,
+        name="THE AVALANCHE",
+        blurb="the hammer comes down with the mountain behind it",
+        level=2,
+    ),
+    Special(
+        key=RIME,
+        name="THE RIME",
+        blurb="a shallow cut, and the cold gets into the legs",
+        level=4,
+    ),
+    Special(
+        key=HOARFROST,
+        name="THE HOARFROST",
+        blurb="he does not swing: whoever strikes him takes the cold home",
+        level=5,
+    ),
+    Special(
+        key=STILLNESS,
+        name="THE STILLNESS",
+        blurb="he sets his feet, and the ice does not care what hits it",
+        level=6,
+        look="aura",
+    ),
+    Special(
+        key=FORTRESS,
+        name="THE FROZEN FORTRESS",
+        blurb="the wall with twice his blood in it, and the floor's whole teeth",
+        level=0,
+        uses_floor=True,
+        look="wall",
+    ),
+)
+
+#: Walkyrion, whose sword gives off a note and whose note throws what it lands
+#: on. His kit is the sound of the thing: a cut that is heard behind him, a ring
+#: that throws what it lands on, and finally the bell itself.
+WALKYRION_SPECIALS: tuple[Special, ...] = (
+    Special(
+        key=FIRST_NOTE,
+        name="THE FIRST NOTE",
+        blurb="one cut, and the note of it carries to what is behind him",
+        level=2,
+    ),
+    Special(
+        key=BELLS_THROW,
+        name="THE BELL'S THROW",
+        blurb="the ring of it throws what it lands on to the back of the round",
+        level=4,
+    ),
+    Special(
+        key=TRUE_NOTE,
+        name="THE TRUE NOTE",
+        blurb="he finds the note the sword is for, and keeps it",
+        level=5,
+        look="aura",
+    ),
+    Special(
+        key=ECHOING_CUT,
+        name="THE ECHOING CUT",
+        blurb="the cut lands once and is heard three times",
+        level=6,
+    ),
+    Special(
+        key=SHATTERED_BELL,
+        name="THE SHATTERED BELL",
+        blurb="he shatters the bell, and the note goes down through the floor",
+        level=0,
+        uses_floor=True,
+    ),
+)
+
+#: Whose kit is whose, by the hero's own key.
+SPECIALS_BY_HERO: dict[str, tuple[Special, ...]] = {
+    "noxx": SPECIALS,
+    "yeti": YETI_SPECIALS,
+    "walkyrion": WALKYRION_SPECIALS,
+}
+
+_ALL = (*SPECIALS, *YETI_SPECIALS, *WALKYRION_SPECIALS)
+_BY_KEY = {special.key: special for special in _ALL}
+
+
+def specials_for(hero_key: str) -> tuple[Special, ...]:
+    """The hero's own five, or an empty kit for a hero nobody has written for.
+
+    A hero with no kit is not a broken fight: the menu simply has nothing in it
+    and the dark says so, which is the same courtesy a monster with no picture
+    gets.
+    """
+    return SPECIALS_BY_HERO.get(hero_key, ())
 
 
 def special_by_key(key: str) -> Special | None:
