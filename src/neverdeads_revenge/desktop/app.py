@@ -447,25 +447,47 @@ class DesktopApp(QMainWindow):
         self.push(ChronicleScreen())
 
     def open_encounter(self) -> bool:
-        """The floor handed over a fight: open the arena over it.
+        """The floor handed over a fight: turn the room into the arena.
 
         Returns whether there was one to open, so a caller can ask without
-        looking first. The arena is *pushed*, not swapped in: the dungeon is
-        still standing underneath, holding the run, and a fight is a room the
-        hero walks into and back out of.
+        looking first. What is pushed is the *turning* and not the arena: the
+        step the hero took, the monster's letter coming at the camera, and the
+        white -- see :mod:`neverdeads_revenge.desktop.screens.encounter`. The
+        fight is already decided underneath it, and the arena takes this screen's
+        place when the turning is done, so the dungeon carries on standing under
+        the whole thing and gets the floor back afterwards.
         """
         if self.run is None or self.run.encounter is None:
             return False
         from ..game.battle import Battle, encounter_around
-        from .screens.battle import BattleScreen
+        from .screens.encounter import EncounterScreen
 
         trigger = self.run.encounter
         # Cleared before the arena opens: the domain is done with it the moment
         # it is set, and a fight that is asked for twice would be two fights.
         self.run.encounter = None
         battle = Battle(self.run, encounter_around(self.run, trigger))
-        self.push(BattleScreen(battle))
+        self.push(EncounterScreen(trigger, battle))
         return True
+
+    def enter_battle(self, battle) -> None:
+        """The arena, in the place of whoever was turning the room over."""
+        from .screens.battle import BattleScreen
+
+        self.swap(BattleScreen(battle))
+
+    def swap(self, screen) -> None:
+        """Put a screen where the last one was.
+
+        For the one case that is a hand-off and not a step: the floor has become
+        the arena, and the screen that did the turning must not be left in the
+        stack underneath, drawing a dungeon over a fight.
+        """
+        if self.screens:
+            self.screens[-1] = screen
+        else:
+            self.screens = [screen]
+        self.redraw()
 
     def leave_battle(self) -> None:
         """The fight is over: back to the floor, or home if there is no floor.

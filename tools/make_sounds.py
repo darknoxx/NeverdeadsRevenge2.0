@@ -165,6 +165,18 @@ SOUNDS["bell"] = (
     Note(659, 0.30, duty=0.5, to=330, noise=0.35, volume=0.6),
 )
 
+SOUNDS["encounter"] = (
+    # The floor turning over. Up, up, and down onto it: the shape of every alarm
+    # there has ever been, because it is the one shape that reads as *look now*
+    # without a word in front of it. Half a second, and the last third of it is
+    # the hit landing -- the same fat low noise as taking a blow, so the noise a
+    # fight starts with is the noise a fight is made of.
+    Note(440, 0.07, duty=0.25, to=880, volume=0.55),
+    Note(660, 0.07, duty=0.25, to=1320, volume=0.5),
+    Note(1760, 0.09, duty=0.125, to=1568, noise=0.2, volume=0.45),
+    Note(240, 0.28, duty=0.75, to=115, noise=0.45, volume=0.7),
+)
+
 SOUNDS["void"] = (
     # The void answers. Three descending wide pulses, each dirtier than the
     # last, ending under the range a laptop can produce but shaped so the

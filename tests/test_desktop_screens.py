@@ -323,6 +323,7 @@ def test_a_death_leaves_pixels_at_the_exact_square(app):
     state.turn_queue = type(state.turn_queue)([state.player, enemy])
 
     press(app, Qt.Key.Key_Right, "d")
+    walk_out_the_turning(app)
     assert top(app) == "BattleScreen", "the floor did not hand the fight over"
 
     # Play the fight out: the blow lands in the arena now, and the floor throws
@@ -2071,8 +2072,13 @@ def begin_run_in(app) -> None:
     press(app, Qt.Key.Key_Return)
 
 
-def step_into_a_monster(app):
-    """Put a monster beside the hero and walk into it. Returns the monster."""
+def walk_into_a_monster(app):
+    """Put a monster beside the hero and walk into it. Returns the monster.
+
+    Stops on the *turning*: the floor does not cut to the arena any more, it
+    plays the step out -- the hit, the letter coming at the camera, the white --
+    so a caller that wants a fight has to walk it out as well.
+    """
     from PySide6.QtCore import Qt
 
     from neverdeads_revenge.core.direction import Direction
@@ -2091,6 +2097,23 @@ def step_into_a_monster(app):
             press(app, key)
             return enemy
     raise AssertionError("nowhere beside the hero to stand")
+
+
+def step_into_a_monster(app):
+    """The same walk, and then the turning played out to the arena."""
+    enemy = walk_into_a_monster(app)
+    walk_out_the_turning(app)
+    return enemy
+
+
+def walk_out_the_turning(app) -> None:
+    """Tick until the arena is on top of the stack, or give up loudly."""
+    assert top(app) == "EncounterScreen", "the step did not turn the floor over"
+    for _ in range(200):
+        if top(app) == "BattleScreen":
+            return
+        app._tick()
+    raise AssertionError("the turning never handed the room to the arena")
 
 
 def play_it_out(app, screen) -> None:
@@ -2142,6 +2165,118 @@ def test_walking_into_a_monster_opens_the_arena(app):
     assert top(app) == "GameScreen", "the arena did not give the floor back"
     assert app.run.encounter is None, "a fight is still owed"
     assert enemy not in app.run.enemies, "the corpse is still on the floor"
+
+
+def test_the_step_into_a_monster_turns_the_floor_over(app):
+    """The cut is gone: walking into something opens the *turning*, not the arena.
+
+    One frame the dungeon and the next a room full of monsters was the only
+    thing a player ever saw of the moment a fight starts, and it was the moment
+    the game most needed to shout about.
+    """
+    begin_run_in(app)
+    walk_into_a_monster(app)
+
+    assert top(app) == "EncounterScreen", "the step did not turn the floor over"
+    screen = app.screens[-1]
+    assert screen.animating, "the turning has nothing to play"
+    assert not screen.modal, "the turning hid the dungeon it is turning over"
+    assert screen.battle is not None, "the fight it is turning into is missing"
+
+
+def test_the_turning_is_heard_once(app):
+    """The sting, on the first frame of the turning and on no other: it is the
+    noise the *step* made, and a noise per frame would be a drone."""
+    begin_run_in(app)
+    walk_into_a_monster(app)
+
+    played: list[str] = []
+    original = app.play
+    app.play = lambda name=None: played.append(name if name else "?")  # type: ignore[assignment]
+    try:
+        screen = app.screens[-1]
+        for _ in range(6):
+            screen.step(0.033, app)
+    finally:
+        app.play = original
+
+    assert played.count("encounter") == 1, f"the turning said {played}"
+
+
+def test_the_turning_lets_nothing_through(app):
+    """A moment a drummed key can cut short is a moment the player never sees --
+    and this is the one second in the game that is *for* looking at."""
+    from PySide6.QtCore import Qt
+
+    begin_run_in(app)
+    walk_into_a_monster(app)
+    age = app.screens[-1].age
+
+    for _ in range(8):
+        press(app, Qt.Key.Key_Return)
+        press(app, Qt.Key.Key_Escape)
+
+    assert top(app) == "EncounterScreen", "a key cut the turning short"
+    assert app.screens[-1].age == age, "a key moved the turning's clock"
+
+
+def test_the_arena_takes_the_turnings_place_not_its_company(app):
+    """The turning is a *hand-off*: the arena stands where it stood, and nothing
+    is left underneath still drawing a dungeon over a fight."""
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+
+    begin_run_in(app)
+    walk_into_a_monster(app)
+    turning = app.screens[-1]
+    battle = turning.battle
+    walk_out_the_turning(app)
+
+    assert [type(screen).__name__ for screen in app.screens][-2:] == [
+        "GameScreen",
+        "BattleScreen",
+    ], "the turning was left in the stack"
+    assert app.screens[-1].battle is battle, "a different fight arrived"
+
+
+def test_the_turning_runs_out_the_letter_of_what_was_walked_into(app, font):
+    """The thing coming at the camera is the monster's own glyph, in its own
+    colour: the letter that was standing on the floor a moment ago, made big and
+    brought forward. That is the arena's whole promise, and the turning is where
+    the promise is made -- so it is measured in pixels, where a player reads it.
+    """
+    from neverdeads_revenge.desktop.buffer import PatternBuffer
+    from neverdeads_revenge.desktop.screens.encounter import GROW_FROM, GROW_TO
+    from neverdeads_revenge.desktop.theme import parse_style
+
+    begin_run_in(app)
+    enemy = walk_into_a_monster(app)
+    screen = app.screens[-1]
+    ink = parse_style(enemy.color).fg
+    rgb = (ink.red(), ink.green(), ink.blue())
+
+    def ink_at(age: float) -> int:
+        """The monster's colour, in the middle of the frame, at this moment."""
+        screen.age = age
+        buffer = PatternBuffer(96, 27, font)
+        # The map has to be drawn by *something*: in the app it is the game
+        # screen standing under the turning, which is the whole reason this
+        # screen is not a modal.
+        app.screens[-2].draw(buffer, app)
+        screen.draw(buffer, app)
+        image = buffer.render()
+        screen.paste(image, app)
+        left, top = image.width() // 3, image.height() // 5
+        right, bottom = image.width() * 2 // 3, image.height() * 4 // 5
+        return sum(
+            1
+            for y in range(top, bottom, 2)
+            for x in range(left, right, 2)
+            if _is_colour(image.pixelColor(x, y), rgb, 70)
+        )
+
+    small = ink_at(GROW_FROM + 0.02)
+    big = ink_at(GROW_TO - 0.02)
+    assert big > small * 3, f"the letter did not come at the camera ({small} -> {big})"
 
 
 def test_a_run_that_ends_in_the_arena_ends_where_it_always_did(app):
