@@ -29,6 +29,8 @@ from PySide6.QtGui import (
     QFontMetrics,
     QImage,
     QPainter,
+    QPen,
+    QPolygonF,
     QRadialGradient,
     QTransform,
 )
@@ -133,6 +135,38 @@ FLAIR_COLOURS: dict[str, str] = {
 }
 #: How long a wall of ice stands in front of the hero after it is raised.
 WALL_LIFE = 1.6
+#: How long a blow's own flourish lasts. Inside the beat that carries it, so the
+#: fight still reads one blow at a time -- but long enough to be *seen*, which is
+#: the whole point of fifteen tricks looking like fifteen tricks.
+FLOURISH_LIFE = 0.55
+#: How many sparks each look throws. The loud ones throw more: a shatter should
+#: look like the mountain, and a rime like a bit of frost.
+SPARKS: dict[str, int] = {
+    "slash": 14,
+    "shadow": 22,
+    "bleed": 18,
+    "trail": 16,
+    "dissolve": 30,
+    "shatter": 34,
+    "frost": 20,
+    "pulse": 22,
+    "aura": 24,
+    "ring": 26,
+    "throw": 24,
+    "wave": 36,
+    "wall": 20,
+}
+#: The three shapes that belong to the *hero* and not to what he hit: an ice
+#: wall in front of him, a glow on him, and a cold ring out of him. They are the
+#: tricks that are not blows, so they have nowhere else to be seen.
+SELF_LOOKS: frozenset[str] = frozenset({"wall", "aura", "pulse"})
+#: And how hard each one knocks the camera. The ultimates land like a floor.
+SHAKES: dict[str, int] = {
+    "shatter": 6,
+    "wave": 6,
+    "dissolve": 7,
+    "throw": 4,
+}
 #: How long one event holds the stage. A fight that printed a whole round at
 #: once would be a spreadsheet with letters drawn on it.
 BEAT = 0.42
@@ -279,12 +313,17 @@ class BattleScreen(Screen):
         self._strikes: dict[int, tuple[int, float]] = {}
         #: Who was struck: when the blow inside their strike lands, and the
         #: colour the trick that landed it is painted in.
-        self._hurts: dict[int, tuple[float, str]] = {}
+        self._hurts: dict[int, tuple[float, str, str]] = {}
+        #: Who has just been thrown back, and when. A knockback is a *place* and
+        #: not a colour, so it is kept apart from the flashes.
+        self._knocked: dict[int, float] = {}
         #: White silhouettes of the sprites, made once and reused: a hit flash is
         #: the figure painted solid white for a few frames.
         self._flashes: dict[tuple[int, str], QImage] = {}
         #: The hero's sprite washed petrol, for the shadow that goes in his place.
         self._shadows: dict[int, QImage] = {}
+        #: What a trick left standing on the *hero*: its look, its colour, when.
+        self._self: tuple[str, str, float] | None = None
         #: A trick that was not a blow: its word, and when it happened. Only the
         #: hero raises one, and only one at a time -- a wall and an aura at once
         #: would be two answers to one turn.
@@ -373,6 +412,10 @@ class BattleScreen(Screen):
                 math.sin(self._clock * BOB_SPEED + figure.phase) * BOB_HEIGHT
             )
         home = figure.row * cell_h - THICKNESS
+        # Thrown back: up the room and drifting home again, which is where
+        # "thrown" is read -- a bell's throw that only changed the queue would be
+        # a rule nobody could see.
+        home -= self._knockback(figure, cell_h)
         cx, baseline, opacity = figure.cx, home - raise_px, 1.0
         pose = self._strike_pose(figure, figures, home, cell_w, cell_h)
         if pose is not None:
@@ -381,8 +424,9 @@ class BattleScreen(Screen):
             cx += self._jolt(figure)
         self._paste_extra(painter, figure, app, figures, cell_w, cell_h, baseline)
         self._paste_model(painter, figure, cx, baseline, opacity, app.font)
+        self._paste_flourish(painter, figure, cell_w, cell_h, baseline)
         if figure.actor is self.battle.hero:
-            self._paste_wall(painter, figure, cell_w, cell_h, baseline)
+            self._paste_self(painter, figure, cell_w, cell_h, baseline)
 
     def _paste_shadow(
         self, painter: QPainter, figure: Staged, cell_w: int, cell_h: int
@@ -551,42 +595,292 @@ class BattleScreen(Screen):
             self._shadows[id(image)] = cached
         return cached
 
-    def _paste_wall(
+    # -- the flourishes: every trick has its own shape ----------------------
+    def _paste_self(
         self, painter: QPainter, figure: Staged, cell_w: int, cell_h: int, baseline: int
     ) -> None:
-        """The wall of ice, standing in front of him while it lasts.
+        """What a trick leaves standing on the *hero*: ice, a glow, or a ring.
 
-        Drawn in front of the hero and not around him: the whole point of the
-        fortress is that the floor has to get *through* it, and a wall that is
-        behind a figure is a wall nobody is standing behind.
+        The three that are not blows at all have to show somewhere, and the hero
+        is where: the wall stands in front of him, the stillness glows on him, and
+        the cold rings out of him.
         """
-        if self._flourish is None:
+        if self._self is None:
             return
-        flair, when = self._flourish
+        look, colour, when = self._self
         age = self._clock - when
-        if age > WALL_LIFE or self._look(flair) != "wall":
+        if age < 0:
             return
-        width = float(figure.cells * cell_w) * 1.25
-        # He stands *behind* it: tall enough to cover his legs and no taller, so
-        # the wall reads as the thing between him and the floor's teeth.
-        height = float(cell_h) * 1.2
-        # Up out of the floor and away again: the ice arrives and goes, so the
-        # frame it is standing is the one the player remembers.
-        fade = 1.0 - age / WALL_LIFE
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(190, 233, 255, int(120 * fade)))
-        painter.drawRect(
-            QRectF(
-                figure.cx - width / 2,
-                baseline - height,
-                width,
-                height,
+        if look == "wall":
+            if age > WALL_LIFE:
+                return
+            width = float(figure.cells * cell_w) * 1.25
+            # He stands *behind* it: tall enough to cover his legs and no taller.
+            height = float(cell_h) * 1.2
+            fade = 1.0 - age / WALL_LIFE
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(190, 233, 255, int(120 * fade)))
+            painter.drawRect(QRectF(figure.cx - width / 2, baseline - height, width, height))
+            painter.setBrush(QColor(255, 255, 255, int(90 * fade)))
+            painter.drawRect(
+                QRectF(figure.cx - width / 2, baseline - height, width, height * 0.22)
             )
+            return
+        if age > FLOURISH_LIFE * 1.5:
+            return
+        if look == "aura":
+            self._glow(painter, figure.cx, baseline, cell_w, cell_h, colour, age)
+            return
+        if look == "pulse":
+            self._ripple(painter, figure.cx, baseline - cell_h, colour, age, reach=4.0)
+
+    def _paste_flourish(
+        self, painter: QPainter, figure: Staged, cell_w: int, cell_h: int, baseline: int
+    ) -> None:
+        """The shape a blow made, over the figure that took it.
+
+        Fifteen tricks and not fifteen colours: a slash is a cut, a bleed drips, a
+        shatter throws shards, a rime leaves crystals, a ring travels, a wave goes
+        through the room -- and the rest climb, so that every one of them *moves*
+        and none of them is only a tint.
+        """
+        struck = self._hurts.get(id(figure.actor))
+        if struck is None:
+            return
+        when, colour, look = struck
+        age = self._clock - when
+        if age < 0 or age > FLOURISH_LIFE:
+            return
+        if look in SELF_LOOKS:
+            # Drawn on the hero instead: a wall on what it hit would be a wall in
+            # the wrong room.
+            return
+        top = baseline - cell_h * 1.4
+        # Every trick opens with the same thing a punch does: a flash where it
+        # landed. The shapes below say *which* trick; the flash says *that* it
+        # hit, and it is what makes a hit read at a glance.
+        self._impact(painter, figure.cx, baseline - cell_h * 1.05, colour, age)
+        if look == "slash":
+            self._slash(painter, figure.cx, top, baseline, cell_w, colour, age)
+        elif look == "bleed":
+            self._drips(painter, figure.cx, top, cell_h, colour, age)
+        elif look == "shatter":
+            self._shards(painter, figure.cx, top, cell_w, colour, age)
+        elif look == "frost":
+            self._crystals(painter, figure.cx, top, cell_w, colour, age)
+        elif look == "ring":
+            self._ripple(painter, figure.cx, top, colour, age, reach=3.4)
+        elif look == "wave":
+            self._band(painter, figure.cx, top, cell_w, colour, age)
+        elif look == "dissolve":
+            self._ripple(painter, figure.cx, top, colour, age, reach=5.5)
+            self._climb(painter, figure.cx, top, cell_h, colour, age, count=6)
+        elif look == "throw":
+            self._climb(painter, figure.cx, top, cell_h, colour, age, count=5, up=True)
+        elif look == "shadow":
+            self._climb(painter, figure.cx, top, cell_h, colour, age, count=6)
+        else:
+            self._climb(painter, figure.cx, top, cell_h, colour, age, count=4)
+
+    # -- the shapes themselves, in pixels ----------------------------------
+    def _impact(self, painter, cx, cy, colour, age) -> None:
+        """The flash of a landed blow: bright, brief, and gone before the shape."""
+        if age > 0.20:
+            return
+        t = age / 0.20
+        radius = 12.0 + t * 30.0
+        tint = QColor(colour)
+        gradient = QRadialGradient(QPointF(cx, cy), radius)
+        gradient.setColorAt(0.0, QColor(255, 255, 255, int(235 * (1.0 - t))))
+        gradient.setColorAt(
+            0.45, QColor(tint.red(), tint.green(), tint.blue(), int(160 * (1.0 - t)))
         )
-        painter.setBrush(QColor(255, 255, 255, int(90 * fade)))
-        painter.drawRect(
-            QRectF(figure.cx - width / 2, baseline - height, width, height * 0.22)
+        gradient.setColorAt(1.0, QColor(tint.red(), tint.green(), tint.blue(), 0))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(gradient)
+        painter.drawEllipse(QRectF(cx - radius, cy - radius, radius * 2, radius * 2))
+
+    def _slash(self, painter, cx, top, baseline, cell_w, colour, age) -> None:
+        """A cut: a bright line through the figure, white at its core.
+
+        Two lines and not one, because a cut has a *side*: the coloured edge is
+        wider and fades, and the white one stays, so the slash is still there at
+        the end of the beat instead of having been a tint that passed.
+        """
+        grow = min(1.0, age / 0.09)
+        half = cell_w * 2.6 * grow
+        fade = 1.0 - min(1.0, age / FLOURISH_LIFE)
+        edge = QColor(colour)
+        edge.setAlpha(int(255 * fade))
+        painter.setPen(QPen(edge, 5))
+        painter.drawLine(QPointF(cx - half, top - 6), QPointF(cx + half, baseline - 4))
+        core = QColor("#ffffff")
+        core.setAlpha(int(255 * (0.5 + 0.5 * fade)))
+        painter.setPen(QPen(core, 2))
+        painter.drawLine(
+            QPointF(cx - half * 0.75, top - 1), QPointF(cx + half * 0.75, baseline - 9)
         )
+
+    def _drips(self, painter, cx, top, cell_h, colour, age) -> None:
+        """A wound: a stain, and drops coming off it that keep going down."""
+        stain = QColor(colour)
+        stain.setAlpha(200)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(stain)
+        painter.drawEllipse(QRectF(cx - 9, top + 2, 18, 7))
+        fall = min(1.0, age / 0.42)
+        for index in range(4):
+            x = cx - 15 + index * 10
+            y = top + 6 + fall * cell_h * 1.4 + index * 3
+            drop = QColor(colour)
+            drop.setAlpha(int(255 * (1.0 - fall)))
+            painter.setPen(QPen(drop, 2))
+            painter.drawLine(QPointF(x, y), QPointF(x, y + 8))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(drop)
+            painter.drawEllipse(QRectF(x - 2, y + 8, 4, 4))
+
+    def _shards(self, painter, cx, top, cell_w, colour, age) -> None:
+        """A shatter: a dozen wedges of ice thrown out of the figure."""
+        throw = min(1.0, age / 0.30)
+        shard = QColor(colour)
+        shard.setAlpha(int(255 * (1.0 - throw)))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(shard)
+        for index in range(12):
+            angle = index * math.pi / 6 + 0.3
+            dx, dy = math.cos(angle), math.sin(angle) * 0.65
+            near = 4 + throw * 12
+            far = 8 + throw * (cell_w * 2.2)
+            painter.drawPolygon(
+                QPolygonF(
+                    [
+                        QPointF(cx + dx * near, top + dy * near),
+                        QPointF(cx + dx * far + dy * 3, top + dy * far - dx * 3),
+                        QPointF(cx + dx * far - dy * 3, top + dy * far + dx * 3),
+                    ]
+                )
+            )
+        core = QColor("#ffffff")
+        core.setAlpha(int(200 * (1.0 - throw)))
+        painter.setPen(QPen(core, 2))
+        for index in range(0, 12, 3):
+            angle = index * math.pi / 6 + 0.3
+            dx, dy = math.cos(angle), math.sin(angle) * 0.65
+            painter.drawLine(
+                QPointF(cx + dx * 4, top + dy * 4),
+                QPointF(cx + dx * (10 + throw * 9), top + dy * (10 + throw * 9)),
+            )
+
+    def _crystals(self, painter, cx, top, cell_w, colour, age) -> None:
+        """A rime: crystals on a ring of frost, breathing in and out.
+
+        Twelve of them, each a diamond rather than a square, so the rime reads as
+        ice and not as the grid the rest of the screen is made of.
+        """
+        breathe = 1.0 + 0.22 * math.sin(age * 24)
+        radius = cell_w * 1.7 * breathe
+        frost = QColor(colour)
+        frost.setAlpha(80)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(QPen(frost, 1))
+        painter.drawEllipse(QRectF(cx - radius, top - radius * 0.55, radius * 2, radius * 1.1))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(colour))
+        for index in range(12):
+            angle = index * math.pi / 6
+            x = cx + math.cos(angle) * radius
+            y = top + math.sin(angle) * radius * 0.55
+            size = 5 if index % 3 == 0 else 3
+            painter.drawPolygon(
+                QPolygonF(
+                    [
+                        QPointF(x, y - size),
+                        QPointF(x + size, y),
+                        QPointF(x, y + size),
+                        QPointF(x - size, y),
+                    ]
+                )
+            )
+
+    def _ripple(self, painter, cx, cy, colour, age, *, reach: float) -> None:
+        """A ring, and a second one after it: the sound of a thing, twice."""
+        for step, delay in ((1.0, 0.0), (0.7, 0.22)):
+            t = (age - delay) / FLOURISH_LIFE
+            if t < 0:
+                continue
+            radius = 5 + t * reach * 12
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.setPen(QPen(QColor(colour), max(1, int(step * 3 * (1 - t)))))
+            painter.drawEllipse(QRectF(cx - radius, cy - radius * 0.55, radius * 2, radius * 1.1))
+
+    def _band(self, painter, cx, top, cell_w, colour, age) -> None:
+        """A wave: a bar of sound going out through the room, both ways."""
+        spread = min(1.0, age / (FLOURISH_LIFE * 0.7))
+        half = cell_w * 1.5 + spread * cell_w * 14
+        fade = max(0, int(255 * (1.0 - spread)))
+        bar = QColor(colour)
+        bar.setAlpha(fade)
+        painter.setPen(QPen(bar, 3))
+        painter.drawLine(QPointF(cx - half, top), QPointF(cx + half, top))
+        core = QColor("#ffffff")
+        core.setAlpha(fade // 2)
+        painter.setPen(QPen(core, 1))
+        painter.drawLine(QPointF(cx - half, top - 3), QPointF(cx + half, top - 3))
+
+    def _climb(self, painter, cx, top, cell_h, colour, age, *, count: int, up: bool = False) -> None:
+        """Sparks climbing off the figure -- or, for a throw, thrown up with it."""
+        painter.setPen(Qt.PenStyle.NoPen)
+        for index in range(count):
+            phase = (age * 34 + index * 9) % (cell_h * 1.5)
+            rise = phase if up else cell_h * 1.5 - phase
+            x = cx - 16 + index * 6 + (3 if up else 0)
+            painter.setBrush(QColor(colour))
+            painter.drawRect(QRectF(x, top + rise, 3, 3))
+
+    def _glow(self, painter, cx, baseline, cell_w, cell_h, colour, age) -> None:
+        """An aura: a pool of colour around the hero, a ring at its rim, sparks.
+
+        Thick at the rim and thin in the middle, because the middle is where the
+        hero is: a glow that swallowed him would be a silhouette with nothing in
+        it, and this one is *his*.
+        """
+        breath = 1.0 + 0.16 * math.sin(age * 12)
+        width = float(cell_w) * 4.4 * breath
+        tint = QColor(colour)
+        gradient = QRadialGradient(QPointF(cx, baseline - cell_h * 0.35), width / 2)
+        gradient.setColorAt(0.0, QColor(tint.red(), tint.green(), tint.blue(), 55))
+        gradient.setColorAt(0.62, QColor(tint.red(), tint.green(), tint.blue(), 90))
+        gradient.setColorAt(1.0, QColor(tint.red(), tint.green(), tint.blue(), 0))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(gradient)
+        painter.drawEllipse(
+            QRectF(cx - width / 2, baseline - cell_h * 1.0, width, cell_h * 1.2)
+        )
+        rim = QColor(colour)
+        rim.setAlpha(170)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(QPen(rim, 2))
+        painter.drawEllipse(
+            QRectF(cx - width * 0.36, baseline - cell_h * 0.78, width * 0.72, cell_h * 0.66)
+        )
+        self._climb(painter, cx, baseline - cell_h * 1.2, cell_h, colour, age, count=6, up=True)
+
+    def _knockback(self, figure: Staged, cell_h: int) -> int:
+        """How far up the room a thrown figure is, right now."""
+        when = self._knocked.get(id(figure.actor))
+        if when is None:
+            return 0
+        age = self._clock - when
+        if age < 0:
+            return 0
+        if age > FLOURISH_LIFE:
+            del self._knocked[id(figure.actor)]
+            return 0
+        # Out fast, home slowly: a knock is not a shove back into place.
+        out = min(1.0, age / 0.14)
+        back = max(0.0, (age - 0.30) / (FLOURISH_LIFE - 0.30))
+        return round(cell_h * 1.2 * out * (1.0 - back))
 
     def _jolt(self, figure: Staged) -> int:
         """How far a struck figure is shaking, in pixels, right now."""
@@ -846,6 +1140,12 @@ class BattleScreen(Screen):
         if isinstance(event, Flourish):
             self._flourish = (event.flair, self._clock)
             look = self._look(event.flair)
+            self._self = (look, FLAIR_COLOURS.get(event.flair, "#ffffff"), self._clock)
+            point = self._point_of(event.actor, app)
+            if point is not None:
+                app.effects.spark(
+                    point, FLAIR_COLOURS.get(event.flair, "#ffffff"), SPARKS.get(look, 20)
+                )
             if look == "aura":
                 point = self._point_of(event.actor, app)
                 if point is not None:
@@ -897,7 +1197,8 @@ class BattleScreen(Screen):
             if outcome.hit:
                 point = self._point_of(struck.target, app)
                 if point is not None:
-                    app.view.shake(strength=4 if outcome.crit else 2, seconds=0.16)
+                    strength = SHAKES.get(self._look(struck.flair), 4 if outcome.crit else 2)
+                    app.view.shake(strength=strength, seconds=0.2)
         # The strike is recorded whether or not it lands: a swing that missed
         # was still a swing, and a hero who did not move would look like a hero
         # who did nothing.
@@ -910,9 +1211,24 @@ class BattleScreen(Screen):
             self._hurts[id(struck.target)] = (
                 self._clock + IMPACT_AT,
                 FLAIR_COLOURS.get(struck.flair, "#ffffff"),
+                self._look(struck.flair),
             )
+            if self._look(struck.flair) == "throw":
+                # Thrown *back*: up the room, which is away from the hero, and
+                # back again -- the dungeon's version only makes it walk.
+                self._knocked[id(struck.target)] = self._clock + IMPACT_AT
         if not outcome.hit:
             return
+        # A shower of sparks in the trick's own colour, from the figure that took
+        # it: the flashes say *where*, the particles say *how much*.
+        look = self._look(struck.flair)
+        point = self._point_of(struck.target, app)
+        if point is not None:
+            app.effects.spark(
+                point,
+                FLAIR_COLOURS.get(struck.flair, "#ffffff"),
+                SPARKS.get(look, 16),
+            )
         if struck.actor is self.battle.hero:
             app.play("kill" if outcome.killed else "crit" if outcome.crit else "hit")
         else:
@@ -1185,6 +1501,7 @@ class BattleScreen(Screen):
         struck = self._hurts.get(id(figure.actor))
         flash_age = None if struck is None else self._clock - struck[0]
         colour = "#ffffff" if struck is None else struck[1]
+        look = "" if struck is None else struck[2]
         if flash_age is not None and 0 <= flash_age <= JOLT:
             pass
         else:

@@ -74,11 +74,14 @@ class Special:
     #: Whether the cost is the *floor* rather than the fight. Only the void is
     #: that expensive, and it is the ask the dungeon already prices.
     uses_floor: bool = False
-    #: How it should *look*, for whoever is doing the showing: ``""`` is the
-    #: plain blink every blow makes, ``"shadow"`` sends a second figure instead of
-    #: the hero, ``"trail"`` leaves echoes of him behind, and ``"dissolve"`` takes
-    #: him out of the room for the middle of it. A look and not a colour: two
-    #: heroes can share a flourish the way they share a rule.
+    #: How it should *look*, for whoever is doing the showing. A look and not a
+    #: colour, because a colour is not enough to tell fifteen tricks apart:
+    #: ``"slash"`` cuts, ``"shatter"`` showers shards, ``"frost"`` leaves crystals,
+    #: ``"pulse"`` rings out from the hero, ``"aura"`` glows on him, ``"ring"``
+    #: travels, ``"wave"`` goes through the room, ``"throw"`` sends what it hit
+    #: back, ``"shadow"`` sends a second figure, ``"trail"`` leaves echoes,
+    #: ``"bleed"`` drips, ``"dissolve"`` takes the hero out of the room and
+    #: ``"wall"`` stands in front of him. Two heroes can share one.
     look: str = ""
 
 
@@ -87,6 +90,7 @@ class Special:
 SPECIALS: tuple[Special, ...] = (
     Special(
         key=LEFT_HAND,
+        look="slash",
         name="THE LEFT HAND",
         blurb="the dagger is the honest one: it stabs where nobody is looking",
         level=2,
@@ -100,6 +104,7 @@ SPECIALS: tuple[Special, ...] = (
     ),
     Special(
         key=OPEN_VEIN,
+        look="bleed",
         name="THE OPEN VEIN",
         blurb="a cut that will not close, and keeps costing him",
         level=5,
@@ -130,18 +135,21 @@ SPECIALS: tuple[Special, ...] = (
 YETI_SPECIALS: tuple[Special, ...] = (
     Special(
         key=AVALANCHE,
+        look="shatter",
         name="THE AVALANCHE",
         blurb="the hammer comes down with the mountain behind it",
         level=2,
     ),
     Special(
         key=RIME,
+        look="frost",
         name="THE RIME",
         blurb="a shallow cut, and the cold gets into the legs",
         level=4,
     ),
     Special(
         key=HOARFROST,
+        look="pulse",
         name="THE HOARFROST",
         blurb="he does not swing: whoever strikes him takes the cold home",
         level=5,
@@ -169,12 +177,14 @@ YETI_SPECIALS: tuple[Special, ...] = (
 WALKYRION_SPECIALS: tuple[Special, ...] = (
     Special(
         key=FIRST_NOTE,
+        look="ring",
         name="THE FIRST NOTE",
         blurb="one cut, and the note of it carries to what is behind him",
         level=2,
     ),
     Special(
         key=BELLS_THROW,
+        look="throw",
         name="THE BELL'S THROW",
         blurb="the ring of it throws what it lands on to the back of the round",
         level=4,
@@ -188,12 +198,14 @@ WALKYRION_SPECIALS: tuple[Special, ...] = (
     ),
     Special(
         key=ECHOING_CUT,
+        look="slash",
         name="THE ECHOING CUT",
         blurb="the cut lands once and is heard three times",
         level=6,
     ),
     Special(
         key=SHATTERED_BELL,
+        look="wave",
         name="THE SHATTERED BELL",
         blurb="he shatters the bell, and the note goes down through the floor",
         level=0,

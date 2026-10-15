@@ -2196,7 +2196,7 @@ def test_a_trick_paints_its_own_colour_on_the_blow(app, font):
     from neverdeads_revenge.desktop.screens.battle import FLAIR_COLOURS, BattleScreen
     from neverdeads_revenge.game.battle import Struck
     from neverdeads_revenge.game.combat import AttackOutcome
-    from neverdeads_revenge.game.specials import LEFT_HAND
+    from neverdeads_revenge.game.specials import LEFT_HAND, special_by_key
 
     battle = arena(count=1)
     screen = BattleScreen(battle)
@@ -2208,6 +2208,125 @@ def test_a_trick_paints_its_own_colour_on_the_blow(app, font):
     screen.step(0.5, app)
 
     assert screen._hurts[id(target)][1] == FLAIR_COLOURS[LEFT_HAND]
+    assert screen._hurts[id(target)][2] == special_by_key(LEFT_HAND).look, (
+        "the blow forgot which shape made it"
+    )
+
+
+def _paint(look: str, *, selfy: bool = False, age: float = 0.14):
+    """One flourish, painted into an empty picture and nothing else.
+
+    A shape is checked by looking at *it*: the stage under it would be a
+    photograph of the whole game, and fifteen of those to check fifteen lines
+    would be a test nobody could afford to run.
+    """
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QImage, QPainter
+
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen, Staged
+
+    battle = arena(count=1)
+    screen = BattleScreen(battle)
+    actor = battle.hero if selfy else battle.enemies[0]
+    figure = Staged(actor, "v", "#ffffff", 1, 100, 10, 6)
+    screen._clock = 5.0
+    if selfy:
+        screen._self = (look, "#ffffff", 5.0 - age)
+    else:
+        screen._hurts[id(actor)] = (5.0 - age, "#ffffff", look)
+    image = QImage(200, 200, QImage.Format.Format_ARGB32)
+    image.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(image)
+    if selfy:
+        screen._paste_self(painter, figure, 10, 20, 200)
+    else:
+        screen._paste_flourish(painter, figure, 10, 20, 200)
+    painter.end()
+    return image
+
+
+def _alpha(image) -> bytes:
+    """The shape of it and nothing else: what is painted, wherever it is painted.
+
+    The colour of a blow is the flair's business and is checked above; two shapes
+    that differ only in *what* they paint are the same picture to a player
+    looking at a fight from across the room.
+    """
+    return bytes(image.constBits())[3::4]
+
+
+def test_every_trick_has_a_shape_of_its_own():
+    """Fifteen tricks and not five colours.
+
+    A colour alone would not do: two of the five would wear the same green and
+    the fight would look like one attack used twice. Every special names a shape,
+    and the screen has a recipe for every shape a special can name.
+    """
+    from neverdeads_revenge.desktop.screens.battle import SPARKS
+    from neverdeads_revenge.game.specials import SPECIALS_BY_HERO
+
+    every = [special for kit in SPECIALS_BY_HERO.values() for special in kit]
+    assert all(special.look for special in every), "a trick with no shape of its own"
+    assert {special.look for special in every} <= set(SPARKS), (
+        "a trick asks for a shape the screen cannot draw"
+    )
+    assert len({special.look for special in every}) >= 12, (
+        "fifteen tricks and a handful of shapes between them"
+    )
+
+
+def test_no_two_tricks_are_the_same_picture():
+    """Every shape paints, and no two of them paint the same picture.
+
+    This is what "flashy, and told apart by the animation" means as a test: not
+    that a number changed, but that a *frame* differs -- which is the only thing
+    the player has to go on. The three that belong on the hero are painted on
+    him, because that is where they are seen.
+    """
+    from neverdeads_revenge.desktop.screens.battle import SELF_LOOKS, SPARKS
+
+    shots = {}
+    for look in sorted(SPARKS):
+        shot = _alpha(_paint(look, selfy=look in SELF_LOOKS))
+        painted = len(shot) - shot.count(0)
+        assert painted > 60, f"the {look} painted almost nothing ({painted} pixels)"
+        shots[look] = shot
+
+    for look, shot in shots.items():
+        twins = sorted(other for other, theirs in shots.items() if theirs == shot)
+        assert twins == [look], f"the {look} is the same picture as {twins}"
+
+
+def test_a_shape_that_belongs_on_the_hero_does_not_land_on_what_he_hit():
+    """An ice wall in front of a monster would be a wall in the wrong room: the
+    three that are not blows are painted on the hero, and nowhere else."""
+    from neverdeads_revenge.desktop.screens.battle import SELF_LOOKS
+
+    for look in sorted(SELF_LOOKS):
+        empty = _alpha(_paint(look))
+        assert empty.count(0) == len(empty), f"the {look} was painted on the target"
+
+
+def test_a_throw_sends_what_it_hit_up_the_room(app):
+    """THE BELL'S THROW has to be *seen*: a knockback that only changed the queue
+    would be a rule nobody could see. The figure goes up the room and comes home
+    again, and it is home before the beat is over."""
+    from neverdeads_revenge.desktop.screens.battle import FLOURISH_LIFE, BattleScreen
+
+    battle = arena(count=1)
+    screen = BattleScreen(battle)
+    target = battle.enemies[0]
+    figure = screen._figure_of(target, app)
+    screen._knocked[id(target)] = screen._clock
+
+    assert screen._knockback(figure, 20) == 0, "it was thrown before it was hit"
+
+    screen._clock += 0.14
+    thrown = screen._knockback(figure, 20)
+    assert thrown > 10, "the throw did not move anything"
+
+    screen._clock += FLOURISH_LIFE
+    assert screen._knockback(figure, 20) == 0, "it never came home again"
 
 
 def test_escape_does_not_leave_a_fight(app):
