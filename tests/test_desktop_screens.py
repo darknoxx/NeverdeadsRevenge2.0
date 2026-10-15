@@ -2978,6 +2978,177 @@ def test_the_arena_names_who_the_arrow_is_on(app, font):
     )
 
 
+def test_a_line_about_a_blow_waits_for_the_blow(app):
+    """The log does not run ahead of the sword.
+
+    A sentence about a hit that turns up *before* the hit has told the player the
+    end of the sentence they are in the middle of, and the animation that follows
+    reads as an afterthought to its own description.
+    """
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.game.battle import Said, Struck
+    from neverdeads_revenge.game.combat import AttackOutcome
+    from neverdeads_revenge.game.specials import LEFT_HAND
+    from neverdeads_revenge.game.state import LogKind
+
+    battle = arena(count=1)
+    screen = BattleScreen(battle)
+    target = battle.enemies[0]
+    line = Said("The ghoul takes 4.", LogKind.COMBAT)
+    screen._queue = [
+        line,
+        Struck(battle.hero, target, AttackOutcome(True, False, 4, False), flair=LEFT_HAND),
+    ]
+    screen._beat = 0.0
+
+    screen.step(1 / 30.0, app)  # the swing begins: the line is written down
+    assert line not in screen.lines, "the log said it before the sword did"
+
+    waited = 1
+    while line not in screen.lines and waited < 60:
+        screen.step(1 / 30.0, app)
+        waited += 1
+
+    assert line in screen.lines, "the line never arrived at all"
+    assert waited >= 8, f"the line turned up after {waited} frames: with the swing"
+
+
+def test_the_bar_and_the_sparks_wait_for_the_blow(app):
+    """The damage is the blow's, and the blow has not landed yet.
+
+    A bar that drops while the sword is still in the air is the fight spending
+    the blow on the player's behalf, and sparks over a monster the blade has not
+    reached are the fight telling them the future.
+    """
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.game.battle import Struck
+    from neverdeads_revenge.game.combat import AttackOutcome
+    from neverdeads_revenge.game.specials import LEFT_HAND
+
+    battle = arena(count=1)
+    screen = BattleScreen(battle)
+    target = battle.enemies[0]
+    hp = target.stats.hp
+    screen._shown[id(target)] = hp
+    screen._queue = [
+        Struck(battle.hero, target, AttackOutcome(True, False, 4, False), flair=LEFT_HAND)
+    ]
+    screen._beat = 0.0
+
+    screen.step(1 / 30.0, app)  # the swing
+    assert screen._shown[id(target)] == hp, "the bar fell while the sword was in the air"
+    assert not app.effects.particles, "the sparks flew before the blow landed"
+
+    for _ in range(30):
+        screen.step(1 / 30.0, app)
+        if screen._shown[id(target)] < hp:
+            break
+
+    assert screen._shown[id(target)] == hp - 4, "the bar never took the blow"
+    assert app.effects.particles, "the blow landed without throwing anything"
+
+
+def test_a_wound_bites_in_the_colour_of_what_is_eating_it(app):
+    """The fight *reads out* a wound as well as showing it.
+
+    "The ghoul is bleeding. 2." was being written into the run's log and never
+    reaching the arena's, so a wound cost a monster health in a fight where
+    nobody ever mentioned it -- and the flourish tells the screen which wound it
+    was, so it can be shown in the right colour on the one it is happening to.
+    """
+    from neverdeads_revenge.desktop.screens.battle import (
+        STATUS_COLOURS,
+        STATUS_LOOKS,
+        BattleScreen,
+    )
+    from neverdeads_revenge.game.battle import Flourish
+
+    battle = arena(count=1)
+    screen = BattleScreen(battle)
+    target = battle.enemies[0]
+    screen._queue = [Flourish(target, "burn")]
+    screen._beat = 0.0
+
+    screen.step(1 / 30.0, app)
+
+    from PySide6.QtGui import QColor
+
+    _when, colour, look = screen._hurts[id(target)]
+    worn = QColor(STATUS_COLOURS["burn"])
+    assert QColor(colour).hue() == worn.hue(), "the wound was shown in the wrong colour"
+    assert QColor(colour).lightness() > worn.lightness(), (
+        "the bite is the same brightness as the light it wears: nobody will see it"
+    )
+    assert look == STATUS_LOOKS["burn"], "the wound was shown in the wrong shape"
+    assert screen._popups, "the wound bit without a number coming off it"
+
+
+def test_a_wound_leaves_a_light_on_the_monster(app, font):
+    """Worn, not thrown: a monster with something eating it glows in that colour
+    for as long as it lasts -- under the model, so the monster stands *in* the
+    light instead of being covered by it.
+
+    Read as pixels: fire warms the middle of the frame, cold cools it, and both
+    are gone the moment the wound is.
+    """
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.game.actions import inflict
+
+    def hue(image, channel: str) -> int:
+        """How much of one colour is in the middle, over the other two."""
+        total = 0
+        for y in range(image.height() // 5, image.height() // 2, 2):
+            for x in range(image.width() // 3, image.width() * 2 // 3, 2):
+                pixel = image.pixelColor(x, y)
+                others = [
+                    getattr(pixel, name)()
+                    for name in ("red", "green", "blue")
+                    if name != channel
+                ]
+                total += max(0, getattr(pixel, channel)() - max(others))
+        return total
+
+    battle = arena(count=1)
+    screen = BattleScreen(battle)
+    target = battle.enemies[0]
+    _, plain = drawn(screen, app, font)
+
+    inflict(battle.state, target, ("burn",))
+    _, burning = drawn(screen, app, font)
+    assert hue(burning, "red") > hue(plain, "red") + 500, "the burn left no light"
+
+    del target.statuses["burn"]
+    inflict(battle.state, target, ("chill",))
+    _, chilled = drawn(screen, app, font)
+    assert hue(chilled, "blue") > hue(plain, "blue") + 500, "the cold left no light"
+
+    del target.statuses["chill"]
+    _, clean = drawn(screen, app, font)
+    assert bytes(clean.constBits()) == bytes(plain.constBits()), (
+        "the light stayed on after the wound was gone"
+    )
+
+
+def test_the_arena_does_not_offer_a_way_out_that_is_not_there(app, font):
+    """The plate used to say "esc leave the arena", and escape has not left the
+    arena since the fall of M1: in the room it is the line about there being no
+    way out but through, and in a menu it is one step back. A footer promising a
+    key that does nothing is worse than no footer."""
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+
+    battle = arena(count=1)
+    screen = BattleScreen(battle)
+    buffer, _ = drawn(screen, app, font)
+    written = "".join(cell.char for row in buffer.cells for cell in row)
+    assert "leave the arena" not in written, "the plate still offers a way out"
+    assert "esc" not in written, "the plate is still talking about escape"
+
+    screen.picking = True
+    buffer, _ = drawn(screen, app, font)
+    written = "".join(cell.char for row in buffer.cells for cell in row)
+    assert "esc" in written, "the menus lost their way back"
+
+
 def test_escape_does_not_leave_a_fight(app):
     """There is no way out of a fight but through it.
 

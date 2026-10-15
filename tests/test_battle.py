@@ -27,6 +27,7 @@ from neverdeads_revenge.game.battle import (
     SPECIAL,
     STAGE,
     Battle,
+    Flourish,
     Guarded,
     Over,
     Said,
@@ -473,6 +474,32 @@ def test_the_open_vein_keeps_costing_him():
     hp = enemy.stats.hp
     battle.choose(DEFEND)  # a round goes by: the wound does its work
     assert enemy.stats.hp < hp, "the bleed never bit"
+
+
+def test_a_wound_that_bites_is_said_and_shown():
+    """A wound is read out *and* handed to the screen.
+
+    "The ghoul is bleeding. 2." was being written into the run's log and never
+    reaching the arena's, so a wound cost a monster health in a fight where
+    nobody ever mentioned it -- and the flourish says *which* wound it was, so
+    the screen can show it in the right colour on the one it is happening to.
+    """
+    battle = levelled(5)
+    enemy = battle.enemies[0]
+    enemy.stats.hp = 999
+    battle.choose(SPECIAL, enemy, special=OPEN_VEIN)
+    assert "bleed" in enemy.statuses
+
+    events = battle.choose(DEFEND)  # a round goes by: the wound does its work
+
+    told = [event.text for event in events if isinstance(event, Said)]
+    assert any("bleeding" in text for text in told), f"the wound bit in silence: {told}"
+    shown = [
+        event
+        for event in events
+        if isinstance(event, Flourish) and event.flair == "bleed" and event.actor is enemy
+    ]
+    assert shown, "the wound bit and nothing was shown on the one it happened to"
 
 
 def test_between_blows_leaves_them_hitting_nothing():

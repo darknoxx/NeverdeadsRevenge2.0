@@ -50,6 +50,7 @@ from ...game.battle import (
     Struck,
 )
 from ...game.specials import SPECIALS, Special, special_by_key
+from ...game.statuses import status_by_key
 from ...game.state import LogKind
 from ..buffer import PatternBuffer
 from ..chrome import ASH, BLOOD, BONE, box, rule
@@ -145,6 +146,38 @@ FLAIR_COLOURS: dict[str, str] = {
     "echoing_cut": "#ffe9a8",
     "shattered_bell": "#fff3c4",
 }
+#: What a *wound* looks like -- and this is not the colour of the blow that made
+#: it but the colour of what is happening to the one wearing it. A monster going
+#: green at the edges is poisoned whatever the blade was made of, which is the
+#: whole point: a status has to be readable from across the room, on the figure,
+#: without reading a word of the log.
+STATUS_COLOURS: dict[str, str] = {
+    "bleed": "#e03131",
+    "poison": "#5bd75b",
+    "burn": "#ff7a1f",
+    "chill": "#9fd8f5",
+}
+#: The shape its tick makes. A bleed drips, a poison climbs, a burn goes out
+#: through the room as a wave of heat, and the cold leaves crystals.
+STATUS_LOOKS: dict[str, str] = {
+    "bleed": "bleed",
+    "poison": "poison",
+    "burn": "burn",
+    "chill": "frost",
+}
+#: What each wound sounds like when it bites. Nothing new to generate: the set
+#: already has a wet one, a bad one, a sharp one and a cold one.
+STATUS_SOUNDS: dict[str, str] = {
+    "bleed": "hurt",
+    "poison": "curse",
+    "burn": "crit",
+    "chill": "ice",
+}
+#: How bright the pool of colour around a statused figure is, and how fast it
+#: breathes. Low, because it is worn for the whole fight and has to be liveable
+#: with: a glow that shouts for four rounds is a glow the player stops seeing.
+STATUS_GLOW = 88
+STATUS_PULSE = 2.6
 #: How long a wall of ice stands in front of the hero after it is raised.
 WALL_LIFE = 1.2
 #: How long a blow's own flourish lasts. Inside the beat that carries it, so the
@@ -161,6 +194,8 @@ SPARKS: dict[str, int] = {
     "dissolve": 30,
     "shatter": 34,
     "frost": 20,
+    "poison": 16,
+    "burn": 24,
     "pulse": 22,
     "aura": 24,
     "ring": 26,
@@ -287,6 +322,11 @@ class Popup:
     y: int
     crit: bool = False
     age: float = 0.0
+    #: What it is *about*: how much of whom. The bar drops when the number
+    #: appears and not when the swing started -- the two are one fact and they
+    #: are read together, a fifth of a second after the player asked for the blow.
+    damage: int = 0
+    target_id: int = 0
 
     #: Not a field: the same life for every number, and the only place it lives.
     LIFE = POPUP_LIFE
@@ -416,6 +456,14 @@ class BattleScreen(Screen):
         self._knocked: dict[int, tuple[float, float]] = {}
         #: The room holding still on a landed blow, in seconds left to hold.
         self._hitstop = 0.0
+        #: Sparks owed to blows that have not landed yet: a shower over a monster
+        #: the sword has not reached is the fight telling the player the future,
+        #: in the same way a number is. ``(when, point, colour, how many)``.
+        self._showers: list[tuple[float, tuple[float, float], str, int]] = []
+        #: Lines that describe a blow that has not landed yet. The log is read
+        #: left to right and top to bottom, so a sentence about a hit has to wait
+        #: for the hit -- see :meth:`_play`.
+        self._late: list[tuple[float, Said]] = []
         #: The wash over the room on a landed blow. The loudest thing here and
         #: the cheapest -- and named apart from the white flash a *sprite* wears,
         #: which is the blow's mark on the figure rather than on the room.
@@ -549,7 +597,9 @@ class BattleScreen(Screen):
         else:
             cx += self._jolt(figure)
         self._paste_extra(painter, figure, app, figures, cell_w, cell_h, baseline)
+        self._paste_wound_aura(painter, figure, cell_w, cell_h, baseline)
         self._paste_model(painter, figure, cx, baseline, opacity, app.font)
+        self._paste_wound_glow(painter, figure, cell_w, cell_h, baseline)
         self._paste_flourish(painter, figure, cell_w, cell_h, baseline)
         if figure.actor is self.battle.hero:
             self._paste_self(painter, figure, cell_w, cell_h, baseline)
@@ -794,6 +844,16 @@ class BattleScreen(Screen):
             self._shards(painter, figure.cx, top, cell_w, colour, age)
         elif look == "frost":
             self._crystals(painter, figure.cx, top, cell_w, colour, age)
+        elif look == "poison":
+            # It climbs: a poison is not a hit, it is something working its way
+            # up out of the thing it is in.
+            self._ripple(painter, figure.cx, top, colour, age, reach=1.6)
+            self._climb(painter, figure.cx, top, cell_h, colour, age, count=7, up=True)
+        elif look == "burn":
+            # Fire goes *out*: a wave of heat through the room, and the flames
+            # coming off the figure the whole time it burns.
+            self._band(painter, figure.cx, top, cell_w, colour, age)
+            self._climb(painter, figure.cx, top, cell_h, colour, age, count=8, up=True)
         elif look == "ring":
             self._ripple(painter, figure.cx, top, colour, age, reach=3.4)
         elif look == "wave":
@@ -807,6 +867,79 @@ class BattleScreen(Screen):
             self._climb(painter, figure.cx, top, cell_h, colour, age, count=6)
         else:
             self._climb(painter, figure.cx, top, cell_h, colour, age, count=4)
+
+    def _wound_keys(self, figure: Staged) -> list[str]:
+        """Which wounds a figure is wearing, in a stable order."""
+        return sorted(key for key in figure.actor.statuses if key in STATUS_COLOURS)
+
+    def _wound_light(self, figure: Staged, baseline: int) -> tuple[float, float, float]:
+        """Where a figure's light sits and how tall the figure is.
+
+        The middle of it, measured off the picture where there is one and off the
+        letter's own cap height where there is not -- the same two cases the
+        model is drawn in, so a glow cannot be over a monster that is not there.
+        """
+        if figure.sprite is not None:
+            span = float(figure.sprite.height())
+        else:
+            span = float(QFontMetrics(letter_font(figure.size).bold).capHeight())
+        return float(figure.cx), baseline - span * 0.45, span
+
+    def _paste_wound_aura(
+        self, painter: QPainter, figure: Staged, cell_w: int, cell_h: int, baseline: int
+    ) -> None:
+        """The light a wound throws *around* a figure, drawn under the model.
+
+        Not a blow's flash and not a trick's flourish: a pool of colour that
+        breathes for as long as something is eating the monster. Red for a
+        bleeding wound, green for poison, orange for fire, pale blue for the cold
+        -- and wider than the figure, because a halo hidden behind the thing
+        wearing it is a halo nobody can see.
+        """
+        cx, cy, span = self._wound_light(figure, baseline)
+        for index, key in enumerate(self._wound_keys(figure)):
+            tint = QColor(STATUS_COLOURS[key])
+            # Each wound breathes out of phase with the last, so a monster with
+            # two of them is two lights and not one muddy one.
+            breath = 0.6 + 0.4 * math.sin(self._clock * STATUS_PULSE + index * 2.1)
+            radius = max(float(cell_w) * 2.4, span * 0.95)
+            gradient = QRadialGradient(QPointF(cx, cy), radius)
+            gradient.setColorAt(0.0, QColor(tint.red(), tint.green(), tint.blue(), 0))
+            gradient.setColorAt(
+                0.72,
+                QColor(tint.red(), tint.green(), tint.blue(), int(STATUS_GLOW * breath)),
+            )
+            gradient.setColorAt(1.0, QColor(tint.red(), tint.green(), tint.blue(), 0))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(gradient)
+            painter.drawEllipse(
+                QRectF(cx - radius, cy - radius * 0.85, radius * 2.0, radius * 1.7)
+            )
+
+    def _paste_wound_glow(
+        self, painter: QPainter, figure: Staged, cell_w: int, cell_h: int, baseline: int
+    ) -> None:
+        """And the same light *on* the figure, drawn over the model.
+
+        Low and even, so the monster keeps its own colours: a torch red enough to
+        hide what it is shining on is a torch that has replaced its subject. The
+        two together -- halo and wash -- are what makes a status readable from the
+        other side of the room without reading a word.
+        """
+        cx, cy, span = self._wound_light(figure, baseline)
+        radius = max(float(cell_w) * 2.0, span * 0.8)
+        for index, key in enumerate(self._wound_keys(figure)):
+            tint = QColor(STATUS_COLOURS[key])
+            breath = 0.6 + 0.4 * math.sin(self._clock * STATUS_PULSE + index * 2.1)
+            gradient = QRadialGradient(QPointF(cx, cy), radius)
+            gradient.setColorAt(0.0, QColor(tint.red(), tint.green(), tint.blue(), int(50 * breath)))
+            gradient.setColorAt(0.7, QColor(tint.red(), tint.green(), tint.blue(), int(32 * breath)))
+            gradient.setColorAt(1.0, QColor(tint.red(), tint.green(), tint.blue(), 0))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(gradient)
+            painter.drawEllipse(
+                QRectF(cx - radius, cy - radius * 0.85, radius * 2.0, radius * 1.7)
+            )
 
     # -- the shapes themselves, in pixels ----------------------------------
     def _impact(self, painter, cx, cy, colour, age) -> None:
@@ -1314,7 +1447,15 @@ class BattleScreen(Screen):
             # few: the hitstop is spent *at* the impact and not at the swing.
             self._wash.spent = True
             self._hitstop = self._wash.stop
+        self._fall_due(app)
         for popup in self._popups:
+            # A number on its way *to* the fight and not out of it: it goes live
+            # on the frame the blow lands, and the bar drops with it. Both are one
+            # fact -- how much of whom -- and a bar that went down while the sword
+            # was still in the air was the fight spending the blow for the player.
+            if popup.age < 0 <= popup.age + dt and popup.damage:
+                before = self._shown.get(popup.target_id, popup.damage)
+                self._shown[popup.target_id] = max(0, before - popup.damage)
             popup.age += dt
         self._popups = [popup for popup in self._popups if popup.age < Popup.LIFE]
         if self._beat > 0:
@@ -1365,6 +1506,25 @@ class BattleScreen(Screen):
         for actor in [self.battle.hero, *self.battle.enemies]:
             self._shown[id(actor)] = actor.stats.hp
 
+    def _fall_due(self, app) -> None:
+        """Everything that was owed to a blow, once its moment has come.
+
+        The lines that describe a hit, and the sparks it throws: both are the
+        blow's, both are timed off it, and neither is allowed to arrive early --
+        a fight that reads out a hit before it happens has told the player the
+        ending of the sentence they are in the middle of.
+        """
+        if self._late:
+            due = [line for when, line in self._late if self._clock >= when]
+            self._late = [(when, line) for when, line in self._late if self._clock < when]
+            for line in due:
+                self.lines = [*self.lines, line][-LOG_LINES:]
+        if self._showers:
+            due = [one for one in self._showers if self._clock >= one[0]]
+            self._showers = [one for one in self._showers if self._clock < one[0]]
+            for _when, point, colour, count in due:
+                app.effects.spark(point, colour, count)
+
     @staticmethod
     def _beat_for(event) -> float:
         """How long this event holds the stage.
@@ -1384,9 +1544,23 @@ class BattleScreen(Screen):
     def _play(self, event, app) -> None:
         """One event, on the screen and in the ear."""
         if isinstance(event, Said):
-            self.lines = [*self.lines, event][-LOG_LINES:]
+            # The log is the fight's voice, and its voice does not run ahead of
+            # its hands: a line that describes a blow *waits* for the blow, and
+            # turns up on the frame the sword does. Lines that are not about a
+            # blow -- a curse arriving, a hero setting his feet -- are read at
+            # once, because there is nothing for them to wait on.
+            follows = self._queue[0] if self._queue else None
+            if isinstance(follows, Struck):
+                waits = self._beat_for(event) + IMPACT_AT
+                self._late.append((self._clock + waits, event))
+            else:
+                self.lines = [*self.lines, event][-LOG_LINES:]
             return
         if isinstance(event, Flourish):
+            status = status_by_key(event.flair)
+            if status is not None:
+                self._wound(event.actor, status, app)
+                return
             self._flourish = (event.flair, self._clock)
             look = self._look(event.flair)
             self._self = (look, FLAIR_COLOURS.get(event.flair, "#ffffff"), self._clock)
@@ -1430,9 +1604,6 @@ class BattleScreen(Screen):
         """A blow landing: a number, a shove, and a sound that matches it."""
         outcome = struck.outcome
         figure = self._figure_of(struck.target, app)
-        if outcome.hit and not outcome.dodged:
-            before = self._shown.get(id(struck.target), struck.target.stats.hp)
-            self._shown[id(struck.target)] = max(0, before - outcome.damage)
         if figure is not None:
             text = str(outcome.damage) if outcome.hit else "miss"
             colour = (
@@ -1448,6 +1619,8 @@ class BattleScreen(Screen):
             # and it appears on the frame the impact falls in.
             number = self._popup(text, colour, figure, app, outcome.crit)
             number.age = -IMPACT_AT
+            number.damage = outcome.damage if outcome.hit and not outcome.dodged else 0
+            number.target_id = id(struck.target)
             self._popups.append(number)
             if outcome.hit and not outcome.dodged:
                 point = self._point_of(struck.target, app)
@@ -1485,19 +1658,57 @@ class BattleScreen(Screen):
         if not outcome.hit:
             return
         # A shower of sparks in the trick's own colour, from the figure that took
-        # it: the flashes say *where*, the particles say *how much*.
+        # it: the flashes say *where*, the particles say *how much*. Owed, not
+        # thrown: it belongs to the impact and not to the swing, so it is put on
+        # the same clock as everything else the blow does.
         look = self._look(struck.flair)
         point = self._point_of(struck.target, app)
         if point is not None:
-            app.effects.spark(
-                point,
-                FLAIR_COLOURS.get(struck.flair, "#ffffff"),
-                SPARKS.get(look, 16),
+            self._showers.append(
+                (
+                    self._clock + IMPACT_AT,
+                    point,
+                    FLAIR_COLOURS.get(struck.flair, "#ffffff"),
+                    SPARKS.get(look, 16),
+                )
             )
         if struck.actor is self.battle.hero:
             app.play("kill" if outcome.killed else "crit" if outcome.crit else "hit")
         else:
             app.play("hurt")
+
+    def _wound(self, actor, status, app) -> None:
+        """A wound biting: what the fight shows at the monster's own turn.
+
+        The damage is the *domain's* and has already been taken -- on the turn
+        the wound belongs to, which is the rule -- so this is only the reading of
+        it: the figure flashes in the colour of what is eating it, a number comes
+        off it, the bar drops to where the wound left it, and the shape goes out
+        (a drip, a climb, a wave of heat, a breath of cold).
+
+        Everything a blow gets except the blow. A wound is not a hit and must not
+        look like one: it is the same monster, one turn later, still being eaten.
+        """
+        # Brighter than the light the wound *wears*, and not the same colour of it:
+        # a bite that is the same green as the monster already is is a bite nobody
+        # sees. The mark and the moment are two different things.
+        colour = QColor(STATUS_COLOURS.get(status.key, "#ffffff")).lighter(150).name()
+        look = STATUS_LOOKS.get(status.key, "")
+        figure = self._figure_of(actor, app)
+        if figure is None:
+            return
+        self._hurts[id(actor)] = (self._clock, colour, look)
+        if status.damage:
+            # The bar was at the *unwounded* value: the domain has already taken
+            # the damage off the real actor, and this is the screen catching up.
+            was = self._shown.get(id(actor), actor.stats.hp + status.damage)
+            self._shown[id(actor)] = max(0, was - status.damage)
+            self._popups.append(self._popup(str(status.damage), colour, figure, app, False))
+        point = self._point_of(actor, app)
+        if point is not None:
+            app.effects.spark(point, colour, SPARKS.get(look, 16))
+            app.view.shake(strength=2, seconds=0.12)
+        app.play(STATUS_SOUNDS.get(status.key, "hurt"))
 
     def _wash_blow(self, struck: Struck, app) -> None:
         """What a landed blow does to the *room*: it stops it, and it colours it.
@@ -1994,12 +2205,13 @@ class BattleScreen(Screen):
                 "ready" if ready else "spent",
                 parse_style("bold bright_yellow" if ready else "grey30"),
             )
-        if height >= 7:
-            # What escape *does* depends on where the player is: out of the arena
-            # from the verbs, and one step back from either of the two menus.
-            # A footer that lied about the way out is worse than no footer.
-            hint = "esc  back" if self.picking or self.aiming else "esc  leave the arena"
-            buffer.text(x + 2, y + height - 2, hint, parse_style(ASH))
+        if (self.picking or self.aiming) and height >= 7:
+            # Escape is a step *back* in the two menus and nothing anywhere else
+            # -- there is no way out of a fight but through it -- so the plate only
+            # says anything about it while there is somewhere to go back to. The
+            # line it used to carry ("leave the arena") was a promise no key could
+            # keep.
+            buffer.text(x + 2, y + height - 2, "esc  back", parse_style(ASH))
 
     def _draw_commands(
         self, buffer: PatternBuffer, x: int, y: int, width: int, height: int

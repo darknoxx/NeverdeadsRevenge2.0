@@ -38,6 +38,7 @@ from .actions import (
 )
 from .actors import Actor
 from .combat import AttackOutcome
+from .statuses import status_by_key
 from .specials import (
     ATRITAS,
     AVALANCHE,
@@ -374,7 +375,7 @@ class Battle:
             actor = self._next()
             if actor is self.hero:
                 if self._settled:
-                    self._lapse()
+                    self._lapse(events)
                 self._settled = True
                 self._hero_up = True
                 return
@@ -404,7 +405,7 @@ class Battle:
             0.1, actor.speed
         )
 
-    def _lapse(self) -> None:
+    def _lapse(self, events: list[Event]) -> None:
         """A round has gone by: the counters that run out by the turn run out.
 
         The dungeon ticks these in ``advance_world`` after its own enemy phase,
@@ -424,8 +425,28 @@ class Battle:
         # turn on the map, and a round is the arena's turn. Without this a bleed
         # would be a sentence the fight never read out.
         for actor in [self.hero, *self.enemies]:
-            if actor.stats.alive:
-                tick_statuses(self.state, actor)
+            if not actor.stats.alive:
+                continue
+            # What is *going* to run, taken before it runs: the tick spends the
+            # wound down as it reads it, and a status on its last turn would be
+            # gone by the time anything could say it had bitten. The screen needs
+            # to be told, or the only sign of a bleed would be a line of text.
+            biting = [
+                key
+                for key in actor.statuses
+                if (status := status_by_key(key)) is not None and status.damage
+            ]
+            before = len(self.state.log)
+            tick_statuses(self.state, actor)
+            # And the fight *says* it: "the ghoul is bleeding. 2." was being
+            # written into the run's log and never reaching the arena's, so a
+            # wound cost the monster health in a fight where nobody ever
+            # mentioned it.
+            self._splice(before, events)
+            for key in biting:
+                # One flourish per wound, on the one it is happening *to* -- which
+                # for a status is anybody in the room, not the hero.
+                events.append(Flourish(actor, key))
 
     def _order(self) -> list[Actor]:
         """Who is up next, and after them, and after them.
