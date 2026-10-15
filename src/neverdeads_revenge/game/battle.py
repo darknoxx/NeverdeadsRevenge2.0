@@ -511,14 +511,22 @@ class Battle:
         living = [one for one in [self.hero, *self.enemies] if one.stats.alive]
         for one in living:
             pace.setdefault(id(one), 1.0 / max(0.1, one.speed))
+        # The turn *in flight* comes first. While the hero is up, the queue has
+        # already charged him for the turn he has not taken yet -- that is how
+        # `_advance` finds him -- so the paces describe what comes after it and
+        # the turn itself would be missing from the strip. Which is exactly the
+        # jump a player sees otherwise: the hero's turn drops off the front when
+        # he swings and slides back in when the room settles.
         ahead: list[Actor] = []
-        for _ in range(max(0, count)):
+        if self._hero_up and self.hero.stats.alive:
+            ahead.append(self.hero)
+        while len(ahead) < max(0, count):
             if not living:
                 break
             who = min(living, key=lambda one: pace.get(id(one), 0.0))
             ahead.append(who)
             pace[id(who)] = pace.get(id(who), 0.0) + 1.0 / max(0.1, who.speed)
-        return ahead
+        return ahead[: max(0, count)]
 
     def _order(self) -> list[Actor]:
         """Who is up next, and after them, and after them.

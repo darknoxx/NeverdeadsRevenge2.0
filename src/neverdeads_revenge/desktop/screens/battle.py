@@ -539,7 +539,7 @@ class BattleScreen(Screen):
         self._knocked: dict[int, tuple[float, float]] = {}
         #: The room holding still on a landed blow, in seconds left to hold.
         self._hitstop = 0.0
-        self._order: list = list(battle.upcoming(ORDER_SHOWN))
+        self._order: list = list(battle.upcoming(ORDER_SHOWN + 2))
         #: Sparks owed to blows that have not landed yet: a shower over a monster
         #: the sword has not reached is the fight telling the player the future,
         #: in the same way a number is. ``(when, point, colour, how many)``.
@@ -1840,8 +1840,11 @@ class BattleScreen(Screen):
         self._queue = list(self.battle.choose(VERBS[self.verb], target, special=special))
         self._beat = 0.0
         # The strip the player is about to watch: the round that was just decided,
-        # in the order it was decided, and then what the queue says comes after it.
-        self._order = [*self.battle.turns(), *self.battle.upcoming(ORDER_SHOWN)]
+        # in the order it was decided, and then what the queue says comes after it
+        # -- with enough runway that counting the round off the front never leaves
+        # the strip shorter than the row it draws.
+        played = self.battle.turns()
+        self._order = [*played, *self.battle.upcoming(ORDER_SHOWN + len(played))]
         # The confirmation, and only one of it: a trick and a draught have a
         # voice of their own, and a blip over the top of the dark's own sound
         # would be a stutter rather than a flourish. Everything else -- a swing,
@@ -1895,10 +1898,11 @@ class BattleScreen(Screen):
         """Truth, once the round has finished being played."""
         for actor in [self.battle.hero, *self.battle.enemies]:
             self._shown[id(actor)] = actor.stats.hp
-        # And the order. Standing still means the hero is up -- `_advance` always
-        # hands over to him -- so his own turn goes in front of the prediction,
-        # which is about the turns *after* the one being taken.
-        self._order = [self.battle.hero, *self.battle.upcoming(ORDER_SHOWN)]
+        # And the order: `upcoming` already begins with the turn in flight, so
+        # standing still and mid-swing give the same strip and nothing slides. A
+        # couple spare, so that the row the panel draws is never shorter than the
+        # row it drew a moment ago.
+        self._order = list(self.battle.upcoming(ORDER_SHOWN + 2))
 
     def _play(self, event, app) -> None:
         """One event, on the screen and in the ear."""

@@ -3220,17 +3220,45 @@ def test_the_order_strip_says_who_acts_next(app, font):
     assert battle.enemies[0].glyph in written, "the monster is not in the order"
 
 
-def test_the_order_strip_counts_down_as_the_round_is_played(app):
-    """It moves on as the blows land: whoever has acted is off the front.
+def test_the_order_strip_does_not_jump_when_the_hero_swings(app):
+    """The turn in flight stays at the front of the strip while he swings.
 
-    Dropped up to and *including* them, so a turn whose events are not all blows
-    does not leave the strip one behind for the rest of the round.
+    The queue charges the hero for his turn *before* he takes it -- that is how
+    `_advance` finds him -- so a strip read straight off the paces loses him the
+    moment his blow lands and slides him back in when the room settles: the row
+    shifts a step left and then a step right again. This is that, pinned.
     """
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
 
     battle = arena(count=1)
-    # A monster quick enough to be *after* him in the queue: with the floor's own
-    # slow ones the hero is next again immediately, and quite rightly so.
+    screen = BattleScreen(battle)
+    screen._queue = []
+    screen._beat = 0.0
+    screen.verb = 0
+    screen._choose(app)
+
+    heads: list = []
+    for _ in range(80):
+        assert screen._order, "the strip emptied itself"
+        heads.append(screen._order[0])
+        if not screen.busy:
+            break
+        screen.step(1 / 30.0, app)
+
+    assert all(one is battle.hero for one in heads), (
+        f"the strip left him mid-swing: {[one.glyph for one in heads]}"
+    )
+
+
+def test_the_order_strip_moves_on_to_whoever_is_next(app):
+    """And it does move on: once the turn being taken is *taken*, the head is
+    whoever the queue says is up. Dropped up to and including them, so a turn
+    whose events are not all blows does not leave the strip one behind."""
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+
+    battle = arena(count=1)
+    # A monster quick enough to act *after* him in the same round: with the
+    # floor's own slow ones the hero is up again immediately, and rightly so.
     battle.enemies[0].stats.speed = 9.0
     screen = BattleScreen(battle)
     screen._queue = []
@@ -3238,16 +3266,17 @@ def test_the_order_strip_counts_down_as_the_round_is_played(app):
     screen.verb = 0
     screen._choose(app)
 
-    assert screen._order, "the strip is empty"
-    assert screen._order[0] is battle.hero, "the round does not start with him"
+    assert screen._order and screen._order[0] is battle.hero, "not his turn first"
     head = screen._order[0]
-
-    for _ in range(60):
+    for _ in range(80):
         screen.step(1 / 30.0, app)
         if screen._order and screen._order[0] is not head:
             break
 
-    assert screen._order and screen._order[0] is not head, "the strip never moved on"
+    assert screen._order, "the strip emptied itself"
+    assert screen._order[0] is battle.enemies[0], (
+        f"the strip is on {screen._order[0].glyph}, not on the monster that acts next"
+    )
 
 
 def test_a_monster_dies_when_the_blow_lands_and_not_when_it_is_decided(app):
