@@ -1882,28 +1882,44 @@ def figure_baseline(figure, font) -> int:
 def test_the_monsters_carry_their_health_under_them(app, font):
     """A bar under every monster, and none under the hero.
 
-    The letter is the monster and the log is the story, so the one thing a
-    monster cannot say about itself is how much of it is left -- and the hero's
-    own numbers live on his plate, not on the floor.
+    Painted now and not written into the grid: the floor is a picture, so a bar in
+    the grid would be a bar *under* the picture. Same stripe, same place -- half a
+    cell of it, under the feet -- and the hero keeps his own numbers on his plate.
     """
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.desktop.theme import parse_style
 
     battle = arena(count=3)
     screen = BattleScreen(battle)
-    buffer, _ = drawn(screen, app, font)
-    x0, y0, width, height = screen._areas(96, 27)["ground"]
+    _, image = drawn(screen, app, font)
+    figures = screen._figures(96, 27, font)
+    inks = [
+        parse_style(colour).fg
+        for colour in ("bright_green", "bright_yellow", "bright_red")
+    ]
 
-    def bar_cells(row: int) -> int:
-        return sum(1 for cell in buffer.cells[row] if cell.char == "▄")
+    def bar_pixels(figure) -> int:
+        """How much of a bar is lying under this figure, read off the frame."""
+        y = figure.row * font.cell_h + font.cell_h * 3 // 4
+        cells = max(8, min(14, figure.cells * 2))
+        left = figure.cx - cells * font.cell_w // 2
+        found = 0
+        for x in range(left, left + cells * font.cell_w):
+            pixel = image.pixelColor(x, y)
+            if any(
+                abs(pixel.red() - ink.red()) < 40
+                and abs(pixel.green() - ink.green()) < 40
+                and abs(pixel.blue() - ink.blue()) < 40
+                for ink in inks
+            ):
+                found += 1
+        return found
 
-    on_the_floor = sum(
-        bar_cells(row) for row in range(y0, y0 + height)
-    )
-    assert on_the_floor >= 8 * len(battle.enemies), (
-        f"{on_the_floor} cells of bar for {len(battle.enemies)} monsters"
-    )
-    hero_row = screen._figures(96, 27, font)[-1].row
-    assert bar_cells(hero_row + 1) == 0, "the hero's health is on the floor as well"
+    for figure in figures:
+        if figure.actor is battle.hero:
+            assert bar_pixels(figure) == 0, "the hero's health is on the floor as well"
+            continue
+        assert bar_pixels(figure) > 20, f"no bar under the {figure.actor.name}"
 
 
 def test_a_whole_fight_plays_out_by_keys(app, font):
@@ -1967,62 +1983,106 @@ def test_the_fight_is_not_interrupted_while_it_talks(app, font):
     assert len(screen._queue) <= queue, "a second round was set off mid-beat"
 
 
-def test_the_arena_is_walled_in_the_dungeons_own_glyph(app, font):
-    """The room is ``#``, the same wall the map draws, and it converges.
+def test_the_arena_is_walled_in_stone(app, font):
+    """The room is masonry, raised from the floor's own edges, and it converges.
 
-    The walls are pasted, not drawn in the grid, so this asks the *frame*: grey
-    pixels where masonry goes -- above the floor's far edge, and down both sides
-    -- and none on the floor itself. The convergence is the second half: the
-    leftmost wall pixel at the far end of the room is further in than the one at
-    the near end, because the walls are placed from the floor's own taper.
+    The walls are pasted from the tile set, so this asks the *frame*: there is
+    something to see above the floor's far edge and down both sides, the sides
+    lean in with the taper, and the room *stops* at the top course -- above the
+    wall there is nothing, which is what keeps an arena a room and not wallpaper.
     """
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
-    from neverdeads_revenge.desktop.theme import parse_style
 
     screen = BattleScreen(arena(count=3))
     _, image = drawn(screen, app, font)
     field = screen._field(96, 27, font.cell_w, font.cell_h)
 
-    def is_wall(x: int, y: int) -> bool:
-        colour = image.pixelColor(x, y)
-        floor = parse_style("grey19").fg.red()
-        return (
-            colour.red() == colour.green() == colour.blue()
-            and colour.red() >= floor
-        )
+    # The frame's own background, read off a corner above the room: "drawn here"
+    # is a comparison against what the app paints behind everything, and not a
+    # brightness threshold that the background itself would slip past.
+    outside = image.pixelColor(2, 2)
+
+    def lit(x: int, y: int) -> bool:
+        return image.pixelColor(x, y) != outside
 
     top, bottom = int(field["top"]), int(field["bottom"])
     back = sum(
         1
-        for y in range(max(0, top - 2), top)
+        for y in range(max(0, top - 30), top)
         for x in range(image.width())
-        if is_wall(x, y)
+        if lit(x, y)
     )
     assert back > 200, "there is no wall behind the floor"
 
     def leftmost(row: int) -> int | None:
         for x in range(image.width()):
-            if is_wall(x, row):
+            if lit(x, row):
                 return x
         return None
 
     # Every row of the room that has wall on its left, from the far end of the
-    # room to the near one. The masonry does not reach the very last row -- a
-    # wall of stone-sized hashes stops where the last one fits -- so the
-    # question is which way the line of them leans, not where it ends.
+    # room to the near one, and which way the line of them leans.
     walled = [
-        (row, leftmost(row))
-        for row in range(top, bottom)
-        if leftmost(row) is not None
+        (row, leftmost(row)) for row in range(top, bottom) if leftmost(row) is not None
     ]
     assert len(walled) > 3, "there is no wall on the left"
     (far_row, far), (near_row, near) = walled[0], walled[-1]
     assert far_row < near_row, "the wall does not run down the room"
     assert far > near, "the side walls do not converge with the floor"
 
-    centre = (int(field["left"]) + int(field["right"])) // 2
-    floor_y = (top + bottom) // 2
-    assert not is_wall(centre, floor_y), "the masonry is standing on the floor"
+    # And the room has a ceiling line: the masonry ends where the band does, and
+    # above it there is nothing at all.
+    ceiling = int(field["wall_top"])
+    above = sum(
+        1
+        for y in range(0, max(0, ceiling - 4))
+        for x in range(0, image.width(), 3)
+        if lit(x, y)
+    )
+    assert above == 0, f"{above} pixels of masonry above the wall's top course"
+
+
+def test_the_arena_has_a_room_with_no_art_in_it(app, font, tmp_path, monkeypatch):
+    """Take the stone away and the room is still there.
+
+    The alphabet is underneath every picture in this game. The grid floor is drawn
+    first and pasted over, and the dungeon's own ``#`` is still in the file: a
+    machine with no tiles in it gets the room the arena has always had, in the
+    same place. A fight is never missing a *room* -- only a picture of one.
+    """
+    from neverdeads_revenge.desktop import tiles
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+
+    screen = BattleScreen(arena(count=1))
+    # The room with the stone in it first: `monkeypatch` holds the empty
+    # directory for the rest of the test, and the second drawing needs the real
+    # one still reachable.
+    _, stoned = drawn(screen, app, font)
+    tiles.clear()
+    monkeypatch.setattr(tiles, "TILES_DIR", tmp_path)  # an empty directory
+    try:
+        _, plain = drawn(screen, app, font)
+    finally:
+        tiles.clear()
+
+    assert bytes(plain.constBits()) != bytes(stoned.constBits()), (
+        "the tiles changed nothing: the arena is not painting the room"
+    )
+
+    field = screen._field(96, 27, font.cell_w, font.cell_h)
+    top = int(field["top"])
+
+    def grey(x: int, y: int) -> bool:
+        colour = plain.pixelColor(x, y)
+        return colour.red() == colour.green() == colour.blue() and colour.red() >= 30
+
+    hung = sum(
+        1
+        for y in range(max(0, top - 30), top)
+        for x in range(0, plain.width(), 2)
+        if grey(x, y)
+    )
+    assert hung > 100, "the wall is not drawn in the dungeon's own glyph any more"
 
 
 def test_the_battle_floor_recedes(app, font):

@@ -24,6 +24,7 @@ SRC = os.path.join(ROOT, "src")
 sounds = os.path.join(SRC, "neverdeads_revenge", "sounds")
 fonts = os.path.join(SRC, "neverdeads_revenge", "desktop", "fonts")
 sprites = os.path.join(SRC, "neverdeads_revenge", "desktop", "sprites")
+tiles = os.path.join(SRC, "neverdeads_revenge", "desktop", "tiles")
 
 a = Analysis(
     [os.path.join(HERE, "run.py")],
@@ -36,6 +37,7 @@ a = Analysis(
         (sounds, os.path.join("neverdeads_revenge", "sounds")),
         (fonts, os.path.join("neverdeads_revenge", "desktop", "fonts")),
         (sprites, os.path.join("neverdeads_revenge", "desktop", "sprites")),
+        (tiles, os.path.join("neverdeads_revenge", "desktop", "tiles")),
     ],
     hiddenimports=[
         # Imported lazily by the audio layer, so static analysis misses it --

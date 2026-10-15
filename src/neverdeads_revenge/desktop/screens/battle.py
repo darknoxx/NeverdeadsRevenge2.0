@@ -57,6 +57,7 @@ from ..chrome import ASH, BLOOD, BONE, box, rule
 from ..font import BitmapFont
 from ..render import log_style
 from ..sprites import sprite as sprite_for
+from ..tiles import tile
 from ..theme import Style, parse_style
 from .base import Screen
 
@@ -184,6 +185,12 @@ STATUS_SOUNDS: dict[str, str] = {
 #: with: a glow that shouts for four rounds is a glow the player stops seeing.
 STATUS_GLOW = 88
 STATUS_PULSE = 2.6
+#: How much of the room's own dark is laid over a stone, at the far end of it.
+#: The hashes were drawn in three greys; a picture cannot be, so the difference
+#: between the wall behind the monsters and the near corner is a wash of the
+#: darkness over the top of it -- the same idea, one layer up. Light enough that
+#: the masonry still reads as masonry: a wall nobody can see is not a wall.
+FAR_LIGHT = 0.62
 #: How long a wall of ice stands in front of the hero after it is raised.
 WALL_LIFE = 1.2
 #: How long Atritas stands there after FRIENDS LIKE THESE has called him. Longer
@@ -532,7 +539,11 @@ class BattleScreen(Screen):
         field = self._field(cols, rows, app.font.cell_w, app.font.cell_h)
         painter = QPainter(image)
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, False)
+        self._paste_floor(painter, field)
         self._paste_walls(painter, field)
+        # The bars are painted here and not written into the grid: the floor is a
+        # picture now, and a bar in the grid would be a bar *under* the picture.
+        self._paste_health(painter, figures, app.font)
         # The shadows first: they live on the floor, so a figure standing on one
         # stands on it rather than carrying it around.
         for figure in figures:
@@ -568,6 +579,81 @@ class BattleScreen(Screen):
             self._paste_verdict(painter, cols, rows, app)
         self._paste_wash(painter, image)
         painter.end()
+
+    def _paste_floor(self, painter: QPainter, field: dict[str, float]) -> None:
+        """The floor, in flagstones: the grid's own geometry with a picture on it.
+
+        Two cells to a stone and half a stone of stagger on every row -- the same
+        tile the grid floor has always laid down, in the same place -- and the two
+        variants alternate exactly where the two tones used to. The fade is still
+        a fade and not a texture: one black wash a row, heavier the further back
+        the row is, which is how distance has been drawn here since the start.
+
+        Drawn over the grid floor and not instead of it: no art, or art that will
+        not load, and the room the arena has always had is already underneath.
+        """
+        light, dark = tile("floor_a"), tile("floor_b")
+        if light is None or dark is None:
+            return
+        left, right = float(field["left"]), float(field["right"])
+        top = float(field["top"])
+        width_px, inset_px = field["width_px"], float(field["inset_px"])
+        rows = int(field["cells_h"])
+        tw = light.width()
+        for row in range(rows):
+            depth = row / max(1, rows - 1)
+            y = top + row * float(field["cell_h"])
+            inset = round((1.0 - depth) * inset_px)
+            # The stagger, and the clip that keeps it inside the taper: a tile
+            # that started half a stone to the left would be floor outside the
+            # floor, which is the one thing the taper is for.
+            painter.save()
+            painter.setClipRect(QRectF(left + inset, y, width_px - inset * 2, float(field["cell_h"])))
+            x = left + inset - (row % 2) * (tw // 2)
+            index = 0
+            while x < right - inset:
+                painter.drawImage(int(x), int(y), light if index % 2 == 0 else dark)
+                x += tw
+                index += 1
+            fade = int(140 * (1.0 - depth))
+            if fade:
+                painter.fillRect(
+                    QRectF(left, y, width_px, float(field["cell_h"])),
+                    QColor(6, 6, 10, fade),
+                )
+            painter.restore()
+
+    def _paste_health(self, painter: QPainter, figures, font) -> None:
+        """The bar under every monster, in pixels, on the floor it is standing on.
+
+        The same stripe in the same place the grid used to write -- half a cell
+        tall, under the feet -- and none under the hero: the letter is the monster
+        and the log is the story, so the one thing a monster cannot say about
+        itself is how much of it is left.
+        """
+        for figure in figures:
+            if figure.actor is self.battle.hero:
+                continue
+            total = max(1, figure.actor.max_hp)
+            shown = self._shown.get(id(figure.actor), figure.actor.stats.hp)
+            ratio = max(0.0, min(1.0, shown / total))
+            cells = max(8, min(14, figure.cells * 2))
+            width = float(cells * font.cell_w)
+            height = float(font.cell_h // 2)
+            left = float(figure.cx) - width / 2.0
+            top = float(figure.row * font.cell_h) + height
+            colour = (
+                "bright_green"
+                if ratio > 0.5
+                else "bright_yellow"
+                if ratio > 0.25
+                else "bright_red"
+            )
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.fillRect(QRectF(left, top, width, height), parse_style("grey19").fg)
+            painter.fillRect(
+                QRectF(left, top, width * ratio, height), parse_style(colour).fg
+            )
 
     def _paste_wash(self, painter: QPainter, image) -> None:
         """The wash over the whole room on a landed blow.
@@ -1953,7 +2039,10 @@ class BattleScreen(Screen):
         dx = inset * cell_w
         dy = bottom - top
         length = math.hypot(dx, dy) or 1.0
+        wx, wy, ww, wh = self._areas(cols, rows)["wall"]
         return {
+            "wall_top": float(wy * cell_h),
+            "wall_h": float(wh * cell_h),
             "left": left,
             "right": right,
             "top": top,
@@ -2078,14 +2167,119 @@ class BattleScreen(Screen):
 
     # -- what is pasted -----------------------------------------------------
     def _paste_walls(self, painter: QPainter, field: dict[str, float]) -> None:
-        """The room: the dungeon's ``#``, big, on three planes.
+        """The room: three planes of the same stone.
 
         One plane is the far wall, which faces the viewer and needs no shear at
         all. The other two are the side walls, and each is the *same* transform
-        of the same glyph: the plane's horizontal axis is the floor's own edge
-        and its vertical axis is the vertical, which is what a wall is. The
-        hashes are all one size -- a parallel projection has no nearer and
-        further, which is the whole of the isometric look.
+        of the same tile: the plane's horizontal axis is the floor's own edge and
+        its vertical axis is the vertical, which is what a wall is. Every stone is
+        the same size -- a parallel projection has no nearer and further, which is
+        the whole of the isometric look.
+
+        Painted from ``tiles/wall.png`` where the game has it, and from the
+        dungeon's own ``#`` where it has not: the alphabet is still underneath
+        every picture in here, which is what makes the art safe to ship.
+        """
+        art = tile("wall")
+        if art is None:
+            self._paste_hash_walls(painter, field)
+            return
+        left, right = float(field["left"]), float(field["right"])
+        inset_px = float(field["inset_px"])
+        ground_top = float(field["top"])
+        wall_top = float(field.get("wall_top", ground_top - 60.0))
+        band = ground_top - wall_top
+        far_ink, near_ink = parse_style(WALL_FAR).fg, parse_style(WALL_NEAR).fg
+        # Everything is masonry, and the room is the band it stands in: the wall
+        # behind the monsters and the two at the sides all end at the same line,
+        # because in this projection they are all the same height. Without the
+        # clip the courses climb off the top of the frame.
+        bottom = float(field["bottom"])
+        painter.save()
+        painter.setClipRect(QRectF(0.0, wall_top, 10000.0, bottom - wall_top + 1.0))
+
+        # The far wall: as many stones as fit between the floor's own edges, and
+        # as many courses as the band is tall. Laid *up* from the floor's far
+        # edge and not down from the top: a wall that grew downwards would be
+        # standing on the floor, which is not what a wall does.
+        span = float(field["width_px"]) - inset_px * 2
+        across = max(1, math.ceil(span / art.width()))
+        down = max(1, math.ceil(band / art.height()))
+        for index in range(across):
+            x = int(left + inset_px + index * art.width())
+            for course in range(down):
+                y = int(ground_top - (course + 1) * art.height())
+                painter.drawImage(x, y, art)
+                self._shade(painter, x, y, art, far_ink, FAR_LIGHT)
+
+        # And the two sides, sheared along the floor's own edge.
+        edge_x, edge_y = float(field["edge_x"]), float(field["edge_y"])
+        length = float(field["edge_len"])
+        steps = max(1, round(length / art.width()))
+        for side in (0, 1):
+            ux = edge_x if side == 0 else -edge_x
+            uy = edge_y
+            if side:
+                ax0, ax1 = right - inset_px, right
+            else:
+                ax0, ax1 = left + inset_px, left
+            # The side walls run the *depth* of the room and not the wall band:
+            # they are the floor's own edges standing up, so they start at the
+            # floor's far edge and end where the floor does.
+            ay0, ay1 = ground_top, float(field["bottom"])
+            for step in range(steps):
+                t_along = (step + 0.5) / steps
+                ax = ax0 + (ax1 - ax0) * t_along
+                ay = ay0 + (ay1 - ay0) * t_along
+                painter.save()
+                painter.setTransform(
+                    QTransform(ux, uy, 0.0, 1.0, ax, ay), combine=True
+                )
+                # Up and out of the room: in the sheared space the tile is drawn
+                # *above* the line its edge is on, which is where a wall is --
+                # and courses of them, because one course is a kerb.
+                for course in range(down):
+                    painter.drawImage(
+                        -art.width() // 2, -(course + 1) * art.height(), art
+                    )
+                    # The light comes from the hero's end: the far corner of each
+                    # wall is the darkest thing in the room.
+                    self._shade(
+                        painter,
+                        -art.width() // 2,
+                        -(course + 1) * art.height(),
+                        art,
+                        far_ink,
+                        FAR_LIGHT - t_along * 0.75,
+                    )
+                painter.restore()
+        painter.restore()
+
+    def _shade(
+        self,
+        painter: QPainter,
+        x: int,
+        y: int,
+        art,
+        ink: QColor,
+        how_much: float,
+    ) -> None:
+        """Lay the room's own dark over a stone, so the planes differ.
+
+        The hashes were *drawn* in three greys; a picture cannot be, so the
+        difference between the far wall and the near corner is a wash of the
+        darkness over the top of it -- the same idea, one layer up.
+        """
+        alpha = int(150 * how_much)
+        if alpha <= 0:
+            return
+        painter.fillRect(QRectF(float(x), float(y), float(art.width()), float(art.height())), QColor(6, 6, 10, alpha))
+
+    def _paste_hash_walls(self, painter: QPainter, field: dict[str, float]) -> None:
+        """The room as it was before the stone arrived: the dungeon's own ``#``.
+
+        Kept, and not as decoration: this is what a machine with no tiles in it
+        gets, and what the arena looked like for its first three hundred commits.
         """
         size = self._hash_size(field)
         font = letter_font(size)
