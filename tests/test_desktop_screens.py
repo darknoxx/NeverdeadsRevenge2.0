@@ -2453,6 +2453,159 @@ def test_a_trick_thrown_at_nobody_does_not_ask_for_one(app):
     assert screen.busy, "the trick was not spent at all"
 
 
+def test_every_trick_says_what_it_does():
+    """The list has to be readable and not decipherable.
+
+    A fight is not a guessing game: all fifteen say what they *do* -- what is
+    hit, how hard, for how long -- in the same panel that says it prettily. The
+    voice is the colour; the numbers are the offer, and an offer nobody can
+    price is not an offer.
+    """
+    from neverdeads_revenge.game.specials import SPECIALS_BY_HERO
+
+    every = [special for kit in SPECIALS_BY_HERO.values() for special in kit]
+    for special in every:
+        assert special.effect, f"{special.name} does not say what it does"
+        assert special.blurb, f"{special.name} lost its voice"
+        assert len(special.effect) <= 34, (
+            f"{special.name} says more than a panel can hold"
+        )
+    assert len({special.effect for special in every}) == len(every), (
+        "two tricks are described with the same words"
+    )
+
+
+def test_the_list_says_what_the_chosen_trick_does(app, font):
+    """The facts under the names, in the readable ink.
+
+    Scroll to a trick and the panel tells you what it does before you spend a
+    turn on it: the fight's own voice underneath is a voice, and a voice is not
+    an instruction.
+    """
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+
+    battle = arena(count=1)
+    screen = BattleScreen(battle)
+    screen.picking = True
+    screen.special = 2
+    buffer, _ = drawn(screen, app, font)
+
+    written = "".join(cell.char for row in buffer.cells for cell in row)
+    assert battle.specials()[2].effect in written, "the panel did not say what it does"
+    assert battle.specials()[2].blurb[:20] in written, "the panel lost its voice"
+
+
+def test_the_aim_keeps_saying_what_is_being_aimed(app, font):
+    """While the arrow is out, the player is still choosing an *attack*: what is
+    about to be thrown at one of them stays in front of them."""
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.game.specials import LEFT_HAND, special_by_key
+
+    battle = arena(count=2)
+    screen = BattleScreen(battle)
+    screen.aiming = True
+    screen._picked = LEFT_HAND
+    buffer, _ = drawn(screen, app, font)
+
+    written = "".join(cell.char for row in buffer.cells for cell in row)
+    assert special_by_key(LEFT_HAND).effect in written, (
+        "the aim did not say what was being aimed"
+    )
+
+
+def test_every_cursor_step_is_heard(app):
+    """The ears are told before the eyes are.
+
+    Opening the arrow, crossing the room and spending the turn each make their
+    own noise. A cursor that moves in silence makes the player look down at the
+    panel to find out whether the key registered, and a fight is watched on the
+    floor.
+    """
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+
+    battle = arena(count=3)
+    screen = BattleScreen(battle)
+    screen._queue = []
+    app.screens = [screen]
+
+    played: list[str] = []
+    original = app.play
+    app.play = lambda name=None: played.append(name if name else "?")  # type: ignore[assignment]
+    try:
+        press(app, Qt.Key.Key_Return)  # ATTACK: the arrow comes out
+        assert played == ["move"], played
+        played.clear()
+        press(app, Qt.Key.Key_Right)  # across the room
+        assert played == ["move"], played
+        played.clear()
+        press(app, Qt.Key.Key_Return)  # and the turn is spent
+        assert played == ["pick"], played
+    finally:
+        app.play = original
+    assert screen.busy, "the swing was confirmed and never thrown"
+
+
+def test_the_menus_blip_on_the_way_through(app):
+    """Every step of every cursor in the menus as well -- the verbs, the five,
+    across the five, and the way back out of them."""
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+
+    battle = arena(count=3)
+    screen = BattleScreen(battle)
+    screen._queue = []
+    app.screens = [screen]
+
+    played: list[str] = []
+    original = app.play
+    app.play = lambda name=None: played.append(name if name else "?")  # type: ignore[assignment]
+    try:
+        for key, expected in (
+            (Qt.Key.Key_Down, "move"),  # the verbs
+            (Qt.Key.Key_S, "move"),  # and into the five
+            (Qt.Key.Key_Down, "move"),
+            (Qt.Key.Key_Left, "move"),
+            (Qt.Key.Key_Escape, "move"),  # back to the verbs
+        ):
+            played.clear()
+            press(app, key, "s" if key == Qt.Key.Key_S else "")
+            assert played == [expected], f"{key} said {played}"
+    finally:
+        app.play = original
+
+
+def test_a_trick_the_dark_will_not_answer_is_refused_out_loud(app):
+    """A lock is not silence. The same note for a spent trick as for a chosen one
+    is a menu the player cannot read with their ears -- and they will try the
+    same row again."""
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.game.specials import VOID
+
+    battle = arena(count=1)
+    battle.state.ultimate_available = False  # the dungeon's ask is spent
+    screen = BattleScreen(battle)
+    screen._queue = []
+    app.screens = [screen]
+
+    played: list[str] = []
+    original = app.play
+    app.play = lambda name=None: played.append(name if name else "?")  # type: ignore[assignment]
+    try:
+        press(app, Qt.Key.Key_S, "s")
+        screen.special = [special.key for special in battle.specials()].index(VOID)
+        press(app, Qt.Key.Key_Return)
+    finally:
+        app.play = original
+
+    assert played[-1] == "deny", f"a locked trick was answered with {played}"
+    assert screen.picking, "the refusal took the list away from the player"
+
+
 def test_escape_from_the_arrow_gives_the_five_back(app):
     """The aim is a step in a menu and not a trap: escape walks it backwards,
     one panel at a time, and the trick that was picked is still picked when the

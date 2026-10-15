@@ -1117,9 +1117,11 @@ class BattleScreen(Screen):
         # question nobody has been asked yet.
         if name == "up":
             self.verb = (self.verb - 1) % len(VERBS)
+            app.play("move")
             return True
         if name == "down":
             self.verb = (self.verb + 1) % len(VERBS)
+            app.play("move")
             return True
         shortcut = {"a": ATTACK, "s": SPECIAL, "i": ITEM, "d": DEFEND, "f": FLEE}
         if name in shortcut:
@@ -1144,11 +1146,13 @@ class BattleScreen(Screen):
         if VERBS[self.verb] == SPECIAL:
             self.picking = True
             self.special = 0
+            app.play("move")
             return
         if VERBS[self.verb] in AIMED:
             self.aiming = True
             self._aim_from = "verbs"
             self._picked = None
+            app.play("move")
             return
         self._choose(app)
 
@@ -1185,11 +1189,11 @@ class BattleScreen(Screen):
             # Back where the choice came from, with the trick still picked: the
             # aim is a step in a menu and not a trap.
             self.aiming = False
+            app.play("move")
             if self._aim_from == "list":
                 self.picking = True
             return True
         if name in ("enter", "return", "space", "a"):
-            app.play("pick")
             self.aiming = False
             self._choose(app, special=self._picked)
             return True
@@ -1211,13 +1215,16 @@ class BattleScreen(Screen):
         index = {"1": 0, "2": 1, "3": 2, "4": 3, "5": 4}.get(name)
         if name == "escape":
             self.picking = False
+            app.play("move")
             return True
         rows = self._list_rows(app)
         if name in ("up", "w"):
             self.special = (self.special - 1) % len(specials)
+            app.play("move")
             return True
         if name in ("down", "s"):
             self.special = (self.special + 1) % len(specials)
+            app.play("move")
             return True
         if name in ("left", "h", "right", "l"):
             # The list is two columns, so across is a whole column away -- and it
@@ -1227,6 +1234,7 @@ class BattleScreen(Screen):
             moved = self.special + jump
             if 0 <= moved < len(specials):
                 self.special = moved
+            app.play("move")
             return True
         if index is None and name in ("enter", "return", "space"):
             index = self.special
@@ -1248,6 +1256,11 @@ class BattleScreen(Screen):
             self.aiming = True
             self._aim_from = "list"
             self._picked = chosen.key
+        else:
+            # Locked, or already spent this fight. Answered out loud and not with
+            # silence: the same note for a refusal as for a commitment is a menu
+            # the player cannot read with their ears.
+            app.play("deny")
         return True
 
     @property
@@ -1316,10 +1329,17 @@ class BattleScreen(Screen):
         self._snapshot()
         self._queue = list(self.battle.choose(VERBS[self.verb], target, special=special))
         self._beat = 0.0
+        # The confirmation, and only one of it: a trick and a draught have a
+        # voice of their own, and a blip over the top of the dark's own sound
+        # would be a stutter rather than a flourish. Everything else -- a swing,
+        # a guard, a run for it -- has nothing to say for itself yet, so the note
+        # that the key registered is all the player hears until it lands.
         if VERBS[self.verb] == SPECIAL:
             app.play("void")
         elif VERBS[self.verb] == ITEM:
             app.play("item")
+        else:
+            app.play("pick")
         if not living:
             self._resync()
 
@@ -2007,16 +2027,23 @@ class BattleScreen(Screen):
         arrow on the floor and the name in the panel are the same answer twice,
         which is how a player learns to trust the arrow.
         """
-        box(buffer, x, y, width, height, title="TARGET", border=BLOOD, fill=True)
+        trick = special_by_key(self._picked) if self._picked else None
+        # The trick being aimed is named in the frame, because the aim is still
+        # a choice about the *attack*: what is about to be thrown at one of them
+        # has to stay in front of the player while they pick which one.
+        title = "TARGET" if trick is None else f"TARGET  ·  {trick.name}"
+        box(buffer, x, y, width, height, title=title, border=BLOOD, fill=True)
         if height < 3 or width < 12:
             return
         living = self._targets()
         chosen = self.target % len(living) if living else 0
-        for index, enemy in enumerate(living[: height - 2]):
+        for index, enemy in enumerate(living[: max(1, height - 4)]):
             lit = index == chosen
             marker = "►" if lit else " "
             style = parse_style(f"bold {BONE}" if lit else ASH)
             buffer.text(x + 2, y + 1 + index, f"{marker} {enemy.name}"[: width - 2], style)
+        if trick is not None and height >= 4:
+            buffer.text(x + 2, y + height - 3, trick.effect[: width - 2], parse_style(BONE))
         buffer.text(x + 2, y + height - 2, "◄ ►  pick", parse_style(ASH))
 
     def _draw_specials(
@@ -2066,9 +2093,13 @@ class BattleScreen(Screen):
                 style,
             )
         if specials:
-            blurb = specials[min(self.special, len(specials) - 1)].blurb
-            rule(buffer, x + 1, y + height - 3, width - 2, ASH)
-            buffer.text(x + 2, y + height - 2, blurb[: width - 4], parse_style(ASH))
+            shown = specials[min(self.special, len(specials) - 1)]
+            # What it *does* first, in the readable ink, and then how the fight
+            # says it, dim: the numbers are the offer and the voice is the
+            # colour. A list that only had the voice would be a list the player
+            # has to guess their way through, and guessing is not a choice.
+            buffer.text(x + 2, y + height - 3, shown.effect[: width - 4], parse_style(BONE))
+            buffer.text(x + 2, y + height - 2, shown.blurb[: width - 4], parse_style(ASH))
 
     @staticmethod
     def _bar(

@@ -124,6 +124,13 @@ SOUNDS: dict[str, tuple[Note, ...]] = {
         Note(659, 0.035, duty=0.25, volume=0.45),
         Note(988, 0.06, duty=0.25, to=1109, volume=0.45),
     ),
+    # And the one that says *no*. A locked trick answered with the same note as a
+    # spent one is a menu that cannot be read with the ears, and the player tries
+    # the same row again: two flat low pulses, the shape of a shake of the head.
+    "deny": (
+        Note(196, 0.05, duty=0.75, to=175, volume=0.4),
+        Note(165, 0.09, duty=0.75, to=140, noise=0.15, volume=0.4),
+    ),
     "chest": (
         Note(330, 0.11, duty=0.75, noise=0.3, volume=0.6),
         Note(495, 0.20, duty=0.5, to=390, noise=0.2, volume=0.6),

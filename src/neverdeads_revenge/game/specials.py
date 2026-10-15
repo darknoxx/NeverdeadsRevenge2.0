@@ -67,7 +67,13 @@ class Special:
 
     key: str
     name: str
-    #: One line about it, in the fight's own voice, for the menu to show.
+    #: What it *does*, in plain words and with the numbers in it: what is hit,
+    #: how hard, and for how long. The player has to be able to read this and
+    #: know, because a fight is not a guessing game -- and the voice below is a
+    #: voice, not an instruction. Kept short enough to fit one line of a panel.
+    effect: str
+    #: One line about it, in the fight's own voice, for the menu to show under
+    #: the facts: colour, not information.
     blurb: str
     #: The level it arrives at. Zero means "the dark's own gate" -- see below.
     level: int
@@ -96,6 +102,7 @@ class Special:
 SPECIALS: tuple[Special, ...] = (
     Special(
         key=LEFT_HAND,
+        effect="always a crit, and +3 damage",
         look="slash",
         name="THE LEFT HAND",
         blurb="the dagger is the honest one: it stabs where nobody is looking",
@@ -103,6 +110,7 @@ SPECIALS: tuple[Special, ...] = (
     ),
     Special(
         key=ATRITAS,
+        effect="the shadow strikes him twice",
         look="shadow",
         name="ATRITAS",
         blurb="the shadow goes on its own, and strikes twice",
@@ -110,6 +118,7 @@ SPECIALS: tuple[Special, ...] = (
     ),
     Special(
         key=OPEN_VEIN,
+        effect="small cut, then 2 a turn for 3",
         look="bleed",
         name="THE OPEN VEIN",
         blurb="a cut that will not close, and keeps costing him",
@@ -117,6 +126,7 @@ SPECIALS: tuple[Special, ...] = (
     ),
     Special(
         key=BETWEEN_BLOWS,
+        effect="untouched this round, and it cuts",
         look="trail",
         name="BETWEEN BLOWS",
         blurb="he is not where they swing, and the cut comes from behind",
@@ -124,6 +134,7 @@ SPECIALS: tuple[Special, ...] = (
     ),
     Special(
         key=VOID,
+        effect="all of them take it (floor)",
         needs_target=False,
         look="dissolve",
         name="THE VOID",
@@ -142,6 +153,7 @@ SPECIALS: tuple[Special, ...] = (
 YETI_SPECIALS: tuple[Special, ...] = (
     Special(
         key=AVALANCHE,
+        effect="the blow lands 80% heavier",
         look="shatter",
         name="THE AVALANCHE",
         blurb="the hammer comes down with the mountain behind it",
@@ -149,6 +161,7 @@ YETI_SPECIALS: tuple[Special, ...] = (
     ),
     Special(
         key=RIME,
+        effect="small cut, slows them 4 turns",
         look="frost",
         name="THE RIME",
         blurb="a shallow cut, and the cold gets into the legs",
@@ -156,6 +169,7 @@ YETI_SPECIALS: tuple[Special, ...] = (
     ),
     Special(
         key=HOARFROST,
+        effect="the cold answers whoever hits you",
         needs_target=False,
         look="pulse",
         name="THE HOARFROST",
@@ -164,6 +178,7 @@ YETI_SPECIALS: tuple[Special, ...] = (
     ),
     Special(
         key=STILLNESS,
+        effect="half damage, +2 armour this round",
         needs_target=False,
         name="THE STILLNESS",
         blurb="he sets his feet, and the ice does not care what hits it",
@@ -172,6 +187,7 @@ YETI_SPECIALS: tuple[Special, ...] = (
     ),
     Special(
         key=FORTRESS,
+        effect="armour x2, blows halved (floor)",
         needs_target=False,
         name="THE FROZEN FORTRESS",
         blurb="the wall with twice his blood in it, and the floor's whole teeth",
@@ -187,6 +203,7 @@ YETI_SPECIALS: tuple[Special, ...] = (
 WALKYRION_SPECIALS: tuple[Special, ...] = (
     Special(
         key=FIRST_NOTE,
+        effect="a cut, and a second at 60%",
         look="ring",
         name="THE FIRST NOTE",
         blurb="one cut, and the note of it carries to what is behind him",
@@ -194,6 +211,7 @@ WALKYRION_SPECIALS: tuple[Special, ...] = (
     ),
     Special(
         key=BELLS_THROW,
+        effect="thrown to the back of the queue",
         look="throw",
         name="THE BELL'S THROW",
         blurb="the ring of it throws what it lands on to the back of the round",
@@ -201,6 +219,7 @@ WALKYRION_SPECIALS: tuple[Special, ...] = (
     ),
     Special(
         key=TRUE_NOTE,
+        effect="+3 damage on every blow after",
         needs_target=False,
         name="THE TRUE NOTE",
         blurb="he finds the note the sword is for, and keeps it",
@@ -209,6 +228,7 @@ WALKYRION_SPECIALS: tuple[Special, ...] = (
     ),
     Special(
         key=ECHOING_CUT,
+        effect="full cut on one, half the rest",
         look="slash",
         name="THE ECHOING CUT",
         blurb="the cut lands once and is heard three times",
@@ -216,6 +236,7 @@ WALKYRION_SPECIALS: tuple[Special, ...] = (
     ),
     Special(
         key=SHATTERED_BELL,
+        effect="all of them, and thrown back",
         needs_target=False,
         look="wave",
         name="THE SHATTERED BELL",
