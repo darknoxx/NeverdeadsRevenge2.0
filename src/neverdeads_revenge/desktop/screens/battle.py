@@ -1232,14 +1232,20 @@ class BattleScreen(Screen):
             return True
         chosen = specials[index]
         if self.battle.special_available(chosen):
+            self.picking = False
+            app.play("pick")
+            if not chosen.needs_target:
+                # Set on himself, or through everything standing: there is nobody
+                # to walk the arrow to, and asking would be asking a question the
+                # fight was never going to read.
+                self._choose(app, special=chosen.key)
+                return True
             # The trick is picked, and the *victim* is still to be picked: the
             # list closes and the arrow takes over, on the floor where the
             # monsters are, with the trick kept for whoever it ends up on.
-            self.picking = False
             self.aiming = True
             self._aim_from = "list"
             self._picked = chosen.key
-            app.play("pick")
         return True
 
     @property

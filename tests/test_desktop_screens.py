@@ -2421,6 +2421,38 @@ def test_the_arrow_blips_and_the_choice_answers(app):
     assert screen.busy, "the arrow on a monster did not spend the turn"
 
 
+def test_a_trick_thrown_at_nobody_does_not_ask_for_one(app):
+    """Six of the fifteen are not thrown at anybody: the three that are set on the
+    hero himself, the note he finds for his own sword, and the two that go through
+    everything standing. An arrow walked to a monster for one of those is a
+    question the fight never reads -- and a turn is not a quiz."""
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.game.actors import HEROES
+    from neverdeads_revenge.game.battle import Battle
+    from neverdeads_revenge.game.specials import SPECIALS_BY_HERO, STILLNESS
+    from neverdeads_revenge.game.state import start_run
+
+    at_nobody = [special for kit in SPECIALS_BY_HERO.values() for special in kit]
+    at_nobody = [special for special in at_nobody if not special.needs_target]
+    assert len(at_nobody) >= 3, "almost nothing is thrown at nobody: check the rule"
+
+    state = start_run(HEROES["yeti"], 5, ultimate_level=7)
+    state.level = 7
+    battle = Battle(state, state.enemies[:2])
+    screen = BattleScreen(battle)
+    screen._queue = []
+    app.screens = [screen]
+
+    press(app, Qt.Key.Key_S, "s")  # the list opens on the first of the five
+    screen.special = [special.key for special in battle.specials()].index(STILLNESS)
+    press(app, Qt.Key.Key_Return)
+
+    assert not screen.aiming, "a trick with no victim in it asked for one"
+    assert screen.busy, "the trick was not spent at all"
+
+
 def test_escape_from_the_arrow_gives_the_five_back(app):
     """The aim is a step in a menu and not a trap: escape walks it backwards,
     one panel at a time, and the trick that was picked is still picked when the

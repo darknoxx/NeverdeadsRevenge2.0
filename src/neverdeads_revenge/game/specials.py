@@ -83,6 +83,12 @@ class Special:
     #: ``"bleed"`` drips, ``"dissolve"`` takes the hero out of the room and
     #: ``"wall"`` stands in front of him. Two heroes can share one.
     look: str = ""
+    #: Whether it is thrown at *somebody*. Six of the fifteen are not: the three
+    #: that are set on the hero himself, the note he finds for his own sword, and
+    #: the two that go through everything standing -- and a fight that made the
+    #: player walk an arrow to a monster for one of those would be asking a
+    #: question whose answer it was never going to read.
+    needs_target: bool = True
 
 
 #: The five, in the order a fight offers them: the small honest ones first, and
@@ -118,6 +124,7 @@ SPECIALS: tuple[Special, ...] = (
     ),
     Special(
         key=VOID,
+        needs_target=False,
         look="dissolve",
         name="THE VOID",
         blurb="he gives in, and everything in front of him takes it",
@@ -149,6 +156,7 @@ YETI_SPECIALS: tuple[Special, ...] = (
     ),
     Special(
         key=HOARFROST,
+        needs_target=False,
         look="pulse",
         name="THE HOARFROST",
         blurb="he does not swing: whoever strikes him takes the cold home",
@@ -156,6 +164,7 @@ YETI_SPECIALS: tuple[Special, ...] = (
     ),
     Special(
         key=STILLNESS,
+        needs_target=False,
         name="THE STILLNESS",
         blurb="he sets his feet, and the ice does not care what hits it",
         level=6,
@@ -163,6 +172,7 @@ YETI_SPECIALS: tuple[Special, ...] = (
     ),
     Special(
         key=FORTRESS,
+        needs_target=False,
         name="THE FROZEN FORTRESS",
         blurb="the wall with twice his blood in it, and the floor's whole teeth",
         level=0,
@@ -191,6 +201,7 @@ WALKYRION_SPECIALS: tuple[Special, ...] = (
     ),
     Special(
         key=TRUE_NOTE,
+        needs_target=False,
         name="THE TRUE NOTE",
         blurb="he finds the note the sword is for, and keeps it",
         level=5,
@@ -205,6 +216,7 @@ WALKYRION_SPECIALS: tuple[Special, ...] = (
     ),
     Special(
         key=SHATTERED_BELL,
+        needs_target=False,
         look="wave",
         name="THE SHATTERED BELL",
         blurb="he shatters the bell, and the note goes down through the floor",
