@@ -174,6 +174,39 @@ def test_a_kill_teaches_the_hero():
     assert any(entry.text.startswith("Level 2") for entry in state.log)
 
 
+def test_a_level_says_what_it_taught():
+    """A trick's gate is a level, so a level-up is where anything is ever learned.
+
+    The news belongs in the log, where it happens, and not in a menu the player
+    might not open for another floor -- and it is written the same way on the map
+    and in the arena, because the arena splices the run's log into its own.
+    """
+    state = start_run(NOXX, seed=3)
+    assert state.level == 1
+
+    _teach(state, KILLS_PER_LEVEL)  # level 2, and the knife arrives with it
+
+    told = [entry.text for entry in state.log]
+    assert "Level 2" in " ".join(told), told
+    assert "THE LEFT HAND learned!" in told, told[-3:]
+
+
+def test_a_level_that_teaches_nothing_says_only_what_it_granted():
+    """Yeti's kit arrives at two, four, five and six: level three is health and
+    nothing else, and a level that teaches nothing must not invent a lesson."""
+    from neverdeads_revenge.game.actors import YETI
+
+    state = start_run(YETI, seed=3)
+    _teach(state, KILLS_PER_LEVEL)  # level 2, and the avalanche with it
+    taught = [entry.text for entry in state.log if entry.text.endswith("learned!")]
+    assert taught == ["THE AVALANCHE learned!"], taught
+
+    _teach(state, KILLS_PER_LEVEL)  # level 3: health, and no lesson
+    assert state.level == 3
+    after = [entry.text for entry in state.log if entry.text.endswith("learned!")]
+    assert after == taught, f"level three taught {after}"
+
+
 def test_a_kill_that_does_not_reach_a_level_says_nothing():
     state = start_run(NOXX, seed=3)
     _teach(state, KILLS_PER_LEVEL - 1)

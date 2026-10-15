@@ -59,6 +59,7 @@ from .specials import (
     VOID,
     FORTRESS,
     Special,
+    learned_at,
     special_by_key,
     specials_for,
 )
@@ -295,6 +296,21 @@ class Battle:
         """
         return list(specials_for(self.state.hero.key))
 
+    def learned(self) -> list[Special]:
+        """The tricks the hero has *learned*: which is what the menu shows.
+
+        Not the same question as :meth:`special_available`, which is about this
+        fight and answers no for a trick already spent. A trick learned and spent
+        is still a trick a player has -- it is back next fight -- and a trick not
+        yet learned is not on the menu at all. A list of names the player cannot
+        use is a list of spoilers.
+        """
+        return [
+            one
+            for one in self.specials()
+            if self.state.level >= learned_at(one, self.state.ultimate_level)
+        ]
+
     def special_ready(self, special: Special | None = None) -> bool:
         """Whether the dark would answer -- this one, or any of them.
 
@@ -323,8 +339,7 @@ class Battle:
             return ultimate_refusal(self.state) is None
         if special.key in self._used:
             return False
-        gate = min(special.level, self.state.ultimate_level)
-        return self.state.level >= gate
+        return self.state.level >= learned_at(special, self.state.ultimate_level)
 
     def living_enemies(self) -> list[Actor]:
         """Everyone still standing, in the order they were met."""

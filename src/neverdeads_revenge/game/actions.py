@@ -51,6 +51,7 @@ from .difficulty import (
 )
 from .gifts import gift_by_key
 from .lore import numeral
+from .specials import learned_at, specials_for
 from .statuses import status_by_key
 from .levels import apply_gain, gains_between, level_for
 from .npcs import npc_by_key
@@ -404,10 +405,19 @@ def _learn(state: GameState) -> None:
     if reached <= state.level:
         return
 
+    was = state.level
     gain = gains_between(state.level, reached)
     state.level = reached
     apply_gain(state.player, gain)
     state.say(f"Level {reached}: {gain.describe()}.", LogKind.GOOD)
+    # And what the level *taught*. A trick's gate is a level, so a level-up is
+    # the only moment anything is ever learned -- and the announcement belongs
+    # here, where it happens, and not in a menu the player might not open for
+    # another floor. The line is written the same way on the map and in the
+    # arena, because the arena splices the run's log into its own.
+    for special in specials_for(state.hero.key):
+        if was < learned_at(special, state.ultimate_level) <= reached:
+            state.say(f"{special.name} learned!", LogKind.GOOD)
 
 
 def _hunter_spoils(state: GameState, enemy: Actor) -> None:

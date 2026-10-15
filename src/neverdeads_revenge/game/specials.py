@@ -42,6 +42,7 @@ __all__ = [
     "TRUE_NOTE",
     "VOID",
     "Special",
+    "learned_at",
     "special_by_key",
     "specials_for",
 ]
@@ -297,6 +298,21 @@ def specials_for(hero_key: str) -> tuple[Special, ...]:
     gets.
     """
     return SPECIALS_BY_HERO.get(hero_key, ())
+
+
+def learned_at(special: Special, ultimate_level: int) -> int:
+    """The level this trick arrives at, in a run where the dark answers at this one.
+
+    The floor's ask is the dark's own gate -- the level it answers at, which
+    ``--testrun`` moves down -- and every other trick is its own printed level,
+    capped by that same gate: a run the dark talks through has the whole kit
+    early, and one it does not has the kit at the levels it was written for.
+
+    One function for it, because two callers need the answer and they must not
+    disagree: the menu asks *what is on it*, and a level-up asks *what was just
+    learned*.
+    """
+    return ultimate_level if special.uses_floor else min(special.level, ultimate_level)
 
 
 def special_by_key(key: str) -> Special | None:

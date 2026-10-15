@@ -2620,6 +2620,99 @@ def test_the_arrow_blips_and_the_choice_answers(app):
     assert screen.busy, "the arrow on a monster did not spend the turn"
 
 
+def test_the_list_only_holds_what_he_has_learned(app, font):
+    """A list of names the player cannot use is a list of spoilers.
+
+    Learned is not the same question as *available*, and the menu needs both: a
+    trick spent in **this** fight is still on the list -- dimmed, because it is
+    his and it comes back next fight -- and a trick he has not reached yet is not
+    on it at all. What the player cannot have is not what the player is offered.
+    """
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.game.actors import HEROES
+    from neverdeads_revenge.game.battle import Battle
+    from neverdeads_revenge.game.specials import LEFT_HAND
+    from neverdeads_revenge.game.state import start_run
+
+    state = start_run(HEROES["noxx"], 3, ultimate_level=7)
+    state.level = 2  # the knife, and nothing else
+    battle = Battle(state, state.enemies[:1])
+    screen = BattleScreen(battle)
+    screen.picking = True
+    buffer, _ = drawn(screen, app, font)
+    written = "".join(cell.char for row in buffer.cells for cell in row)
+
+    assert [one.key for one in battle.learned()] == [LEFT_HAND]
+    assert "THE LEFT HAND" in written, "the one he has learned is missing"
+    assert "ORB OF PTAMERA" not in written, "a trick he has not learned is on the list"
+
+
+def test_the_arena_reads_out_a_lesson(app):
+    """A trick learned in a fight is said *in* the fight.
+
+    The arena plays the run's own log, so the line a kill wrote on the map is the
+    line a kill writes here -- which is why the announcement lives in the rules
+    and not in the menu: it has one text and two rooms to be read in.
+    """
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.game.levels import KILLS_PER_LEVEL
+
+    # The dark answers at seven here and not at one: with `--testrun` every trick
+    # is learned from the start, and a level that teaches nothing (correctly)
+    # says nothing either.
+    battle = arena(count=1, ultimate_level=7)
+    battle.state.kills = KILLS_PER_LEVEL - 1  # one kill short of level two
+    battle.state.level = 1
+    battle.enemies[0].stats.hp = 1
+    screen = BattleScreen(battle)
+    app.screens = [screen]
+
+    seen: list[str] = []
+    guard = 0
+    while guard < 400 and app.screens and app.screens[-1] is screen:
+        guard += 1
+        if screen.busy:
+            app._tick()
+            seen += [line.text for line in screen.lines]
+            continue
+        if battle.over:
+            break
+        press(app, Qt.Key.Key_Return)  # ATTACK: the arrow comes out
+        press(app, Qt.Key.Key_Return)  # and the blow goes in
+
+    assert any("learned!" in text for text in seen), f"the arena never said it: {seen}"
+
+
+def test_a_key_with_nothing_behind_it_says_so(app):
+    """SPECIAL at level one is a door onto an empty room, and this one is shut."""
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.game.actors import HEROES
+    from neverdeads_revenge.game.battle import Battle
+    from neverdeads_revenge.game.state import start_run
+
+    state = start_run(HEROES["noxx"], 3, ultimate_level=7)
+    state.level = 1  # nothing learned at all
+    battle = Battle(state, state.enemies[:1])
+    screen = BattleScreen(battle)
+    screen._queue = []
+    app.screens = [screen]
+
+    played: list[str] = []
+    original = app.play
+    app.play = lambda name=None: played.append(name if name else "?")  # type: ignore[assignment]
+    try:
+        press(app, Qt.Key.Key_S, "s")
+    finally:
+        app.play = original
+
+    assert not screen.picking, "a list with nothing in it opened anyway"
+    assert played and played[-1] == "deny", f"an empty menu said {played}"
+
+
 def test_a_trick_thrown_at_nobody_does_not_ask_for_one(app):
     """Six of the fifteen are not thrown at anybody: the three that are set on the
     hero himself, the note he finds for his own sword, and the two that go through

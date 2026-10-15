@@ -1613,6 +1613,11 @@ class BattleScreen(Screen):
         second, both of them on the screen.
         """
         if VERBS[self.verb] == SPECIAL:
+            if not self.battle.learned():
+                # Nothing learned yet: there is no list to open, and a panel with
+                # nothing in it is worse than a key that says no.
+                app.play("deny")
+                return
             self.picking = True
             self.special = 0
             app.play("move")
@@ -1679,8 +1684,15 @@ class BattleScreen(Screen):
         return max(1, self._areas(cols, rows)["commands"][3] - 4)
 
     def _pick_special(self, name: str, app) -> bool:
-        """The five, being looked at: pick one, or come back."""
-        specials = self.battle.specials()
+        """What he has learned, being looked at: pick one, or come back."""
+        specials = self.battle.learned()
+        if not specials:
+            # Nothing on the menu and no way to have got here: the verbs refuse
+            # to open an empty list, and this is the guard for anything that
+            # finds another road in.
+            self.picking = False
+            app.play("deny")
+            return True
         index = {"1": 0, "2": 1, "3": 2, "4": 3, "5": 4}.get(name)
         if name == "escape":
             self.picking = False
@@ -2788,7 +2800,7 @@ class BattleScreen(Screen):
         )
         if height < 4 or width < 24:
             return
-        specials = self.battle.specials()
+        specials = self.battle.learned()
         rows = max(1, height - 4)
         # The list is as many columns as its tricks need and no more: two for a
         # kit of five or six, three for Noxx's eight. A fixed two columns would
