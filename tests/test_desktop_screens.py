@@ -3232,6 +3232,12 @@ def test_the_order_strip_does_not_jump_when_the_hero_swings(app):
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
 
     battle = arena(count=1)
+    # A monster that is slower than he is and survives the blow: then the round
+    # is his alone, and the strip has no honest reason to move -- which is the
+    # thing being pinned. (It passed before because the sword killed the viper
+    # outright, so the round *was* his alone; that is luck and not a rule.)
+    battle.enemies[0].stats.speed = 0.5
+    battle.enemies[0].stats.hp = 999
     screen = BattleScreen(battle)
     screen._queue = []
     screen._beat = 0.0

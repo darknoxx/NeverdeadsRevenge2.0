@@ -187,6 +187,17 @@ AVALANCHE_SCALE = 1.8
 STILLNESS_ARMOUR = 2
 TRUE_NOTE_DAMAGE = 3
 
+#: What a plain swing is worth, against everything else a turn can buy.
+#:
+#: The tricks are priced in kill points, and a price is only meaningful against
+#: what the *free* option does: if swinging the sword is as good as THE OPEN VEIN,
+#: then the vein is not a choice, it is a way of spending points for nothing. So
+#: the baseline comes down an inch and the tricks get their room -- not far enough
+#: to make the sword feel like a mistake, which would be its own kind of wrong:
+#: the verbs are all meant to be worth a turn, and the attack is still the one
+#: that costs nothing and never runs out.
+PLAIN_SWING = 0.85
+
 #: The orb of Ptamera is *loaded* and not promised: it hunts the throat without
 #: ever being certain of it, which is the one thing that tells it apart from the
 #: knife -- and the knife is the one that always crits.
@@ -567,7 +578,9 @@ class Battle:
             enemy = target if target is not None and target.stats.alive else None
             if enemy is None:
                 return False
-            outcome = resolve_player_attack(self.state, enemy)
+            outcome = resolve_player_attack(
+                self.state, enemy, damage_scale=PLAIN_SWING
+            )
             self._splice(before, events)
             events.append(Struck(self.hero, enemy, outcome))
             return True
