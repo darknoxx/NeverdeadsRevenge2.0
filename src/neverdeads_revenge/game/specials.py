@@ -53,6 +53,12 @@ class Special:
     #: Whether the cost is the *floor* rather than the fight. Only the void is
     #: that expensive, and it is the ask the dungeon already prices.
     uses_floor: bool = False
+    #: How it should *look*, for whoever is doing the showing: ``""`` is the
+    #: plain blink every blow makes, ``"shadow"`` sends a second figure instead of
+    #: the hero, ``"trail"`` leaves echoes of him behind, and ``"dissolve"`` takes
+    #: him out of the room for the middle of it. A look and not a colour: two
+    #: heroes can share a flourish the way they share a rule.
+    look: str = ""
 
 
 #: The five, in the order a fight offers them: the small honest ones first, and
@@ -66,6 +72,7 @@ SPECIALS: tuple[Special, ...] = (
     ),
     Special(
         key=ATRITAS,
+        look="shadow",
         name="ATRITAS",
         blurb="the shadow goes on its own, and strikes twice",
         level=4,
@@ -78,12 +85,14 @@ SPECIALS: tuple[Special, ...] = (
     ),
     Special(
         key=BETWEEN_BLOWS,
+        look="trail",
         name="BETWEEN BLOWS",
         blurb="he is not where they swing, and the cut comes from behind",
         level=6,
     ),
     Special(
         key=VOID,
+        look="dissolve",
         name="THE VOID",
         blurb="he gives in, and everything in front of him takes it",
         # The dungeon's own gate: the level the dark answers at, and the once-a-

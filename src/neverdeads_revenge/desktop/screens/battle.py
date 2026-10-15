@@ -46,7 +46,7 @@ from ...game.battle import (
     Said,
     Struck,
 )
-from ...game.specials import SPECIALS, Special
+from ...game.specials import SPECIALS, Special, special_by_key
 from ...game.state import LogKind
 from ..buffer import PatternBuffer
 from ..chrome import ASH, BLOOD, BONE, box, rule
@@ -267,6 +267,8 @@ class BattleScreen(Screen):
         #: White silhouettes of the sprites, made once and reused: a hit flash is
         #: the figure painted solid white for a few frames.
         self._flashes: dict[tuple[int, str], QImage] = {}
+        #: The hero's sprite washed petrol, for the shadow that goes in his place.
+        self._shadows: dict[int, QImage] = {}
 
     # -- the contract -------------------------------------------------------
     def draw(self, buffer: PatternBuffer, app) -> None:
@@ -357,6 +359,7 @@ class BattleScreen(Screen):
             cx, baseline, opacity = pose
         else:
             cx += self._jolt(figure)
+        self._paste_extra(painter, figure, app, figures, cell_w, cell_h, baseline)
         self._paste_model(painter, figure, cx, baseline, opacity, app.font)
 
     def _paste_shadow(
@@ -404,7 +407,8 @@ class BattleScreen(Screen):
         strike = self._strikes.get(id(figure.actor))
         if strike is None:
             return None
-        target_id, began = strike
+        target_id, began, flair = strike
+        look = self._look(flair)
         progress = (self._clock - began) / STRIKE
         if progress >= 1.0:
             del self._strikes[id(figure.actor)]
@@ -412,6 +416,14 @@ class BattleScreen(Screen):
         near_x, near_y = self._beside_target(
             figure, target_id, figures, home, cell_w, cell_h
         )
+        if look in ("shadow", "trail"):
+            # Neither of these moves the hero. The shadow is a second figure
+            # going instead of him, and the trail is where he *is*: a step so
+            # quick that the room cannot follow it.
+            return figure.cx, home, 1.0
+        if look == "dissolve":
+            # Giving in: he is not in the room for the middle of it.
+            return figure.cx, home, 0.10 if 0.22 < progress < 0.78 else 1.0
         if progress < 0.20:  # out, where it stands
             return figure.cx, home, 1.0 - progress / 0.20
         if progress < 0.34:  # in, beside the one being hit
@@ -446,6 +458,76 @@ class BattleScreen(Screen):
                     return other.cx + cell_w * 3, other.row * cell_h - cell_h
                 return other.cx - cell_w * 3, other.row * cell_h + cell_h * 4 // 5
         return figure.cx, home
+
+    @staticmethod
+    def _look(flair: str) -> str:
+        """How a blow was struck, as its own word -- or ``""`` for a plain one.
+
+        The rules say which *trick* was used; what that trick looks like is the
+        screen's to know, so a hero can get a look without the fight learning a
+        colour.
+        """
+        special = special_by_key(flair) if flair else None
+        return special.look if special is not None else ""
+
+    def _paste_extra(
+        self, painter: QPainter, figure: Staged, app, figures, cell_w: int, cell_h: int, home: int
+    ) -> None:
+        """What a trick puts on the floor besides the blow.
+
+        Two of the five are *not* the hero moving: ATRITAS sends his shadow, and
+        BETWEEN BLOWS leaves echoes of him where he stands. Both are drawn here,
+        under and over the figures as they belong, and both are only ever the
+        sprite he already has -- there is no second set of art for a shadow.
+        """
+        strike = self._strikes.get(id(figure.actor))
+        if strike is None or figure.sprite is None:
+            return
+        target_id, began, flair = strike
+        look = self._look(flair)
+        progress = (self._clock - began) / STRIKE
+        image = figure.sprite
+        if look == "shadow":
+            if not 0.20 < progress < 0.88:
+                return
+            opacity = min(1.0, (progress - 0.20) / 0.14, (0.88 - progress) / 0.14)
+            near_x, near_y = self._beside_target(
+                figure, target_id, figures, home, cell_w, cell_h
+            )
+            painter.setOpacity(max(0.0, opacity) * 0.85)
+            painter.drawImage(
+                near_x - image.width() // 2, near_y - image.height(), self._shadow(image)
+            )
+            painter.setOpacity(1.0)
+            return
+        if look == "trail":
+            for dx, fade in ((9, 0.32), (18, 0.20), (27, 0.11)):
+                painter.setOpacity(fade)
+                painter.drawImage(
+                    figure.cx - image.width() // 2 + dx, home - image.height(), image
+                )
+            painter.setOpacity(1.0)
+
+    def _shadow(self, image: QImage) -> QImage:
+        """The same figure, in the colour his shadow is.
+
+        A wash of petrol laid over the sprite's own pixels -- `SourceAtop` keeps
+        the alpha it has -- so the shadow is the hero's silhouette and not a
+        second drawing of him. Made once and kept.
+        """
+        cached = self._shadows.get(id(image))
+        if cached is None:
+            cached = QImage(image.size(), QImage.Format.Format_ARGB32)
+            cached.fill(QColor(0, 0, 0, 0))
+            painter = QPainter(cached)
+            painter.drawImage(0, 0, image)
+            painter.setCompositionMode(
+                QPainter.CompositionMode.CompositionMode_SourceAtop
+            )
+            painter.fillRect(cached.rect(), QColor(12, 64, 62, 200))
+            painter.end()
+            self._shadows[id(image)] = cached
+        return cached
 
     def _jolt(self, figure: Staged) -> int:
         """How far a struck figure is shaking, in pixels, right now."""
@@ -750,7 +832,11 @@ class BattleScreen(Screen):
         # The strike is recorded whether or not it lands: a swing that missed
         # was still a swing, and a hero who did not move would look like a hero
         # who did nothing.
-        self._strikes[id(struck.actor)] = (id(struck.target), self._clock)
+        self._strikes[id(struck.actor)] = (
+            id(struck.target),
+            self._clock,
+            struck.flair,
+        )
         if outcome.hit and not outcome.dodged:
             self._hurts[id(struck.target)] = (
                 self._clock + IMPACT_AT,
