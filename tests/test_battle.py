@@ -608,7 +608,10 @@ def test_the_hoarfrost_punishes_what_touches_him():
     battle = duel("yeti", 5, count=1)
     enemy = battle.enemies[0]
     enemy.stats.accuracy = 99
-    enemy.stats.speed = 0.1  # behind him, so the trick is set before it swings
+    # Slow enough to be behind him in the queue, quick enough to come round
+    # inside the same turn: a very slow monster would simply not get a blow in
+    # before Yeti's next one, and the frost would have nothing to answer.
+    enemy.stats.speed = 0.5
     battle.hero.stats.evasion = 0
 
     battle.choose(SPECIAL, enemy, special=HOARFROST)
@@ -648,12 +651,10 @@ def test_the_bells_throw_sends_them_to_the_back():
     """
     battle = duel("walkyrion", 4, count=3)
     enemy = battle.enemies[1]
-    battle._round = [battle.hero, *battle.enemies]
-    battle._taken = 1
 
     battle._throw_back(enemy)
 
-    assert battle._round[-1] is enemy, "it was not sent to the back"
+    assert battle._order()[-1] is enemy, "it was not sent to the back"
 
     battle = duel("walkyrion", 4, count=3)
     enemy = battle.enemies[1]

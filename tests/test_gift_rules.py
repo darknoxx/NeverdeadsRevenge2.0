@@ -290,6 +290,9 @@ def test_three_waits_in_a_row_close_the_circle():
     state = _run("salt_circle")
     state.player.stats.hp = 500
     enemy = _beside(state, damage=(5, 5))
+    # Behind the hero but inside his own turn: the queue would otherwise let him
+    # take several turns before this one's blow, and the circle has only one.
+    enemy.stats.speed = state.player.speed * 0.9
 
     for _ in range(SALT_CIRCLE_WAITS):
         perform_action(state, Action.WAIT)

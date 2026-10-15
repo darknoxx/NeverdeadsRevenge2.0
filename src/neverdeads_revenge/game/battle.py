@@ -231,9 +231,12 @@ class Battle:
         self.enemies = list(enemies)
         #: Whether the hero has his feet set, which lasts one round.
         self._guarded = False
-        #: This round's order, and how far into it the fight has got.
-        self._round: list[Actor] = []
-        self._taken = 0
+        #: When each combatant is next up, in the same kind of units the
+        #: dungeon's own queue uses: every turn costs ``1 / speed``, so a quick
+        #: hero's turns come round sooner and he simply gets more of them. A
+        #: *round* would hand the slow hero the same number of turns as the quick
+        #: one, which is the one thing speed in this game is not allowed to mean.
+        self._pace: dict[int, float] = {}
         self.over = False
         self.won = False
         self.escaped = False
@@ -245,16 +248,17 @@ class Battle:
         #: Which of the hero's tricks this *fight* has already spent. The void is
         #: not in here: it is priced by the floor, and the floor's own flag says so.
         self._used: set[str] = set()
+        #: Whether the hero has taken a turn yet. The dungeon's counters -- a salt
+        #: circle, a borrowed face -- were raised *before* the fight and cover its
+        #: first turn, so the lapse waits until he has taken one; what the fight
+        #: raises itself ("this round") lapses at his next turn, which is where the
+        #: dungeon's own tail ticks them too.
+        self._settled = False
         #: BETWEEN BLOWS: until the end of this round, nothing finds the hero.
         self._unseen = False
         #: THE HOARFROST: until the end of this round, whoever lands a blow on him
         #: takes the cold home with them.
         self._frost = False
-        #: THE BELL'S THROW, and the shattered one: these act last this round.
-        #: Kept as a set of actors rather than by shuffling the round, because the
-        #: round is being walked while a blow lands and moving its floor under the
-        #: walk is how a turn gets skipped.
-        self._slow: set[int] = set()
 
     # -- what the hero is offered -------------------------------------------
     def commands(self) -> list[str]:
@@ -352,51 +356,53 @@ class Battle:
         #: THE HOARFROST: until the end of this round, whoever lands a blow on him
         #: takes the cold home with them.
         self._frost = False
-        #: THE BELL'S THROW, and the shattered one: these act last this round.
-        #: Kept as a set of actors rather than by shuffling the round, because the
-        #: round is being walked while a blow lands and moving its floor under the
-        #: walk is how a turn gets skipped.
-        self._slow: set[int] = set()
         if self._hero_acts(command, target, events, special):
             self._advance(events)
         return events
 
     # -- the round ----------------------------------------------------------
     def _advance(self, events: list[Event]) -> None:
-        """Let the round run until the hero is up, or until it is decided."""
+        """Let the queue run until the hero is up, or until it is decided.
+
+        Everything that runs out *by the turn* runs out here, once per hero turn
+        -- the statuses, the borrowed face, the salt circle, the guard -- which is
+        exactly where the dungeon ticks them, one player turn at a time.
+        """
         while True:
             if self._decide(events):
                 return
             actor = self._next()
             if actor is self.hero:
+                if self._settled:
+                    self._lapse()
+                self._settled = True
                 self._hero_up = True
                 return
             self._enemy_acts(actor, events)
 
     def _next(self) -> Actor:
-        """The next combatant to act, rolling the round over when it runs out.
+        """Whose turn it is: whoever's own pace is up.
 
-        Quickest first, and the roster order breaks a tie -- so the hero goes
-        first among equals and the wraith does not. Rolling over is also where
-        setting your feet stops counting: a round is one breath, and the guard
-        lasts exactly that long.
+        The dungeon answers this with a queue that divides its interval by speed,
+        which is what makes a quick hero act more often than a slow one. The arena
+        answers it the same way, with the same number -- `Actor.speed` is the same
+        property, statuses folded in -- or Noxx's whole identity (1.5 against
+        Yeti's 0.75) would buy him nothing but going first.
         """
-        while True:
-            if self._taken >= len(self._round):
-                if self._round:
-                    # A round that was *played* has ended; the first one is being
-                    # built, and nothing has happened yet to run out.
-                    self._lapse()
-                self._round = self._order()
-                # Read by the order that was just built, and finished with: a
-                # throw that lasted two rounds would be a throw with no rule.
-                self._slow.clear()
-                self._taken = 0
-                self._guarded = False
-            actor = self._round[self._taken]
-            self._taken += 1
-            if actor.stats.alive:
-                return actor
+        living = [one for one in [self.hero, *self.enemies] if one.stats.alive]
+        for one in living:
+            # First time in the queue, a combatant waits its own speed's worth --
+            # so the quickest opens the fight, and the slowest watches him do it.
+            self._pace.setdefault(id(one), 1.0 / max(0.1, one.speed))
+        actor = min(living, key=lambda one: self._pace[id(one)])
+        self._spend(actor)
+        return actor
+
+    def _spend(self, actor: Actor) -> None:
+        """Charge an actor for the turn it is taking: its own speed's worth."""
+        self._pace[id(actor)] = self._pace.get(id(actor), 0.0) + 1.0 / max(
+            0.1, actor.speed
+        )
 
     def _lapse(self) -> None:
         """A round has gone by: the counters that run out by the turn run out.
@@ -413,6 +419,7 @@ class Battle:
             self.state.salt_ward -= 1
         self._unseen = False
         self._frost = False
+        self._guarded = False
         # And the wounds run, for everybody: a poison hurt on the victim's own
         # turn on the map, and a round is the arena's turn. Without this a bleed
         # would be a sentence the fight never read out.
@@ -421,14 +428,14 @@ class Battle:
                 tick_statuses(self.state, actor)
 
     def _order(self) -> list[Actor]:
-        """Everyone alive, quickest first. Never empty: the fight is decided
-        before this is asked, so somebody is always still standing."""
-        return sorted(
-            [actor for actor in [self.hero, *self.enemies] if actor.stats.alive],
-            # Whoever the bell threw acts last, and everything else is quickest
-            # first: two keys, one order, and no reshuffling of a round in flight.
-            key=lambda actor: (id(actor) in self._slow, -actor.speed),
-        )
+        """Who is up next, and after them, and after them.
+
+        Not a round: the arena has none. This is the order the queue *will*
+        produce, which is what the fight's flourishes are read against -- and what
+        a test can ask about without playing the turns out.
+        """
+        living = [one for one in [self.hero, *self.enemies] if one.stats.alive]
+        return sorted(living, key=lambda one: self._pace.get(id(one), 0.0))
 
     def _decide(self, events: list[Event]) -> bool:
         """Whether the fight is over, saying so once. True means stop."""
@@ -696,19 +703,17 @@ class Battle:
             self._blow(others[0], events, flair=FIRST_NOTE, damage_scale=0.6)
 
     def _throw_back(self, enemy: Actor) -> None:
-        """Send what was struck to the back of the round.
+        """Send what was struck to the back of the queue.
 
-        If it has not gone yet, it goes last *now* -- the round is being walked
-        and moving a name that is still ahead of the walk is safe, because the
-        walk only ever steps forward. If it has already gone, the throw is for
-        the round after this one, and the order picks it up when it is built.
+        It is not removed from the fight, only put behind everyone still to come:
+        its own pace is set past the furthest one, so the next turn it takes is
+        after theirs. Being thrown *back* and not *out* is the whole of the bell's
+        promise -- the dungeon's version does not remove anything either, it only
+        makes it walk back.
         """
-        ahead = self._round[self._taken :]
-        if any(one is enemy for one in ahead):
-            self._round = [one for one in self._round if one is not enemy]
-            self._round.append(enemy)
-        else:
-            self._slow.add(id(enemy))
+        for one in [self.hero, *self.enemies]:
+            self._pace.setdefault(id(one), 1.0 / max(0.1, one.speed))
+        self._pace[id(enemy)] = max(self._pace.values()) + 0.001
 
     def _special_bells_throw(self, target: Actor | None, events: list[Event]) -> None:
         """The ring of it throws what it lands on to the back of the round."""

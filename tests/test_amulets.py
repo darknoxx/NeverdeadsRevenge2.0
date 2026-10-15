@@ -51,7 +51,10 @@ def answer(state, brute) -> bool:
     """
     from neverdeads_revenge.game.battle import open_fight
 
-    brute.stats.speed = state.player.speed + 5.0
+    # Quick enough for exactly one turn before the hero's: the fight is a queue,
+    # and a monster several times his speed would get several turns in before him
+    # -- which would make "one blow" a measurement of the queue instead.
+    brute.stats.speed = state.player.speed * 1.2
     fight = open_fight(state, brute)
     if fight is None:
         return False
@@ -648,7 +651,9 @@ def _a_brute_beside(player, *, hp: int = 400):
     """
     brute = make_enemy(ENEMIES["bone"], (player.position[0], player.position[1] - 1))
     brute.stats.hp = hp
-    brute.stats.speed = max(0.1, player.speed - 1.0)
+    # Just behind the hero in the queue, which is where "the answer to a kill"
+    # lives: its next turn comes round right after his, and not three turns on.
+    brute.stats.speed = max(0.1, player.speed * 0.9)
     brute.stats.accuracy = 99
     player.stats.evasion = 0
     return brute

@@ -969,7 +969,8 @@ def _play_the_fight(state) -> None:
 
     A run ends in the arena now: a monster that gets to the hero hands the fight
     over rather than rolling a blow on the map, so "wait until something kills
-    him" is "wait, and then fight".
+    him" is "wait, and then fight". Its monsters hit like a floor above their own,
+    because these two tests are about the *death* and not about the fight.
     """
     from neverdeads_revenge.game.battle import ATTACK, open_fight
 
@@ -980,6 +981,12 @@ def _play_the_fight(state) -> None:
         fight = open_fight(state)
         if fight is None:
             continue
+        for monster in fight.enemies:
+            # Certain and lethal: these tests are about the death, and a monster
+            # that misses 65% of the time would make them a test of the dice.
+            monster.stats.damage = (99, 99)
+            monster.stats.accuracy = 99
+        state.player.stats.evasion = 0
         fight.begin()
         while not state.over and not fight.over:
             living = fight.living_enemies()
@@ -2181,7 +2188,9 @@ def _let_it_swing(state, monster) -> None:
     """
     from neverdeads_revenge.game.battle import open_fight
 
-    monster.stats.speed = state.player.speed + 5.0
+    # One turn before the hero's: the queue gives a monster several turns in a
+    # row if it is much quicker, and these tests count blows.
+    monster.stats.speed = state.player.speed * 1.2
     fight = open_fight(state, monster)
     if fight is not None:
         fight.begin()
