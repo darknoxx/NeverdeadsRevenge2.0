@@ -51,6 +51,7 @@ from .difficulty import (
 )
 from .gifts import gift_by_key
 from .lore import numeral
+from .levels import kill_points_for
 from .specials import learned_at, specials_for
 from .statuses import status_by_key
 from .levels import apply_gain, gains_between, level_for
@@ -410,6 +411,12 @@ def _learn(state: GameState) -> None:
     state.level = reached
     apply_gain(state.player, gain)
     state.say(f"Level {reached}: {gain.describe()}.", LogKind.GOOD)
+    # And the purse: this is where kill points *come from*. A level raises the
+    # ceiling and fills to it, because a level that only raised the ceiling would
+    # be a level that handed the player a longer wait.
+    if state.kill_points_max > kill_points_for(was):
+        state.kill_points = state.kill_points_max
+        state.say(f"Kill points {state.kill_points}.", LogKind.GOOD)
     # And what the level *taught*. A trick's gate is a level, so a level-up is
     # the only moment anything is ever learned -- and the announcement belongs
     # here, where it happens, and not in a menu the player might not open for
@@ -2004,6 +2011,10 @@ def _try_descend(state: GameState) -> ActionResult:
 
     state.floors_cleared += 1
     state.build_floor(state.depth + 1)
+    # A floor is a new purse. The points do not trickle back between fights --
+    # that is what makes spending them a decision -- but walking into a floor
+    # empty-handed and staying empty-handed is not a decision, it is a corner.
+    state.kill_points = state.kill_points_max
 
     if state.toll_per_floor:
         # After the descent, so it reads as the price of the floor rather than

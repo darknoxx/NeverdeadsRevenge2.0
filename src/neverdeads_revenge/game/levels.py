@@ -32,6 +32,8 @@ __all__ = [
     "Gain",
     "KILLS_PER_LEVEL",
     "MAX_LEVEL",
+    "KILL_POINTS",
+    "kill_points_for",
     "level_for",
     "gains_for",
     "gains_between",
@@ -59,6 +61,36 @@ KILLS_PER_LEVEL = 4
 #: It used to be twenty, which was a wall a thorough run could feel without ever
 #: being told it was there.
 MAX_LEVEL = 41
+
+#: Kill points: what the tricks are paid from, by level.
+#:
+#: The old economy was "each trick once a fight", which is not an economy at all
+#: -- it is a checklist. Every fight you used each of yours once and there was
+#: never a decision in it. Kill points are one purse for the whole kit, so the
+#: question is not *have I used this one* but *is this one worth its price now*:
+#: a cheap wound twice, or one big thing once, or nothing at all and wait.
+#:
+#: The table is the ceiling; the purse fills by one at every turn of the hero's
+#: and to the brim on a level. So a level-2 hero can afford the knife twice in
+#: one fight, and the void -- the dark's own ask at level seven -- costs more
+#: than a level-seven hero can *hold*: it is a thing you save for, which is what
+#: an ultimate should be.
+KILL_POINTS: tuple[int, ...] = (
+    3, 4, 5, 6, 8, 10, 12, 14, 16, 18,  # levels one to ten
+    21, 24, 27, 30, 33, 36, 39, 42, 45, 48,
+    51, 54, 57, 60, 63, 66, 69, 72, 75, 78,
+    81, 84, 87, 90, 93, 96, 99, 102, 105, 108, 111,
+)
+
+
+def kill_points_for(level: int) -> int:
+    """How big the purse is at a level.
+
+    Off the end of the table the purse stops growing rather than crashing: the
+    last levels of a perfect clear are already beyond anything a run reaches,
+    and a run that somehow got there should not find its tricks unaffordable.
+    """
+    return KILL_POINTS[max(0, min(level, len(KILL_POINTS)) - 1)]
 
 
 @dataclass(frozen=True, slots=True)

@@ -40,6 +40,7 @@ from .actors import (
     scale_template,
 )
 from .combat import apply_revenge
+from .levels import kill_points_for
 from .curses import CURSES, Curse
 from .difficulty import (
     ATRITAS_VIEW,
@@ -191,6 +192,11 @@ class GameState:
     #: :func:`~neverdeads_revenge.game.levels.level_for`; kept as a field only so
     #: the moment it changes can be noticed and written into the log.
     level: int = 1
+    #: Kill points: the purse every trick is paid from, and how much of it is
+    #: left. Persistent, like the hero's health and for the same reason -- a
+    #: purse that filled itself between fights would make every fight the same
+    #: fight, and this one is supposed to be about what you can afford *now*.
+    kill_points: int = 0
     revenge_stacks: int = 0
     floors_cleared: int = 0
     #: Draughts carried, not drunk. Survives a descent: it is the run's health
@@ -517,6 +523,11 @@ class GameState:
         would be a swarm, and a swarm is not a price.
         """
         return max((curse.follows for curse in self.curses), default=0)
+
+    @property
+    def kill_points_max(self) -> int:
+        """How big the purse is at this level: the ceiling the pool fills to."""
+        return kill_points_for(self.level)
 
     @property
     def heal_scale(self) -> float:
@@ -1142,6 +1153,7 @@ def start_run(
     """
     loadout = loadout or Loadout()
     state = GameState(hero=hero, rng=Rng(seed), seed=seed)
+    state.kill_points = kill_points_for(state.level)
     if ultimate_level is not None:
         state.ultimate_level = ultimate_level
     state.missing_pages = (

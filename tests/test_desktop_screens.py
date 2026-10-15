@@ -2732,6 +2732,7 @@ def test_a_trick_thrown_at_nobody_does_not_ask_for_one(app):
 
     state = start_run(HEROES["yeti"], 5, ultimate_level=7)
     state.level = 7
+    state.kill_points = state.kill_points_max
     battle = Battle(state, state.enemies[:2])
     screen = BattleScreen(battle)
     screen._queue = []

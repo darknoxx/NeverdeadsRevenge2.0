@@ -1751,6 +1751,11 @@ class BattleScreen(Screen):
         return True
 
     @property
+    def kill_points(self) -> int:
+        """How much of the purse the tricks are paid from is left."""
+        return self.state.kill_points
+
+    @property
     def busy(self) -> bool:
         """Whether the fight still has something to say or show.
 
@@ -2712,14 +2717,16 @@ class BattleScreen(Screen):
             buffer.text(x + 2, y + 2, f"PACK {pack}", parse_style(ASH))
             buffer.text(x + 10, y + 2, marks, parse_style("dim #a855f7"))
         if height >= 6:
-            ready = self.battle.special_ready()
-            buffer.text(x + 2, y + 3, "THE VOID", parse_style(ASH))
-            buffer.text(
-                x + 12,
-                y + 3,
-                "ready" if ready else "spent",
-                parse_style("bold bright_yellow" if ready else "grey30"),
-            )
+            # The purse, as a bar like his health -- because that is what it is:
+            # the other half of what a turn costs. The old line here said whether
+            # the void was ready, which told the player about *one* trick; this
+            # tells them about all of them at once, and about the next few turns.
+            points = self.kill_points
+            top = max(1, self.state.kill_points_max)
+            bar = min(12, max(4, width - 22))
+            buffer.text(x + 2, y + 3, "KP", parse_style(ASH))
+            self._bar(buffer, x + 5, y + 3, bar, points / top)
+            buffer.text(x + 6 + bar, y + 3, f" {points:>2}/{top}", parse_style(BONE))
         if (self.picking or self.aiming) and height >= 7:
             # Escape is a step *back* in the two menus and nothing anywhere else
             # -- there is no way out of a fight but through it -- so the plate only
@@ -2863,13 +2870,19 @@ class BattleScreen(Screen):
         reaching for. *Why* one cannot be spent is the fight's to say, in the log,
         when it is asked for; a panel of reasons would be a manual.
         """
+        # The purse is in the *frame* of the list and not only on the plate,
+        # because the list is what covers the plate: a player choosing what to
+        # spend has to be able to see what there is to spend.
         box(
             buffer,
             x,
             y,
             width,
             height,
-            title="THE DARK      enter  ask      esc  back",
+            title=(
+                f"THE DARK      {self.kill_points}/{self.state.kill_points_max} kill points"
+                f"      enter  ask      esc  back"
+            ),
             border=BLOOD,
             fill=True,
         )
@@ -2886,7 +2899,9 @@ class BattleScreen(Screen):
             usable = self.battle.special_available(special)
             chosen = index == self.special
             marker = "►" if chosen else " "
-            line = f"{marker} {index + 1}  {special.name}"
+            # The price, on every line, whether he can pay it or not: a menu
+            # that hid what it cost would be a menu of surprises.
+            line = f"{marker} {index + 1}  {special.cost:>2}kp  {special.name}"
             if not usable:
                 style = parse_style("grey23")
             elif chosen:

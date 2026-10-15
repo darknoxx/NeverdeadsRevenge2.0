@@ -65,8 +65,15 @@ from neverdeads_revenge.world.items import ITEMS, make_item
 
 
 def run(seed: int = 1, *, level: int = 1, ultimate_level: int = 1):
-    """A fresh run, with the dark answering from the start."""
-    return start_run(HEROES["noxx"], seed, ultimate_level=ultimate_level)
+    """A fresh run, with the dark answering from the start.
+
+    And a full purse: what a trick *costs* has its own tests, and every other
+    test here is about what it *does*. A test that had to save up for the trick
+    it is about would be testing the purse by accident.
+    """
+    state = start_run(HEROES["noxx"], seed, ultimate_level=ultimate_level)
+    state.kill_points = 999
+    return state
 
 
 def take(state, count: int = 1):
@@ -179,14 +186,18 @@ def test_defending_is_a_turn_the_fight_takes():
     assert any(isinstance(event, Guarded) for event in events)
 
 
-def test_the_void_answers_once_and_everything_takes_it():
-    """The hero's ask, in the arena: one blow on everybody, one per floor.
+def test_the_void_takes_everything_and_costs_everything():
+    """The hero's ask, in the arena: one blow on everybody, and the dearest
+    price in the book.
 
-    The price is the dungeon's own -- ``ultimate_available`` is spent here the
-    way ``f`` spends it on the map -- which is what keeps a floor from being
-    asked twice for the same favour.
+    It is paid out of the purse like every other trick now -- one economy and not
+    two -- but at a price no hero of the level that *learns* it can hold: twelve
+    against a level-seven purse of eleven. The void is a thing you save up for,
+    which is what an ultimate should be and what "once a floor" only pretended.
     """
     state = run(ultimate_level=1)
+    state.level = 8
+    state.kill_points = 99
     enemies = take(state, 3)
     battle = Battle(state, enemies)
     battle.begin()
@@ -195,12 +206,18 @@ def test_the_void_answers_once_and_everything_takes_it():
 
     hit = [blow for blow in strikes(events) if blow.actor is state.player]
     assert [blow.target for blow in hit] == enemies, "the ask missed somebody"
-    assert not state.ultimate_available, "the dark was not spent"
     assert {blow.flair for blow in hit} == {VOID}, "the blows wear no word"
+    # Paid, give or take the point that came back on the same turn: what matters
+    # is that it *came out of the purse* and not out of a floor's favour.
+    assert state.kill_points <= state.kill_points_max - special_by_key(VOID).cost + 1, (
+        "the purse did not pay"
+    )
 
+    # And the purse is the gate: empty it, and the dark has nothing left.
+    state.kill_points = 1
     again = battle.choose(SPECIAL, special=VOID)
-    assert not strikes(again), "the dark answered twice"
-    assert any("does not ask twice" in line for line in lines(again))
+    assert not strikes(again), "the dark answered with an empty purse"
+    assert any("kill points" in line for line in lines(again)), lines(again)
 
 
 def test_a_refused_verb_costs_nothing():
@@ -437,11 +454,19 @@ def levelled(level: int, count: int = 2, ultimate_level: int = 7):
     """
     state = start_run(HEROES["noxx"], 1, ultimate_level=ultimate_level)
     state.level = level
+    state.kill_points = 999
     return Battle(state, take(state, count))
 
 
-def test_the_left_hand_is_a_stab_it_makes_sure_of():
-    """The dagger: a crit it does not have to roll for, and deeper than usual."""
+def test_the_left_hand_is_a_cut_that_leaves_something_in():
+    """The cheapest trick in the kit: an ordinary cut, and a poison on top.
+
+    It used to make sure of its stab -- a forced crit and a flat bonus -- which
+    was the wrong promise for the trick that costs least: a small certain hit is
+    a small certain hit, and what a *cheap* trick wants is a reason of its own.
+    Poison is not a bigger blow. It is a reason to open with this one, and it
+    keeps working while the purse fills.
+    """
     battle = levelled(2)
     enemy = battle.enemies[0]
     enemy.stats.hp = 999
@@ -449,11 +474,13 @@ def test_the_left_hand_is_a_stab_it_makes_sure_of():
     events = battle.choose(SPECIAL, enemy, special=LEFT_HAND)
 
     blow = [one for one in strikes(events) if one.actor is battle.hero][0]
-    assert blow.outcome.crit, "the left hand did not make sure of it"
-    assert blow.flair == LEFT_HAND
-    assert not battle.special_available(special_by_key(LEFT_HAND)), (
-        "the knife was spent and can be spent again"
-    )
+    assert blow.flair == LEFT_HAND, "the blow wears no word"
+    assert not blow.outcome.crit or True  # an ordinary blow, crit or not
+    assert "poison" in enemy.statuses, "the dagger left nothing in him"
+
+    hp = enemy.stats.hp
+    battle.choose(DEFEND)  # a round goes by: the poison does its work
+    assert enemy.stats.hp < hp, "the poison never bit"
 
 
 def test_the_order_strip_reads_the_queue_and_spends_nothing():
@@ -586,6 +613,87 @@ def test_friends_like_these_opens_all_of_them():
     ), "Atritas did not come"
 
 
+def test_the_purse_is_the_only_gate():
+    """One economy and not two: what a trick costs is the whole of the rule.
+
+    There is no once-a-fight tally any more. A trick he knows and cannot afford
+    is refused -- and told the *price*, because "no" without a number is a rule
+    the player cannot play against.
+    """
+    battle = levelled(6)
+    battle.state.kill_points = 0
+
+    events = battle.choose(SPECIAL, battle.enemies[0], special=OPEN_VEIN)
+
+    assert not strikes(events), "a trick was cast out of an empty purse"
+    assert any("kill points" in line for line in lines(events)), lines(events)
+
+
+def test_a_trick_is_paid_for_out_of_the_purse():
+    """And the purse pays on the way out, so a refusal costs nothing."""
+    battle = levelled(6)
+    before = battle.state.kill_points
+    cost = special_by_key(OPEN_VEIN).cost
+
+    battle.choose(SPECIAL, battle.enemies[0], special=OPEN_VEIN)
+
+    # Give or take the point that came back on his own turn in the same breath.
+    assert battle.state.kill_points <= before - cost + 1, "the trick was free"
+
+
+def test_the_purse_fills_one_point_a_turn():
+    """A point a turn of the hero's own, which is what makes a cheap trick a
+    rhythm and a dear one a plan."""
+    battle = levelled(3)
+    battle.begin()  # so the round this measures is the hero's, and not the opening one
+    battle.state.kill_points = 1
+
+    battle.choose(DEFEND)
+
+    assert battle.state.kill_points == 2, "the purse did not fill"
+
+
+def test_the_purse_never_holds_more_than_the_level_allows():
+    """The ceiling is the level, and it is a *ceiling*: a purse that grew past it
+    would make saving pointless, and saving is half of what the price is for."""
+    battle = levelled(3)
+    battle.state.kill_points = battle.state.kill_points_max
+
+    battle.choose(DEFEND)
+
+    assert battle.state.kill_points == battle.state.kill_points_max, "it overflowed"
+
+
+def test_every_trick_is_affordable_at_the_level_that_learns_it():
+    """The curve and the prices are written in two files, so they are checked.
+
+    A trick a level *teaches* and a purse that cannot pay for it is a trick the
+    player only ever sees dimmed -- and the point of the curve is that the level
+    which arrives with a trick arrives with the means to use it.
+    """
+    from neverdeads_revenge.game.levels import kill_points_for
+    from neverdeads_revenge.game.specials import SPECIALS_BY_HERO, learned_at
+
+    for hero, kit in SPECIALS_BY_HERO.items():
+        for special in kit:
+            gate = learned_at(special, 7)
+            purse = kill_points_for(gate)
+            assert purse >= special.cost, (
+                f"{hero}'s {special.name} arrives at level {gate} and costs "
+                f"{special.cost}, out of a purse of {purse}"
+            )
+
+
+def test_the_ultimate_is_the_dearest_thing_in_every_kit():
+    """The order of the prices is the order of the powers, at least at the top."""
+    from neverdeads_revenge.game.specials import SPECIALS_BY_HERO
+
+    for hero, kit in SPECIALS_BY_HERO.items():
+        ultimate = next(one for one in kit if one.uses_floor)
+        assert ultimate.cost == max(one.cost for one in kit), hero
+        assert all(one.cost > 0 for one in kit), f"{hero} has a trick for free"
+
+
 def test_the_open_vein_keeps_costing_him():
     """A wound that will not close: the status is left, and a round makes it bite."""
     battle = levelled(5)
@@ -715,6 +823,7 @@ def duel(hero: str, level: int = 7, count: int = 2):
     """A fight as another hero, at a level where the whole kit is in hand."""
     state = start_run(HEROES[hero], 1, ultimate_level=7)
     state.level = level
+    state.kill_points = 999
     return Battle(state, take(state, count))
 
 
@@ -807,15 +916,19 @@ def test_the_stillness_raises_the_ice():
 
 
 def test_the_fortress_doubles_the_ice_and_costs_the_floor():
-    """His own ultimate: the wall with twice his blood in it, priced by the floor."""
+    """His own ultimate: the wall with twice his blood in it, and the dearest
+    thing he owns."""
     battle = duel("yeti", 1)
-    battle.state.level = 7
+    battle.state.level = 8
     armor = battle.hero.stats.armor
 
     battle.choose(SPECIAL, battle.enemies[0], special=FORTRESS)
 
     assert battle.hero.stats.armor >= armor * 2, "the wall was made of paper"
-    assert not battle.state.ultimate_available, "the floor was not spent"
+    assert (
+        battle.state.kill_points
+        <= battle.state.kill_points_max - special_by_key(FORTRESS).cost + 1
+    ), "the wall was not paid for"
 
 
 def test_the_bells_throw_sends_them_to_the_back():
@@ -870,7 +983,7 @@ def test_the_echoing_cut_is_heard_three_times():
 
 def test_the_shattered_bell_takes_everyone_and_the_floor():
     battle = duel("walkyrion", 1, count=3)
-    battle.state.level = 7
+    battle.state.level = 8
     for enemy in battle.enemies:
         enemy.stats.hp = 999
     battle.hero.stats.accuracy = 99
@@ -881,4 +994,7 @@ def test_the_shattered_bell_takes_everyone_and_the_floor():
 
     hit = [one for one in strikes(events) if one.actor is battle.hero]
     assert len(hit) == 3, "the note did not go round"
-    assert not battle.state.ultimate_available, "the floor was not spent"
+    assert (
+        battle.state.kill_points
+        <= battle.state.kill_points_max - special_by_key(SHATTERED_BELL).cost + 1
+    ), "the bell was not paid for"

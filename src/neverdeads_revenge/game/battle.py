@@ -187,11 +187,6 @@ AVALANCHE_SCALE = 1.8
 STILLNESS_ARMOUR = 2
 TRUE_NOTE_DAMAGE = 3
 
-#: What the dagger adds to a stab it makes sure of. Small, because the crit is
-#: already the point: this is the difference between a knife and a knife that was
-#: aimed.
-LEFT_HAND_BONUS = 3
-
 #: The orb of Ptamera is *loaded* and not promised: it hunts the throat without
 #: ever being certain of it, which is the one thing that tells it apart from the
 #: knife -- and the knife is the one that always crits.
@@ -266,9 +261,6 @@ class Battle:
         #: the hero's command is the command of his place in it, and the round
         #: does not hand him a second turn for free.
         self._hero_up = False
-        #: Which of the hero's tricks this *fight* has already spent. The void is
-        #: not in here: it is priced by the floor, and the floor's own flag says so.
-        self._used: set[str] = set()
         #: Whether the hero has taken a turn yet. The dungeon's counters -- a salt
         #: circle, a borrowed face -- were raised *before* the fight and cover its
         #: first turn, so the lapse waits until he has taken one; what the fight
@@ -303,17 +295,18 @@ class Battle:
     def learned(self) -> list[Special]:
         """The tricks the hero has *learned*: which is what the menu shows.
 
-        Not the same question as :meth:`special_available`, which is about this
-        fight and answers no for a trick already spent. A trick learned and spent
-        is still a trick a player has -- it is back next fight -- and a trick not
-        yet learned is not on the menu at all. A list of names the player cannot
-        use is a list of spoilers.
+        Not the same question as :meth:`special_available`, which also asks the
+        purse. A trick he knows but cannot afford belongs on the menu -- dimmed,
+        with its price beside it -- because the price is the decision, and a
+        decision nobody can see is not one. A trick he has not learned yet is not
+        on the menu at all: a list of names a player cannot use is a list of
+        spoilers.
         """
-        return [
-            one
-            for one in self.specials()
-            if self.state.level >= learned_at(one, self.state.ultimate_level)
-        ]
+        return [one for one in self.specials() if self.has_learned(one)]
+
+    def has_learned(self, special: Special) -> bool:
+        """Whether the level has taught him this one. Nothing to do with money."""
+        return self.state.level >= learned_at(special, self.state.ultimate_level)
 
     def special_ready(self, special: Special | None = None) -> bool:
         """Whether the dark would answer -- this one, or any of them.
@@ -326,24 +319,20 @@ class Battle:
         return any(self.special_available(one) for one in self.specials())
 
     def special_available(self, special: Special) -> bool:
-        """Whether this one can still be asked for, right now.
+        """Whether this one can be spent, right now.
 
-        The void is the dungeon's ask and is priced by the dungeon: the level the
-        dark answers at, and the once-a-floor flag the floor refills. The other
-        four are the fight's, and are spent one by one inside it.
+        Two questions, and both of them are the player's: has the level *taught*
+        it, and is it *affordable* out of the kill points he has left. There is
+        no third -- no once-a-fight tally, no floor the dark has already had. One
+        purse for the whole kit, every trick priced against it, so the only thing
+        that ever stops a trick is its price, and the price is the choice.
 
-        Their level is capped by the level the dark answers at, which is the one
-        place a test can lower: `--testrun` runs make the dark speak at level one,
-        and a run the dark talks through does not keep four of the hero's tricks
-        secret. In an ordinary run nothing changes -- the void arrives at seven
-        and the other four are all in hand by six -- so the cap only ever opens
-        what was going to open anyway, earlier.
+        The level the dark answers at is still the *gate* on the ultimate (see
+        `learned_at`), which is the one place a test can lower it: `--testrun`
+        runs make the dark speak at level one, and a run the dark talks through
+        does not keep the hero's tricks secret.
         """
-        if special.uses_floor:
-            return ultimate_refusal(self.state) is None
-        if special.key in self._used:
-            return False
-        return self.state.level >= learned_at(special, self.state.ultimate_level)
+        return self.has_learned(special) and self.state.kill_points >= special.cost
 
     def living_enemies(self) -> list[Actor]:
         """Everyone still standing, in the order they were met."""
@@ -388,9 +377,6 @@ class Battle:
             return events
         self._hero_up = False
         self._turns.append(self.hero)
-        #: Which of the hero's tricks this *fight* has already spent. The void is
-        #: not in here: it is priced by the floor, and the floor's own flag says so.
-        self._used: set[str] = set()
         #: BETWEEN BLOWS: until the end of this round, nothing finds the hero.
         self._unseen = False
         #: THE HOARFROST: until the end of this round, whoever lands a blow on him
@@ -417,6 +403,12 @@ class Battle:
                     self._lapse(events)
                 self._settled = True
                 self._hero_up = True
+                # And the purse fills, one point a turn of his own. Which makes
+                # the cheap tricks a rhythm and the dear ones a plan -- and makes
+                # a quick hero richer in them, on top of getting more turns.
+                self.state.kill_points = min(
+                    self.state.kill_points_max, self.state.kill_points + 1
+                )
                 return
             self._turns.append(actor)
             self._enemy_acts(actor, events)
@@ -623,18 +615,20 @@ class Battle:
     def _special_refusal(self, special: Special | None) -> str:
         """Why the dark will not do this one, in the dungeon's own words.
 
-        The void's refusal *is* the dungeon's -- the level the dark answers at,
-        and the floor it has already had -- because it is the same ask priced the
-        same way. The others are the fight's, and say so.
+        Two ways to be turned down, and they are different sentences: a trick the
+        level has not taught yet is a *distance*, and a trick he cannot afford is
+        a *wait*. The player can act on either, but only if the fight says which.
         """
         if special is None:
             return "The dark has nothing left to spend here."
-        if special.uses_floor:
-            return ultimate_refusal(self.state) or "The dark has already had this floor."
-        if special.key in self._used:
-            return f"{special.name} has already been spent in this fight."
-        if self.state.level < special.level:
-            return f"Not yet. {special.name} arrives at level {special.level}."
+        if not self.has_learned(special):
+            gate = learned_at(special, self.state.ultimate_level)
+            return f"Not yet. {special.name} arrives at level {gate}."
+        if self.state.kill_points < special.cost:
+            return (
+                f"{special.name} costs {special.cost} kill points. "
+                f"You have {self.state.kill_points}."
+            )
         return "The dark is quiet."
 
     def _run_special(self, special: Special, target: Actor | None, events: list[Event]) -> None:
@@ -665,8 +659,11 @@ class Battle:
             SHATTERED_BELL: self._special_shattered_bell,
         }[special.key]
         run(target, events)
-        if not special.uses_floor:
-            self._used.add(special.key)
+        # Paid on the way out, and only if it went off: a trick the fight refused
+        # never got here, and a refusal that cost money would be a punishment for
+        # asking a question.
+        if special.cost:
+            self.state.kill_points = max(0, self.state.kill_points - special.cost)
 
     def _blow(
         self,
@@ -694,10 +691,22 @@ class Battle:
         return outcome
 
     def _special_left_hand(self, target: Actor | None, events: list[Event]) -> None:
-        """The dagger: the stab it makes sure of, and it is a little deeper."""
+        """The dagger, and what it leaves in: a plain cut, and a poison.
+
+        It used to make sure of its stab -- a forced crit and a flat bonus -- and
+        that was the wrong promise for the cheapest trick in the kit. A small
+        certain hit is a small certain hit; poison is not a bigger blow at all,
+        it is a reason to open with this one and a thing that keeps working while
+        the purse fills.
+        """
         enemy = self._pick(target)
-        if enemy is not None:
-            self._blow(enemy, events, flair=LEFT_HAND, force_crit=True, bonus=LEFT_HAND_BONUS)
+        if enemy is None:
+            return
+        self._blow(enemy, events, flair=LEFT_HAND)
+        if enemy.stats.alive:
+            before = len(self.state.log)
+            inflict(self.state, enemy, ("poison",))
+            self._splice(before, events)
 
     def _special_orb_of_ptamera(self, target: Actor | None, events: list[Event]) -> None:
         """The orb: a dark thing thrown instead of carried, and loaded for the throat.
@@ -799,7 +808,6 @@ class Battle:
     def _special_the_void(self, target: Actor | None, events: list[Event]) -> None:
         """The dungeon's own ask, in the room: the dark answers, and everything
         in front of him takes it at once."""
-        self.state.ultimate_available = False
         before = len(self.state.log)
         self.state.say("The dark answers.", LogKind.SYSTEM)
         self._splice(before, events)
@@ -849,7 +857,6 @@ class Battle:
         rather bite; what fits in a room is what it is made of -- the armour is
         doubled, and this round the blows are halved against the ice.
         """
-        self.state.ultimate_available = False
         player = self.state.player
         player.stats.armor += max(2, player.stats.armor)
         self._guarded = True
@@ -914,7 +921,6 @@ class Battle:
 
     def _special_shattered_bell(self, target: Actor | None, events: list[Event]) -> None:
         """He shatters the bell, and the note goes down through the floor."""
-        self.state.ultimate_available = False
         before = len(self.state.log)
         self.state.say("You shatter the golden bell.", LogKind.GOOD)
         self.state.say("The note goes down through the floor.", LogKind.SYSTEM)

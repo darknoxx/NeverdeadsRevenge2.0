@@ -37,6 +37,7 @@ from .actors import Actor, ActorKind, HEROES, Stats, Trait
 from .curses import Curse
 from .difficulty import BASE_PACK_SLOTS
 from .npcs import NPCS
+from .levels import kill_points_for
 from .state import GameState, LogEntry, LogKind, RunState
 
 __all__ = ["dump", "load", "SaveError", "SCHEMA_VERSION"]
@@ -186,6 +187,7 @@ def dump(state: GameState) -> dict:
         "run_state": _encode(state.run_state),
         "kills": state.kills,
         "level": state.level,
+        "kill_points": state.kill_points,
         "revenge_stacks": state.revenge_stacks,
         "floors_cleared": state.floors_cleared,
         "inventory": [_encode(item) for item in state.inventory],
@@ -258,6 +260,9 @@ def load(payload: dict) -> GameState:
         state.run_state = _decode(payload["run_state"])
         state.kills = payload["kills"]
         state.level = payload["level"]
+        # A save from before the purse: filled rather than empty, because the
+        # alternative is a run that opens with its tricks unaffordable.
+        state.kill_points = payload.get("kill_points", kill_points_for(payload["level"]))
         state.revenge_stacks = payload["revenge_stacks"]
         state.floors_cleared = payload["floors_cleared"]
         state.inventory = [_decode(item) for item in payload["inventory"]]

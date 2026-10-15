@@ -84,6 +84,12 @@ class Special:
     blurb: str
     #: The level it arrives at. Zero means "the dark's own gate" -- see below.
     level: int
+    #: What it costs, in kill points. One purse for the whole kit, so the price
+    #: is the decision: the cheap wound twice, or the big thing once, or nothing
+    #: and wait for the purse to fill. Priced against `levels.KILL_POINTS`, which
+    #: is what a hero of the level that learns it can *hold* -- so a trick is
+    #: affordable the moment it arrives, and the ultimate is not.
+    cost: int = 0
     #: Whether the cost is the *floor* rather than the fight. Only the void is
     #: that expensive, and it is the ask the dungeon already prices.
     uses_floor: bool = False
@@ -109,14 +115,16 @@ class Special:
 SPECIALS: tuple[Special, ...] = (
     Special(
         key=LEFT_HAND,
-        effect="always a crit, and +3 damage",
+        cost=2,
+        effect="a plain cut; poison 1 a turn for 8",
         look="slash",
         name="THE LEFT HAND",
-        blurb="the dagger is the honest one: it stabs where nobody is looking",
+        blurb="the dagger is the honest one: it cuts, and leaves something in",
         level=2,
     ),
     Special(
         key=ORB_OF_PTAMERA,
+        cost=3,
         effect="a dark orb: nearly always a crit",
         look="orb",
         name="ORB OF PTAMERA",
@@ -125,6 +133,7 @@ SPECIALS: tuple[Special, ...] = (
     ),
     Special(
         key=FLEETING_SHADOW,
+        cost=5,
         effect="out at once; nothing gets a swing",
         needs_target=False,
         look="fleet",
@@ -134,6 +143,7 @@ SPECIALS: tuple[Special, ...] = (
     ),
     Special(
         key=DEVOURING_DARKNESS,
+        cost=6,
         effect="a bite; half the damage comes back",
         look="drain",
         name="DEVOURING DARKNESS",
@@ -142,6 +152,7 @@ SPECIALS: tuple[Special, ...] = (
     ),
     Special(
         key=OPEN_VEIN,
+        cost=4,
         effect="small cut, then 2 a turn for 3",
         look="bleed",
         name="THE OPEN VEIN",
@@ -150,6 +161,7 @@ SPECIALS: tuple[Special, ...] = (
     ),
     Special(
         key=FRIENDS_LIKE_THESE,
+        cost=8,
         effect="the shadow comes; all bleed badly",
         needs_target=False,
         look="shadow",
@@ -159,6 +171,7 @@ SPECIALS: tuple[Special, ...] = (
     ),
     Special(
         key=BETWEEN_BLOWS,
+        cost=6,
         effect="untouched this round, and it cuts",
         look="trail",
         name="BETWEEN BLOWS",
@@ -167,6 +180,7 @@ SPECIALS: tuple[Special, ...] = (
     ),
     Special(
         key=VOID,
+        cost=12,
         effect="all of them take it (floor)",
         needs_target=False,
         look="dissolve",
@@ -186,6 +200,7 @@ SPECIALS: tuple[Special, ...] = (
 YETI_SPECIALS: tuple[Special, ...] = (
     Special(
         key=AVALANCHE,
+        cost=4,
         effect="the blow lands 80% heavier",
         look="shatter",
         name="THE AVALANCHE",
@@ -194,6 +209,7 @@ YETI_SPECIALS: tuple[Special, ...] = (
     ),
     Special(
         key=RIME,
+        cost=3,
         effect="small cut, slows them 4 turns",
         look="frost",
         name="THE RIME",
@@ -202,6 +218,7 @@ YETI_SPECIALS: tuple[Special, ...] = (
     ),
     Special(
         key=HOARFROST,
+        cost=5,
         effect="the cold answers whoever hits you",
         needs_target=False,
         look="pulse",
@@ -211,6 +228,7 @@ YETI_SPECIALS: tuple[Special, ...] = (
     ),
     Special(
         key=STILLNESS,
+        cost=6,
         effect="half damage, +2 armour this round",
         needs_target=False,
         name="THE STILLNESS",
@@ -220,6 +238,7 @@ YETI_SPECIALS: tuple[Special, ...] = (
     ),
     Special(
         key=FORTRESS,
+        cost=12,
         effect="armour x2, blows halved (floor)",
         needs_target=False,
         name="THE FROZEN FORTRESS",
@@ -236,6 +255,7 @@ YETI_SPECIALS: tuple[Special, ...] = (
 WALKYRION_SPECIALS: tuple[Special, ...] = (
     Special(
         key=FIRST_NOTE,
+        cost=3,
         effect="a cut, and a second at 60%",
         look="ring",
         name="THE FIRST NOTE",
@@ -244,6 +264,7 @@ WALKYRION_SPECIALS: tuple[Special, ...] = (
     ),
     Special(
         key=BELLS_THROW,
+        cost=5,
         effect="thrown to the back of the queue",
         look="throw",
         name="THE BELL'S THROW",
@@ -252,6 +273,7 @@ WALKYRION_SPECIALS: tuple[Special, ...] = (
     ),
     Special(
         key=TRUE_NOTE,
+        cost=6,
         effect="+3 damage on every blow after",
         needs_target=False,
         name="THE TRUE NOTE",
@@ -261,6 +283,7 @@ WALKYRION_SPECIALS: tuple[Special, ...] = (
     ),
     Special(
         key=ECHOING_CUT,
+        cost=8,
         effect="full cut on one, half the rest",
         look="slash",
         name="THE ECHOING CUT",
@@ -269,6 +292,7 @@ WALKYRION_SPECIALS: tuple[Special, ...] = (
     ),
     Special(
         key=SHATTERED_BELL,
+        cost=12,
         effect="all of them, and thrown back",
         needs_target=False,
         look="wave",

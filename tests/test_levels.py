@@ -207,6 +207,41 @@ def test_a_level_that_teaches_nothing_says_only_what_it_granted():
     assert after == taught, f"level three taught {after}"
 
 
+def test_a_level_fills_the_purse():
+    """Kill points come from levels: a level raises the ceiling *and* fills to it.
+
+    A level that only raised the ceiling would hand the player a longer wait,
+    which is the opposite of a reward.
+    """
+    from neverdeads_revenge.game.levels import kill_points_for
+
+    state = start_run(NOXX, seed=3)
+    state.kill_points = 0
+    assert kill_points_for(2) > kill_points_for(1), "the ceiling did not rise"
+
+    _teach(state, KILLS_PER_LEVEL)  # level 2
+
+    assert state.level == 2
+    assert state.kill_points == state.kill_points_max == kill_points_for(2)
+    assert any("Kill points" in entry.text for entry in state.log), state.log[-2:]
+
+
+def test_a_new_floor_is_a_new_purse():
+    """Walking into a floor empty-handed and staying empty-handed is not a
+    decision, it is a corner -- so the stairs fill the purse."""
+    from neverdeads_revenge.game.actions import descend
+
+    state = start_run(NOXX, seed=3)
+    state.kill_points = 0
+    state.player.position = state.exit_pos
+    assert state.on_exit, "the test never found the stairs"
+
+    descend(state)
+
+    assert state.depth == 2, "the hero did not go down"
+    assert state.kill_points == state.kill_points_max, "the stairs did not fill it"
+
+
 def test_a_kill_that_does_not_reach_a_level_says_nothing():
     state = start_run(NOXX, seed=3)
     _teach(state, KILLS_PER_LEVEL - 1)
