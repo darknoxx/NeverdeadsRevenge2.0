@@ -205,10 +205,10 @@ WALL_STONES: tuple[str, ...] = (
     "wall_vines",
     "wall",
 )
-#: And what is lying on the floor: nothing, mostly. Bone belongs on the ground
-#: and not in the wall -- on masonry it reads as a trophy somebody hung up, and
-#: on the ground as somebody who did not get up.
-FLOOR_BONES = 17
+#: And what is lying on the floor: nothing, mostly -- one stone in this many.
+#: Bone belongs on the ground and not in the wall: on masonry it reads as a trophy
+#: somebody hung up, and on the ground as somebody who did not get up.
+FLOOR_BONES = 45
 #: How long a monster takes to go, once the blow that killed it has *landed*.
 #: It does not wink out and it is not a dimmed corpse left standing: the room
 #: keeps it for half a second and then does not. See GONE_LIFE's use in _fade.
@@ -345,6 +345,25 @@ LOG_LINES = 3
 
 
 _LETTERS: dict[int, BitmapFont] = {}
+
+
+def _scatter(along: int, across: int) -> int:
+    """A stable, well-mixed number for a place in the room.
+
+    Stable because the room must not redecorate itself between frames, and
+    *mixed* because the obvious way to make one -- ``along * 7 + across * 5`` --
+    is not scattered at all: it is a lattice. A lattice of bones reads as a
+    pattern on the floor rather than as litter on it, and it is what the first
+    attempt at this drew: evenly spaced, which is the one thing litter never is.
+
+    Two coordinates multiplied by two large primes and folded into each other
+    have no such structure -- the places that come up are the places a hash comes
+    up with, which is what scattered looks like. This is not cryptography, it is
+    a floor with some bones on it.
+    """
+    mixed = (along * 73856093) ^ (across * 19349663)
+    mixed = (mixed ^ (mixed >> 13)) * 1274126177
+    return (mixed ^ (mixed >> 16)) & 0x7FFFFFFF
 
 
 def letter_font(size: int) -> BitmapFont:
@@ -2344,7 +2363,7 @@ class BattleScreen(Screen):
         scatter is: bones stay where they were left.
         """
         tone = "a" if light else "b"
-        if (along * 7 + row * 5) % FLOOR_BONES == 0:
+        if _scatter(along, row) % FLOOR_BONES == 0:
             return tile(f"floor_{tone}_bones") or tile(f"floor_{tone}")
         return tile(f"floor_{tone}")
 
@@ -2357,7 +2376,7 @@ class BattleScreen(Screen):
         would be a room made of flicker.
         """
         plain = tile("wall")
-        wanted = WALL_STONES[(along * 5 + course * 3) % len(WALL_STONES)]
+        wanted = WALL_STONES[_scatter(along, course) % len(WALL_STONES)]
         return tile(wanted) or plain
 
     def _shade(

@@ -100,6 +100,38 @@ def test_the_dungeon_is_scattered_and_not_tiled(qapp):
     assert FLOOR_BONES > 8, "the floor is more bone than stone"
 
 
+def test_the_litter_is_scattered_and_not_counted():
+    """A lattice of bones is a pattern on the floor, and litter is never even.
+
+    The first version of this placed them with ``along * 7 + row * 5 % n``, which
+    is not a scatter at all -- it is a grid, and the grid was visible from across
+    the room. The places have to come out of a mix of the two coordinates, so that
+    what lands beside what is coincidence and not arithmetic.
+    """
+    from neverdeads_revenge.desktop.screens.battle import FLOOR_BONES, _scatter
+
+    floor = [
+        (along, row)
+        for row in range(24)
+        for along in range(60)
+        if _scatter(along, row) % FLOOR_BONES == 0
+    ]
+    assert floor, "nothing is ever scattered at all"
+    assert len(floor) < 24 * 60 / 12, "the floor is more bone than stone"
+
+    crowded = [
+        row for row in range(24) if sum(1 for _a, r in floor if r == row) > 1
+    ]
+    assert crowded, "no row has two of anything in it, which is not a scatter either"
+
+    gaps = []
+    for row in crowded:
+        columns = [along for along, there in floor if there == row]
+        gaps.extend(second - first for first, second in zip(columns, columns[1:]))
+    assert len(set(gaps)) > 3, "the bones land on a lattice"
+    assert min(gaps) < FLOOR_BONES // 2, "nothing ever lands near anything else"
+
+
 def test_the_committed_tiles_are_what_the_generator_produces(tmp_path):
     """They are generated, so they must not be hand-edited out of sync.
 
