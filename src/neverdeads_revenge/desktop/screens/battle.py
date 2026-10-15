@@ -191,6 +191,24 @@ STATUS_PULSE = 2.6
 #: darkness over the top of it -- the same idea, one layer up. Light enough that
 #: the masonry still reads as masonry: a wall nobody can see is not a wall.
 FAR_LIGHT = 0.62
+#: Which stone goes where in a wall. Mostly plain, with a bone or a vine here and
+#: there, because a room where every stone is decorated is a room with a pattern
+#: in it -- and the scatter is picked from the *place* and not from a dice roll,
+#: so the room is the same room on every frame. A vine that moved between frames
+#: would be a vine nobody believes.
+WALL_STONES: tuple[str, ...] = (
+    "wall",
+    "wall",
+    "wall_vines",
+    "wall",
+    "wall_bones",
+    "wall",
+    "wall_vines",
+)
+#: How long a monster takes to go, once the blow that killed it has *landed*.
+#: It does not wink out and it is not a dimmed corpse left standing: the room
+#: keeps it for half a second and then does not. See GONE_LIFE's use in _fade.
+GONE_LIFE = 0.6
 #: How long a wall of ice stands in front of the hero after it is raised.
 WALL_LIFE = 1.2
 #: How long Atritas stands there after FRIENDS LIKE THESE has called him. Longer
@@ -359,6 +377,12 @@ class Popup:
     #: are read together, a fifth of a second after the player asked for the blow.
     damage: int = 0
     target_id: int = 0
+    #: And whether it was the blow that finished them, and what it sounds like.
+    #: The rules have known both since the swing -- they resolve at once -- and
+    #: the *room* must not: a monster that goes transparent while the sword is
+    #: still in the air is a fight that told the player the ending early.
+    killed: bool = False
+    sound: str = ""
 
     #: Not a field: the same life for every number, and the only place it lives.
     LIFE = POPUP_LIFE
@@ -500,6 +524,10 @@ class BattleScreen(Screen):
         #: the cheapest -- and named apart from the white flash a *sprite* wears,
         #: which is the blow's mark on the figure rather than on the room.
         self._wash: Wash | None = None
+        #: Who has been *seen* to die, and when: the frame the killing blow
+        #: landed, not the moment the rules decided it. Everything that reads a
+        #: figure's aliveness for the picture reads this instead.
+        self._dying: dict[int, float] = {}
         #: White silhouettes of the sprites, made once and reused: a hit flash is
         #: the figure painted solid white for a few frames.
         self._flashes: dict[tuple[int, str], QImage] = {}
@@ -634,6 +662,10 @@ class BattleScreen(Screen):
         for figure in figures:
             if figure.actor is self.battle.hero:
                 continue
+            if self._fade(id(figure.actor)) < 1.0:
+                # The bar goes with the monster and not before it: a stripe left
+                # lying on the floor under nobody is a stripe about nobody.
+                continue
             total = max(1, figure.actor.max_hp)
             shown = self._shown.get(id(figure.actor), figure.actor.stats.hp)
             ratio = max(0.0, min(1.0, shown / total))
@@ -726,13 +758,16 @@ class BattleScreen(Screen):
         is that every cell of it has hard ones. The gradient goes to nothing at
         the rim, so the pool fades into the floor instead of stopping.
         """
+        fade = self._fade(id(figure.actor))
+        if fade <= 0.0:
+            return
         width = max(20.0, float(figure.cells * cell_w) * 1.05)
         height = max(6.0, width * 0.24)
         centre_x = float(figure.cx)
         centre_y = float(figure.row * cell_h) - 1.0
         gradient = QRadialGradient(QPointF(centre_x, centre_y), width / 2.0)
-        gradient.setColorAt(0.0, QColor(0, 0, 0, 120))
-        gradient.setColorAt(0.55, QColor(0, 0, 0, 74))
+        gradient.setColorAt(0.0, QColor(0, 0, 0, int(120 * fade)))
+        gradient.setColorAt(0.55, QColor(0, 0, 0, int(74 * fade)))
         gradient.setColorAt(1.0, QColor(0, 0, 0, 0))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(gradient)
@@ -998,6 +1033,22 @@ class BattleScreen(Screen):
             self._climb(painter, figure.cx, baseline - cell_h, cell_h, colour, age, count=9, up=True)
             self._glow(painter, figure.cx, baseline, cell_w, cell_h, colour, age)
             return
+
+    def _fade(self, actor_id: int) -> float:
+        """How much of a figure is still in the room: 1 until it is killed, 0 gone.
+
+        The rules kill at the swing and the room lets go at the *blow*, which is
+        a fifth of a second later -- and then it does not leave a dimmed corpse
+        lying about, it lets the whole figure go. A dead monster is not a monster
+        in half a light: it is one that was there and now is not.
+        """
+        when = self._dying.get(actor_id)
+        if when is None:
+            return 1.0
+        age = self._clock - when
+        if age >= GONE_LIFE:
+            return 0.0
+        return max(0.0, 1.0 - age / GONE_LIFE)
 
     def _paste_flourish(
         self, painter: QPainter, figure: Staged, cell_w: int, cell_h: int, baseline: int
@@ -1704,9 +1755,17 @@ class BattleScreen(Screen):
             # on the frame the blow lands, and the bar drops with it. Both are one
             # fact -- how much of whom -- and a bar that went down while the sword
             # was still in the air was the fight spending the blow for the player.
-            if popup.age < 0 <= popup.age + dt and popup.damage:
-                before = self._shown.get(popup.target_id, popup.damage)
-                self._shown[popup.target_id] = max(0, before - popup.damage)
+            if popup.age < 0 <= popup.age + dt:
+                if popup.damage:
+                    before = self._shown.get(popup.target_id, popup.damage)
+                    self._shown[popup.target_id] = max(0, before - popup.damage)
+                if popup.sound:
+                    app.play(popup.sound)
+                if popup.killed:
+                    # *Now* it dies, which is the moment the number came off it.
+                    # The rules knew at the swing; the room is told here, and the
+                    # two moments are different on purpose.
+                    self._dying[popup.target_id] = self._clock
             popup.age += dt
         self._popups = [popup for popup in self._popups if popup.age < Popup.LIFE]
         if self._beat > 0:
@@ -1872,6 +1931,23 @@ class BattleScreen(Screen):
             number.age = -IMPACT_AT
             number.damage = outcome.damage if outcome.hit and not outcome.dodged else 0
             number.target_id = id(struck.target)
+            number.killed = outcome.killed
+            # The sound belongs to the *blow* and not to the swing, like the
+            # number and the bar and the sparks: everything the player hears and
+            # sees about a hit happens on the frame it lands in.
+            number.sound = (
+                (
+                    "kill"
+                    if outcome.killed
+                    else "crit"
+                    if outcome.crit
+                    else "hit"
+                )
+                if struck.actor is self.battle.hero
+                else "hurt"
+            )
+            if not outcome.hit:
+                number.sound = ""
             self._popups.append(number)
             if outcome.hit and not outcome.dodged:
                 point = self._point_of(struck.target, app)
@@ -1923,10 +1999,7 @@ class BattleScreen(Screen):
                     SPARKS.get(look, 16),
                 )
             )
-        if struck.actor is self.battle.hero:
-            app.play("kill" if outcome.killed else "crit" if outcome.crit else "hit")
-        else:
-            app.play("hurt")
+
 
     def _wound(self, actor, status, app) -> None:
         """A wound biting: what the fight shows at the monster's own turn.
@@ -2209,8 +2282,9 @@ class BattleScreen(Screen):
             x = int(left + inset_px + index * art.width())
             for course in range(down):
                 y = int(ground_top - (course + 1) * art.height())
-                painter.drawImage(x, y, art)
-                self._shade(painter, x, y, art, far_ink, FAR_LIGHT)
+                stone = self._stone(index, course)
+                painter.drawImage(x, y, stone)
+                self._shade(painter, x, y, stone, far_ink, FAR_LIGHT)
 
         # And the two sides, sheared along the floor's own edge.
         edge_x, edge_y = float(field["edge_x"]), float(field["edge_y"])
@@ -2239,8 +2313,9 @@ class BattleScreen(Screen):
                 # *above* the line its edge is on, which is where a wall is --
                 # and courses of them, because one course is a kerb.
                 for course in range(down):
+                    stone = self._stone(step, course)
                     painter.drawImage(
-                        -art.width() // 2, -(course + 1) * art.height(), art
+                        -art.width() // 2, -(course + 1) * art.height(), stone
                     )
                     # The light comes from the hero's end: the far corner of each
                     # wall is the darkest thing in the room.
@@ -2248,12 +2323,24 @@ class BattleScreen(Screen):
                         painter,
                         -art.width() // 2,
                         -(course + 1) * art.height(),
-                        art,
+                        stone,
                         far_ink,
                         FAR_LIGHT - t_along * 0.75,
                     )
                 painter.restore()
         painter.restore()
+
+    @staticmethod
+    def _stone(along: int, course: int):
+        """Which stone is at this place in a wall: mostly plain, sometimes not.
+
+        Chosen from the place in the wall and not rolled for, so the scattered
+        bones stay where they were laid: a room that re-dressed itself every frame
+        would be a room made of flicker.
+        """
+        plain = tile("wall")
+        wanted = WALL_STONES[(along * 5 + course * 3) % len(WALL_STONES)]
+        return tile(wanted) or plain
 
     def _shade(
         self,
@@ -2358,6 +2445,10 @@ class BattleScreen(Screen):
         figures, and a painted figure put through a nearest-neighbour resize looks
         like a mistake -- so what the sheets made is what the arena shows.
         """
+        fade = self._fade(id(figure.actor))
+        if fade <= 0.0:
+            return
+        opacity *= fade
         struck = self._hurts.get(id(figure.actor))
         flash_age = None if struck is None else self._clock - struck[0]
         colour = "#ffffff" if struck is None else struck[1]
@@ -2371,11 +2462,6 @@ class BattleScreen(Screen):
             image = figure.sprite
             left = cx - image.width() // 2
             top = baseline - image.height()
-            if not figure.actor.stats.alive:
-                # A monster that is out of the fight stays where it fell, dimmed
-                # rather than removed: a corpse that vanished on the last blow
-                # would make the end of a fight unreadable.
-                opacity *= 0.45
             painter.setOpacity(opacity)
             painter.drawImage(left, top, image)
             if flash_age is not None:
@@ -2389,12 +2475,6 @@ class BattleScreen(Screen):
         metrics = QFontMetrics(glyph_font.bold)
         left = cx - metrics.horizontalAdvance(figure.glyph) // 2
         ink = parse_style(figure.colour).fg
-        if not figure.actor.stats.alive:
-            faded = QColor(ink)
-            faded.setRed((faded.red() + 20) // 3)
-            faded.setGreen((faded.green() + 20) // 3)
-            faded.setBlue((faded.blue() + 20) // 3)
-            ink = faded
         painter.setOpacity(opacity)
         painter.setPen(ink.darker(320))
         painter.drawText(left, baseline + THICKNESS, figure.glyph)

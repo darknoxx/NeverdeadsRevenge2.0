@@ -3108,6 +3108,44 @@ def test_the_bar_and_the_sparks_wait_for_the_blow(app):
     assert app.effects.particles, "the blow landed without throwing anything"
 
 
+def test_a_monster_dies_when_the_blow_lands_and_not_when_it_is_decided(app):
+    """The rules settle a whole round at once; the room must not.
+
+    A monster that goes pale the moment the *fight* knows it is dead -- with the
+    sword still in the air -- has told the player the ending of a sentence they
+    are in the middle of. It holds its own light until the frame the number comes
+    off it, and then it does not lie down dead and dim: the room lets it *go*.
+    """
+    from neverdeads_revenge.desktop.screens.battle import GONE_LIFE, BattleScreen
+    from neverdeads_revenge.game.battle import Struck
+    from neverdeads_revenge.game.combat import AttackOutcome
+    from neverdeads_revenge.game.specials import LEFT_HAND
+
+    battle = arena(count=1)
+    screen = BattleScreen(battle)
+    target = battle.enemies[0]
+    screen._queue = [
+        Struck(battle.hero, target, AttackOutcome(True, False, 1, True), flair=LEFT_HAND)
+    ]
+    screen._beat = 0.0
+
+    screen.step(1 / 30.0, app)  # the swing: the rules have already killed it
+    assert screen._fade(id(target)) == 1.0, "it died while the sword was in the air"
+
+    for _ in range(30):
+        screen.step(1 / 30.0, app)
+        if screen._fade(id(target)) < 1.0:
+            break
+    assert 0.0 < screen._fade(id(target)) < 1.0, "it never died at all"
+
+    waited = 0
+    while screen._fade(id(target)) > 0.0 and waited < 120:
+        screen.step(1 / 30.0, app)
+        waited += 1
+    assert screen._fade(id(target)) == 0.0, "the corpse stayed in the room"
+    assert waited * (1 / 30.0) < GONE_LIFE + 0.25, "it took longer to go than its time"
+
+
 def test_a_wound_bites_in_the_colour_of_what_is_eating_it(app):
     """The fight *reads out* a wound as well as showing it.
 
