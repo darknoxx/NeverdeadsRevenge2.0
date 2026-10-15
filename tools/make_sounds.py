@@ -110,6 +110,20 @@ SOUNDS: dict[str, tuple[Note, ...]] = {
     "curse": (
         Note(300, 0.20, duty=0.75, to=170, noise=0.5, volume=0.7),
     ),
+    # -- the cursor --------------------------------------------------------
+    # The two a menu lives on. A *move* has to be shorter than the keypress that
+    # caused it, or holding an arrow key turns into a stutter of overlapping
+    # blips: fifteen milliseconds, high and thin, gone before the next one. The
+    # *pick* is a commit and gets the room of a small chord -- but still under a
+    # fifth of a second, because it is punctuation in front of the blow that
+    # follows it and not a fanfare of its own.
+    "move": (
+        Note(1319, 0.015, duty=0.25, volume=0.30),
+    ),
+    "pick": (
+        Note(659, 0.035, duty=0.25, volume=0.45),
+        Note(988, 0.06, duty=0.25, to=1109, volume=0.45),
+    ),
     "chest": (
         Note(330, 0.11, duty=0.75, noise=0.3, volume=0.6),
         Note(495, 0.20, duty=0.5, to=390, noise=0.2, volume=0.6),

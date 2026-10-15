@@ -88,6 +88,13 @@ TAPER = 0.18
 #: The most monsters the stage holds. A crowd is a second row and a wider glass,
 #: which is M3's business; three is what a fight of this shape is about.
 STAGE = 3
+#: The verbs that have to be pointed at somebody. Confirming one of these opens
+#: the aim instead of spending the turn: the trick is picked and *then* the
+#: monster, which is the order every fight in this genre ever had -- and the
+#: order a player can see, because the arrow is on the room and the choice is a
+#: name in a panel. Quaffing a draught and setting your feet are aimed at nobody
+#: and still happen on one key, because a turn spent on nothing is a turn.
+AIMED: tuple[str, ...] = (ATTACK, SPECIAL)
 
 #: Where a row of monsters stands, by how many there are: the lane across the
 #: room and how far into it, both as fractions of the ground's width and height.
@@ -167,6 +174,51 @@ SHAKES: dict[str, int] = {
     "dissolve": 7,
     "throw": 4,
 }
+#: Everything that lands *moves* what it hit: the figure is shoved a fraction of
+#: its own height up the room and drifts back. A thrown monster goes the whole
+#: way (that is the trick); a stick hit moves a quarter of it, and the number
+#: says how much it cost. Weight is a thing that is seen and not only read.
+THROWN = 1.2
+SHOVES: dict[str, float] = {
+    "shatter": 0.7,
+    "wave": 0.6,
+    "dissolve": 0.8,
+    "throw": THROWN,
+    "ring": 0.45,
+    "slash": 0.35,
+    "bleed": 0.3,
+    "frost": 0.3,
+    "shadow": 0.4,
+    "trail": 0.35,
+}
+SHOVE = 0.26
+#: How much more of a shove a crit is.
+CRIT_SHOVE = 1.6
+#: How long the room holds still on a landed blow, and the same by shape. This is
+#: a hitstop and it is the whole of the weight: three frames in which *nothing*
+#: moves, so the hit lands on a room that has stopped rather than on one that is
+#: politely carrying on. Short enough to feel like impact and not like a stall.
+HITSTOP = 0.05
+CRIT_STOP = 0.09
+HITSTOPS: dict[str, float] = {
+    "shatter": 0.11,
+    "wave": 0.11,
+    "dissolve": 0.14,
+    "throw": 0.09,
+    "shadow": 0.08,
+    "ring": 0.07,
+    "frost": 0.07,
+}
+#: The wash over the whole room when a blow lands, and how long it holds. Drawn
+#: last and felt first: on a small screen a frame of colour across everything is
+#: the loudest thing there is, and it costs one rectangle.
+FLASH_LIFE = 0.13
+FLASH_ALPHA = 0.10
+FLASH_HARD_ALPHA = 0.18
+#: The blows that shake the *seat* rather than the figure: the three that cost
+#: the whole floor rather than the fight's exchange. A crit is in the same league
+#: whatever it was struck with.
+HARD_BLOWS: frozenset[str] = frozenset({"shatter", "wave", "dissolve"})
 #: How long one event holds the stage. A fight that printed a whole round at
 #: once would be a spreadsheet with letters drawn on it.
 BEAT = 0.42
@@ -223,6 +275,25 @@ class Popup:
 
     #: Not a field: the same life for every number, and the only place it lives.
     LIFE = POPUP_LIFE
+
+
+@dataclass
+class Wash:
+    """The colour across the whole room when a blow lands.
+
+    Its own thing because it has two moments and not one: it is *set* when the
+    swing begins and it *lands* when the blow does, and the room only holds still
+    on the second of those. A freeze that came with the decision to swing would
+    be a freeze in the wrong place -- the pause before a punch is not the punch.
+    """
+
+    colour: str
+    when: float
+    strength: float
+    stop: float
+    #: Whether the room has already stopped for it. Set once, on the frame the
+    #: impact falls in, so that the freeze is spent at the impact and not before.
+    spent: bool = False
 
 
 class Staged:
@@ -292,6 +363,17 @@ class BattleScreen(Screen):
         #: not being offered anything.
         self.picking = False
         self.special = 0
+        #: Whether the arrow is out on the room, waiting for a monster to be
+        #: walked to and taken. The trick is chosen first and the *victim* second:
+        #: a turn that named a monster in the rules and hid it from the player
+        #: would be a choice made by whoever was standing under the arrow.
+        self.aiming = False
+        #: Where the aim was opened from, so escape goes back there: ``"list"``
+        #: for the five, ``"verbs"`` for the command panel.
+        self._aim_from = "verbs"
+        #: Which of the five the aim is going to spend. The list picks the trick
+        #: and the arrow picks the monster, so the trick has to be kept.
+        self._picked: str | None = None
         #: The fight's last few lines, in the log's own colours.
         self.lines: list[Said] = []
         #: The round being played back, one event per beat. The opening round is
@@ -314,9 +396,15 @@ class BattleScreen(Screen):
         #: Who was struck: when the blow inside their strike lands, and the
         #: colour the trick that landed it is painted in.
         self._hurts: dict[int, tuple[float, str, str]] = {}
-        #: Who has just been thrown back, and when. A knockback is a *place* and
-        #: not a colour, so it is kept apart from the flashes.
-        self._knocked: dict[int, float] = {}
+        #: Who has just been thrown back, by how far and when. A knockback is a
+        #: *place* and not a colour, so it is kept apart from the flashes.
+        self._knocked: dict[int, tuple[float, float]] = {}
+        #: The room holding still on a landed blow, in seconds left to hold.
+        self._hitstop = 0.0
+        #: The wash over the room on a landed blow. The loudest thing here and
+        #: the cheapest -- and named apart from the white flash a *sprite* wears,
+        #: which is the blow's mark on the figure rather than on the room.
+        self._wash: Wash | None = None
         #: White silhouettes of the sprites, made once and reused: a hit flash is
         #: the figure painted solid white for a few frames.
         self._flashes: dict[tuple[int, str], QImage] = {}
@@ -390,7 +478,30 @@ class BattleScreen(Screen):
             self._paste_popup(painter, popup)
         if self.verdict is not None:
             self._paste_verdict(painter, cols, rows, app)
+        self._paste_wash(painter, image)
         painter.end()
+
+    def _paste_wash(self, painter: QPainter, image) -> None:
+        """The wash over the whole room on a landed blow.
+
+        Drawn last, over everything including the verdict, because it is not a
+        thing in the room -- it is the room's own reaction to being hit, and it
+        costs one rectangle to make a small fight feel like it has weight.
+        """
+        if self._wash is None:
+            return
+        age = self._clock - self._wash.when
+        if age < 0:
+            return
+        if age > FLASH_LIFE:
+            self._wash = None
+            return
+        tint = QColor(self._wash.colour)
+        painter.setOpacity(self._wash.strength * (1.0 - age / FLASH_LIFE))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(tint)
+        painter.drawRect(QRectF(0.0, 0.0, float(image.width()), float(image.height())))
+        painter.setOpacity(1.0)
 
     # -- where a figure stands, this frame ---------------------------------
     def _paste_figure(self, painter: QPainter, figure: Staged, app, figures) -> None:
@@ -867,10 +978,18 @@ class BattleScreen(Screen):
         self._climb(painter, cx, baseline - cell_h * 1.2, cell_h, colour, age, count=6, up=True)
 
     def _knockback(self, figure: Staged, cell_h: int) -> int:
-        """How far up the room a thrown figure is, right now."""
-        when = self._knocked.get(id(figure.actor))
-        if when is None:
+        """How far up the room a shoved figure is, right now.
+
+        Up the room and not across it, because the floor runs away towards the
+        top: a shove that moved a monster sideways would be a monster standing
+        somewhere it is not, which is the one thing the isometric view cannot
+        afford. ``push`` is in cell heights, so the bell's throw and a stick hit
+        are the same movement at two sizes.
+        """
+        knocked = self._knocked.get(id(figure.actor))
+        if knocked is None:
             return 0
+        when, push = knocked
         age = self._clock - when
         if age < 0:
             return 0
@@ -880,7 +999,7 @@ class BattleScreen(Screen):
         # Out fast, home slowly: a knock is not a shove back into place.
         out = min(1.0, age / 0.14)
         back = max(0.0, (age - 0.30) / (FLOURISH_LIFE - 0.30))
-        return round(cell_h * 1.2 * out * (1.0 - back))
+        return round(cell_h * push * out * (1.0 - back))
 
     def _jolt(self, figure: Staged) -> int:
         """How far a struck figure is shaking, in pixels, right now."""
@@ -956,6 +1075,22 @@ class BattleScreen(Screen):
         return (buffer.cols, buffer.rows)
 
     def key(self, name: str, event, app) -> bool:
+        if self.battle.over:
+            # The fight is decided, but the arena may still be playing the last
+            # blow: leaving on a keypress before the verdict has been shown would
+            # be the player skipping the one thing they just earned.
+            if not self.busy and name in ("enter", "return", "space"):
+                app.leave_battle()
+            return True
+        if self.picking:
+            # The five, being looked at: everything goes to the list until it is
+            # closed, escape included -- *there* escape is the way back and not
+            # the way out, and the list has to hear it before the arena does.
+            return self._pick_special(name, app)
+        if self.aiming:
+            # The arrow, being walked across the room: everything goes to the aim
+            # until a monster is taken or the choice is given back.
+            return self._aim(name, app)
         if name == "escape":
             # There is no way out of a fight but through it. Fleeing is a *verb*
             # with a price -- everything still standing gets a blow at the hero's
@@ -966,17 +1101,6 @@ class BattleScreen(Screen):
                 Said("The only way out of this is through it.", LogKind.PLAIN),
             ][-LOG_LINES:]
             return True
-        if self.battle.over:
-            # The fight is decided, but the arena may still be playing the last
-            # blow: leaving on a keypress before the verdict has been shown would
-            # be the player skipping the one thing they just earned.
-            if not self.busy and name in ("enter", "return", "space"):
-                app.leave_battle()
-            return True
-        if self.picking:
-            # The five, being looked at: everything goes to the list until it is
-            # closed, including escape, which is the way back and not the way out.
-            return self._pick_special(name, app)
         if self.busy:
             # The fight is talking. It will not be interrupted mid-sentence, or
             # a player drumming on the keyboard would be choosing the next verb
@@ -984,10 +1108,10 @@ class BattleScreen(Screen):
             return True
         living = self._targets()
         if name in ("left", "h") and living:
-            self.target = (self.target - 1) % len(living)
+            self._walk(-1, app)
             return True
         if name in ("right", "l") and living:
-            self.target = (self.target + 1) % len(living)
+            self._walk(1, app)
             return True
         if name == "up":
             self.verb = (self.verb - 1) % len(VERBS)
@@ -1006,17 +1130,68 @@ class BattleScreen(Screen):
         return True
 
     def _confirm(self, app) -> None:
-        """Take the highlighted verb -- or open the five, if it was SPECIAL.
+        """Take the highlighted verb.
 
         SPECIAL is a door rather than a verb: the hero has five ways to spend a
         turn and the player is entitled to pick which. The first available one is
-        not good enough, because a choice nobody can make is not a choice.
+        not good enough, because a choice nobody can make is not a choice -- and
+        neither is a monster nobody was shown. So the two verbs that are *aimed*
+        open the arrow instead of spending the turn: the trick first, the victim
+        second, both of them on the screen.
         """
         if VERBS[self.verb] == SPECIAL:
             self.picking = True
             self.special = 0
             return
+        if VERBS[self.verb] in AIMED:
+            self.aiming = True
+            self._aim_from = "verbs"
+            self._picked = None
+            return
         self._choose(app)
+
+    def _walk(self, step: int, app) -> None:
+        """Move the arrow to another monster, and say so.
+
+        The blip is not decoration. A cursor that moves in silence makes the
+        player look down at the panel to find out whether the key registered,
+        and a fight is watched on the floor.
+        """
+        living = self._targets()
+        if not living:
+            return
+        self.target = (self.target + step) % len(living)
+        app.play("move")
+
+    def _aim(self, name: str, app) -> bool:
+        """A monster is being walked to, and the next enter spends the turn.
+
+        Left and right cross the room, the blip marks every step of it, and the
+        note on the way in is the commitment: the arrow says *which*, and the
+        ears say that the choice was taken.
+        """
+        # Left and right only, and not up and down: the row of monsters runs
+        # across the room, and a key that walked the arrow "up" would walk it
+        # along an axis the room does not have.
+        if name in ("left", "h"):
+            self._walk(-1, app)
+            return True
+        if name in ("right", "l"):
+            self._walk(1, app)
+            return True
+        if name == "escape":
+            # Back where the choice came from, with the trick still picked: the
+            # aim is a step in a menu and not a trap.
+            self.aiming = False
+            if self._aim_from == "list":
+                self.picking = True
+            return True
+        if name in ("enter", "return", "space", "a"):
+            app.play("pick")
+            self.aiming = False
+            self._choose(app, special=self._picked)
+            return True
+        return True
 
     def _list_rows(self, app) -> int:
         """How many names fit in one column of the list, as it is drawn now.
@@ -1057,8 +1232,14 @@ class BattleScreen(Screen):
             return True
         chosen = specials[index]
         if self.battle.special_available(chosen):
+            # The trick is picked, and the *victim* is still to be picked: the
+            # list closes and the arrow takes over, on the floor where the
+            # monsters are, with the trick kept for whoever it ends up on.
             self.picking = False
-            self._choose(app, special=chosen.key)
+            self.aiming = True
+            self._aim_from = "list"
+            self._picked = chosen.key
+            app.play("pick")
         return True
 
     @property
@@ -1083,7 +1264,19 @@ class BattleScreen(Screen):
         the life of a damage number -- because a screen that kept a timer of its
         own would keep running after the window it is drawn in has gone.
         """
+        if self._hitstop > 0:
+            # The room holds still on a landed blow: no clock, no breath, no
+            # beat. Three frames in which nothing moves is the difference between
+            # a hit that lands on something and a number that arrives politely --
+            # and it is spent *inside* the beat, so the round is not longer.
+            self._hitstop = max(0.0, self._hitstop - dt)
+            return
         self._clock += dt
+        if self._wash is not None and not self._wash.spent and self._clock >= self._wash.when:
+            # The blow landed inside this frame, so the room stops for the next
+            # few: the hitstop is spent *at* the impact and not at the swing.
+            self._wash.spent = True
+            self._hitstop = self._wash.stop
         for popup in self._popups:
             popup.age += dt
         self._popups = [popup for popup in self._popups if popup.age < Popup.LIFE]
@@ -1193,12 +1386,24 @@ class BattleScreen(Screen):
                 if outcome.hit
                 else "grey70"
             )
-            self._popups.append(self._popup(text, colour, figure, app, outcome.crit))
-            if outcome.hit:
+            # The number waits for the blow. It is *set* when the swing starts --
+            # there is one moment to write it down -- but it must not be read
+            # before the sword is in the monster, so its clock starts negative
+            # and it appears on the frame the impact falls in.
+            number = self._popup(text, colour, figure, app, outcome.crit)
+            number.age = -IMPACT_AT
+            self._popups.append(number)
+            if outcome.hit and not outcome.dodged:
                 point = self._point_of(struck.target, app)
                 if point is not None:
-                    strength = SHAKES.get(self._look(struck.flair), 4 if outcome.crit else 2)
-                    app.view.shake(strength=strength, seconds=0.2)
+                    look = self._look(struck.flair)
+                    app.view.shake(
+                        strength=SHAKES.get(look, 4 if outcome.crit else 2), seconds=0.2
+                    )
+                # And the whole room takes it: a frame of the trick's own colour
+                # across everything, which is what a blow sounds like with the
+                # sound off. The heavy ones land harder than a stick does.
+                self._wash_blow(struck, app)
         # The strike is recorded whether or not it lands: a swing that missed
         # was still a swing, and a hero who did not move would look like a hero
         # who did nothing.
@@ -1208,15 +1413,19 @@ class BattleScreen(Screen):
             struck.flair,
         )
         if outcome.hit and not outcome.dodged:
+            look = self._look(struck.flair)
+            when = self._clock + IMPACT_AT
             self._hurts[id(struck.target)] = (
-                self._clock + IMPACT_AT,
+                when,
                 FLAIR_COLOURS.get(struck.flair, "#ffffff"),
-                self._look(struck.flair),
+                look,
             )
-            if self._look(struck.flair) == "throw":
-                # Thrown *back*: up the room, which is away from the hero, and
-                # back again -- the dungeon's version only makes it walk.
-                self._knocked[id(struck.target)] = self._clock + IMPACT_AT
+            # Thrown *back*: up the room, which is away from the hero, and back
+            # again -- the dungeon's version of the bell only makes it walk. Every
+            # other blow shoves a little of the same way, so that a hit moves
+            # something whether or not there is a number over it.
+            push = SHOVES.get(look, SHOVE) * (CRIT_SHOVE if outcome.crit else 1.0)
+            self._knocked[id(struck.target)] = (when, push)
         if not outcome.hit:
             return
         # A shower of sparks in the trick's own colour, from the figure that took
@@ -1233,6 +1442,28 @@ class BattleScreen(Screen):
             app.play("kill" if outcome.killed else "crit" if outcome.crit else "hit")
         else:
             app.play("hurt")
+
+    def _wash_blow(self, struck: Struck, app) -> None:
+        """What a landed blow does to the *room*: it stops it, and it colours it.
+
+        The two together are the weight. Everything else a hit has -- the shove,
+        the sparks, the number -- happens inside a room that is carrying on as
+        before, and a room that carries on is a room in which nothing much
+        happened. Both are timed at the impact and not at the swing, so they land
+        with the blow and not with the decision to throw it.
+        """
+        look = self._look(struck.flair)
+        hard = struck.outcome.crit or look in HARD_BLOWS
+        stop = max(
+            HITSTOPS.get(look, HITSTOP),
+            CRIT_STOP if struck.outcome.crit else 0.0,
+        )
+        self._wash = Wash(
+            colour=FLAIR_COLOURS.get(struck.flair, "#ffffff"),
+            when=self._clock + IMPACT_AT,
+            strength=FLASH_HARD_ALPHA if hard else FLASH_ALPHA,
+            stop=stop,
+        )
 
     @staticmethod
     def _popup(text: str, colour: str, figure: Staged, app, crit: bool) -> Popup:
@@ -1552,6 +1783,11 @@ class BattleScreen(Screen):
         It hangs above the letter rather than beside it, because beside a letter
         is where the next monster is: an arrow that means "this one" has to point
         at the one it means.
+
+        While it is being *aimed*, it also breathes: the same figure rising and
+        falling, so the one the arrow is on is moving while all the others are
+        still. A marker that stands as still as everything under it is a marker a
+        player has to hunt for.
         """
         font = letter_font(max(16, figure.size // 2))
         painter.setFont(font.bold)
@@ -1562,6 +1798,8 @@ class BattleScreen(Screen):
         else:
             top = QFontMetrics(letter_font(figure.size).bold).capHeight()
         baseline = figure.row * cell_h - THICKNESS - top - metrics.height() // 3
+        if self.aiming:
+            baseline -= round(math.sin(self._clock * 5.0) * 2) - 1
         left = figure.cx - metrics.horizontalAdvance(ARROW) // 2
         painter.setPen(ink.darker(320))
         painter.drawText(left, baseline + THICKNESS, ARROW)
@@ -1570,6 +1808,10 @@ class BattleScreen(Screen):
 
     def _paste_popup(self, painter: QPainter, popup: Popup) -> None:
         """A number on its way up and out: the only thing here that moves."""
+        if popup.age < 0:
+            # Written down, not yet landed. A number over a monster before the
+            # blow reaches it is the fight telling the player the future.
+            return
         font = letter_font(34 if popup.crit else 26)
         painter.setFont(font.bold)
         metrics = QFontMetrics(font.bold)
@@ -1695,7 +1937,11 @@ class BattleScreen(Screen):
                 parse_style("bold bright_yellow" if ready else "grey30"),
             )
         if height >= 7:
-            buffer.text(x + 2, y + height - 2, "esc  leave the arena", parse_style(ASH))
+            # What escape *does* depends on where the player is: out of the arena
+            # from the verbs, and one step back from either of the two menus.
+            # A footer that lied about the way out is worse than no footer.
+            hint = "esc  back" if self.picking or self.aiming else "esc  leave the arena"
+            buffer.text(x + 2, y + height - 2, hint, parse_style(ASH))
 
     def _draw_commands(
         self, buffer: PatternBuffer, x: int, y: int, width: int, height: int
@@ -1718,6 +1964,9 @@ class BattleScreen(Screen):
                 height,
             )
             return
+        if self.aiming:
+            self._draw_targets(buffer, x, y, width, height)
+            return
         box(buffer, x, y, width, height, title="COMMAND", border=BLOOD, fill=True)
         if height < 4 or width < 12:
             return
@@ -1736,6 +1985,29 @@ class BattleScreen(Screen):
             else:
                 style = parse_style(ASH)
             buffer.text(x + 2, y + 1 + index, f"{marker} {key}  {label}", style)
+
+    def _draw_targets(
+        self, buffer: PatternBuffer, x: int, y: int, width: int, height: int
+    ) -> None:
+        """Who the arrow is on, said in words.
+
+        The one place in a fight where a monster's name is written on a panel
+        rather than spoken in the log: a name under a figure would be a label on
+        the room, but this is the *choice*, and a choice has to be readable. The
+        arrow on the floor and the name in the panel are the same answer twice,
+        which is how a player learns to trust the arrow.
+        """
+        box(buffer, x, y, width, height, title="TARGET", border=BLOOD, fill=True)
+        if height < 3 or width < 12:
+            return
+        living = self._targets()
+        chosen = self.target % len(living) if living else 0
+        for index, enemy in enumerate(living[: height - 2]):
+            lit = index == chosen
+            marker = "►" if lit else " "
+            style = parse_style(f"bold {BONE}" if lit else ASH)
+            buffer.text(x + 2, y + 1 + index, f"{marker} {enemy.name}"[: width - 2], style)
+        buffer.text(x + 2, y + height - 2, "◄ ►  pick", parse_style(ASH))
 
     def _draw_specials(
         self, buffer: PatternBuffer, x: int, y: int, width: int, height: int

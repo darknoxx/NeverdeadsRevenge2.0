@@ -1952,7 +1952,8 @@ def test_the_fight_is_not_interrupted_while_it_talks(app, font):
     app.screens = [screen]
     app.redraw()
 
-    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)  # ATTACK: the arrow comes out onto the room
+    press(app, Qt.Key.Key_Return)  # and is laid on the monster: the round begins
     assert screen.busy, "the fight had nothing to play"
     verb, queue = screen.verb, len(screen._queue)
     for _ in range(5):
@@ -2311,22 +2312,246 @@ def test_a_throw_sends_what_it_hit_up_the_room(app):
     """THE BELL'S THROW has to be *seen*: a knockback that only changed the queue
     would be a rule nobody could see. The figure goes up the room and comes home
     again, and it is home before the beat is over."""
-    from neverdeads_revenge.desktop.screens.battle import FLOURISH_LIFE, BattleScreen
+    from neverdeads_revenge.desktop.screens.battle import (
+        FLOURISH_LIFE,
+        THROWN,
+        BattleScreen,
+    )
 
     battle = arena(count=1)
     screen = BattleScreen(battle)
     target = battle.enemies[0]
     figure = screen._figure_of(target, app)
-    screen._knocked[id(target)] = screen._clock
+    screen._knocked[id(target)] = (screen._clock + 0.2, THROWN)
 
     assert screen._knockback(figure, 20) == 0, "it was thrown before it was hit"
 
-    screen._clock += 0.14
+    screen._clock += 0.34
     thrown = screen._knockback(figure, 20)
     assert thrown > 10, "the throw did not move anything"
 
     screen._clock += FLOURISH_LIFE
     assert screen._knockback(figure, 20) == 0, "it never came home again"
+
+
+def test_every_blow_shoves_what_it_hit(app):
+    """Weight is the one thing a number cannot say.
+
+    A stick hit does not get the bell's throw, but it *moves* the monster: a
+    fraction of the figure's own height, up the room, gone before the beat is
+    over. A hit that left the monster exactly where it stood is a hit the eye
+    reads as a subtraction.
+    """
+    from neverdeads_revenge.desktop.screens.battle import SHOVE, THROWN, BattleScreen
+
+    assert 0 < SHOVE < THROWN, "a plain hit shoves as hard as the bell's throw"
+
+    battle = arena(count=1)
+    screen = BattleScreen(battle)
+    target = battle.enemies[0]
+    figure = screen._figure_of(target, app)
+    screen._knocked[id(target)] = (screen._clock + 0.2, SHOVE)
+
+    screen._clock += 0.34
+    assert screen._knockback(figure, 20) > 0, "the monster did not move at all"
+
+
+def test_the_trick_is_picked_before_the_monster_is(app):
+    """The order every fight in this genre ever had: the move, and then the mark.
+
+    SPECIAL opens the five, taking one of the five opens the *arrow*, and the
+    arrow is what spends the turn. A trick chosen in a list and spent on whoever
+    happened to be standing under a cursor is a choice the player never made --
+    the panel is still the one that says what is being thrown, and the floor is
+    the one that says at whom.
+    """
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+
+    battle = arena(count=3)
+    screen = BattleScreen(battle)
+    screen._queue = []  # the opening round is not what this test is about
+    app.screens = [screen]
+
+    press(app, Qt.Key.Key_S, "s")
+    assert screen.picking, "SPECIAL did not open the five"
+
+    press(app, Qt.Key.Key_Return)
+    assert not screen.picking, "the list stayed open after a trick was taken"
+    assert screen.aiming, "the trick was spent without a monster being picked"
+    assert screen._picked == battle.specials()[0].key, "a different trick was armed"
+    assert not screen.busy, "the turn was spent before the arrow was laid on anyone"
+
+
+def test_the_arrow_blips_and_the_choice_answers(app):
+    """Switching monsters is heard, and taking one is a note of its own.
+
+    A cursor that moves in silence makes a player look down at the panel to find
+    out whether the key even registered -- and a fight is watched on the floor.
+    The confirm is the other half: the arrow says *which* one, and the note says
+    that the choice was taken.
+    """
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+
+    battle = arena(count=3)
+    screen = BattleScreen(battle)
+    screen._queue = []
+    app.screens = [screen]
+
+    press(app, Qt.Key.Key_Return)  # ATTACK wants a monster: the arrow comes out
+    assert screen.aiming, "the plain swing did not ask for a target"
+
+    played: list[str] = []
+    original = app.play
+    app.play = lambda name=None: played.append(name if name else "?")  # type: ignore[assignment]
+    try:
+        press(app, Qt.Key.Key_Right)
+        assert screen.target == 1, "the arrow did not cross the room"
+        assert played == ["move"], "the arrow crossed the room in silence"
+        played.clear()
+        press(app, Qt.Key.Key_Return)
+    finally:
+        app.play = original
+
+    assert played and played[0] == "pick", "the choice was taken in silence"
+    assert not screen.aiming, "the arrow is still out after the turn was spent"
+    assert screen.busy, "the arrow on a monster did not spend the turn"
+
+
+def test_escape_from_the_arrow_gives_the_five_back(app):
+    """The aim is a step in a menu and not a trap: escape walks it backwards,
+    one panel at a time, and the trick that was picked is still picked when the
+    list comes back."""
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+
+    battle = arena(count=3)
+    screen = BattleScreen(battle)
+    screen._queue = []
+    app.screens = [screen]
+
+    press(app, Qt.Key.Key_S, "s")
+    press(app, Qt.Key.Key_Return)
+    assert screen.aiming
+
+    press(app, Qt.Key.Key_Escape)
+    assert not screen.aiming and screen.picking, "escape did not give the five back"
+
+    press(app, Qt.Key.Key_Escape)
+    assert not screen.picking and not screen.aiming, "escape did not give the verbs back"
+
+
+def test_a_landed_blow_holds_the_room_still(app):
+    """Weight, as three frames in which nothing moves.
+
+    The freeze has to be *at the impact* and not at the decision to swing: a room
+    that stopped when the player pressed the key would be pausing before the
+    punch, which is not the punch.
+    """
+    from neverdeads_revenge.desktop.screens.battle import IMPACT_AT, BattleScreen
+    from neverdeads_revenge.game.battle import Struck
+    from neverdeads_revenge.game.combat import AttackOutcome
+    from neverdeads_revenge.game.specials import LEFT_HAND
+
+    battle = arena(count=1)
+    screen = BattleScreen(battle)
+    target = battle.enemies[0]
+    screen._queue = [
+        Struck(battle.hero, target, AttackOutcome(True, False, 4, False), flair=LEFT_HAND)
+    ]
+    screen._beat = 0.0
+
+    screen.step(0.02, app)  # the swing
+    assert screen._hitstop == 0.0, "the room stopped before the blow landed"
+
+    screen.step(IMPACT_AT, app)  # and the blow lands in this one
+    assert screen._hitstop > 0, "the blow landed on a room that carried on"
+
+    clock = screen._clock
+    screen.step(0.01, app)
+    assert screen._clock == clock, "the room moved during the hitstop"
+
+
+def test_a_landed_blow_washes_the_room(app, font):
+    """The colour over everything, for a moment: the loudest thing here and the
+    cheapest -- one rectangle, where the eye is already looking."""
+    from neverdeads_revenge.desktop.screens.battle import (
+        FLASH_LIFE,
+        IMPACT_AT,
+        BattleScreen,
+        FLAIR_COLOURS,
+    )
+    from neverdeads_revenge.game.battle import Struck
+    from neverdeads_revenge.game.combat import AttackOutcome
+    from neverdeads_revenge.game.specials import LEFT_HAND
+
+    battle = arena(count=1)
+    screen = BattleScreen(battle)
+    target = battle.enemies[0]
+    screen._queue = [
+        Struck(battle.hero, target, AttackOutcome(True, False, 4, False), flair=LEFT_HAND)
+    ]
+    screen._beat = 0.0
+
+    screen.step(0.02, app)
+    screen.step(IMPACT_AT + 0.01, app)
+    assert screen._wash is not None, "the blow did not colour the room at all"
+    assert screen._wash.colour == FLAIR_COLOURS[LEFT_HAND]
+
+    _, during = drawn(screen, app, font)
+    screen._clock += FLASH_LIFE
+    _, after = drawn(screen, app, font)
+
+    assert bytes(during.constBits()) != bytes(after.constBits()), (
+        "the wash was not drawn over the room"
+    )
+    assert screen._wash is None, "the wash outstayed the blow"
+
+
+def test_the_number_waits_for_the_blow(app):
+    """A number hanging over a monster the sword has not reached yet is the fight
+    telling the player the future. It is written down when the swing starts --
+    there is one moment to write it down -- and it appears when the blow does."""
+    from neverdeads_revenge.desktop.screens.battle import IMPACT_AT, BattleScreen
+    from neverdeads_revenge.game.battle import Struck
+    from neverdeads_revenge.game.combat import AttackOutcome
+    from neverdeads_revenge.game.specials import LEFT_HAND
+
+    battle = arena(count=1)
+    screen = BattleScreen(battle)
+    target = battle.enemies[0]
+    screen._queue = [
+        Struck(battle.hero, target, AttackOutcome(True, False, 4, False), flair=LEFT_HAND)
+    ]
+    screen._beat = 0.0
+
+    screen.step(0.02, app)
+    assert screen._popups, "no number was written down at all"
+    assert screen._popups[0].age < 0, "the number was readable before the blow"
+
+    screen.step(IMPACT_AT, app)
+    assert screen._popups[0].age >= 0, "the number never arrived"
+
+
+def test_the_arena_names_who_the_arrow_is_on(app, font):
+    """The one place a monster's name is written on a panel and not spoken in the
+    log: a name under a figure would be a label on the room, but this is the
+    *choice*, and a choice has to be readable."""
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+
+    battle = arena(count=3)
+    screen = BattleScreen(battle)
+    screen.aiming = True
+    buffer, _ = drawn(screen, app, font)
+
+    written = "".join(cell.char for row in buffer.cells for cell in row)
+    assert battle.enemies[screen.target].name[:6] in written, (
+        "the panel did not say who the arrow was on"
+    )
 
 
 def test_escape_does_not_leave_a_fight(app):
