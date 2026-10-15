@@ -146,11 +146,11 @@ FLAIR_COLOURS: dict[str, str] = {
     "shattered_bell": "#fff3c4",
 }
 #: How long a wall of ice stands in front of the hero after it is raised.
-WALL_LIFE = 1.6
+WALL_LIFE = 1.2
 #: How long a blow's own flourish lasts. Inside the beat that carries it, so the
 #: fight still reads one blow at a time -- but long enough to be *seen*, which is
 #: the whole point of fifteen tricks looking like fifteen tricks.
-FLOURISH_LIFE = 0.55
+FLOURISH_LIFE = 0.40
 #: How many sparks each look throws. The loud ones throw more: a shatter should
 #: look like the mountain, and a rime like a bit of frost.
 SPARKS: dict[str, int] = {
@@ -203,21 +203,21 @@ CRIT_SHOVE = 1.6
 #: a hitstop and it is the whole of the weight: three frames in which *nothing*
 #: moves, so the hit lands on a room that has stopped rather than on one that is
 #: politely carrying on. Short enough to feel like impact and not like a stall.
-HITSTOP = 0.05
-CRIT_STOP = 0.09
+HITSTOP = 0.045
+CRIT_STOP = 0.075
 HITSTOPS: dict[str, float] = {
-    "shatter": 0.11,
-    "wave": 0.11,
-    "dissolve": 0.14,
-    "throw": 0.09,
-    "shadow": 0.08,
-    "ring": 0.07,
-    "frost": 0.07,
+    "shatter": 0.09,
+    "wave": 0.09,
+    "dissolve": 0.11,
+    "throw": 0.07,
+    "shadow": 0.06,
+    "ring": 0.055,
+    "frost": 0.055,
 }
 #: The wash over the whole room when a blow lands, and how long it holds. Drawn
 #: last and felt first: on a small screen a frame of colour across everything is
 #: the loudest thing there is, and it costs one rectangle.
-FLASH_LIFE = 0.13
+FLASH_LIFE = 0.11
 FLASH_ALPHA = 0.10
 FLASH_HARD_ALPHA = 0.18
 #: The blows that shake the *seat* rather than the figure: the three that cost
@@ -225,21 +225,31 @@ FLASH_HARD_ALPHA = 0.18
 #: whatever it was struck with.
 HARD_BLOWS: frozenset[str] = frozenset({"shatter", "wave", "dissolve"})
 #: How long one event holds the stage. A fight that printed a whole round at
-#: once would be a spreadsheet with letters drawn on it.
-BEAT = 0.42
-#: How long a number hangs in the air over a head.
-POPUP_LIFE = 0.85
+#: once would be a spreadsheet with letters drawn on it -- but a fight that
+#: *narrates* at the speed it strikes is a fight that makes the player wait for
+#: its own prose, so a blow and a line do not hold the stage for the same time.
+BEAT = 0.30
+#: A line is read at a glance and does not need to be *watched*: a fifth of a
+#: beat. A round is a handful of blows and twice as many lines, and this is the
+#: difference between a fight and a queue.
+LINE_BEAT = 0.12
+#: How long a number hangs in the air over a head. Short: it is not holding the
+#: keyboard any more (see :attr:`BattleScreen.busy`), and a number that outlives
+#: the blow it belongs to is the fight talking about itself.
+POPUP_LIFE = 0.60
 #: The idle breath: how fast a figure rises and falls, and how far. Small on
 #: purpose -- two pixels is the difference between a fight and a photograph.
 BOB_SPEED = 3.4
 BOB_HEIGHT = 2
 #: How long a strike takes, and when inside it the blow lands. A blink: out
 #: where the striker stands, back in beside what it is hitting, and gone again
-#: before the beat that started it is over.
-STRIKE = 0.62
+#: before the beat that started it is over -- and the blow lands a fifth of a
+#: second after the player asked for it, which is the number that decides whether
+#: a fight feels like a fight or like a form to fill in.
+STRIKE = 0.44
 IMPACT_AT = STRIKE * 0.46
 #: How long a struck figure shakes, and how far.
-JOLT = 0.26
+JOLT = 0.20
 JOLT_PIXELS = 3
 #: How many lines of the fight are readable at once.
 LOG_LINES = 3
@@ -1270,8 +1280,14 @@ class BattleScreen(Screen):
         Talking, and only talking: the keyboard is held while the round is being
         played, because a player drumming on enter would be choosing the next
         verb for a blow they have not seen land.
+
+        *Talking* and not *fading*: the damage numbers are deliberately not in
+        here. They are the fight's last word about a blow that has already
+        landed, and a number on its way out is not a reason to hold the player's
+        hands -- it used to be three quarters of a second of pure waiting every
+        single round, which is exactly the wait a fight should never have.
         """
-        return bool(self._queue) or self._beat > 0 or bool(self._popups)
+        return bool(self._queue) or self._beat > 0
 
     @property
     def animating(self) -> bool:
@@ -1307,8 +1323,9 @@ class BattleScreen(Screen):
         if not self._queue:
             self._resync()
             return
-        self._play(self._queue.pop(0), app)
-        self._beat = BEAT
+        event = self._queue.pop(0)
+        self._play(event, app)
+        self._beat = self._beat_for(event)
 
     # -- the fight, played ------------------------------------------------
     def _targets(self) -> list:
@@ -1347,6 +1364,17 @@ class BattleScreen(Screen):
         """Freeze what the bars say, so the playback can move them itself."""
         for actor in [self.battle.hero, *self.battle.enemies]:
             self._shown[id(actor)] = actor.stats.hp
+
+    @staticmethod
+    def _beat_for(event) -> float:
+        """How long this event holds the stage.
+
+        A blow is *watched* and gets the full beat; a line is read at a glance
+        and gets a fifth of one. Splitting them is the whole of the fight's pace:
+        a round is a handful of blows and twice as many lines, and one number for
+        both was the fight narrating at the speed it strikes.
+        """
+        return LINE_BEAT if isinstance(event, Said) else BEAT
 
     def _resync(self) -> None:
         """Truth, once the round has finished being played."""

@@ -332,6 +332,10 @@ def test_a_death_leaves_pixels_at_the_exact_square(app):
     play_it_out(app, screen)
 
     assert screen.battle.won, "a one-hit ghoul was not killed"
+    # The arena's own sparks are still in the air -- a short fight leaves more of
+    # them behind than a long one -- and this is about the blood the *floor*
+    # throws when it gets the hero back, so the air is cleared first.
+    app.effects.clear()
     press(app, Qt.Key.Key_Return)  # the verdict: leave the arena
     assert top(app) == "GameScreen", "the fight never gave the floor back"
     assert state.deaths == [square], (
@@ -2855,6 +2859,106 @@ def test_the_number_waits_for_the_blow(app):
 
     screen.step(IMPACT_AT, app)
     assert screen._popups[0].age >= 0, "the number never arrived"
+
+
+class _Quiet:
+    """An app-shaped thing for the pace tests: a fight, and no window.
+
+    Timing a fight through the real app would be timing Qt as well -- the tick is
+    the app's and the frames are the app's -- and the question here is only how
+    long the *fight* keeps the player's hands off the keyboard.
+    """
+
+    def __init__(self, font):
+        from neverdeads_revenge.desktop.effects import Effects
+
+        self.font = font
+        self.effects = Effects(font.cell_w, font.cell_h)
+
+    def play(self, name):  # noqa: D102 - an app has one
+        pass
+
+    def leave_battle(self):  # noqa: D102 - an app has one
+        pass
+
+    def show_game_over(self, won: bool = False):  # noqa: D102 - an app has one
+        pass
+
+    class _View:
+        def shake(self, strength: int = 0, seconds: float = 0.0):  # noqa: D102
+            pass
+
+    view = _View()
+
+
+def _time_a_round(font, count: int = 3, *, dt: float = 1 / 30.0) -> float:
+    """How many seconds one round of ``count`` monsters costs the player."""
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+
+    battle = arena(count=count)
+    battle.state.player.stats.hp = 9999
+    battle.state.player.stats.max_hp = 9999
+    for enemy in battle.enemies:
+        enemy.stats.hp = 9999
+        enemy.stats.damage = (0, 0)
+    screen = BattleScreen(battle)
+    app = _Quiet(font)
+    for _ in range(60):  # anything quicker than the hero gets its turn first
+        if not screen.busy:
+            break
+        screen.step(dt, app)
+    screen.verb = 0
+    screen._choose(app)
+    frames = 0
+    while screen.busy and frames < 400:
+        screen.step(dt, app)
+        frames += 1
+    return frames * dt
+
+
+def test_a_round_does_not_keep_the_player_waiting(font):
+    """A fight is only boring in the gap between the decision and the answer.
+
+    This is the number that says the gap is short: a round of three monsters,
+    measured on the fight's own clock, is about a second. It used to be three
+    and a half, and most of the difference was the fight narrating at the speed
+    it strikes -- a line is read at a glance and does not need to be watched.
+    """
+    from neverdeads_revenge.desktop.screens.battle import BEAT, LINE_BEAT
+
+    assert LINE_BEAT < BEAT, "a line holds the stage as long as a blow does"
+    one = _time_a_round(font, count=1)
+    three = _time_a_round(font, count=3)
+    assert one < 1.4, f"a round of one monster took {one:.2f}s"
+    assert three < 2.2, f"a round of three monsters took {three:.2f}s"
+
+
+def test_a_damage_number_does_not_hold_the_keyboard(font):
+    """A number on its way out is not a reason to hold the player's hands.
+
+    It is the fight's last word about a blow that has already landed: readable
+    while the next turn is being chosen, and worth about three quarters of a
+    second of pure waiting every single round when it was not.
+    """
+    from neverdeads_revenge.desktop.screens.battle import BEAT, BattleScreen
+    from neverdeads_revenge.game.battle import Struck
+    from neverdeads_revenge.game.combat import AttackOutcome
+    from neverdeads_revenge.game.specials import LEFT_HAND
+
+    battle = arena(count=1)
+    screen = BattleScreen(battle)
+    app = _Quiet(font)
+    target = battle.enemies[0]
+    screen._queue = [
+        Struck(battle.hero, target, AttackOutcome(True, False, 3, False), flair=LEFT_HAND)
+    ]
+    screen._beat = 0.0
+
+    screen.step(0.033, app)  # the swing: the number is written down
+    screen.step(BEAT, app)  # the beat runs out on its own
+
+    assert screen._popups, "the number is gone already: nothing left to test"
+    assert not screen.busy, "a number on its way out was holding the keyboard"
 
 
 def test_the_arena_names_who_the_arrow_is_on(app, font):
