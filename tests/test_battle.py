@@ -456,6 +456,41 @@ def test_the_left_hand_is_a_stab_it_makes_sure_of():
     )
 
 
+def test_the_order_strip_reads_the_queue_and_spends_nothing():
+    """A quick hero takes two turns before a slow monster takes one.
+
+    That is the whole of what speed buys in this fight, and the strip has to say
+    so -- a player plans against it. Read forward and not saved: asking twice must
+    give the same answer twice, or the strip would be spending the turns it is
+    only supposed to be showing.
+    """
+    battle = levelled(6, count=1)
+    battle.hero.stats.speed = 3.0
+    battle.enemies[0].stats.speed = 0.5
+
+    ahead = battle.upcoming(3)
+    assert [one.glyph for one in ahead][:2] == [battle.hero.glyph] * 2, (
+        f"the quick hero did not get two turns first: {[one.glyph for one in ahead]}"
+    )
+    assert [one.glyph for one in battle.upcoming(3)] == [one.glyph for one in ahead], (
+        "asking twice spent something"
+    )
+
+
+def test_the_round_reads_back_in_the_order_it_was_taken():
+    """The hero first and then the room, in the order the blows come in: this is
+    the list the arena's strip counts down as it plays."""
+    battle = levelled(6, count=3)
+
+    events = battle.choose(ATTACK, battle.enemies[0])
+
+    taken = [one.glyph for one in battle.turns()]
+    swung = [event.actor.glyph for event in events if isinstance(event, Struck)]
+    assert taken == swung, f"the round went {taken} and the blows came {swung}"
+    assert taken.count(battle.hero.glyph) == 1, f"his turn is in there twice: {taken}"
+    assert battle.hero.glyph in taken, f"his turn is not in there at all: {taken}"
+
+
 def test_the_orb_hunts_crits_without_promising_them():
     """A chance and not a certainty: that is the whole difference between the orb
     and the knife, and the same dice show it -- every fight here is the same seed

@@ -3201,6 +3201,55 @@ def test_the_bar_and_the_sparks_wait_for_the_blow(app):
     assert app.effects.particles, "the blow landed without throwing anything"
 
 
+def test_the_order_strip_says_who_acts_next(app, font):
+    """Three turns at the bottom of the room, in the alphabet it is made of.
+
+    ``N > N > g``: the hero, the hero again, and then the ghoul -- which is what
+    the queue really produces for a quick hero, and the reason to show it at all.
+    Letters and not names, because a letter is what everything in this room is.
+    """
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+
+    battle = arena(count=1)
+    screen = BattleScreen(battle)
+    buffer, _ = drawn(screen, app, font)
+    written = "".join(cell.char for row in buffer.cells for cell in row)
+
+    assert "ORDER" in written, "there is no order strip at all"
+    assert battle.hero.glyph in written, "the hero is not in the order"
+    assert battle.enemies[0].glyph in written, "the monster is not in the order"
+
+
+def test_the_order_strip_counts_down_as_the_round_is_played(app):
+    """It moves on as the blows land: whoever has acted is off the front.
+
+    Dropped up to and *including* them, so a turn whose events are not all blows
+    does not leave the strip one behind for the rest of the round.
+    """
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+
+    battle = arena(count=1)
+    # A monster quick enough to be *after* him in the queue: with the floor's own
+    # slow ones the hero is next again immediately, and quite rightly so.
+    battle.enemies[0].stats.speed = 9.0
+    screen = BattleScreen(battle)
+    screen._queue = []
+    screen._beat = 0.0
+    screen.verb = 0
+    screen._choose(app)
+
+    assert screen._order, "the strip is empty"
+    assert screen._order[0] is battle.hero, "the round does not start with him"
+    head = screen._order[0]
+
+    for _ in range(60):
+        screen.step(1 / 30.0, app)
+        if screen._order and screen._order[0] is not head:
+            break
+
+    assert screen._order and screen._order[0] is not head, "the strip never moved on"
+
+
 def test_a_monster_dies_when_the_blow_lands_and_not_when_it_is_decided(app):
     """The rules settle a whole round at once; the room must not.
 

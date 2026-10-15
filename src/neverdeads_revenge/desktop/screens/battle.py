@@ -87,6 +87,10 @@ THICKNESS = 5
 #: This is the *only* perspective number: the walls are derived from it, so a
 #: room that is deeper or shallower is one edit and not four.
 TAPER = 0.18
+#: How many turns the strip at the bottom of the room shows: the one being taken
+#: and the two after it, which is what a decision is actually made against.
+ORDER_SHOWN = 3
+
 #: The most monsters the stage holds. A crowd is a second row and a wider glass,
 #: which is M3's business; three is what a fight of this shape is about.
 STAGE = 3
@@ -535,6 +539,7 @@ class BattleScreen(Screen):
         self._knocked: dict[int, tuple[float, float]] = {}
         #: The room holding still on a landed blow, in seconds left to hold.
         self._hitstop = 0.0
+        self._order: list = list(battle.upcoming(ORDER_SHOWN))
         #: Sparks owed to blows that have not landed yet: a shower over a monster
         #: the sword has not reached is the fight telling the player the future,
         #: in the same way a number is. ``(when, point, colour, how many)``.
@@ -576,6 +581,7 @@ class BattleScreen(Screen):
         self._draw_log(buffer, areas["log"])
         self._draw_plate(buffer, *areas["plate"])
         self._draw_commands(buffer, *areas["commands"])
+        self._draw_order(buffer, *areas["order"])
 
     def paste(self, image, app) -> None:
         """The room, the models, and everything that moves in them.
@@ -1833,6 +1839,9 @@ class BattleScreen(Screen):
         self._snapshot()
         self._queue = list(self.battle.choose(VERBS[self.verb], target, special=special))
         self._beat = 0.0
+        # The strip the player is about to watch: the round that was just decided,
+        # in the order it was decided, and then what the queue says comes after it.
+        self._order = [*self.battle.turns(), *self.battle.upcoming(ORDER_SHOWN)]
         # The confirmation, and only one of it: a trick and a draught have a
         # voice of their own, and a blip over the top of the dark's own sound
         # would be a stutter rather than a flourish. Everything else -- a swing,
@@ -1886,6 +1895,10 @@ class BattleScreen(Screen):
         """Truth, once the round has finished being played."""
         for actor in [self.battle.hero, *self.battle.enemies]:
             self._shown[id(actor)] = actor.stats.hp
+        # And the order. Standing still means the hero is up -- `_advance` always
+        # hands over to him -- so his own turn goes in front of the prediction,
+        # which is about the turns *after* the one being taken.
+        self._order = [self.battle.hero, *self.battle.upcoming(ORDER_SHOWN)]
 
     def _play(self, event, app) -> None:
         """One event, on the screen and in the ear."""
@@ -1923,6 +1936,9 @@ class BattleScreen(Screen):
                     )
             return
         if isinstance(event, Guarded):
+            # A guard is the hero's turn and carries his *name*: the strip is
+            # about actors, and there is exactly one actor a guard can belong to.
+            self._took_a_turn(self.battle.hero)
             point = self._point_of(self.battle.hero, app)
             if point is not None:
                 app.effects.spark(point, "grey70", count=8)
@@ -1944,6 +1960,7 @@ class BattleScreen(Screen):
                 app.show_game_over(won=False)
             return
         if isinstance(event, Struck):
+            self._took_a_turn(event.actor)
             self._land(event, app)
 
     def _land(self, struck: Struck, app) -> None:
@@ -2124,12 +2141,18 @@ class BattleScreen(Screen):
         ground_y = min(log_y - 1, wall_y + wall_h)
         ground_h = max(1, log_y - ground_y)
         panel_w = max(12, min((cols - margin * 3) // 2, 36))
+        # The strip lives in the gap the two panels leave between them: the plate
+        # on the left, the verbs on the right, and the order in the middle, which
+        # is where a player's eye already is when they are deciding.
+        order_x = margin + panel_w + 1
+        order_w = max(0, cols - margin - panel_w - order_x - 1)
         return {
             "wall": (margin, wall_y, max(1, cols - margin * 2), wall_h),
             "ground": (margin, ground_y, max(1, cols - margin * 2), ground_h),
             "log": (margin, log_y, max(1, cols - margin * 2), log_h),
             "plate": (margin, panel_y, panel_w, panel_h),
             "commands": (max(0, cols - margin - panel_w), panel_y, panel_w, panel_h),
+            "order": (order_x, panel_y, order_w, panel_h),
         }
 
     def _field(
@@ -2773,6 +2796,54 @@ class BattleScreen(Screen):
         if trick is not None and height >= 4:
             buffer.text(x + 2, y + height - 3, trick.effect[: width - 2], parse_style(BONE))
         buffer.text(x + 2, y + height - 2, "◄ ►  pick", parse_style(ASH))
+
+    def _draw_order(
+        self, buffer: PatternBuffer, x: int, y: int, width: int, height: int
+    ) -> None:
+        """The next few turns, in the alphabet the whole game is made of.
+
+        A glyph a turn, in the actor's own colour, the one being taken now the
+        brightest of them: a player deciding what to do this turn is deciding
+        against the next two, and this is that sentence written short.
+
+        Letters and not names, and the *same* letters the room is drawn in -- ``N``
+        for Noxx and whatever the ghoul is -- so the strip reads as part of this
+        fight rather than as a legend about it.
+        """
+        if self.picking or self.battle.over or height < 3 or width < 8:
+            # The list wants the whole strip when it is open, and a fight that is
+            # over has no order left to show.
+            return
+        # A short box, sitting on the same line as the two beside it. The strip is
+        # one row of letters, and a box the full height of the others would be a
+        # box of mostly nothing.
+        tall = min(height, 3)
+        top = y + height - tall
+        box(buffer, x, top, width, tall, title="ORDER", border=BLOOD, fill=True)
+        row = top + 1
+        shown = min(len(self._order), max(1, (width - 2) // 3))
+        for index in range(shown):
+            actor = self._order[index]
+            # Bold for the turn being taken, plain for the rest: bright enough to
+            # read, different enough to tell apart. A strip the player has to
+            # squint at is a strip they will not look at.
+            style = parse_style(f"bold {actor.color}" if index == 0 else actor.color)
+            buffer.text(x + 2 + index * 3, row, actor.glyph, style)
+            if index + 1 < shown:
+                buffer.text(x + 3 + index * 3, row, ">", parse_style(ASH))
+
+    def _took_a_turn(self, actor) -> None:
+        """The strip moves on: whoever acted is done and the rest come up.
+
+        Dropped up to *and including* them, and not simply off the front: a turn
+        whose events are not all blows -- the hero finding a note for his sword,
+        a monster swinging at where he was -- would otherwise leave the strip one
+        turn behind for the rest of the round.
+        """
+        for index, waiting in enumerate(self._order):
+            if waiting is actor:
+                del self._order[: index + 1]
+                return
 
     def _draw_specials(
         self, buffer: PatternBuffer, x: int, y: int, width: int, height: int

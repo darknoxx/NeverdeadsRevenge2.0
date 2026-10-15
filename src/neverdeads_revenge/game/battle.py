@@ -254,6 +254,10 @@ class Battle:
         #: *round* would hand the slow hero the same number of turns as the quick
         #: one, which is the one thing speed in this game is not allowed to mean.
         self._pace: dict[int, float] = {}
+        #: Who has taken a turn in the round being resolved, and in what order.
+        #: The queue is a set of paces, and paces do not read out loud: this is
+        #: what the arena's order strip counts down.
+        self._turns: list[Actor] = []
         self.over = False
         self.won = False
         self.escaped = False
@@ -372,6 +376,10 @@ class Battle:
         action bolted onto the front of a round he is already standing in.
         """
         events: list[Event] = []
+        # The round about to be played, from its first turn to its last: a fight
+        # that opens with a monster acting has to say so *first*, because that is
+        # the order the blows are about to arrive in.
+        self._turns = []
         if self.over:
             return events
         if not self._hero_up:
@@ -379,6 +387,7 @@ class Battle:
         if self.over:
             return events
         self._hero_up = False
+        self._turns.append(self.hero)
         #: Which of the hero's tricks this *fight* has already spent. The void is
         #: not in here: it is priced by the floor, and the floor's own flag says so.
         self._used: set[str] = set()
@@ -409,6 +418,7 @@ class Battle:
                 self._settled = True
                 self._hero_up = True
                 return
+            self._turns.append(actor)
             self._enemy_acts(actor, events)
 
     def _next(self) -> Actor:
@@ -477,6 +487,38 @@ class Battle:
                 # One flourish per wound, on the one it is happening *to* -- which
                 # for a status is anybody in the room, not the hero.
                 events.append(Flourish(actor, key))
+
+    def turns(self) -> list[Actor]:
+        """Who took a turn in the round just resolved, in the order they took it.
+
+        The hero first and then the room: this is the round the arena is about to
+        *play*, which is what the order strip at the bottom counts down.
+        """
+        return list(self._turns)
+
+    def upcoming(self, count: int = 3) -> list[Actor]:
+        """Who is up next, and after them, and after them -- without spending it.
+
+        Simulated and not saved: the queue is a set of paces that every turn
+        *spends*, and this reads them forward and gives them back. Two numbers
+        decide it -- who is up, which is the lowest pace, and what a turn costs
+        them, which is their own speed's worth -- and they are the same two the
+        fight itself uses. A strip drawn any other way would be a decoration that
+        lied about the fight it is standing in, and the whole reason to show a
+        player the order is that they can plan with it.
+        """
+        pace = dict(self._pace)
+        living = [one for one in [self.hero, *self.enemies] if one.stats.alive]
+        for one in living:
+            pace.setdefault(id(one), 1.0 / max(0.1, one.speed))
+        ahead: list[Actor] = []
+        for _ in range(max(0, count)):
+            if not living:
+                break
+            who = min(living, key=lambda one: pace.get(id(one), 0.0))
+            ahead.append(who)
+            pace[id(who)] = pace.get(id(who), 0.0) + 1.0 / max(0.1, who.speed)
+        return ahead
 
     def _order(self) -> list[Actor]:
         """Who is up next, and after them, and after them.
