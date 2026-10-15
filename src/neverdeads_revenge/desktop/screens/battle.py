@@ -87,6 +87,15 @@ THICKNESS = 5
 #: This is the *only* perspective number: the walls are derived from it, so a
 #: room that is deeper or shallower is one edit and not four.
 TAPER = 0.18
+#: Kill points are drawn as stones, not as a bar: one mark a point, filled when
+#: he has it and hollow when he does not. A bar says *how much*, which is the
+#: wrong question -- the points are *spent*, one trick at a time, and a picture
+#: of countable things is the picture of a purse.
+POINT = "◆"
+HOLLOW = "◇"
+#: The colour the filled ones are drawn in: the dark's own violet, because that
+#: is where they come from.
+POINT_COLOUR = "bold #c084fc"
 #: How many turns the strip at the bottom of the room shows: the one being taken
 #: and the two after it, which is what a decision is actually made against.
 ORDER_SHOWN = 3
@@ -1699,7 +1708,10 @@ class BattleScreen(Screen):
             self.picking = False
             app.play("deny")
             return True
-        index = {"1": 0, "2": 1, "3": 2, "4": 3, "5": 4}.get(name)
+        # The number keys still work and are no longer *shown*: the list carries
+        # the price of each trick where the number used to be, and a shortcut is
+        # a convenience for the player who already knows the list by heart.
+        index = {str(digit): digit - 1 for digit in range(1, 10)}.get(name)
         if name == "escape":
             self.picking = False
             app.play("move")
@@ -2717,16 +2729,25 @@ class BattleScreen(Screen):
             buffer.text(x + 2, y + 2, f"PACK {pack}", parse_style(ASH))
             buffer.text(x + 10, y + 2, marks, parse_style("dim #a855f7"))
         if height >= 6:
-            # The purse, as a bar like his health -- because that is what it is:
-            # the other half of what a turn costs. The old line here said whether
-            # the void was ready, which told the player about *one* trick; this
-            # tells them about all of them at once, and about the next few turns.
+            # The purse, as stones rather than as a bar: one mark a point, filled
+            # and hollow. The old line here said whether the *void* was ready,
+            # which told the player about one trick out of eight; this says what
+            # there is to spend, and the price of everything is on the list.
             points = self.kill_points
             top = max(1, self.state.kill_points_max)
-            bar = min(12, max(4, width - 22))
+            # The number stays, small beside it, because at a deep level the
+            # stones run out of room before the purse runs out of points.
+            room = max(3, width - 14)
+            shown = min(top, room)
+            filled = min(points, shown)
             buffer.text(x + 2, y + 3, "KP", parse_style(ASH))
-            self._bar(buffer, x + 5, y + 3, bar, points / top)
-            buffer.text(x + 6 + bar, y + 3, f" {points:>2}/{top}", parse_style(BONE))
+            buffer.text(x + 5, y + 3, POINT * filled, parse_style(POINT_COLOUR))
+            buffer.text(
+                x + 5 + filled, y + 3, HOLLOW * (shown - filled), parse_style("grey23")
+            )
+            buffer.text(
+                x + 6 + shown, y + 3, f"{points}/{top}", parse_style(ASH)
+            )
         if (self.picking or self.aiming) and height >= 7:
             # Escape is a step *back* in the two menus and nothing anywhere else
             # -- there is no way out of a fight but through it -- so the plate only
@@ -2899,9 +2920,11 @@ class BattleScreen(Screen):
             usable = self.battle.special_available(special)
             chosen = index == self.special
             marker = "►" if chosen else " "
-            # The price, on every line, whether he can pay it or not: a menu
-            # that hid what it cost would be a menu of surprises.
-            line = f"{marker} {index + 1}  {special.cost:>2}kp  {special.name}"
+            # The price, as stones, on every line and whether he can pay it or
+            # not: a menu that hid what it cost would be a menu of surprises.
+            # The number in front of it used to be a *keypress*, which is not a
+            # thing to read a menu by.
+            line = f"{marker} {special.name} {POINT * special.cost}"
             if not usable:
                 style = parse_style("grey23")
             elif chosen:
