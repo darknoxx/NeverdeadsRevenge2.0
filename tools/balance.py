@@ -58,6 +58,38 @@ DRINK_BELOW = 0.55
 #: turns than the health is worth, which is a decision a player makes by feel.
 CARRY_LIMIT = 3
 
+
+def _room_for_loot(state) -> bool:
+    """Whether the pack will take one more thing.
+
+    The game's own capacity, and not the bot's preference: the two are different
+    numbers, and asking for a pickup the pack refuses spends *no turn*. So a bot
+    that believed its own limit pressed the same key at the same elixir until
+    the idle rule ended the run -- which was two thirds of a batch: twenty-four
+    runs out of thirty-six, all of them reported as depth and none of them
+    measuring anything.
+    """
+    return len(state.inventory) < min(CARRY_LIMIT, state.pack_capacity)
+
+
+def _pickable(state, item) -> bool:
+    """Whether the *game* will take this thing off the floor.
+
+    Three cases and not one, because the game has three: a coin and a torn page
+    are always pocketed, a blade or a coat or an amulet goes into its own slot
+    and never touches the pack at all, and everything else needs a free slot in
+    a pack with as many slots as the shop sold.
+
+    The bot's own rule was one case -- "is there room?" -- and a stricter rule
+    than the game's is a run spent doing nothing: a weapon underfoot with a full
+    pack is one the bot walked onto, was told there was no room for, walked off,
+    and wanted again from the next square. Two squares, north and south, for
+    fifteen hundred turns, which is what a capped run was.
+    """
+    if item.kind in ("coin", "page") or item.slot is not None:
+        return True
+    return _room_for_loot(state)
+
 #: What a turn is worth before the bot decides it is stuck and gives up.
 #: How long one fight may run before the bot gives up on it.
 FIGHT_CAP = 200
@@ -89,6 +121,11 @@ class Run:
     #: separating from a death, because a stall is the tool's fault and a death is
     #: the game's, and the report used to call both of them dying.
     stuck: bool = False
+    #: And the same for the safety net: a run that ran out of turns did not die
+    #: either, and its depth is where the clock stopped rather than where the
+    #: floor did. Rare -- but a cap that fires silently is a number nobody can
+    #: tell from a measurement.
+    capped: bool = False
 
     @property
     def died(self) -> bool:
@@ -222,17 +259,15 @@ def play(
             action = Action.TAKE_FAME if fame else Action.OPEN_CHEST
         elif beside is not None:
             action = _towards(state, beside.position)
-        elif (
-            standing_on is not None
-            and not on_chest
-            and len(state.inventory) < CARRY_LIMIT
-        ):
+        elif standing_on is not None and not on_chest and _pickable(state, standing_on):
             # Only when there is room for it. A full pack refuses the pickup and
             # the *turn is not spent*, so a bot that asked anyway stood on the
             # same coin pressing the same key until the idle rule ended the run
             # -- which is what "died on floor one with two kills" was, for every
             # hero, in every loadout, for as long as this file has been measuring
-            # a game with an arena in it.
+            # a game with an arena in it. The check was the bot's own limit of
+            # three, against a pack that holds two: the same stall, from the
+            # other side, for as long as the shop has sold pack room.
             action = Action.PICK_UP
         elif hurt and carrying:
             action = Action.QUAFF
@@ -256,6 +291,7 @@ def play(
             run.stuck = True
             break
 
+    run.capped = not state.over and state.total_turns >= TURN_CAP
     run.kills = state.kills
     run.turns = state.total_turns
     run.gold = state.gold
@@ -281,7 +317,7 @@ def _explore(state, can_afford_a_wash: bool, seek_chests: bool = False) -> Actio
     if state.curses and can_afford_a_wash and state.spring_pos is not None:
         targets.append(state.spring_pos)
 
-    if len(state.inventory) < CARRY_LIMIT:
+    if _room_for_loot(state):
         targets += [
             pos
             for pos, item in state.dungeon_map.items.items()
@@ -360,6 +396,22 @@ class Report:
     def escaped(self) -> float:
         return sum(run.escaped for run in self.runs) / len(self.runs)
 
+    @property
+    def capped(self) -> int:
+        """How many runs ran out of clock before the game ended them."""
+        return sum(run.capped for run in self.runs)
+
+    @property
+    def stuck(self) -> int:
+        """How many runs *stopped* rather than died.
+
+        On the line and not in a footnote: a stall is the tool's fault and a
+        death is the game's, and every number in this file is a claim about the
+        game. A batch where a third of the runs gave up is not a measurement of
+        anything, and it has to say so where it is read.
+        """
+        return sum(run.stuck for run in self.runs)
+
     def __str__(self) -> str:
         """Two lines: how the runs went, and what they were worth.
 
@@ -374,7 +426,9 @@ class Report:
             f"max {max(r.depth for r in self.runs):2}  "
             f"level mean {statistics.mean(r.level for r in self.runs):4.1f}  "
             f"gold {statistics.mean(r.gold for r in self.runs):5.1f}  "
-            f"washed {sum(r.cleansed for r in self.runs):3}"
+            f"washed {sum(r.cleansed for r in self.runs):3}  "
+            f"stuck {self.stuck:3}  "
+            f"capped {self.capped:3}"
         )
         scoring = (
             f"kills {statistics.mean(r.kills for r in self.runs):5.1f}  "
@@ -444,6 +498,8 @@ def main(argv: list[str] | None = None) -> int:
     print()
     depths = Counter(run.depth for run in runs)
     print(f"escaped        {sum(r.escaped for r in runs)}/{len(runs)}")
+    print(f"stuck          {sum(r.stuck for r in runs)}/{len(runs)}")
+    print(f"capped         {sum(r.capped for r in runs)}/{len(runs)}")
     print(f"depth mean     {statistics.mean(r.depth for r in runs):.2f}")
     print(f"depth histogram {dict(sorted(depths.items()))}")
     return 0
