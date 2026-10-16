@@ -33,6 +33,7 @@ from neverdeads_revenge.game.actors import (
     scale_template,
 )
 from neverdeads_revenge.game.combat import (
+    chance_against,
     MAX_HIT_CHANCE,
     MIN_HIT_CHANCE,
     REVENGE_MAX_STACKS,
@@ -500,17 +501,26 @@ def test_hit_chance_stays_in_bounds():
 
 
 def test_noxx_evades_much_of_what_throws_at_him():
-    """Evasion 5 is half the reason he works; assert it actually pays."""
+    """Evasion is half the reason he works, at three as it was at five.
+
+    Five was measured as too much and came down: it put a ghoul at 35%, which is
+    a *59%* cut to everything that swung at him -- more defence than Yeti's three
+    armour, on the hero who also gets the most turns. Three still puts the ghoul
+    at 55%, which is the largest cut any of the four can claim, and the test
+    holds both halves of that: the formula is what the dice actually do, and what
+    the formula says is still an edge worth having.
+    """
     hero = make_hero(NOXX, (0, 0))
     ghoul = make_enemy(ENEMIES["ghoul"], (1, 0))
+    swings = 4000
     rng = Rng(5)
-    hits = sum(
-        1
-        for _ in range(4000)
-        if attack(ghoul, hero, rng).hit
+    hits = sum(1 for _ in range(swings) if attack(ghoul, hero, rng).hit)
+
+    expected = chance_against(ghoul.accuracy, hero.evasion)
+    assert 0.9 * expected * swings < hits < 1.1 * expected * swings, (
+        f"the formula says {expected:.0%} and the dice said {hits / swings:.0%}"
     )
-    # 35% by the formula, with room for the sample.
-    assert 1200 < hits < 1600, f"the ghoul landed {hits / 4000:.0%} of its swings"
+    assert expected <= 0.6, "nothing plainer than a ghoul should be the one to land"
 
 
 def test_evasion_five_is_the_last_point_that_counts():
@@ -534,7 +544,7 @@ def test_evasion_five_is_the_last_point_that_counts():
         else:
             assert chance == MIN_HIT_CHANCE, evasion
 
-    assert NOXX.stats.evasion == 5
+    assert NOXX.stats.evasion == 3
 
 
 def test_crit_rate_is_about_right():

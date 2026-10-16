@@ -588,7 +588,7 @@ def test_the_permanent_set_is_a_grind_and_not_a_wall():
     full = sum(
         ladder(upgrade) for upgrade in META_UPGRADES.values() if not upgrade.wild
     )
-    # Everything: the five-step ladders and all three bloodlines. About forty
+    # Everything: the five-step ladders and all four bloodlines. About forty
     # good runs -- that is the *everything* price, not the price of a hero
     # that can play.
     assert 4000 <= full <= 8000, f"the permanent set costs {full}"

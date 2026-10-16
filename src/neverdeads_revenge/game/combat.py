@@ -5,13 +5,13 @@ result object rather than mutating the world silently, so the caller can report
 exactly what happened and tests can assert on it.
 
 The hit chance is a flat base nudged by the accuracy/evasion difference. Noxx's
-evasion 5 against a ghoul's accuracy 0 puts him at 35% -- being hard to pin down
+evasion 3 against a ghoul's accuracy 0 puts him at 55% -- being hard to pin down
 is half of what makes him work, and the other half is that he gets to attack
 more often.
 
-Evasion is worth ten points of hit chance per point, which makes 5 the natural
-ceiling for any hero: the floor is 30%, so a sixth point against a monster with
-accuracy 0 is partly paid for and not received.
+Evasion is worth ten points of hit chance per point, against a floor of 30%: past
+four points the ceiling starts doing the paying, which is why no hero is built
+with more than that and why the one who was came down to three.
 """
 
 from __future__ import annotations

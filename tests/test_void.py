@@ -876,15 +876,43 @@ def test_a_bloodline_only_works_for_its_own_hero():
     from neverdeads_revenge.game.actors import HEROES
     from neverdeads_revenge.game.state import start_run
 
-    noxx = start_run(HEROES["noxx"], 5, upgrades={"hoarfrost": 3, "bell_ring": 3})
+    every = {"hoarfrost": 3, "bell_ring": 3, "emberheart": 3}
+    noxx = start_run(HEROES["noxx"], 5, upgrades=every)
     assert noxx.freeze_chance == 0.0, "Yeti's cold worked for Noxx"
     assert noxx.pushback_chance == 0.0
+    assert noxx.ember_chance == 0.0, "Inferno's fire worked for Noxx"
 
     yeti = start_run(HEROES["yeti"], 5, upgrades={"hoarfrost": 3})
     assert abs(yeti.freeze_chance - 0.45) < 1e-9, "the hoarfrost did not settle"
 
     walkyrion = start_run(HEROES["walkyrion"], 5, upgrades={"bell_ring": 2})
     assert abs(walkyrion.pushback_chance - 0.40) < 1e-9
+
+    inferno = start_run(HEROES["inferno"], 5, upgrades=every)
+    assert abs(inferno.ember_chance - 0.45) < 1e-9, "the ember did not catch"
+
+
+def test_emberheart_sets_alight_what_inferno_lands_on():
+    """His bloodline: the blows leave them burning.
+
+    The same fire the kindled breath buys and the same place the other two
+    bloodlines are read -- on a *blow*, with the weapon, because what the hero
+    swings is the weapon and his specials carry their own flame already.
+    """
+    from neverdeads_revenge.game.actions import resolve_player_attack
+    from neverdeads_revenge.game.actors import HEROES
+    from neverdeads_revenge.game.state import start_run
+    from neverdeads_revenge.world.tiles import Tile
+
+    state = start_run(HEROES["inferno"], 5, upgrades={"emberheart": 3})
+    state.ember_chance = 1.0  # a certainty, for the test
+    square = (state.player.position[0] + 1, state.player.position[1])
+    state.dungeon_map.set_tile(square, Tile.FLOOR)
+    enemy = _stage_enemy_at_square(state, square, hp=99)
+
+    resolve_player_attack(state, enemy)
+
+    assert "burn" in enemy.statuses, "his hand left no fire in it"
 
 
 def test_bleeding_edge_makes_a_crits_wound_keep_opening():

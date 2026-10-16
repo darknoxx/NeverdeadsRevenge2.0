@@ -44,6 +44,7 @@ from .levels import RAVAGING_POINTS, kill_points_for, kills_to_next
 from .curses import CURSES, Curse
 from .difficulty import (
     ATRITAS_VIEW,
+    EMBERHEART_PER_STACK,
     BASE_PACK_SLOTS,
     BELL_RING_PER_STACK,
     FORTRESS_VIEW,
@@ -328,6 +329,11 @@ class GameState:
     freeze_chance: float = 0.0
     #: Walkyrion: chance that a landing blow throws its target.
     pushback_chance: float = 0.0
+    #: And how often one of the hero's blows sets what it landed on alight. The
+    #: third of the shop's bloodlines, and the one that is a *wound* rather than
+    #: a shove: a burn is three a turn for two, which is the kindled breath's
+    #: rule on a coin instead of in a bottle.
+    ember_chance: float = 0.0
     #: The strange draughts drunk on this floor, by key. A set rather than a
     #: single slot because nothing stops a player drinking two, and every one
     #: of them is emptied by :meth:`build_floor` -- a rule carried down the
@@ -1244,6 +1250,8 @@ def _apply_upgrades(state: GameState, upgrades: dict[str, int]) -> None:
                 state.freeze_chance = HOARFROST_PER_STACK * stacks
             elif upgrade.key == "bell_ring":
                 state.pushback_chance = BELL_RING_PER_STACK * stacks
+            elif upgrade.key == "emberheart":
+                state.ember_chance = EMBERHEART_PER_STACK * stacks
 
     # A run starts whole. Bought health you do not have is not bought health,
     # and the blood bargain's whole point is that the missing part is gone.

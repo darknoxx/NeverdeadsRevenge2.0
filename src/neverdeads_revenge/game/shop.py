@@ -27,7 +27,11 @@ from typing import Callable
 
 from neverdeads_revenge.core.rng import Rng
 from neverdeads_revenge.game.amulets import AMULETS, blurb_for
-from neverdeads_revenge.game.difficulty import BELL_RING_PER_STACK, HOARFROST_PER_STACK
+from neverdeads_revenge.game.difficulty import (
+    BELL_RING_PER_STACK,
+    EMBERHEART_PER_STACK,
+    HOARFROST_PER_STACK,
+)
 from neverdeads_revenge.game.draughts import draught_by_key
 from neverdeads_revenge.game.statuses import status_by_key
 from neverdeads_revenge.world.items import ITEMS, ItemTemplate
@@ -217,6 +221,18 @@ META_UPGRADES: dict[str, MetaUpgrade] = {
         description="your blows throw what they land on",
         price=180,
         hero="walkyrion",
+        max_stacks=3,
+    ),
+    "emberheart": MetaUpgrade(
+        key="emberheart",
+        note_for=lambda n: (
+            f"{round(EMBERHEART_PER_STACK * n * 100)}% chance to set "
+            "alight what you hit"
+        ),
+        name="Emberheart",
+        description="what he lands on does not stop burning",
+        price=180,
+        hero="inferno",
         max_stacks=3,
     ),
     "blood_deal": MetaUpgrade(

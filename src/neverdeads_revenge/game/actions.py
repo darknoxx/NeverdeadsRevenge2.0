@@ -1051,6 +1051,13 @@ def resolve_player_attack(
             # RING OF THE BELL. Walkyrion's blows throw what they land on --
             # the same shove the dead weight amulet buys, on a coin.
             _knock_back(state, target)
+        if state.ember_chance and state.rng.chance(state.ember_chance):
+            # EMBERHEART. Inferno's blows leave what they landed on alight --
+            # the fire the kindled breath buys, on a coin rather than in a
+            # bottle. A *blow* and not a trick, which is the rule the other two
+            # bloodlines keep: what the hero swings is the weapon, and his
+            # specials carry their own fire already.
+            inflict(state, target, ("burn",))
     if outcome.killed:
         _remove_corpse(state, target)
         return outcome

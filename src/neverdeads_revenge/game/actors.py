@@ -475,11 +475,13 @@ NOXX = Hero(
         crit_chance=0.25,
         crit_multiplier=2.2,
         accuracy=1,
-        # Five, not four. Evasion is worth 10 points of enemy hit chance each,
-        # and the hit chance floor is 30%: at 5 a ghoul is down to 35%, at 6 it
-        # would be 25% and clamped, so the sixth point is partly paid for and
-        # not received. Five is the last value that fully counts.
-        evasion=5,
+        # Three, down from five, and the reason is what five *measured* like: a
+        # ghoul's 85% becomes 35% at five and 55% at three, so five points of
+        # evasion was a 59% cut to everything that swung at him -- more defence
+        # than Yeti's three armour, on the hero who also gets the most turns.
+        # Three still makes him the hardest of the four to land on, which is his
+        # half of the trade, without the other half being decided by one stat.
+        evasion=3,
         armor=1,
     ),
     # REVENGE makes him faster still, which is the same joke his whole kit tells:

@@ -45,6 +45,7 @@ __all__ = [
     "BASE_PACK_SLOTS",
     "HOARFROST_PER_STACK",
     "BELL_RING_PER_STACK",
+    "EMBERHEART_PER_STACK",
     "enemy_speed",
     "weight_at_depth",
 ]
@@ -139,6 +140,10 @@ BELL_RADIUS = 3
 #: rule at three, without ever being certain.
 HOARFROST_PER_STACK = 0.15
 BELL_RING_PER_STACK = 0.20
+#: And how often one of Inferno's blows leaves the thing it landed on alight.
+#: Between the other two, because a burn is worth six damage over the two turns
+#: it runs -- the kindled breath's whole promise, on a coin rather than a bottle.
+EMBERHEART_PER_STACK = 0.15
 
 #: What the pack holds before any upgrade. Two draughts, so the limit is felt
 #: on the first floor rather than admired: the shop sells the rest, one slot at
