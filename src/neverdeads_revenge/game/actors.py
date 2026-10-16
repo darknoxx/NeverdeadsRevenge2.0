@@ -20,6 +20,7 @@ from .npcs import NPC_COLOR, NPC_GLYPH, Npc
 from .statuses import status_by_key
 
 __all__ = [
+    "ATRITAS_PETROL",
     "Stats",
     "ActorKind",
     "Actor",
@@ -416,12 +417,23 @@ class Hero:
         return self.stats.average_damage
 
 
+#: The dark's own petrol: Noxx's, and the shadow he casts. One constant because
+#: they are one colour, and a hero and his shadow drifting apart in the palette
+#: is exactly the kind of thing nobody notices until a screenshot.
+#:
+#: A hex rather than the name "teal", for the reason every hero's is a hex:
+#: named colours get snapped to the terminal's nearest palette entry, and the
+#: dark is not the terminal's business.
+ATRITAS_PETROL = "#12716f"
+
+
 #: Noxx -- high speed, high crit, low durability. Hits and runs.
 #:
 #: ``N`` rather than the usual ``@``: this hero has a name, and the map is where
-#: the player spends the whole run looking at him. Purple is his own -- the
-#: wraith is plain magenta and the elixir is bright magenta, so no two things on
-#: the map share both a glyph and a colour.
+#: the player spends the whole run looking at him.
+
+
+
 NOXX = Hero(
     key="noxx",
     name="Noxx",
@@ -432,10 +444,10 @@ NOXX = Hero(
         "is lethal."
     ),
     glyph="N",
-    # A hex rather than the name "purple": named colours get snapped to the
-    # terminal's nearest palette entry, and "purple" lands on the same magenta
-    # the wraith already uses. Hex renders exactly and stays his own.
-    color="#a855f7",
+    # The dark's own petrol, which is to say the same colour as the shadow he
+    # casts: Atritas is Noxx's dark, and a hero and his shadow wearing two
+    # colours was two characters in one coat.
+    color=ATRITAS_PETROL,
     stats=Stats(
         max_hp=42,
         hp=42,
@@ -659,7 +671,11 @@ ENEMIES: dict[str, EnemyTemplate] = {
         key="ooze",
         name="ooze",
         glyph="o",
-        color="cyan",
+        # A hex and not "cyan", for the reason Noxx's is a hex: a terminal's
+        # cyan is the *dark* one -- (0,128,128), a hair from the dark's own
+        # petrol -- and the ooze is not the hero. (#00e5ff is the bright one the
+        # game means, and a name is not what a terminal is told.)
+        color="#00e5ff",
         # The wall. More health than anything else in the game and almost no
         # damage: it will not kill a careful player and it will not die to one
         # either. What it does is *cost* -- turns, which are the score, and the
@@ -804,7 +820,7 @@ def make_atritas(position: Pos, level: int, depth: int) -> Actor:
         stats=replace(HEROES["noxx"].stats, hp=1, max_hp=1, damage=(low, low + 6)),
         position=position,
         glyph="A",
-        color="#12716f",
+        color=ATRITAS_PETROL,
         behaviour="atritas",
         gold=(0, 0),
         curse_chance=0.0,

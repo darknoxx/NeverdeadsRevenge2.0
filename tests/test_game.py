@@ -172,19 +172,25 @@ def test_heroes_registry_is_populated():
     assert HEROES["noxx"] is NOXX
 
 
-def test_noxx_is_a_purple_n():
+def test_noxx_wears_his_own_shadows_petrol():
     """The hero's mark on the map, and it is his own.
 
     Held to a specific glyph and a specific colour because the map is where the
     player looks for the whole run: a hero who is a different colour on the
     select screen, the sidebar and the map is three characters, not one.
+
+    And his colour is his shadow's: Atritas is Noxx's dark, and a hero and the
+    thing he casts in two colours is two characters as well. It used to be
+    purple -- his own, but not the dark's.
     """
+    from neverdeads_revenge.game.actors import ATRITAS_PETROL
+
     assert NOXX.glyph == "N"
-    assert NOXX.color == "#a855f7"
+    assert NOXX.color == ATRITAS_PETROL, "the hero and his shadow wear two colours"
 
 
 def test_the_hero_colour_is_not_another_hero_or_monster_in_disguise():
-    """``purple`` and ``magenta`` are one terminal approximation apart.
+    """No two *marks* on the map are the same colour.
 
     The named colour "purple" resolves to the same magenta the wraith uses on
     terminals that cannot show the difference, which is why the heroes carry hex
@@ -204,6 +210,11 @@ def test_the_hero_colour_is_not_another_hero_or_monster_in_disguise():
     for hero in HEROES.values():
         marks[hero.glyph] = (f"hero {hero.key}", hero.color)
     for template in ENEMIES.values():
+        if template.key == "atritas":
+            # Except the shadow, which is *Noxx's* dark and wears his colour on
+            # purpose: a hero and his own summon are one character, and the map
+            # tells them apart by where they stand and which one follows.
+            continue
         marks[template.glyph] = (f"monster {template.key}", template.color)
     for item in ITEMS.values():
         marks.setdefault(item.glyph, (f"{item.kind} items", item.color))
