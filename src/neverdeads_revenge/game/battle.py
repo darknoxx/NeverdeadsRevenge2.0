@@ -427,6 +427,15 @@ class Battle:
             if actor is self.hero:
                 if self._settled:
                     self._lapse(events)
+                    # And what the wounds did, at the end of them. A monster that
+                    # *bled to death* at the start of this turn is the last one
+                    # dead -- and the fight has to be decided here, or the player
+                    # is left standing in a room with nothing in it, swinging at
+                    # nothing, twice, before the fight admits it is over. This
+                    # was the whole of "the fight does not end straight away,
+                    # sometimes": it was everything to do with the statuses.
+                    if self._decide(events):
+                        return
                 self._settled = True
                 self._hero_up = True
                 # And the purse fills, one point a turn of his own. Which makes

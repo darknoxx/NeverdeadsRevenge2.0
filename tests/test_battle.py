@@ -852,6 +852,36 @@ def test_a_miss_throws_nobody():
         assert not thrown, f"{key} threw a monster it never touched"
 
 
+def test_a_monster_that_bleeds_to_death_ends_the_fight_at_once():
+    """The last monster can die of a wound, and the fight has to be over then.
+
+    The wounds tick once a hero turn, in `_lapse` -- which ran *after* the win
+    check, so the last of them could bleed out at the start of a turn and the
+    fight would sit there undecided: the player swings at nothing, walks through
+    the aim twice, and only then does the room admit it is empty. Which is
+    exactly what "the fight does not end straight away, sometimes" was, and why
+    it was always something to do with the statuses.
+
+    A self-buff and not a swing, because a swing that *lands* would finish the
+    monster by hand and there would be nothing left for the wound to do.
+    """
+    from neverdeads_revenge.game.specials import STILLNESS
+
+    battle = duel("yeti", 6, count=1)
+    enemy = battle.enemies[0]
+    enemy.stats.hp = 1
+    enemy.statuses["bleed"] = 3
+    battle.begin()
+
+    events = battle.choose(SPECIAL, None, special=STILLNESS)
+
+    assert enemy.stats.hp == 0, "the wound did not finish it"
+    assert battle.over and battle.won, "the fight did not know it was over"
+    assert any(isinstance(event, Over) and event.won for event in events), (
+        "no verdict was handed over"
+    )
+
+
 def test_the_open_vein_keeps_costing_him():
     """A wound that will not close: the status is left, and a round makes it bite."""
     battle = levelled(5)
