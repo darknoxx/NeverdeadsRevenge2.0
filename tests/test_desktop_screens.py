@@ -2685,6 +2685,65 @@ def test_the_arena_reads_out_a_lesson(app):
     assert any("learned!" in text for text in seen), f"the arena never said it: {seen}"
 
 
+def test_the_side_panel_counts_the_kills_to_the_next_level(app):
+    """The overworld's own line says how close the next level is.
+
+    It is a footnote to the level -- "+3" -- rather than a fourth number in a
+    row: three kills is a *distance*, and the line has room for a distance.
+    """
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.desktop.render import hud_lines
+
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)
+    state = app.run
+    written = " ".join(text for text, _style in hud_lines(state))
+
+    assert f"Lv {state.level} (+{state.kills_to_level})" in written, written
+
+
+def test_the_plate_counts_the_kills_to_the_next_level(app, font):
+    """And the arena says the same thing, because a level is what a fight is for."""
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+
+    battle = arena(count=1)
+    screen = BattleScreen(battle)
+    buffer, _ = drawn(screen, app, font)
+    written = "".join(cell.char for row in buffer.cells for cell in row)
+
+    assert f"{battle.state.kills_to_level} KILLS TO LVL" in written, (
+        f"the plate does not say how close the level is: {written[-200:]}"
+    )
+
+
+def test_a_level_up_gets_an_arrow_over_the_hero(app):
+    """The line the rules wrote for a level gets a picture, and the picture is
+    over the *hero*: the loudest thing in a room is a number about somebody else,
+    and this is the quiet one about him."""
+    from neverdeads_revenge.desktop.screens.battle import LEVEL_UP, BattleScreen
+    from neverdeads_revenge.game.battle import Said
+    from neverdeads_revenge.game.state import LogKind
+
+    battle = arena(count=1)
+    screen = BattleScreen(battle)
+    screen._queue = [Said("Level 4: more blood.", LogKind.GOOD)]
+    screen._beat = 0.0
+
+    played: list[str] = []
+    original = app.play
+    app.play = lambda name=None: played.append(name if name else "?")  # type: ignore[assignment]
+    try:
+        screen.step(1 / 30.0, app)
+    finally:
+        app.play = original
+
+    assert any(popup.text == LEVEL_UP for popup in screen._popups), (
+        "the level-up made no picture"
+    )
+    assert "level" in played, f"the level-up made no sound: {played}"
+
+
 def test_a_key_with_nothing_behind_it_says_so(app):
     """SPECIAL at level one is a door onto an empty room, and this one is shut."""
     from PySide6.QtCore import Qt

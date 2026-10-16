@@ -95,6 +95,12 @@ HOLLOW = "◇"
 #: The colour the filled ones are drawn in: the dark's own violet, because that
 #: is where they come from.
 POINT_COLOUR = "bold #c084fc"
+#: What a level-up looks like over the hero's head, and the colour it wears. The
+#: arrow is the whole message: the one thing in a fight that is about *him*
+#: rather than about what just happened to somebody else.
+LEVEL_UP = "\u25b2 LVL UP"
+LEVEL_UP_COLOUR = "#ffd34d"
+
 #: How many turns the strip at the bottom of the room shows: the one being taken
 #: and the two after it, which is what a decision is actually made against.
 ORDER_SHOWN = 3
@@ -1939,6 +1945,11 @@ class BattleScreen(Screen):
     def _play(self, event, app) -> None:
         """One event, on the screen and in the ear."""
         if isinstance(event, Said):
+            if event.text.startswith("Level "):
+                # The one line in a fight that gets a picture of its own: the
+                # arrow over his head, and the note that goes with it. The rules
+                # wrote it, and the rules do not know what a picture is.
+                self._level_up(app)
             # The log is the fight's voice, and its voice does not run ahead of
             # its hands: a line that describes a blow *waits* for the blow, and
             # turns up on the frame the sword does. Lines that are not about a
@@ -2763,6 +2774,18 @@ class BattleScreen(Screen):
             buffer.text(
                 x + 6 + shown, y + 3, f"{points}/{top}", parse_style(ASH)
             )
+        if height >= 5:
+            # The same count the side panel keeps, because a level is the one
+            # thing a fight is *for* and the player should not have to leave the
+            # room to find out how close it is.
+            to_go = self.state.kills_to_level
+            level = self.state.level
+            buffer.text(
+                x + 2,
+                y + 4,
+                f"{to_go} KILLS TO LVL {level + 1}" if to_go else "THE LAST LEVEL",
+                parse_style(ASH),
+            )
         if (self.picking or self.aiming) and height >= 7:
             # Escape is a step *back* in the two menus and nothing anywhere else
             # -- there is no way out of a fight but through it -- so the plate only
@@ -2878,6 +2901,23 @@ class BattleScreen(Screen):
             buffer.text(x + 2 + index * 3, row, actor.glyph, style)
             if index + 1 < shown:
                 buffer.text(x + 3 + index * 3, row, ">", parse_style(ASH))
+
+    def _level_up(self, app) -> None:
+        """The arrow rising off the hero, and the note that goes with it.
+
+        A popup like a damage number and deliberately *not* one: it is bigger,
+        it is gold, it starts a little higher than a number lands so the two
+        never share a spot, and it drifts up and fades exactly the way a number
+        does -- which is the joke of it. The loudest thing in the room is a
+        number about somebody else; this is the quiet one about him.
+        """
+        figure = self._figure_of(self.battle.hero, app)
+        if figure is None:
+            return
+        popup = self._popup(LEVEL_UP, LEVEL_UP_COLOUR, figure, app, True)
+        popup.y -= 12  # clear of the damage numbers, which land on the same head
+        self._popups.append(popup)
+        app.play("level")
 
     def _took_a_turn(self, actor) -> None:
         """The strip moves on: whoever acted is done and the rest come up.

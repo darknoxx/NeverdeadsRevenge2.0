@@ -471,7 +471,11 @@ def hud_lines(state: GameState) -> list[tuple[str, str]]:
 
     lines.append(
         (
-            f"Kills {state.kills}  Turns {state.total_turns}  Lv {state.level}",
+            # "+3" is the three kills the *next* level still wants. It reads as a
+            # footnote to the level rather than a fourth number in a row, which
+            # is what the line has room for.
+            f"Kills {state.kills}  Lv {state.level} (+{state.kills_to_level})"
+            f"  Turns {state.total_turns}",
             "bold green",
         )
     )

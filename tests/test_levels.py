@@ -39,6 +39,24 @@ def test_a_run_starts_at_level_one_and_earns_one_every_few_kills():
     assert level_for(kills_for_level(3)) == 3
 
 
+def test_the_kills_to_the_next_level_are_counted():
+    """The number a run is owed: a level is a budget of kills, and what a player
+    wants to know is how much of the current one is left."""
+    from neverdeads_revenge.game.levels import kills_for_level, kills_to_next
+
+    assert kills_to_next(0) == kills_for_level(2), "the first level is not counted"
+    assert kills_to_next(kills_for_level(2)) == kills_for_level(3) - kills_for_level(2)
+    # Und direkt vor dem Level ist es genau ein Kill.
+    assert kills_to_next(kills_for_level(3) - 1) == 1
+    assert kills_to_next(kills_for_level(3)) == kills_for_level(4) - kills_for_level(3)
+
+
+def test_the_cap_has_no_next_level_to_work_toward():
+    from neverdeads_revenge.game.levels import MAX_LEVEL, kills_for_level, kills_to_next
+
+    assert kills_to_next(kills_for_level(MAX_LEVEL)) == 0
+
+
 def test_the_level_never_goes_backwards():
     """Derived from the kill count, so it cannot be lost or double-paid."""
     levels = [level_for(kills) for kills in range(0, 200)]

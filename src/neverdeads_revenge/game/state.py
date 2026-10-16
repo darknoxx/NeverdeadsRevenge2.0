@@ -40,7 +40,7 @@ from .actors import (
     scale_template,
 )
 from .combat import apply_revenge
-from .levels import kill_points_for
+from .levels import kill_points_for, kills_to_next
 from .curses import CURSES, Curse
 from .difficulty import (
     ATRITAS_VIEW,
@@ -523,6 +523,11 @@ class GameState:
         would be a swarm, and a swarm is not a price.
         """
         return max((curse.follows for curse in self.curses), default=0)
+
+    @property
+    def kills_to_level(self) -> int:
+        """How many more kills buy the next level. Asked by both panels."""
+        return kills_to_next(self.kills)
 
     @property
     def kill_points_max(self) -> int:

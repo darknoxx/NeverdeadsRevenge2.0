@@ -32,6 +32,7 @@ __all__ = [
     "Gain",
     "LEVEL_COSTS",
     "kills_for_level",
+    "kills_to_next",
     "MAX_LEVEL",
     "KILL_POINTS",
     "kill_points_for",
@@ -179,6 +180,21 @@ def level_for(kills: int) -> int:
         kills -= cost
         level += 1
     return min(MAX_LEVEL, level)
+
+
+def kills_to_next(kills: int) -> int:
+    """How many more kills buy the next level.
+
+    The number a player is actually owed. A level is a *budget* of kills, and
+    what a run wants to know is how much of the current one is left -- so this
+    is what the side panel counts and what the plate in the arena counts, and
+    they ask it here so they cannot disagree. Zero at the cap, because there is
+    no next level to be working toward.
+    """
+    level = level_for(kills)
+    if level >= MAX_LEVEL:
+        return 0
+    return max(0, kills_for_level(level + 1) - kills)
 
 
 def gains_for(level: int) -> Gain:
