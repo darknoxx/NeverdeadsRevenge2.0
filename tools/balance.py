@@ -41,7 +41,7 @@ from neverdeads_revenge.game.battle import (  # noqa: E402
     open_fight,
 )
 from neverdeads_revenge.game.actors import HEROES  # noqa: E402
-from neverdeads_revenge.game.shop import Loadout  # noqa: E402
+from neverdeads_revenge.game.shop import META_UPGRADES, Loadout  # noqa: E402
 from neverdeads_revenge.game.state import RunState, start_run  # noqa: E402
 
 #: Every action that moves, and the offset it moves by.
@@ -378,10 +378,33 @@ def _explore(state, can_afford_a_wash: bool, seek_chests: bool = False) -> Actio
     return Action.WAIT
 
 
-#: Everything the shop sells, bought. The "fully upgraded" row of the tables.
+#: A *complete kit*, and part of the permanent shelf: three of the five Vigour,
+#: two of the three Haste, the Lantern, and one thing in every slot the game has
+#: -- a draught, the best blade the shop sells, its coat, and one amulet (there
+#: is only ever one amulet: they all share the slot).
+#:
+#: It is deliberately *not* everything, and this comment used to say it was:
+#: a row labelled "everything the shop sells" is a claim, and the claim was
+#: three fifths of the way up the health ladder with no Whetstone, no Edge and
+#: no bloodline in it. What a save that has bought the shop looks like is
+#: `MAXED` below.
 FULL = Loadout(
     upgrades={"vigour": 3, "haste": 2, "lantern": 1},
     pending=("elixir", "bite", "hide", "patient_knife"),
+)
+
+#: The ceiling of what coin can buy, built from the shop's own tables rather
+#: than from a list typed out here: every permanent upgrade at its last stack,
+#: and one thing in every slot. The wilds are left out and that is not an
+#: oversight -- every offer on that shelf is a bargain with a catch, so a
+#: "fully equipped" run is what the shop *sells* and not what it gambles.
+MAXED = Loadout(
+    upgrades={
+        key: upgrade.max_stacks
+        for key, upgrade in META_UPGRADES.items()
+        if not upgrade.wild
+    },
+    pending=("elixir", "potion", "bite", "rune_plate", "patient_knife"),
 )
 
 
@@ -466,9 +489,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--hero", action="append", help="restrict to one hero (repeatable)")
     parser.add_argument(
         "--loadout",
-        choices=("none", "full"),
+        choices=("none", "full", "maxed"),
         default="none",
-        help="what the shop has already sold the bot",
+        help="what the shop has already sold the bot (maxed: every stack and "
+        "one thing in every slot, which is the ceiling of what coin buys)",
     )
     parser.add_argument(
         "--fame",
@@ -487,7 +511,7 @@ def main(argv: list[str] | None = None) -> int:
         if hero not in HEROES:
             parser.error(f"no hero called {hero!r}; try one of {', '.join(HEROES)}")
 
-    loadout = FULL if args.loadout == "full" else None
+    loadout = {"full": FULL, "maxed": MAXED}.get(args.loadout)
     print(
         f"{args.seeds} seeds a hero, loadout: {args.loadout}"
         f"{', every chest taken for fame' if args.fame else ''}"
