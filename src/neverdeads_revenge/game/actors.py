@@ -31,6 +31,7 @@ __all__ = [
     "NOXX",
     "YETI",
     "WALKYRION",
+    "INFERNO",
     "HEROES",
     "EnemyTemplate",
     "ENEMIES",
@@ -130,6 +131,10 @@ class Trait(Enum):
     SPEED = "speed"
     ARMOUR = "armour"
     DAMAGE = "damage"
+    #: Inferno's: the wild one. Damage is a flat number and he already has the
+    #: most of it; what he *does* with it is swing from anywhere, so what his
+    #: kills give him is the chance that the wild swing lands where it counts.
+    CRIT = "crit"
 
     @property
     def per_stack(self) -> float:
@@ -161,6 +166,8 @@ class Trait(Enum):
         amount = self.per_stack * stacks
         if self is Trait.SPEED:
             return f"+{amount:.1f} speed"
+        if self is Trait.CRIT:
+            return f"+{amount:.0%} crit"
         return f"+{int(amount)} {self.value}"
 
 
@@ -170,6 +177,7 @@ REVENGE_TITLES: dict["Trait", str] = {
     Trait.SPEED: "BLACK TIDE",
     Trait.ARMOUR: "FROZEN FORTRESS",
     Trait.DAMAGE: "AURAL BLADE",
+    Trait.CRIT: "WILD FIRE",
 }
 
 
@@ -184,6 +192,11 @@ REVENGE_PER_STACK: dict[Trait, float] = {
     Trait.SPEED: 0.3,
     Trait.ARMOUR: 1.0,
     Trait.DAMAGE: 2.0,
+    #: Five points a stack, four stacks: a fifth of the wild swings find the
+    #: throat by the end of a chain. Noxx's crit is a *plan* -- he sets it up and
+    #: takes it -- and this is the other thing a crit can be, which is luck that
+    #: arrives more often the more of a mess he has made.
+    Trait.CRIT: 0.05,
 }
 
 #: How many stacks each trait takes before it stops paying.
@@ -198,6 +211,7 @@ REVENGE_MAX_STACKS: dict[Trait, int] = {
     Trait.SPEED: 5,
     Trait.ARMOUR: 3,
     Trait.DAMAGE: 4,
+    Trait.CRIT: 4,
 }
 
 
@@ -243,6 +257,7 @@ class Actor:
     speed_bonus: float = 0.0
     armor_bonus: int = 0
     damage_bonus: int = 0
+    crit_bonus: float = 0.0
     #: What this actor is wearing, by slot. Only the player ever fills it, but
     #: it lives here because that is where the effective stats are computed and
     #: a bonus that cannot go stale is worth a dict on every monster.
@@ -347,7 +362,11 @@ class Actor:
 
     @property
     def crit_chance(self) -> float:
-        return self.stats.crit_chance + self.modifiers.crit_chance
+        return (
+            self.stats.crit_chance
+            + self.modifiers.crit_chance
+            + self.crit_bonus
+        )
 
     @property
     def crit_multiplier(self) -> float:
@@ -556,13 +575,68 @@ WALKYRION = Hero(
     trait=Trait.DAMAGE,
 )
 
+#: Inferno -- all of the damage and none of the patience.
+#:
+#: The fourth answer to the same question, and the only one that is not a
+#: *technique*. Noxx avoids, Yeti absorbs, Walkyrion measures; Inferno closes his
+#: eyes and swings, and the numbers are built so that this works often enough to
+#: be a hero: the largest flat damage in the roster, on the smallest body in it,
+#: with no armour at all and barely more evasion than a ghoul. What he has is the
+#: first strike, and the threat that a fight he is losing is a fight he is about
+#: to win -- his REVENGE is the chance that the next wild swing is a killing one.
+#:
+#: Deliberately the worst *survivor* of the four and the best *closer*: a player
+#: who picks him is trading the whole of the late game for the early kill, and a
+#: run that reaches floor eight with him has earned it.
+INFERNO = Hero(
+    key="inferno",
+    name="Inferno",
+    title="the short fuse",
+    blurb=(
+        "Everything he has is in his hands and there is nothing behind them. "
+        "Inferno hits harder than anything down here and can take less: the "
+        "fight he wins is the one he finishes before it starts."
+    ),
+    glyph="I",
+    # Fire, and *this* fire. The bright orange end of it is taken -- the hunter
+    # is #ff5555, a draught is bright_red, and the strange draughts are #f85800
+    # -- so this is the deep end: embers rather than flame, which is the colour
+    # the art's own hood is anyway, and the only red in the roster that is not
+    # standing next to another one.
+    color="#c0202a",
+    stats=Stats(
+        # The smallest body in the roster by a wide margin -- eight below
+        # Walkyrion's, who is nobody's idea of tough -- and the largest damage.
+        # Damage is flat here and crit is barely a footnote (multiplier 1.8 on a
+        # 5% chance), because "a lot of flat damage" and "a lot of crit" are two
+        # different heroes and the roster already has the second one.
+        max_hp=34,
+        hp=34,
+        speed=1.30,
+        damage=(13, 18),
+        crit_chance=0.05,
+        crit_multiplier=1.8,
+        accuracy=1,
+        evasion=1,
+        # None at all. A fire does not block anything: it burns what comes close
+        # and goes out when it is done, and a hero whose whole argument is the
+        # first blow has no business being able to survive the second.
+        armor=0,
+    ),
+    # Every kill teaches the swing a little luck -- see `Trait.CRIT`.
+    trait=Trait.CRIT,
+)
+
+
 #: Registry. Later heroes drop in here and the select screen picks them up for
 #: free -- that is the whole reason heroes are data and not a hardcoded branch.
 #:
 #: Heroes take the capital of their name and monsters stay lowercase, so a letter
 #: on the map tells you which side of the fight it is on before you have read the
 #: legend. The wraith had the ``W`` until Walkyrion needed it.
-HEROES: dict[str, Hero] = {hero.key: hero for hero in (NOXX, YETI, WALKYRION)}
+HEROES: dict[str, Hero] = {
+    hero.key: hero for hero in (NOXX, YETI, WALKYRION, INFERNO)
+}
 
 
 def make_hero(hero: Hero, position: Pos) -> Actor:

@@ -1922,6 +1922,25 @@ def test_the_roster_shows_the_hero_and_not_only_their_letter(app, font):
     )
 
 
+def test_every_hero_has_a_face_on_the_roster():
+    """The sheets' front views, one per hero, or the card falls back to a letter.
+
+    Asserted for *every* hero rather than the one the roster happens to open on:
+    a hero added without art is a letter on a card nobody notices until they
+    pick him, and the whole point of the front views is that the choice is made
+    by looking at four characters instead of four letters.
+    """
+    from neverdeads_revenge.desktop.sprites import portrait
+    from neverdeads_revenge.game.actors import HEROES
+
+    for hero in HEROES.values():
+        art = portrait(hero.name)
+        assert art is not None, f"{hero.name} has no front view"
+        assert art.width() > 20 and art.height() > 20, (
+            f"{hero.name}'s front view is a thumbnail"
+        )
+
+
 def test_a_monster_the_sheets_never_heard_of_is_still_a_letter(app, font):
     """The fallback: no picture means the alphabet, which is what the whole
     game looked like before the art arrived -- and a fight is never missing a
@@ -3641,6 +3660,21 @@ def test_a_wound_is_a_badge_on_the_plate_and_not_a_light_on_the_monster(app, fon
     )
     assert not changed(poisoned, plate, bare), (
         "a monster's wound was written on the player's plate"
+    )
+
+    # And the plate *goes away* when the trick list is up -- the list is drawn
+    # across the whole strip -- so the row must go with it: it is painted in
+    # pixels, after the grid, and a badge over a panel that is not there is a
+    # badge over somebody else's menu.
+    screen.picking = True
+    hero.statuses.clear()
+    screen._catching_up(hero)
+    _, listed_bare = drawn(screen, app, font)
+    hero.statuses["burn"] = 1
+    screen._catching_up(hero)
+    _, listed_wound = drawn(screen, app, font)
+    assert bytes(listed_bare.constBits()) == bytes(listed_wound.constBits()), (
+        "a badge is hanging over the list of tricks"
     )
 
 

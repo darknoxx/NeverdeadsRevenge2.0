@@ -743,6 +743,139 @@ def test_fleeting_shadow_is_out_before_anything_moves():
     )
 
 
+# -- Inferno's hands -------------------------------------------------------
+def _flat(hero_key: str, level: int = 7, count: int = 1):
+    """A fight whose numbers are exactly what the trick is worth.
+
+    His kit is a *ladder* of scales, and a ladder measured through two dice is
+    two ladders: the hero rolls a range and sometimes a crit, so the gap between
+    two rungs can be swallowed by the spread. One damage value and no crit make
+    every rung read as the scale it is.
+    """
+    battle = duel(hero_key, level, count=count)
+    battle.hero.stats.damage = (12, 12)
+    battle.hero.stats.crit_chance = 0.0
+    for enemy in battle.enemies:
+        enemy.stats.hp = 9999
+        enemy.stats.armor = 0
+        enemy.stats.evasion = 0
+    return battle
+
+
+def _dealt(battle, key: str) -> int:
+    """What one trick took off the first of them, in one blow."""
+    target = battle.enemies[0]
+    before = target.stats.hp
+    battle.choose(SPECIAL, target, special=key)
+    return before - target.stats.hp
+
+
+def test_infernos_hands_get_heavier_as_they_get_dearer():
+    """He has no kit in the sense the others do: what the eight are is damage.
+
+    So the thing worth holding still is the *order* -- the lightest and cheapest
+    first, the heaviest last, and the prices climbing beside them. A kit whose
+    cheapest trick hit like its dearest would be one trick with eight names, and
+    a kit whose ladder is in the wrong order is a kit that lies about its prices.
+    """
+    from neverdeads_revenge.game.specials import (
+        EMBER_FIST,
+        GUT_PUNCH,
+        HAYMAKER,
+        HEADBUTT,
+        JAB,
+    )
+
+    rungs = ["jab", "gut", "ember", "headbutt", "haymaker"]
+    dealt = {
+        "jab": _dealt(_flat("inferno"), JAB),
+        "gut": _dealt(_flat("inferno"), GUT_PUNCH),
+        "ember": _dealt(_flat("inferno"), EMBER_FIST),
+        "headbutt": _dealt(_flat("inferno"), HEADBUTT),
+        "haymaker": _dealt(_flat("inferno"), HAYMAKER),
+    }
+    assert [dealt[rung] for rung in rungs] == sorted(dealt[rung] for rung in rungs), (
+        f"the ladder is out of order: {dealt}"
+    )
+
+    # And the cheapest rung is still worth pressing: a free swing is what every
+    # trick is priced against, and the jab has to be better than it or the
+    # cheapest thing in the game is the worst one.
+    free = _flat("inferno")
+    before = free.enemies[0].stats.hp
+    free.choose(ATTACK, free.enemies[0])
+    assert dealt["jab"] > before - free.enemies[0].stats.hp, (
+        "the jab is worse than swinging for nothing"
+    )
+
+
+def test_the_wildest_tricks_are_paid_in_his_own_blood():
+    """The headbutt and the bonfire cost health, and it can be the last of it.
+
+    A cost that cannot finish him is not a cost -- the rule the tithe is written
+    under -- and blood is the only currency a hero with 34 hit points has that
+    the fight has not already spent. He is also the only hero whose *ultimate*
+    has a second price at all.
+    """
+    from neverdeads_revenge.game.specials import BONFIRE, HEADBUTT
+
+    battle = _flat("inferno")
+    full = battle.hero.stats.hp
+    _dealt(battle, HEADBUTT)
+    assert battle.hero.stats.hp < full, "the headbutt was free"
+
+    # And the fire takes more than he has, if he lights it with everything: it
+    # is a fifth of him, so five points is not enough to build it with.
+    spent = _flat("inferno")
+    spent.hero.stats.hp = 4
+    _dealt(spent, BONFIRE)
+    assert not spent.hero.stats.alive, "the bonfire did not take what it costs"
+
+
+def test_red_mist_hits_harder_the_worse_he_is_hurt():
+    """The rage has to be worth *losing* for, or it is just a better attack."""
+    from neverdeads_revenge.game.specials import RED_MIST
+
+    calm = _dealt(_flat("inferno"), RED_MIST)
+    hurt = _flat("inferno")
+    hurt.hero.stats.hp = 1
+    furious = _dealt(hurt, RED_MIST)
+
+    assert furious > calm, f"{furious} out of a dying man is not more than {calm}"
+
+
+def test_the_bonfire_burns_all_of_them_and_keeps_burning():
+    """A full blow to everything -- and the fire is the part a fist cannot do."""
+    from neverdeads_revenge.game.specials import BONFIRE
+    from neverdeads_revenge.game.statuses import STATUSES
+
+    battle = _flat("inferno", count=3)
+    before = [enemy.stats.hp for enemy in battle.enemies]
+    battle.choose(SPECIAL, battle.enemies[0], special=BONFIRE)
+
+    assert all(
+        enemy.stats.hp < was for enemy, was in zip(battle.enemies, before)
+    ), "something stood outside the fire"
+    for enemy in battle.enemies:
+        assert "burn" in enemy.statuses, f"{enemy.name} did not catch"
+        assert enemy.statuses["burn"] > STATUSES["burn"].turns, (
+            "the bonfire's fire lasts as long as an ember fist's"
+        )
+
+
+def test_the_roundhouse_takes_the_whole_room():
+    """One turn, and everything standing is in the way of it."""
+    from neverdeads_revenge.game.specials import ROUNDHOUSE
+
+    battle = _flat("inferno", count=3)
+    before = [enemy.stats.hp for enemy in battle.enemies]
+    battle.choose(SPECIAL, battle.enemies[0], special=ROUNDHOUSE)
+
+    assert all(
+        enemy.stats.hp < was for enemy, was in zip(battle.enemies, before)
+    ), "one of them was out of the spin"
+
+
 def test_devouring_darkness_keeps_half_of_what_it_bites():
     """The steal: half of the damage, back to him -- and never nothing, because a
     mouthful of a mouthful is still a mouthful."""

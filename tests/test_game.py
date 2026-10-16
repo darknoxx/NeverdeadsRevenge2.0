@@ -18,14 +18,15 @@ from neverdeads_revenge.game.actions import (  # noqa: F401
     resolve_player_attack,
 )
 from neverdeads_revenge.game.actors import (
-    ENEMIES,
-    HEROES,
-    NOXX,
-    WALKYRION,
-    YETI,
     Actor,
     ActorKind,
+    ENEMIES,
+    HEROES,
+    INFERNO,
+    NOXX,
     Stats,
+    WALKYRION,
+    YETI,
     make_enemy,
     make_hero,
     pick_enemy_template,
@@ -233,8 +234,8 @@ def test_the_hero_colour_is_not_another_hero_or_monster_in_disguise():
 # -- the roster -------------------------------------------------------------
 def test_the_roster_has_more_than_one_hero_in_it():
     """The select screen is data-driven, and a roster of one is not a choice."""
-    assert len(HEROES) == 3
-    assert set(HEROES) == {"noxx", "yeti", "walkyrion"}
+    assert len(HEROES) == 4
+    assert set(HEROES) == {"noxx", "yeti", "walkyrion", "inferno"}
 
 
 def test_each_hero_is_the_best_at_something():
@@ -251,9 +252,17 @@ def test_each_hero_is_the_best_at_something():
     best_evasion = max(heroes, key=lambda h: h.stats.evasion)
     best_accuracy = max(heroes, key=lambda h: h.stats.accuracy)
 
+    best_damage = max(heroes, key=lambda h: sum(h.stats.damage))
+
     assert best_speed is NOXX and best_evasion is NOXX, "Noxx is not the fast one"
     assert best_hp is YETI and best_armor is YETI, "Yeti is not the tough one"
     assert best_accuracy is WALKYRION, "Walkyrion has no edge of his own"
+    # And the fourth: the one who hits hardest *once*, on the body least able to
+    # survive being hit back.
+    assert best_damage is INFERNO, "Inferno does not hit the hardest"
+    assert min(heroes, key=lambda h: h.stats.max_hp) is INFERNO, (
+        "the hardest hitter is not the one who can take the least"
+    )
 
 
 def test_walkyrion_is_the_middle_of_the_other_two():
@@ -619,6 +628,7 @@ def test_each_hero_collects_their_own_revenge():
         "noxx": lambda a: a.speed == pytest.approx(1.5 + 5 * 0.3),
         "yeti": lambda a: a.armor == 3 + 3,
         "walkyrion": lambda a: a.damage_bonus == 8,
+        "inferno": lambda a: a.crit_bonus == pytest.approx(4 * 0.05),
     }
     for key, hero in HEROES.items():
         actor = make_hero(hero, (0, 0))
@@ -638,12 +648,14 @@ def test_revenge_grants_nothing_but_the_heroes_own_stat():
         speed_gained = actor.speed > hero.stats.speed
         armour_gained = actor.armor > hero.stats.armor
         damage_gained = actor.damage_bonus > 0
+        crit_gained = actor.crit_bonus > 0
         gained = [
             name
             for name, flag in (
                 ("speed", speed_gained),
                 ("armour", armour_gained),
                 ("damage", damage_gained),
+                ("crit", crit_gained),
             )
             if flag
         ]
@@ -661,10 +673,20 @@ def test_lapsing_revenge_leaves_no_residue():
     """
     for hero in HEROES.values():
         actor = make_hero(hero, (0, 0))
-        before = (actor.speed, actor.armor, actor.damage_bonus)
+        before = (
+            actor.speed,
+            actor.armor,
+            actor.damage_bonus,
+            actor.crit_bonus,
+        )
         apply_revenge(actor, hero.trait.cap)
         apply_revenge(actor, 0)
-        assert (actor.speed, actor.armor, actor.damage_bonus) == before
+        assert (
+            actor.speed,
+            actor.armor,
+            actor.damage_bonus,
+            actor.crit_bonus,
+        ) == before
 
 
 def test_revenge_never_goes_negative():

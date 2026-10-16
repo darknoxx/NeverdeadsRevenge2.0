@@ -59,6 +59,7 @@ EXPORTS: dict[str, str] = {
     "noxx_back.png": "Noxx.png",
     "yedti_back.png": "Yeti.png",
     "walkyrion_back.png": "Walkyrion.png",
+    "inferno_back.png": "Inferno.png",
 }
 
 
@@ -70,6 +71,7 @@ PORTRAITS: dict[str, str] = {
     "noxx_front.png": "Noxx.png",
     "yeti_front.png": "Yeti.png",
     "walkyrion_front.png": "Walkyrion.png",
+    "inferno_front.png": "Inferno.png",
 }
 
 

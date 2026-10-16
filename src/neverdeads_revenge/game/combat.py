@@ -173,4 +173,5 @@ def apply_revenge(actor: Actor, stacks: int) -> int:
     actor.speed_bonus = amount if actor.trait is Trait.SPEED else 0.0
     actor.armor_bonus = int(amount) if actor.trait is Trait.ARMOUR else 0
     actor.damage_bonus = int(amount) if actor.trait is Trait.DAMAGE else 0
+    actor.crit_bonus = amount if actor.trait is Trait.CRIT else 0.0
     return stacks

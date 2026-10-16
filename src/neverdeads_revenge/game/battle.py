@@ -41,7 +41,15 @@ from .combat import AttackOutcome
 from .statuses import status_by_key
 from .specials import (
     AVALANCHE,
+    BONFIRE,
     CHORD,
+    EMBER_FIST,
+    GUT_PUNCH,
+    HAYMAKER,
+    HEADBUTT,
+    JAB,
+    RED_MIST,
+    ROUNDHOUSE,
     DEVOURING_DARKNESS,
     FLEETING_SHADOW,
     FRIENDS_LIKE_THESE,
@@ -219,6 +227,39 @@ WINTER_SCALE = 0.5
 SILENCE_SCALE = 0.5
 #: And the one heavy note, for the price of a full purse, on one target.
 CHORD_SCALE = 1.6
+
+# -- Inferno: the weight of a fist -----------------------------------------
+#: The cheapest thing in the game by a whole point, and light: a jab is a plain
+#: swing with two more on the end of it, which is what makes it worth pressing
+#: twice rather than saving for something bigger.
+JAB_BONUS = 2
+#: The body blow: a little more than a swing, and the wound that comes with it.
+GUT_PUNCH_SCALE = 1.1
+#: The burning hand: a little more again, and the fire is the reason to spend.
+EMBER_FIST_SCALE = 1.2
+#: The hardest single blow in the game, and the only one that is *priced in
+#: blood*: an eighth of what he has, taken whichever way the swing goes.
+HEADBUTT_SCALE = 1.7
+HEADBUTT_BLOOD = 0.125
+#: RED MIST: he starts at a swing and a fifth and ends up near three swings, so
+#: the trick is worth using when he is *losing* and a waste when he is not --
+#: which is the only shape a rage can be that is not simply a better attack.
+RED_MIST_SCALE = 1.2
+RED_MIST_RAGE = 1.6
+#: The spin, priced like the other area tricks: seventy percent of a blow to
+#: everything, which is worse than the haymaker on one and much better on three.
+ROUNDHOUSE_SCALE = 0.7
+#: The haymaker: a full extra blow on top of a blow, and the biggest number in
+#: the game. It is what the whole hero is: no rider, no wound, no second chance.
+HAYMAKER_SCALE = 2.0
+#: The bonfire: a full blow to *everything*, and the fire it leaves is the
+#: reason -- five turns of burning rather than the usual two, which on three
+#: monsters is forty-five damage nobody had to stand next to. A fifth of him
+#: goes into it: the only ultimate in the game with a second price, and the only
+#: hero in the game who would notice paying it.
+BONFIRE_SCALE = 1.0
+BONFIRE_BLOOD = 0.20
+BONFIRE_BURN = 3
 
 #: The orb of Ptamera is *loaded* and not promised: it hunts the throat without
 #: ever being certain of it, which is the one thing that tells it apart from the
@@ -708,6 +749,14 @@ class Battle:
             TRUE_NOTE: self._special_true_note,
             ECHOING_CUT: self._special_echoing_cut,
             SHATTERED_BELL: self._special_shattered_bell,
+            JAB: self._special_jab,
+            GUT_PUNCH: self._special_gut_punch,
+            EMBER_FIST: self._special_ember_fist,
+            HEADBUTT: self._special_headbutt,
+            RED_MIST: self._special_red_mist,
+            HAYMAKER: self._special_haymaker,
+            ROUNDHOUSE: self._special_roundhouse,
+            BONFIRE: self._special_bonfire,
         }[special.key]
         run(target, events)
         # Paid on the way out, and only if it went off: a trick the fight refused
@@ -1072,6 +1121,168 @@ class Battle:
         for other in self.living_enemies():
             if other is not enemy:
                 self._blow(other, events, flair=ECHOING_CUT, damage_scale=0.5)
+
+    # -- Inferno: the weight of a fist -------------------------------------
+    def _special_jab(self, target: Actor | None, events: list[Event]) -> None:
+        """The cheapest thing in the game: a light hand with two more behind it.
+
+        A plain swing and a little, which is exactly the point -- a trick this
+        cheap is a trick you press twice rather than save for, and a hero with no
+        armour and the smallest body in the roster needs one of those.
+        """
+        enemy = self._pick(target)
+        if enemy is not None:
+            self._blow(
+                enemy,
+                events,
+                flair=JAB,
+                damage_scale=PLAIN_SWING,
+                bonus=JAB_BONUS,
+            )
+
+    def _special_gut_punch(self, target: Actor | None, events: list[Event]) -> None:
+        """A body blow: more than a swing, and something inside gives way."""
+        enemy = self._pick(target)
+        if enemy is None:
+            return
+        before = len(self.state.log)
+        self.state.say("He puts his hand in where the ribs stop.", LogKind.SYSTEM)
+        self._splice(before, events)
+        outcome = self._blow(
+            enemy, events, flair=GUT_PUNCH, damage_scale=GUT_PUNCH_SCALE
+        )
+        if outcome.hit and enemy.stats.alive:
+            before = len(self.state.log)
+            inflict(self.state, enemy, ("bleed",))
+            self._splice(before, events)
+
+    def _special_ember_fist(self, target: Actor | None, events: list[Event]) -> None:
+        """The burning hand: a heavy blow, and the fire it leaves is why.
+
+        The one rider in his kit, and his own element: everything he does is
+        damage, and this is the damage that keeps being dealt after the turn is
+        over.
+        """
+        enemy = self._pick(target)
+        if enemy is None:
+            return
+        before = len(self.state.log)
+        self.state.say("His hand comes up already burning.", LogKind.SYSTEM)
+        self._splice(before, events)
+        outcome = self._blow(
+            enemy, events, flair=EMBER_FIST, damage_scale=EMBER_FIST_SCALE
+        )
+        if outcome.hit and enemy.stats.alive:
+            before = len(self.state.log)
+            inflict(self.state, enemy, ("burn",))
+            self._splice(before, events)
+
+    def _special_headbutt(self, target: Actor | None, events: list[Event]) -> None:
+        """The hardest thing he has, and it is paid for in his own blood."""
+        enemy = self._pick(target)
+        if enemy is None:
+            return
+        before = len(self.state.log)
+        self.state.say("He puts his own brow into it.", LogKind.SYSTEM)
+        self._splice(before, events)
+        self._blow(enemy, events, flair=HEADBUTT, damage_scale=HEADBUTT_SCALE)
+        self._in_his_blood(
+            max(1, round(self.state.player.stats.max_hp * HEADBUTT_BLOOD)), events
+        )
+
+    def _special_red_mist(self, target: Actor | None, events: list[Event]) -> None:
+        """The red comes down: a blow that grows with what he has already lost.
+
+        At full health it is barely a swing and at the edge of dying it is close
+        to three of them, which is the only shape a rage can have that is not
+        simply a better attack: it has to be worth *losing* for.
+        """
+        enemy = self._pick(target)
+        if enemy is None:
+            return
+        player = self.state.player
+        missing = 1.0 - (player.stats.hp / max(1, player.stats.max_hp))
+        before = len(self.state.log)
+        self.state.say("The red comes down over everything.", LogKind.SYSTEM)
+        self._splice(before, events)
+        self._blow(
+            enemy,
+            events,
+            flair=RED_MIST,
+            damage_scale=RED_MIST_SCALE + RED_MIST_RAGE * missing,
+        )
+
+    def _special_haymaker(self, target: Actor | None, events: list[Event]) -> None:
+        """The whole floor goes into it: the heaviest single blow in the game.
+
+        No rider, no wound and no second chance -- two blows' worth in one, which
+        is what he is for and the reason the price is what it is.
+        """
+        enemy = self._pick(target)
+        if enemy is not None:
+            self._blow(enemy, events, flair=HAYMAKER, damage_scale=HAYMAKER_SCALE)
+
+    def _special_roundhouse(self, target: Actor | None, events: list[Event]) -> None:
+        """He turns once: everything standing takes it, at seventy percent.
+
+        Priced like the other two area tricks and for the same reason -- worse
+        than the haymaker against one monster and much better against three.
+        """
+        before = len(self.state.log)
+        self.state.say("He turns once, and everything is in the way.", LogKind.SYSTEM)
+        self._splice(before, events)
+        for enemy in self.living_enemies():
+            if not self.hero.stats.alive:
+                break
+            self._blow(
+                enemy, events, flair=ROUNDHOUSE, damage_scale=ROUNDHOUSE_SCALE
+            )
+
+    def _special_bonfire(self, target: Actor | None, events: list[Event]) -> None:
+        """He builds it out of himself, and the room catches.
+
+        A full blow to everything, the same shape the void has, and then five
+        turns of fire on each of them -- which is the part a fist cannot do. A
+        third of him goes into it first, and it can be the last of him: for a
+        hero with thirty-four hit points that is the price of an ultimate, and
+        the only ultimate he could ever afford.
+        """
+        before = len(self.state.log)
+        self.state.say(
+            "He builds it out of himself, and the room catches.", LogKind.SYSTEM
+        )
+        self._splice(before, events)
+        self._in_his_blood(
+            max(1, round(self.state.player.stats.max_hp * BONFIRE_BLOOD)), events
+        )
+        if not self.hero.stats.alive:
+            return
+        for enemy in self.living_enemies():
+            if not self.hero.stats.alive:
+                break
+            outcome = self._blow(
+                enemy, events, flair=BONFIRE, damage_scale=BONFIRE_SCALE
+            )
+            if outcome.hit and enemy.stats.alive:
+                before = len(self.state.log)
+                inflict(self.state, enemy, ("burn",), turns_bonus=BONFIRE_BURN)
+                self._splice(before, events)
+
+    def _in_his_blood(self, amount: int, events: list[Event]) -> None:
+        """The price of a wild trick: his own health, and it can be all of it.
+
+        A cost that cannot finish him is not a cost, which is the rule the tithe
+        is already written under -- and for a hero whose whole kit is damage on
+        a small body, blood is the only currency the fight has not already spent.
+        """
+        player = self.state.player
+        before = len(self.state.log)
+        player.stats.hp = max(0, player.stats.hp - amount)
+        if player.stats.hp <= 0:
+            self.state.die("He puts the last of it into it, and it takes him.")
+        else:
+            self.state.say(f"It costs him {amount} of his own blood.", LogKind.BAD)
+        self._splice(before, events)
 
     def _special_shattered_bell(self, target: Actor | None, events: list[Event]) -> None:
         """He shatters the bell, and the note goes down through the floor."""

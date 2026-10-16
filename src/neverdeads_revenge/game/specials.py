@@ -26,7 +26,16 @@ __all__ = [
     "BELLS_THROW",
     "CHORD",
     "BETWEEN_BLOWS",
+    "BONFIRE",
     "DEVOURING_DARKNESS",
+    "EMBER_FIST",
+    "GUT_PUNCH",
+    "HAYMAKER",
+    "HEADBUTT",
+    "INFERNO_SPECIALS",
+    "JAB",
+    "RED_MIST",
+    "ROUNDHOUSE",
     "ECHOING_CUT",
     "FIRST_NOTE",
     "FLEETING_SHADOW",
@@ -78,6 +87,14 @@ BELLS_THROW = "bells_throw"
 TRUE_NOTE = "true_note"
 ECHOING_CUT = "echoing_cut"
 SHATTERED_BELL = "shattered_bell"
+JAB = "jab"
+GUT_PUNCH = "gut_punch"
+EMBER_FIST = "ember_fist"
+HEADBUTT = "headbutt"
+RED_MIST = "red_mist"
+ROUNDHOUSE = "roundhouse"
+HAYMAKER = "haymaker"
+BONFIRE = "bonfire"
 
 
 @dataclass(frozen=True, slots=True)
@@ -370,13 +387,109 @@ WALKYRION_SPECIALS: tuple[Special, ...] = (
 )
 
 #: Whose kit is whose, by the hero's own key.
+#: Inferno's eight, and they are one idea told eight ways: *the next one lands*.
+#:
+#: He has no kit in the sense the other three do -- there is nothing here that
+#: avoids a blow, absorbs one, or changes the shape of a fight. What he has is
+#: damage in escalating amounts, and the prices climb with it: the jab is the
+#: cheapest thing anybody in this game can do, and the haymaker is the heaviest
+#: single blow in it. Two of them cost him blood, which is his own currency,
+#: because the answer to "he has 34 hit points" is not to give him more.
+#:
+#: The last one is a *place*: he builds a fire in the room out of himself and
+#: everything in it burns, which is the one thing a fist cannot do.
+INFERNO_SPECIALS: tuple[Special, ...] = (
+    Special(
+        key=JAB,
+        cost=2,
+        effect="a fast hand: light, and two more",
+        look="pulse",
+        name="THE JAB",
+        blurb="he does not wind up; he just starts",
+        level=2,
+    ),
+    Special(
+        key=GUT_PUNCH,
+        cost=3,
+        effect="a body blow: heavy; it bleeds",
+        look="bleed",
+        name="GUT PUNCH",
+        blurb="somewhere inside gives way, and keeps on giving",
+        level=3,
+    ),
+    Special(
+        key=EMBER_FIST,
+        cost=4,
+        effect="a burning hand: heavy, and fire",
+        look="burn",
+        name="EMBER FIST",
+        blurb="the fist is not on fire; he is",
+        level=4,
+    ),
+    Special(
+        key=HEADBUTT,
+        cost=5,
+        effect="his hardest blow; it costs blood",
+        look="shatter",
+        name="THE HEADBUTT",
+        blurb="he opens his own brow to put it in yours",
+        level=5,
+    ),
+    Special(
+        key=RED_MIST,
+        cost=6,
+        effect="hurt harder, swing harder",
+        look="aura",
+        name="RED MIST",
+        blurb="the red comes down and he stops counting",
+        level=5,
+    ),
+    Special(
+        key=HAYMAKER,
+        cost=6,
+        effect="the heaviest single blow he has",
+        look="shatter",
+        name="THE HAYMAKER",
+        blurb="the whole floor goes into it, and then so does the monster",
+        level=6,
+    ),
+    Special(
+        key=ROUNDHOUSE,
+        cost=8,
+        effect="one spin: everything takes it",
+        needs_target=False,
+        look="wave",
+        name="THE ROUNDHOUSE",
+        blurb="he turns once, and the room is in the way",
+        level=6,
+    ),
+    Special(
+        key=BONFIRE,
+        # The same full purse the other three ultimates ask, and then blood on
+        # top of it: his is the only ultimate in the game with a second price,
+        # and it is the only one that *is* paid in what he has least of.
+        cost=12,
+        effect="all of them burn, and keep (floor)",
+        needs_target=False,
+        look="burn",
+        name="THE BONFIRE",
+        blurb="he builds it out of himself, and there is a lot of him",
+        # The dark's own gate, like the void and the wall: the price is not on
+        # the list. His is blood, and it is taken in the trick.
+        uses_floor=True,
+        level=0,
+    ),
+)
+
+
 SPECIALS_BY_HERO: dict[str, tuple[Special, ...]] = {
     "noxx": SPECIALS,
     "yeti": YETI_SPECIALS,
     "walkyrion": WALKYRION_SPECIALS,
+    "inferno": INFERNO_SPECIALS,
 }
 
-_ALL = (*SPECIALS, *YETI_SPECIALS, *WALKYRION_SPECIALS)
+_ALL = (*SPECIALS, *YETI_SPECIALS, *WALKYRION_SPECIALS, *INFERNO_SPECIALS)
 _BY_KEY = {special.key: special for special in _ALL}
 
 

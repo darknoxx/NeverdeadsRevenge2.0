@@ -176,6 +176,15 @@ FLAIR_COLOURS: dict[str, str] = {
     "true_note": "#ffb000",
     "echoing_cut": "#ffe9a8",
     "shattered_bell": "#fff3c4",
+    # Inferno: the fists, and the fire that is the only rider he has.
+    "jab": "#ffd9a8",
+    "gut_punch": "#e0703f",
+    "ember_fist": "#ff7a1f",
+    "headbutt": "#ff5533",
+    "red_mist": "#ff3b1f",
+    "haymaker": "#ffb066",
+    "roundhouse": "#ff8c42",
+    "bonfire": "#ff5a1f",
 }
 #: What a *wound* looks like -- and this is not the colour of the blow that made
 #: it but the colour of what is happening to the one wearing it. A monster going
@@ -1334,6 +1343,12 @@ class BattleScreen(Screen):
         because a row that fell off the end would tell the player about four of
         their five problems.
         """
+        if self.picking:
+            # The list of tricks is drawn across the whole strip, plate and all,
+            # and this row is *pixels*: pasted after the grid has been painted,
+            # it would hang over a panel that is no longer there. The aiming
+            # panel keeps to its own half, so the row stays for that one.
+            return
         worn = self._worn(self.battle.hero)
         if not worn:
             return
