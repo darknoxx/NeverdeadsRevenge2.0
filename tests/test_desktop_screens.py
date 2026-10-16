@@ -367,11 +367,20 @@ def test_a_tombed_monster_is_not_a_death(app):
 
 
 def test_the_glass_rattles_and_settles(app):
+    """The rattle ends when its own span is up, and the margin is enormous.
+
+    It used to be one sixtieth of a second against one twentieth -- a *real*
+    clock against a real sleep, on whatever machine is running the suite. On a
+    loaded Windows CI runner that is a coin toss, and it was one: the v0.3.0
+    release failed here after building nothing and testing everything else. A
+    sleep ten times the shake cannot be raced by a slow runner, and the thing
+    being asserted -- that it settles at all -- is still the thing asserted.
+    """
     import time
 
     app.view.shake(seconds=0.05)
     assert app.view.is_shaking()
-    time.sleep(0.06)
+    time.sleep(0.5)
     assert not app.view.is_shaking()
 
 
