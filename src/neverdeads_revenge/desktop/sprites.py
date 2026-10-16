@@ -25,7 +25,15 @@ from pathlib import Path
 
 from PySide6.QtGui import QImage
 
-__all__ = ["SPRITES_DIR", "PORTRAITS_DIR", "clear", "portrait", "sprite"]
+__all__ = [
+    "SPRITES_DIR",
+    "PORTRAITS_DIR",
+    "STATUS_DIR",
+    "clear",
+    "portrait",
+    "sprite",
+    "status_icon",
+]
 
 #: The art that travels with the game, beside the fonts and the sounds.
 SPRITES_DIR = Path(__file__).resolve().parent / "sprites"
@@ -33,6 +41,9 @@ SPRITES_DIR = Path(__file__).resolve().parent / "sprites"
 #: And the heroes seen from the front, for the screens that stand them in front
 #: of the player with nothing to fight.
 PORTRAITS_DIR = SPRITES_DIR / "portraits"
+
+#: And the wounds, one a status key, for the plate to wear beside the life bar.
+STATUS_DIR = SPRITES_DIR / "status"
 
 _LOADED: dict[Path, QImage | None] = {}
 
@@ -65,6 +76,16 @@ def portrait(name: str) -> QImage | None:
     falling back to it in the arena.
     """
     return _load(PORTRAITS_DIR / f"{name}.png")
+
+
+def status_icon(key: str) -> QImage | None:
+    """What a wound looks like, or ``None`` if the sheets have no picture of it.
+
+    A third lookup and not a flag on either of the others, for the reason the
+    other two are apart: a status is not a view of an actor, and a screen that
+    asks for one is not asking about a figure in the room.
+    """
+    return _load(STATUS_DIR / f"{key}.png")
 
 
 def clear() -> None:

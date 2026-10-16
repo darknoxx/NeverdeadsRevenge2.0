@@ -17,6 +17,10 @@ The heroes have a *second* view, and it is the one the roster wants: standing in
 the hero select with nobody to fight, they face the player. So they live in
 ``sprites/portraits/`` under their own names, and a screen that wants the hero
 looking at the camera asks `portrait("Noxx")` rather than `sprite("Noxx")`.
+
+And the wounds have pictures of their own -- ``sprites/status/``, one a status
+key, which is what the plate wears beside the health bar. Not a view of anything:
+a status is a rule, and the icon is what the rule looks like.
 """
 
 from __future__ import annotations
@@ -25,7 +29,7 @@ import shutil
 import sys
 from pathlib import Path
 
-__all__ = ["EXPORTS", "main"]
+__all__ = ["EXPORTS", "PORTRAITS", "STATUS_SYMBOLS", "main"]
 
 #: The game's own sprite folder, beside the fonts and the sounds.
 HERE = Path(__file__).resolve().parent.parent
@@ -33,6 +37,13 @@ OUT = HERE / "src" / "neverdeads_revenge" / "desktop" / "sprites"
 #: And the other view of the three heroes: seen from the front, which is what
 #: the roster needs and what the arena has no use for.
 PORTRAITS_OUT = OUT / "portraits"
+
+#: The four wounds, as pictures. Their own folder again, because they are not a
+#: *view* of anything: a status is a rule, and this is what the rule looks like
+#: on the plate -- the same way the models are what the actors look like in the
+#: room. Named for the status's own key and not for the export, since the export
+#: says "burning" and the table says "burn".
+STATUS_OUT = OUT / "status"
 
 #: ``export name -> the name the game asks for``. Spelled out rather than
 #: derived, because a typo in an export is a typo in a file name and nothing
@@ -62,19 +73,37 @@ PORTRAITS: dict[str, str] = {
 }
 
 
+#: ``export name -> the status key the game asks for``. `maul` has no export of
+#: its own and shares the bleeding one, exactly as it shares the shape its tick
+#: makes -- a deep wound and a wound are the same wound, one of them deeper.
+STATUS_SYMBOLS: dict[str, str] = {
+    "status_bleed.png": "bleed.png",
+    "status_poison.png": "poison.png",
+    "status_burning.png": "burn.png",
+    "status_frozen.png": "chill.png",
+}
+
+
 def main(argv: list[str] | None = None) -> int:
     args = argv if argv is not None else sys.argv[1:]
     source = Path(args[0] if args else "~/Vibecoding/grafiken_kampfsystem").expanduser()
     missing = []
-    for table, into in ((EXPORTS, OUT), (PORTRAITS, PORTRAITS_OUT)):
+    # Three tables, and where each one's exports live in the sheets folder: the
+    # models and the portraits sit at the top of it, and the wound symbols have
+    # a folder of their own, which is how they were handed over.
+    for table, under, into in (
+        (EXPORTS, "", OUT),
+        (PORTRAITS, "", PORTRAITS_OUT),
+        (STATUS_SYMBOLS, "status", STATUS_OUT),
+    ):
         into.mkdir(parents=True, exist_ok=True)
         for export, name in table.items():
-            origin = source / export
+            origin = (source / under if under else source) / export
             if not origin.exists():
                 missing.append(export)
                 continue
             shutil.copyfile(origin, into / name)
-            where = name if into is OUT else f"portraits/{name}"
+            where = name if into is OUT else f"{into.name}/{name}"
             print(f"{export:26s} -> {where}")
     if missing:
         print(f"missing: {', '.join(missing)}")

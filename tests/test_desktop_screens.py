@@ -3578,49 +3578,66 @@ def test_a_wound_bites_in_the_colour_of_what_is_eating_it(app):
     assert screen._popups, "the wound bit without a number coming off it"
 
 
-def test_a_wound_leaves_a_light_on_the_monster(app, font):
-    """Worn, not thrown: a monster with something eating it glows in that colour
-    for as long as it lasts -- under the model, so the monster stands *in* the
-    light instead of being covered by it.
+def test_a_wound_is_a_badge_on_the_plate_and_not_a_light_on_the_monster(app, font):
+    """Worn, not thrown -- and now *written down* rather than shone.
 
-    Read as pixels: fire warms the middle of the frame, cold cools it, and both
-    are gone the moment the wound is.
+    A wound used to be a pool of colour the figure stood in, which said
+    "something is eating this one" and could not say which wound, or how many of
+    them. The plate can: the sheets' own symbol for each one, beside the life
+    bar, in a row.
+
+    Read as pixels, three ways. The room does not change when a wound arrives --
+    nothing is lit any more -- the plate does, and a second wound pushes the row
+    *further right* rather than landing on top of the first, which is what
+    "side by side" means and is the only part of it a colour count could not see.
     """
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
     from neverdeads_revenge.game.actions import inflict
 
-    def hue(image, channel: str) -> int:
-        """How much of one colour is in the middle, over the other two."""
-        total = 0
-        for y in range(image.height() // 5, image.height() // 2, 2):
-            for x in range(image.width() // 3, image.width() * 2 // 3, 2):
-                pixel = image.pixelColor(x, y)
-                others = [
-                    getattr(pixel, name)()
-                    for name in ("red", "green", "blue")
-                    if name != channel
-                ]
-                total += max(0, getattr(pixel, channel)() - max(others))
-        return total
-
     battle = arena(count=1)
     screen = BattleScreen(battle)
-    target = battle.enemies[0]
+    hero = battle.hero
+    cols, rows = 96, 27  # what `drawn` renders at, and what the plate is sized by
     _, plain = drawn(screen, app, font)
+    ground = screen._areas(cols, rows)["ground"]
+    plate = screen._areas(cols, rows)["plate"]
 
-    inflict(battle.state, target, ("burn",))
+    def changed(image, area, base=None) -> list[int]:
+        """The columns in one band where a frame differs from another one."""
+        was = plain if base is None else base
+        x0, y0, width, height = area
+        return [
+            x
+            for x in range(x0 * font.cell_w, (x0 + width) * font.cell_w)
+            if any(
+                image.pixelColor(x, y) != was.pixelColor(x, y)
+                for y in range(y0 * font.cell_h, (y0 + height) * font.cell_h)
+            )
+        ]
+
+    inflict(battle.state, hero, ("burn",))
     _, burning = drawn(screen, app, font)
-    assert hue(burning, "red") > hue(plain, "red") + 500, "the burn left no light"
+    assert not changed(burning, ground), "the wound is still lighting the room"
+    assert changed(burning, plate), "the wound was not shown on the plate"
+    first = max(changed(burning, plate))
 
-    del target.statuses["burn"]
-    inflict(battle.state, target, ("chill",))
-    _, chilled = drawn(screen, app, font)
-    assert hue(chilled, "blue") > hue(plain, "blue") + 500, "the cold left no light"
+    inflict(battle.state, hero, ("chill",))
+    _, both = drawn(screen, app, font)
+    assert max(changed(both, plate)) > first, (
+        "the second wound did not line up beside the first"
+    )
 
-    del target.statuses["chill"]
-    _, clean = drawn(screen, app, font)
-    assert bytes(clean.constBits()) == bytes(plain.constBits()), (
-        "the light stayed on after the wound was gone"
+    # And the monsters keep theirs, at the end of their own bars: without that,
+    # taking the light away would have made a wounded monster one that nothing
+    # on screen says is wounded.
+    bare = drawn(screen, app, font)[1]
+    inflict(battle.state, battle.enemies[0], ("poison",))
+    _, poisoned = drawn(screen, app, font)
+    assert changed(poisoned, ground, bare), (
+        "the monster's wound is not on the floor with it"
+    )
+    assert not changed(poisoned, plate, bare), (
+        "a monster's wound was written on the player's plate"
     )
 
 

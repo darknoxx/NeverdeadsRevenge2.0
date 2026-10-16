@@ -56,6 +56,7 @@ from ..chrome import ASH, BLOOD, BONE, box, rule
 from ..font import BitmapFont
 from ..render import log_style
 from ..sprites import sprite as sprite_for
+from ..sprites import status_icon
 from ..tiles import tile
 from ..theme import Style, parse_style
 from .base import Screen
@@ -204,11 +205,29 @@ STATUS_SOUNDS: dict[str, str] = {
     "burn": "crit",
     "chill": "ice",
 }
-#: How bright the pool of colour around a statused figure is, and how fast it
-#: breathes. Low, because it is worn for the whole fight and has to be liveable
-#: with: a glow that shouts for four rounds is a glow the player stops seeing.
-STATUS_GLOW = 88
-STATUS_PULSE = 2.6
+#: Which picture a wound wears on the plate. ``maul`` has none of its own and
+#: wears the bleeding one, exactly as it shares the shape its tick makes -- a
+#: deep wound and a wound are the same wound, one of them deeper.
+STATUS_ICONS: dict[str, str] = {
+    "bleed": "bleed",
+    "maul": "bleed",
+    "poison": "poison",
+    "burn": "burn",
+    "chill": "chill",
+}
+#: The row of them: how tall one may be drawn (the sheets' own size, so a plate
+#: with room for one shows it as painted), where it starts -- one row under the
+#: life bar and past the pack, the purse and the count, which own the left of
+#: the plate -- and the gap between two of them.
+STATUS_BADGE = 52
+STATUS_ROW_IN = 20
+STATUS_ROW_DOWN = 2
+STATUS_GAP = 4
+#: And the same symbols for the monsters, whose bars are on the floor: smaller,
+#: because a badge half the size of the thing wearing it is a label rather than a
+#: mark, and set on the *end* of the bar, which is where the next one goes.
+MONSTER_BADGE = 22
+MONSTER_BADGE_GAP = 5
 #: How much of the room's own dark is laid over a stone, at the far end of it.
 #: The hashes were drawn in three greys; a picture cannot be, so the difference
 #: between the wall behind the monsters and the near corner is a wash of the
@@ -635,6 +654,7 @@ class BattleScreen(Screen):
         # The bars are painted here and not written into the grid: the floor is a
         # picture now, and a bar in the grid would be a bar *under* the picture.
         self._paste_health(painter, figures, app.font)
+        self._paste_wounds(painter, cols, rows, app)
         # The shadows first: they live on the floor, so a figure standing on one
         # stands on it rather than carrying it around.
         for figure in figures:
@@ -750,6 +770,17 @@ class BattleScreen(Screen):
             painter.fillRect(
                 QRectF(left, top, width * ratio, height), parse_style(colour).fg
             )
+            # And what is eating it, at the end of the bar: the room used to say
+            # this with a light around the figure, and a light could not say
+            # *which* wound. A monster whose bar says how much of it is left is
+            # the one place that can also say what is still taking it.
+            self._wound_row(
+                painter,
+                figure.actor,
+                left + width + MONSTER_BADGE_GAP,
+                top + height / 2.0,
+                MONSTER_BADGE,
+            )
 
     def _paste_wash(self, painter: QPainter, image) -> None:
         """The wash over the whole room on a landed blow.
@@ -804,9 +835,7 @@ class BattleScreen(Screen):
         else:
             cx += self._jolt(figure)
         self._paste_extra(painter, figure, app, figures, cell_w, cell_h, baseline)
-        self._paste_wound_aura(painter, figure, cell_w, cell_h, baseline)
         self._paste_model(painter, figure, cx, baseline, opacity, app.font)
-        self._paste_wound_glow(painter, figure, cell_w, cell_h, baseline)
         self._paste_flourish(painter, figure, cell_w, cell_h, baseline)
         if figure.actor is self.battle.hero:
             self._paste_self(painter, figure, cell_w, cell_h, baseline)
@@ -1215,78 +1244,69 @@ class BattleScreen(Screen):
         )
         painter.setOpacity(1.0)
 
-    def _wound_keys(self, figure: Staged) -> list[str]:
-        """Which wounds a figure is wearing, in a stable order."""
-        return sorted(key for key in figure.actor.statuses if key in STATUS_COLOURS)
+    def _worn(self, actor) -> list[str]:
+        """Which wounds somebody is wearing, in a stable order."""
+        return sorted(key for key in actor.statuses if key in STATUS_ICONS)
 
-    def _wound_light(self, figure: Staged, baseline: int) -> tuple[float, float, float]:
-        """Where a figure's light sits and how tall the figure is.
-
-        The middle of it, measured off the picture where there is one and off the
-        letter's own cap height where there is not -- the same two cases the
-        model is drawn in, so a glow cannot be over a monster that is not there.
-        """
-        if figure.sprite is not None:
-            span = float(figure.sprite.height())
-        else:
-            span = float(QFontMetrics(letter_font(figure.size).bold).capHeight())
-        return float(figure.cx), baseline - span * 0.45, span
-
-    def _paste_wound_aura(
-        self, painter: QPainter, figure: Staged, cell_w: int, cell_h: int, baseline: int
+    def _wound_row(
+        self, painter: QPainter, actor, start: float, middle: float, size: int
     ) -> None:
-        """The light a wound throws *around* a figure, drawn under the model.
+        """One row of wound symbols, from ``start`` and centred on ``middle``.
 
-        Not a blow's flash and not a trick's flourish: a pool of colour that
-        breathes for as long as something is eating the monster. Red for a
-        bleeding wound, green for poison, orange for fire, pale blue for the cold
-        -- and wider than the figure, because a halo hidden behind the thing
-        wearing it is a halo nobody can see.
+        One helper for both rows -- the plate's, which is the hero's own numbers,
+        and the little one at the end of every monster's bar on the floor --
+        because a player who has learned a symbol in one place should find the
+        same symbol in the other, drawn the same way. Sized by the caller: the
+        plate has a panel to fill and the floor has a monster to avoid covering.
         """
-        cx, cy, span = self._wound_light(figure, baseline)
-        for index, key in enumerate(self._wound_keys(figure)):
-            tint = QColor(STATUS_COLOURS[key])
-            # Each wound breathes out of phase with the last, so a monster with
-            # two of them is two lights and not one muddy one.
-            breath = 0.6 + 0.4 * math.sin(self._clock * STATUS_PULSE + index * 2.1)
-            radius = max(float(cell_w) * 2.4, span * 0.95)
-            gradient = QRadialGradient(QPointF(cx, cy), radius)
-            gradient.setColorAt(0.0, QColor(tint.red(), tint.green(), tint.blue(), 0))
-            gradient.setColorAt(
-                0.72,
-                QColor(tint.red(), tint.green(), tint.blue(), int(STATUS_GLOW * breath)),
+        icons = [
+            art
+            for art in (
+                status_icon(STATUS_ICONS[key]) for key in self._worn(actor)
             )
-            gradient.setColorAt(1.0, QColor(tint.red(), tint.green(), tint.blue(), 0))
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(gradient)
-            painter.drawEllipse(
-                QRectF(cx - radius, cy - radius * 0.85, radius * 2.0, radius * 1.7)
+            if art is not None
+        ]
+        if not icons:
+            return
+        box = max(6, round(size * 0.8))
+        step = box + STATUS_GAP
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+        for index, art in enumerate(icons):
+            painter.drawImage(
+                QRectF(start + index * step, middle - size / 2.0, box, size),
+                art,
+                QRectF(art.rect()),
             )
+        painter.restore()
 
-    def _paste_wound_glow(
-        self, painter: QPainter, figure: Staged, cell_w: int, cell_h: int, baseline: int
-    ) -> None:
-        """And the same light *on* the figure, drawn over the model.
+    def _paste_wounds(self, painter: QPainter, cols: int, rows: int, app) -> None:
+        """The hero's wounds, as the sheets' symbols, beside his life bar.
 
-        Low and even, so the monster keeps its own colours: a torch red enough to
-        hide what it is shining on is a torch that has replaced its subject. The
-        two together -- halo and wash -- are what makes a status readable from the
-        other side of the room without reading a word.
+        A wound used to be a *light*: the figure stood in a pool of the colour of
+        whatever was eating it until it stopped. This says the same thing more
+        exactly -- which wound, and all of them side by side rather than one
+        muddy colour per figure -- and it says it on the plate, which is the one
+        place in the arena that owns the hero's own numbers.
+
+        Sized to fit and *not* left to run off the plate: one wound is drawn at
+        the size the sheets painted it, and five share the room the row has,
+        because a row that fell off the end would tell the player about four of
+        their five problems.
         """
-        cx, cy, span = self._wound_light(figure, baseline)
-        radius = max(float(cell_w) * 2.0, span * 0.8)
-        for index, key in enumerate(self._wound_keys(figure)):
-            tint = QColor(STATUS_COLOURS[key])
-            breath = 0.6 + 0.4 * math.sin(self._clock * STATUS_PULSE + index * 2.1)
-            gradient = QRadialGradient(QPointF(cx, cy), radius)
-            gradient.setColorAt(0.0, QColor(tint.red(), tint.green(), tint.blue(), int(50 * breath)))
-            gradient.setColorAt(0.7, QColor(tint.red(), tint.green(), tint.blue(), int(32 * breath)))
-            gradient.setColorAt(1.0, QColor(tint.red(), tint.green(), tint.blue(), 0))
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(gradient)
-            painter.drawEllipse(
-                QRectF(cx - radius, cy - radius * 0.85, radius * 2.0, radius * 1.7)
-            )
+        worn = self._worn(self.battle.hero)
+        if not worn:
+            return
+        x, y, width, height = self._areas(cols, rows)["plate"]
+        if height < 4 or width < 12:
+            return
+        cell_w, cell_h = app.font.cell_w, app.font.cell_h
+        left = (x + min(STATUS_ROW_IN, max(2, width - 6))) * cell_w
+        right = (x + width - 1) * cell_w
+        room = max(0, right - left)
+        size = max(10, min(STATUS_BADGE, 3 * cell_h, (room - (len(worn) - 1) * STATUS_GAP) // len(worn)))
+        top = (y + STATUS_ROW_DOWN) * cell_h
+        self._wound_row(painter, self.battle.hero, left, top + size / 2.0, size)
 
     # -- the shapes themselves, in pixels ----------------------------------
     def _impact(self, painter, cx, cy, colour, age) -> None:
