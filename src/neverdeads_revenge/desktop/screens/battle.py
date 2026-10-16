@@ -226,8 +226,21 @@ STATUS_GAP = 4
 #: And the same symbols for the monsters, whose bars are on the floor: smaller,
 #: because a badge half the size of the thing wearing it is a label rather than a
 #: mark, and set on the *end* of the bar, which is where the next one goes.
-MONSTER_BADGE = 22
-MONSTER_BADGE_GAP = 5
+MONSTER_BADGE = 34
+MONSTER_BADGE_GAP = 4
+#: How wide a slot is against its height. The sheets' four symbols are not the
+#: same shape as each other -- the frozen one is nearly square and the bleeding
+#: one is a tall drop -- so the slot is cut for the widest of them and each is
+#: fitted into its own rather than stretched to a common box: a drop pulled into
+#: a square is a drop nobody recognises at a glance, which is the whole job.
+STATUS_SLOT = 0.95
+#: And *nearest* when it is fitted, because the sheets' four are pixels now: a
+#: painted figure put through a resize looks like a mistake, and a pixel figure
+#: put through a smooth one looks like a smudge. Drawing at a size the source
+#: divides into keeps the grid square; anything else is a rounding, and a
+#: rounding is what the source is made of anyway. (Nearest is the default, and
+#: it is asked for anyway -- the room sets its own hints, and this row is drawn
+#: in the middle of them.)
 #: How much of the room's own dark is laid over a stone, at the far end of it.
 #: The hashes were drawn in three greys; a picture cannot be, so the difference
 #: between the wall behind the monsters and the near corner is a wash of the
@@ -1268,13 +1281,20 @@ class BattleScreen(Screen):
         ]
         if not icons:
             return
-        box = max(6, round(size * 0.8))
-        step = box + STATUS_GAP
+        slot = max(6, round(size * STATUS_SLOT))
+        step = slot + STATUS_GAP
         painter.save()
-        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
         for index, art in enumerate(icons):
+            # Fitted, not stretched: the largest box of its own shape that fits
+            # in the slot, and then centred in it, so the row's spacing is even
+            # and every symbol keeps its own proportions.
+            scale = min(slot / art.width(), size / art.height())
+            width = max(1.0, art.width() * scale)
+            height = max(1.0, art.height() * scale)
+            x = start + index * step + (slot - width) / 2.0
             painter.drawImage(
-                QRectF(start + index * step, middle - size / 2.0, box, size),
+                QRectF(x, middle - height / 2.0, width, height),
                 art,
                 QRectF(art.rect()),
             )
@@ -1304,7 +1324,14 @@ class BattleScreen(Screen):
         left = (x + min(STATUS_ROW_IN, max(2, width - 6))) * cell_w
         right = (x + width - 1) * cell_w
         room = max(0, right - left)
-        size = max(10, min(STATUS_BADGE, 3 * cell_h, (room - (len(worn) - 1) * STATUS_GAP) // len(worn)))
+        size = max(
+            10,
+            min(
+                STATUS_BADGE,
+                3 * cell_h,
+                (room - (len(worn) - 1) * STATUS_GAP) // max(1, round(len(worn) * STATUS_SLOT)),
+            ),
+        )
         top = (y + STATUS_ROW_DOWN) * cell_h
         self._wound_row(painter, self.battle.hero, left, top + size / 2.0, size)
 
