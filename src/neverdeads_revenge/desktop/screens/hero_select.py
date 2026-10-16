@@ -13,6 +13,7 @@ hero the sheets have never heard of is a letter on the card, not a broken menu.
 
 from __future__ import annotations
 
+from PySide6.QtCore import QRectF
 from PySide6.QtGui import QPainter
 
 from neverdeads_revenge.game.actors import HEROES, Hero
@@ -30,6 +31,26 @@ __all__ = ["HeroSelectScreen", "FUTURE_HEROES"]
 
 #: Slugs that exist as a design idea and not yet as code.
 FUTURE_HEROES = ("revenant", "warden")
+
+#: How many rows the picture band is, in cells: the block font's own height, and
+#: a *constant* rather than a measurement. The card's layout is the same card for
+#: every hero, and deriving its height from the hero's letter meant that a hero
+#: whose letter the font happened not to carry -- which is exactly what happened
+#: to the fourth one -- got a band of a different height and a picture standing
+#: somewhere else on the card.
+ART_ROWS = 5
+
+#: The height every hero's picture is drawn at, whatever height the sheets
+#: exported it at. The four cards are otherwise the same card four times, and a
+#: figure a third smaller than its neighbours -- with its feet on the same line,
+#: so it hangs where its own transparent margin would have been -- reads as a
+#: hero who is not finished rather than one who is small.
+#:
+#: Ninety is not a taste: it is what the three exported at, so they are drawn at
+#: the size they were painted and only a smaller export is scaled up to meet
+#: them. The filter is *smooth* here and nowhere else in this game: these are
+#: paintings, and the pixel art on the plate is not.
+PORTRAIT_HEIGHT = 90
 
 
 class HeroSelectScreen(Screen):
@@ -69,26 +90,25 @@ class HeroSelectScreen(Screen):
             self._centre(buffer, y + 3, "???", ASH)
             self._centre(buffer, y + 5, "not yet resurrected", ASH)
         else:
-            art = render_word(hero.glyph)
-            # The letter's five rows are the card's layout whether or not there
+            # The band is the block font's own five rows whether or not there
             # is a picture to put in them: the name and the prose below sit on
-            # the same line either way, which is what keeps one hero's card from
+            # the same line for every hero, which is what keeps one card from
             # being taller than the next one's.
             face = portrait(hero.name)
             if face is None:
-                for i, line in enumerate(art):
+                for i, line in enumerate(render_word(hero.glyph)[:ART_ROWS]):
                     self._centre(buffer, y + 2 + i, line, f"bold {hero.color}")
-            self._centre(buffer, y + 2 + len(art), f"{hero.name}  {hero.title}",
+            self._centre(buffer, y + 2 + ART_ROWS, f"{hero.name}  {hero.title}",
                          f"bold {hero.color}")
             if face is not None:
-                # The figure stands on the last row of the letter's band, the
-                # way it stands on the arena's floor: a picture floats, a
-                # *figure* is standing somewhere.
+                # The figure stands on the last row of the band, the way it
+                # stands on the arena's floor: a picture floats, a *figure* is
+                # standing somewhere.
                 self._where = (
                     buffer.cols * app.font.cell_w // 2,
-                    (y + 2 + len(art)) * app.font.cell_h,
+                    (y + 2 + ART_ROWS) * app.font.cell_h,
                 )
-            body_y = y + 3 + len(art)
+            body_y = y + 3 + ART_ROWS
             for i, line in enumerate(wrap(hero.blurb, width - 8)):
                 if body_y + i >= stats_top - 1:
                     break
@@ -119,8 +139,18 @@ class HeroSelectScreen(Screen):
             # or a question mark, and the grid has already drawn it.
             return
         cx, baseline = self._where
+        height = PORTRAIT_HEIGHT
+        width = max(1, round(art.width() * height / max(1, art.height())))
         painter = QPainter(image)
-        painter.drawImage(cx - art.width() // 2, baseline - art.height(), art)
+        # Fitted to the common height and *then* centred: every figure stands on
+        # the same line at the same size, which is the whole of what a roster
+        # row is for.
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+        painter.drawImage(
+            QRectF(cx - width / 2.0, baseline - height, width, height),
+            art,
+            QRectF(art.rect()),
+        )
         painter.end()
 
     @staticmethod

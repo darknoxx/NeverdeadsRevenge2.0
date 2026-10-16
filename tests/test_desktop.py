@@ -346,3 +346,31 @@ def test_the_shake_never_moves_what_is_sampled():
     # The shake warps where the pattern is placed, never how it is sampled --
     # the scale is the same number shaken or not.
     assert fit_scale(QSize(1920, 1080), QSize(960, 528)) == 2
+
+
+def test_the_sidebar_says_what_the_fire_costs_while_it_burns():
+    """The receipt, and the one number that matters while it burns.
+
+    The fire does not run out and it cannot be walked away from, so the line has
+    to say what it costs him for the rest of the floor -- which is the whole of
+    what a player needs to know about a state they cannot see anywhere else.
+    """
+    from neverdeads_revenge.desktop import render
+    from neverdeads_revenge.game.actions import Action, perform_action
+    from neverdeads_revenge.game.actors import HEROES
+    from neverdeads_revenge.game.levels import RAVAGING_POINTS
+    from neverdeads_revenge.game.state import start_run
+
+    state = start_run(HEROES["inferno"], 3)
+    state.level = 7
+
+    before = render._void_prompt(state, 0.0)
+    assert before is not None, "the fire has no line in the sidebar"
+
+    perform_action(state, Action.ULTIMATE)
+
+    after = render._void_prompt(state, 0.0)
+    assert after is not None
+    assert str(RAVAGING_POINTS) in after[0], (
+        f"the burning line does not say what it costs: {after}"
+    )

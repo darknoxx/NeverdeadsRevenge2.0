@@ -32,6 +32,9 @@ BLOCK: dict[str, tuple[str, ...]] = {
     "D": ("████ ", "█   █", "█   █", "█   █", "████ "),
     "E": ("█████", "█    ", "████ ", "█    ", "█████"),
     "G": (" ████", "█    ", "█  ██", "█   █", " ███ "),
+    # With its feet and its hat, so it cannot be read as a bar: five columns
+    # have room for the serifs and the letter is the fourth hero's mark.
+    "I": ("█████", "  █  ", "  █  ", "  █  ", "█████"),
     "N": ("█   █", "██  █", "█ █ █", "█  ██", "█   █"),
     "R": ("████ ", "█   █", "████ ", "█  █ ", "█   █"),
     "S": (" ████", "█    ", " ███ ", "    █", "████ "),

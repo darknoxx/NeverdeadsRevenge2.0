@@ -1172,6 +1172,101 @@ def test_steps_are_a_run_total_not_a_floor_one():
     assert state.player.steps == 42, "the walk was reset by the descent"
 
 
+# -- Inferno's own ask: the floor itself -------------------------------------
+def _alight(seed: int = 3):
+    """A run of Inferno's, at the level the dark answers at, with the floor lit.
+
+    The fire is his ultimate and his ultimate is a *state of the floor* rather
+    than a thing standing on it, so every test of it starts here.
+    """
+    state = start_run(INFERNO, seed=seed)
+    state.level = 7
+    state.kill_points = 12
+    perform_action(state, Action.ULTIMATE)
+    assert state.ravaging, "the floor did not catch"
+    return state
+
+
+def test_the_ravaging_fire_takes_his_purse_down_to_three():
+    """The only ask in the game that *takes*, and it takes his whole kit.
+
+    Three points is one jab and then nothing -- the cheapest trick he has, once,
+    for the rest of the floor. For a hero whose tricks run from two to twelve,
+    lighting the floor is spending every one of them on one gesture, and it is
+    paid the moment he makes it rather than over the turns after: a cap he could
+    walk around holding twelve points under would be a cap that never bit.
+    """
+    from neverdeads_revenge.game.levels import RAVAGING_POINTS
+
+    state = start_run(INFERNO, seed=3)
+    state.level = 7
+    state.kill_points = 12
+    assert state.kill_points_max == 12
+
+    perform_action(state, Action.ULTIMATE)
+
+    assert state.ravaging, "the floor did not catch"
+    assert state.kill_points_max == RAVAGING_POINTS, "the purse did not shrink"
+    assert state.kill_points <= RAVAGING_POINTS, "the cap did not bite"
+    assert not state.ultimate_available, "it asked twice"
+    assert state.total_turns, "it was free"
+
+
+def test_everything_that_reaches_him_while_the_floor_burns_is_burning():
+    """Not the monsters standing there when he lit it: every one that reaches him.
+
+    A bomb would be the first thing; a fire on a floor is the second, and the
+    difference is the whole promise -- the counter keeps burning after he walks
+    away from it, and the monster two rooms east catches on its way in.
+    """
+    from neverdeads_revenge.game.battle import open_fight
+
+    state = _alight()
+    hero = state.player
+    later = make_enemy(ENEMIES["ghoul"], (hero.position[0] + 1, hero.position[1]))
+    state.enemies.append(later)
+    state.turn_queue.add(later)
+    state.raise_encounter(later)
+
+    fight = open_fight(state)
+
+    assert fight is not None
+    assert all("burn" in enemy.statuses for enemy in fight.enemies), (
+        "something walked into the fire and did not catch"
+    )
+
+
+def test_nothing_catches_when_the_floor_is_not_burning():
+    """The control, and the reason the promise is a promise."""
+    from neverdeads_revenge.game.battle import open_fight
+
+    state = start_run(INFERNO, seed=3)
+    state.level = 7
+    state.kill_points = 12
+    hero = state.player
+    enemy = make_enemy(ENEMIES["ghoul"], (hero.position[0] + 1, hero.position[1]))
+    state.enemies.append(enemy)
+    state.turn_queue.add(enemy)
+    state.raise_encounter(enemy)
+
+    fight = open_fight(state)
+
+    assert fight is not None
+    assert not any("burn" in one.statuses for one in fight.enemies)
+
+
+def test_the_fire_goes_out_at_the_stairs():
+    """A floor's ask belongs to the floor: the next one is not on fire."""
+    state = _alight()
+    state.player.position = state.stairs
+
+    perform_action(state, Action.DESCEND)
+
+    assert state.depth == 2
+    assert not state.ravaging, "the fire followed him down the stairs"
+    assert state.kill_points_max > 3, "his purse never came back"
+
+
 # -- curses -----------------------------------------------------------------
 def test_every_curse_states_a_price():
     """The dialog shows this sentence and nothing else. A blank one is a trap."""

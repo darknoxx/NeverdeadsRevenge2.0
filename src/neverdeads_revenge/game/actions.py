@@ -1377,6 +1377,7 @@ def _ultimate(state: GameState) -> ActionResult:
         "noxx": _summon_void,
         "yeti": _build_fortress,
         "walkyrion": _shatter_bell,
+        "inferno": _ravaging_fire,
     }
     build = builders.get(state.hero.key)
     if build is None:
@@ -1506,6 +1507,35 @@ def _shatter_bell(state: GameState) -> ActionResult:
         state.say("The note finds: " + ", ".join(struck) + ".", LogKind.COMBAT)
     elif not broken:
         state.say("The note finds nothing to break.", LogKind.PLAIN)
+    return _spend_the_turn(state)
+
+
+def _ravaging_fire(state: GameState) -> ActionResult:
+    """Inferno sets the floor alight with everything he has left.
+
+    The only ask in the game that *takes* rather than gives. There is nothing to
+    walk to and nothing to hit: the floor itself burns, and for as long as it
+    does, two things are true of it.
+
+    Every fight on it starts with everything in it already on fire -- not the
+    monsters standing there *now*, which would make this a bomb, but every one
+    of them that ever reaches him, which is what a fire on a floor actually is.
+    And his own purse holds three points: one jab, and then nothing, for the
+    rest of the floor. For a hero whose kit runs from two points to twelve that
+    is his whole repertoire spent on one gesture, paid at the moment he makes
+    it rather than over the turns that follow.
+
+    What it does *not* do is stop him swinging. The free attack is still free,
+    which is what keeps a hero with no armour and thirty-four hit points able to
+    keep going down a floor he has just bankrupted himself on.
+    """
+    state.ravaging = True
+    state.ultimate_available = False
+    # Paid on the way out and not over the floor: a cap the hero walks around
+    # holding twelve points under would be a cap that never bit.
+    state.kill_points = min(state.kill_points, state.kill_points_max)
+    state.say("You put everything you have into the floor.", LogKind.SYSTEM)
+    state.say("It catches, and it keeps catching.", LogKind.GOOD)
     return _spend_the_turn(state)
 
 

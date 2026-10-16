@@ -19,6 +19,7 @@ from PySide6.QtCore import QRect
 from PySide6.QtGui import QColor, QImage, QPainter
 
 from neverdeads_revenge.game.draughts import draught_by_key
+from neverdeads_revenge.game.levels import RAVAGING_POINTS
 from neverdeads_revenge.game.npcs import NPC_COLOR, NPC_GLYPH
 from neverdeads_revenge.game.state import GameState, LogKind
 from neverdeads_revenge.world.generator import ESCAPE_DEPTH
@@ -172,6 +173,12 @@ def _draw_map(buffer, state, area) -> None:
     # the thing it has become. The glyphs keep their colours; the background
     # is what changes.
     frosted = state.fortress is not None
+    # THE RAVAGING FIRE. Its own weather and only that: the ground goes red and
+    # the walls go darker under it, and every glyph keeps the colour it had --
+    # because unlike the frost, nothing here is lying on the floor to be read
+    # against it. What the fire is *for* is not on this screen at all: it is in
+    # the fights, and in the counting of them.
+    burning = state.ravaging
     # THE CARRION TONGUE paints the floor's dead rather than marking it: a
     # glyph loses to whatever else is on the square -- and a kill almost always
     # leaves coin there, so the stain was invisible exactly where it mattered
@@ -190,6 +197,21 @@ def _draw_map(buffer, state, area) -> None:
                 style = Style(
                     fg=style.fg,
                     bg=BLOOD_TINT,
+                    bold=style.bold,
+                    dim=style.dim,
+                    reverse=style.reverse,
+                    italic=style.italic,
+                )
+            if burning and style.bg is None:
+                fg = style.fg
+                if dungeon.display_tile(position) is Tile.WALL:
+                    # The walls go darker with the heat on them, exactly as they
+                    # go darker under the frost: an ember ground with ember walls
+                    # is a room with no shape in it.
+                    fg = parse_style("grey15").fg
+                style = Style(
+                    fg=fg,
+                    bg=EMBER,
                     bold=style.bold,
                     dim=style.dim,
                     reverse=style.reverse,
@@ -540,6 +562,7 @@ ULTIMATE_PROMPTS: dict[str, tuple[str, tuple[int, int, int]]] = {
     "noxx": ("give in to the void", (14, 111, 111)),
     "yeti": ("build the Frozen Fortress", (159, 227, 239)),
     "walkyrion": ("shatter the golden bell", (212, 175, 55)),
+    "inferno": ("set the floor alight", (192, 32, 42)),
 }
 
 #: The blood the floor keeps while the carrion tongue works. Dark, so a coin
@@ -551,6 +574,13 @@ BLOOD_TINT = QColor("#3a0f12")
 #: rather than paper white: bright enough to be the fortress's own weather,
 #: dark enough that the grey of a remembered wall still reads against it.
 FROST = QColor("#bfced2")
+
+#: And the red it goes while it burns. *Dark* red rather than a bright one, for
+#: the opposite reason to the frost being pale: the frost had to keep dark
+#: glyphs legible on it, and this has to keep every glyph in the dungeon legible,
+#: because while the floor is on fire nothing about the actors changes. A bright
+#: red would make the map a warning sign with writing on it.
+EMBER = QColor("#4a120c")
 
 
 def ultimate_ready(state: GameState) -> bool:
@@ -582,6 +612,14 @@ def _void_prompt(state: GameState, now: float) -> tuple[str, QColor] | None:
         fortress = state.fortress
         return (
             f"the fortress stands {fortress.stats.hp}/{fortress.stats.max_hp}",
+            QColor(*base),
+        )
+    if state.ravaging:
+        # The receipt, and the one number that matters while it burns: the fire
+        # does not run out and cannot be walked away from, so the line says what
+        # it costs him for the rest of the floor.
+        return (
+            f"the floor burns; {RAVAGING_POINTS} kill points",
             QColor(*base),
         )
     if state.atritas is not None or not state.ultimate_available:

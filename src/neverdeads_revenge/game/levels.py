@@ -30,6 +30,7 @@ from .actors import Actor
 
 __all__ = [
     "Gain",
+    "RAVAGING_POINTS",
     "LEVEL_COSTS",
     "kills_for_level",
     "kills_to_next",
@@ -102,6 +103,16 @@ KILL_POINTS: tuple[int, ...] = (
     51, 54, 57, 60, 63, 66, 69, 72, 75, 78,
     81, 84, 87, 90, 93, 96, 99, 102, 105, 108, 111,
 )
+
+
+#: What a hero can hold while the floor is on fire: Inferno's own price.
+#:
+#: Three points is his *cheapest* trick and a half -- the jab, once, and then
+#: nothing -- and it lasts the whole floor. It is the only ultimate in the game
+#: that is paid for by taking part of the hero's own kit away rather than by
+#: spending something he has, and it is the only price that could possibly suit
+#: him: a fire he lights with everything he had left.
+RAVAGING_POINTS = 3
 
 
 def kill_points_for(level: int) -> int:

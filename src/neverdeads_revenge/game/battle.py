@@ -353,6 +353,14 @@ class Battle:
         #: what answers a turn spent in it. See ``GameState.in_fight``, and
         #: ``_close_the_fight`` for the other end of it.
         state.in_fight = True
+        if state.ravaging:
+            # THE RAVAGING FIRE. Everything that reaches him is already burning
+            # when it gets there -- applied here, where a fight is *built*,
+            # because that is what the promise is: not the monsters standing on
+            # the floor when he lit it, but every one of them that ever comes at
+            # him while it burns.
+            for enemy in self.enemies:
+                inflict(state, enemy, ("burn",))
 
     # -- what the hero is offered -------------------------------------------
     def commands(self) -> list[str]:

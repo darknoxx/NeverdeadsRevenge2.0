@@ -1903,10 +1903,13 @@ def test_the_roster_shows_the_hero_and_not_only_their_letter(app, font):
     assert len(painted) > 20, (
         f"the band is {len(painted)} colours, so it is still the block letter"
     )
-    # Drawn at its own size, which is the arena's own rule: what the sheets made
-    # is what the screen shows. A scaled portrait would be a different promise.
-    assert abs((max(columns) - min(columns) + 1) - art.width()) <= 4, (
-        "the portrait is not drawn at its own size"
+    # Drawn at the roster's common height rather than at its own, so that four
+    # heroes photographed at four sizes stand the same size on four cards.
+    from neverdeads_revenge.desktop.screens.hero_select import PORTRAIT_HEIGHT
+
+    expected = round(art.width() * PORTRAIT_HEIGHT / art.height())
+    assert abs((max(columns) - min(columns) + 1) - expected) <= 4, (
+        "the portrait is not drawn at the roster's height"
     )
 
     monkeypatch_absent = lambda name: None  # noqa: E731 - one line, one meaning

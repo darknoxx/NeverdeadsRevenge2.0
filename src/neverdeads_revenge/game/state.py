@@ -40,7 +40,7 @@ from .actors import (
     scale_template,
 )
 from .combat import apply_revenge
-from .levels import kill_points_for, kills_to_next
+from .levels import RAVAGING_POINTS, kill_points_for, kills_to_next
 from .curses import CURSES, Curse
 from .difficulty import (
     ATRITAS_VIEW,
@@ -300,6 +300,12 @@ class GameState:
     #: fight then killed it, and the floor was left owing a fight to a corpse: a
     #: run that stood still for as long as it had left.
     in_fight: bool = False
+    #: Whether the floor is on fire: Inferno's own gift to a floor, and the one
+    #: thing in the game that *takes* from the hero rather than giving. It never
+    #: runs out and it never has a shape on the map -- what it does is make every
+    #: fight on this floor start with everything in it already burning, and hold
+    #: his purse at three points for as long as it lasts.
+    ravaging: bool = False
     #: Yeti's bastion, while it stands. Same shape of life as the shadow: not
     #: an enemy, not in the queue, kept by its own clock -- and the one thing
     #: on the floor every monster would rather bite than the hero.
@@ -543,7 +549,15 @@ class GameState:
 
     @property
     def kill_points_max(self) -> int:
-        """How big the purse is at this level: the ceiling the pool fills to."""
+        """How big the purse is at this level: the ceiling the pool fills to.
+
+        And while a floor is *burning*, three. That is Inferno's price, written
+        where the purse is measured rather than where it is spent, so that the
+        bar, the list of tricks and the arithmetic all read the same small
+        number -- a cap any of the three could disagree about is not a cap.
+        """
+        if self.ravaging:
+            return min(RAVAGING_POINTS, kill_points_for(self.level))
         return kill_points_for(self.level)
 
     @property
@@ -922,6 +936,7 @@ class GameState:
         self.atritas = None
         self.atritas_turns_left = 0
         self.void_sight = False
+        self.ravaging = False
         self.fortress = None
         self.fortress_turns_left = 0
         self.sight_penalty = 0
