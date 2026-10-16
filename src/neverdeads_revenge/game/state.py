@@ -288,6 +288,18 @@ class GameState:
         """
         if self.encounter is None:
             self.encounter = actor
+
+    #: Whether a fight is *open* over this state -- owed and not yet opened, or
+    #: running in the arena. The floor stands still while one is, and not only
+    #: for the reason the encounter check below gives: a turn spent in a room is
+    #: answered *by the room*, and the dungeon's own answer to the same turn is a
+    #: second one. Which is not a theory. A mouthful drunk in the arena ran
+    #: ``advance_world``, the floor's monsters took their turn in the middle of
+    #: the fight, and one of them -- with no business moving while the hero was
+    #: in a room -- walked up and was handed over as a *fresh* encounter. The
+    #: fight then killed it, and the floor was left owing a fight to a corpse: a
+    #: run that stood still for as long as it had left.
+    in_fight: bool = False
     #: Yeti's bastion, while it stands. Same shape of life as the shadow: not
     #: an enemy, not in the queue, kept by its own clock -- and the one thing
     #: on the floor every monster would rather bite than the hero.

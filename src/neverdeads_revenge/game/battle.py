@@ -176,7 +176,14 @@ def open_fight(state: GameState, trigger: Actor | None = None) -> Battle | None:
     a test calls it to play a turn of contact without building a screen.
     """
     trigger = trigger if trigger is not None else state.encounter
-    if trigger is None or not trigger.stats.alive:
+    if trigger is None:
+        return None
+    if not trigger.stats.alive:
+        # Owed by a corpse, and a corpse owes nothing. A death clears its own
+        # encounter (see `_on_death`); this is the other door, so that a fight
+        # nobody can ever have cannot be *asked for* again and again either.
+        if state.encounter is trigger:
+            state.encounter = None
         return None
     if state.encounter is trigger:
         state.encounter = None
@@ -301,6 +308,10 @@ class Battle:
         #: THE HOARFROST: until the end of this round, whoever lands a blow on him
         #: takes the cold home with them.
         self._frost = False
+        #: And the floor stops taking turns while the fight is open: the room is
+        #: what answers a turn spent in it. See ``GameState.in_fight``, and
+        #: ``_close_the_fight`` for the other end of it.
+        state.in_fight = True
 
     # -- what the hero is offered -------------------------------------------
     def commands(self) -> list[str]:
@@ -574,11 +585,13 @@ class Battle:
             return True
         if not self.hero.stats.alive:
             self.over = True
+            self._close_the_fight()
             events.append(Over(won=False))
             return True
         if not self.living_enemies():
             self.over = True
             self.won = True
+            self._close_the_fight()
             before = len(self.state.log)
             self.state.say("The floor is quiet again.", LogKind.GOOD)
             self._splice(before, events)
@@ -1128,7 +1141,18 @@ class Battle:
         self.over = True
         self.escaped = self.hero.stats.alive
         self.won = False
+        self._close_the_fight()
         events.append(Over(won=False, escaped=self.escaped))
+
+    def _close_the_fight(self) -> None:
+        """Hand the floor its turns back, now that the room has stopped asking.
+
+        Every way out of a fight comes through here: a win, a death, and a run
+        for the dark. The other end of it is the flag going up in ``__init__``,
+        and a fight that went out without coming back through here would leave a
+        floor that never moves again.
+        """
+        self.state.in_fight = False
 
     # -- plumbing -----------------------------------------------------------
     def _splice(self, before: int, events: list[Event]) -> None:

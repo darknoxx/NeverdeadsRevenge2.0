@@ -273,6 +273,75 @@ def test_drinking_is_the_packs_own_arithmetic():
     assert not state.inventory, "the bottle is still in the pack"
 
 
+def test_a_mouthful_in_the_arena_is_the_rooms_turn_and_not_the_floors():
+    """A turn spent in a room is answered *by the room*.
+
+    The dungeon's own quaff spends a turn and runs ``advance_world``, which is
+    the right answer when the drinking happens on the map -- a mouthful should
+    not be a free action. In the arena the room is already answering, so the
+    floor got a second turn out of the same mouthful: measured, a monster with no
+    business moving while the hero was in a room walked up to him and was handed
+    over as a *fresh* encounter mid-fight. The fight then killed it, and the
+    floor was left owing a fight to a corpse, standing still for as long as the
+    run had left. Which is what two thirds of a batch of measured runs was.
+
+    So the watcher below is the floor's own monster, beside the hero, quicker
+    than anybody, and it must not take a turn -- and the run's own clock, which
+    counts what a turn cost, must not move either.
+    """
+    from neverdeads_revenge.game.actors import ENEMIES, make_enemy
+
+    state = run()
+    state.inventory.append(make_item(ITEMS["potion"]))
+    state.player.stats.hp = 5
+    battle = Battle(state, take(state))
+
+    # The hunter and not a ghoul, because it is the one monster whose turn does
+    # not need the hero to be able to see it -- a test that could pass because
+    # the actor was invisible would be measuring the lamp.
+    watcher = make_enemy(
+        ENEMIES["hunter"], (state.player.position[0] + 1, state.player.position[1])
+    )
+    watcher.stats.speed = 99.0
+    state.enemies.append(watcher)
+    # The floor's queue, emptied down to the two of them, and the watcher quicker
+    # than the hero: a queue that *could* still hand this monster a turn, so that
+    # "it did not take one" is the flag and not the dice.
+    state.turn_queue = type(state.turn_queue)([state.player, watcher])
+    turns_before = state.total_turns
+
+    events = battle.choose(ITEM)
+
+    assert any("drink the potion" in line for line in lines(events))
+    assert state.player.stats.hp > 5, "the potion mended nothing"
+    assert state.encounter is None, "the floor handed over a fight mid-fight"
+    assert state.total_turns == turns_before, "the mouthful ticked the run's clock"
+    assert not battle.over, "one mouthful finished a fight"
+
+
+def test_a_fight_owed_to_a_monster_that_died_is_no_longer_owed():
+    """A corpse owes nothing, and the floor moves on.
+
+    The floor hands a fight over by *setting* the encounter, and the door into
+    the arena asks the monster's health. A monster that died in between -- a
+    wound running out at the start of its turn, the shadow reaching it first --
+    used to leave the field set: the door refused every time it was asked, and
+    the enemy phase stood still for a battle that could never happen. Nothing
+    could move the floor on, and the run was over without being over.
+    """
+    state = run()
+    enemy = take(state)[0]
+    state.raise_encounter(enemy)
+
+    enemy.stats.hp = 0
+    from neverdeads_revenge.game.actions import _on_death
+
+    _on_death(state, enemy)
+
+    assert state.encounter is None, "a corpse is still owed a fight"
+    assert open_fight(state) is None, "the floor offered a fight with a corpse"
+
+
 def test_nothing_to_drink_is_not_a_turn():
     """An empty pack is a refusal, and a refusal is free."""
     state = run()

@@ -341,6 +341,13 @@ def _on_death(state: GameState, enemy: Actor) -> None:
     # encounter for -- and the arena refuses that fight, because it asks the
     # *health*. The player presses into a corpse and nothing happens.
     enemy.alive = False
+    if state.encounter is enemy:
+        # And nothing is owed any more. A monster that died before its fight was
+        # opened leaves a floor that would otherwise owe a battle to a corpse:
+        # the door into the arena asks the *health* and refuses, so the run sits
+        # in a room it can never enter, with the enemy phase standing still for
+        # it, for the rest of the floor.
+        state.encounter = None
     state.kills += 1
     state.deaths.append(enemy.position)
     # THE CARRION TONGUE reads this long after the blood has been cleared: a
@@ -1971,11 +1978,17 @@ def _quaff(state: GameState) -> ActionResult:
         _shatter(state)
 
     # Drinking takes a turn, so it is not a free action in the middle of a fight
-    # and monsters get their answer.
-    state.turn += 1
-    state.total_turns += 1
-    advance_world(state)
-    state.refresh_vision()
+    # and monsters get their answer -- the *floor's* answer, which is the right
+    # one when the floor is where the drinking happened. In the arena the answer
+    # is the room's own queue and the turn is the arena's to spend, so the
+    # dungeon's clock is left alone: ticking it here as well counted one mouthful
+    # twice in the run's own turn count, and ran the floor's phase in the middle
+    # of a fight.
+    if not state.in_fight:
+        state.turn += 1
+        state.total_turns += 1
+        advance_world(state)
+        state.refresh_vision()
     return _outcome(state, consumed_turn=True, acted=True)
 
 
@@ -2472,6 +2485,12 @@ def advance_world(state: GameState) -> None:
     monsters get an action in before the queue hands control back. A speed-0.7
     ghoul only gets to move about every second player turn.
     """
+    if state.in_fight:
+        # A fight is open: the room is the answer to a turn spent in it, and the
+        # floor outside it has no business moving. Nor do the counters tick --
+        # the arena ticks the same ones at its own round boundary, and two clocks
+        # on one ward is a ward that lasts half as long as it says.
+        return
     state.refresh_passives()
     for _ in range(MAX_ENEMY_ACTIONS_PER_PLAYER_TURN):
         if state.over or state.encounter is not None:
