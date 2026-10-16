@@ -1845,6 +1845,83 @@ def test_the_arena_draws_whatever_art_there_is(app, font):
         assert found[-1] - found[0] > font.cell_h, "the letter is not a letter"
 
 
+def test_the_roster_shows_the_hero_and_not_only_their_letter(app, font):
+    """The block letter is the fallback; the sheets have the hero now.
+
+    The roster stands them facing the *player* -- the front view, which is the
+    second set of art the arena has no use for, since the arena's three stand
+    with their backs to the camera at the monsters. What is asserted is the
+    difference between the two views: a painted figure is a hundred colours wide
+    and a block letter is exactly one, which is a thing a test can see where
+    "it looks better" is not.
+    """
+    from PySide6.QtCore import Qt
+
+    from neverdeads_revenge.desktop.blocks import render_word
+    from neverdeads_revenge.desktop.screens import hero_select
+    from neverdeads_revenge.desktop.sprites import portrait
+
+    press(app, Qt.Key.Key_Return)  # off the title, onto the roster
+    screen = app.screens[-1]
+    hero = screen.current
+    assert hero is not None
+
+    def band() -> tuple[set, list[int]]:
+        """The card's picture band: the colours in it, and where its ink is.
+
+        The band is the letter's own five rows, which is where the picture goes
+        too, and the background is whatever colour fills most of it.
+        """
+        _, image = drawn(screen, app, font)
+        # Inside the card's own frame: outside it is the game's background, and
+        # a background is not a figure standing in a band.
+        width = min(96 - 8, 76)
+        left = (96 - width) // 2
+        inside = range((left + 1) * font.cell_w, (left + width - 1) * font.cell_w)
+        top = (27 - min(27 - 4, 22)) // 2 + 2
+        rows = range(top * font.cell_h, (top + len(render_word(hero.glyph))) * font.cell_h)
+        seen: dict[tuple, int] = {}
+        for y in rows:
+            for x in inside:
+                ink = image.pixelColor(x, y)
+                key = (ink.red(), ink.green(), ink.blue())
+                seen[key] = seen.get(key, 0) + 1
+        fill = max(seen, key=lambda key: seen[key])
+        columns = [
+            x
+            for x in inside
+            if any(
+                (c.red(), c.green(), c.blue()) != fill
+                for c in (image.pixelColor(x, y) for y in rows)
+            )
+        ]
+        return set(seen) - {fill}, columns
+
+    painted, columns = band()
+    art = portrait(hero.name)
+    assert art is not None, "the sheets have no front view of the hero"
+    assert len(painted) > 20, (
+        f"the band is {len(painted)} colours, so it is still the block letter"
+    )
+    # Drawn at its own size, which is the arena's own rule: what the sheets made
+    # is what the screen shows. A scaled portrait would be a different promise.
+    assert abs((max(columns) - min(columns) + 1) - art.width()) <= 4, (
+        "the portrait is not drawn at its own size"
+    )
+
+    monkeypatch_absent = lambda name: None  # noqa: E731 - one line, one meaning
+    hero_select.portrait = monkeypatch_absent
+    try:
+        lettered, letter_columns = band()
+    finally:
+        hero_select.portrait = portrait
+
+    assert len(lettered) < len(painted) / 4, "the fallback is not a letter"
+    assert max(letter_columns) - min(letter_columns) + 1 < art.width(), (
+        "the fallback letter is as wide as the picture"
+    )
+
+
 def test_a_monster_the_sheets_never_heard_of_is_still_a_letter(app, font):
     """The fallback: no picture means the alphabet, which is what the whole
     game looked like before the art arrived -- and a fight is never missing a

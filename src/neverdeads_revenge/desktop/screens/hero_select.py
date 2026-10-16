@@ -1,12 +1,19 @@
 """Hero select.
 
-The roster is data, so this is a card per hero: their letter in the block font,
-their name, their prose, and the numbers that make them a choice. Locked slots
-are shown rather than hidden, because the shape of what is coming is worth
-seeing.
+The roster is data, so this is a card per hero: their picture, their name, their
+prose, and the numbers that make them a choice. Locked slots are shown rather
+than hidden, because the shape of what is coming is worth seeing.
+
+The picture is the hero *facing the player* -- the sheets' own front view, which
+is the second set of art the arena has no use for -- drawn at its own size, the
+way the arena draws everything painted, and standing on the line the block
+letter stood on. The letter is still what happens when there is no picture: a
+hero the sheets have never heard of is a letter on the card, not a broken menu.
 """
 
 from __future__ import annotations
+
+from PySide6.QtGui import QPainter
 
 from neverdeads_revenge.game.actors import HEROES, Hero
 from neverdeads_revenge.game.combat import chance_against
@@ -14,6 +21,7 @@ from neverdeads_revenge.game.pace import MAX_ACTIONS_PER_SECOND, actions_per_sec
 
 from ..blocks import render_word
 from ..chrome import ASH, BONE, BLOOD, box
+from ..sprites import portrait
 from ..theme import parse_style
 from .base import Screen
 from .dialogs import wrap
@@ -29,6 +37,12 @@ class HeroSelectScreen(Screen):
 
     def __init__(self) -> None:
         self.index = 0
+        #: Where the hero's picture goes, in pixels: the centre of the card and
+        #: the line the figure stands on. Decided in ``draw`` and used in
+        #: ``paste``, because the grid pass knows the card's rows and the pixel
+        #: pass knows the frame -- and this screen is the one that has to know
+        #: both, so it carries the seam between them.
+        self._where: tuple[int, int] | None = None
 
     @property
     def slots(self) -> list[Hero | None]:
@@ -50,15 +64,30 @@ class HeroSelectScreen(Screen):
         rows = _stat_rows(hero) if hero is not None else []
         stats_top = y + height - len(rows) - 2 if rows else y + height - 3
 
+        self._where = None
         if hero is None:
             self._centre(buffer, y + 3, "???", ASH)
             self._centre(buffer, y + 5, "not yet resurrected", ASH)
         else:
             art = render_word(hero.glyph)
-            for i, line in enumerate(art):
-                self._centre(buffer, y + 2 + i, line, f"bold {hero.color}")
+            # The letter's five rows are the card's layout whether or not there
+            # is a picture to put in them: the name and the prose below sit on
+            # the same line either way, which is what keeps one hero's card from
+            # being taller than the next one's.
+            face = portrait(hero.name)
+            if face is None:
+                for i, line in enumerate(art):
+                    self._centre(buffer, y + 2 + i, line, f"bold {hero.color}")
             self._centre(buffer, y + 2 + len(art), f"{hero.name}  {hero.title}",
                          f"bold {hero.color}")
+            if face is not None:
+                # The figure stands on the last row of the letter's band, the
+                # way it stands on the arena's floor: a picture floats, a
+                # *figure* is standing somewhere.
+                self._where = (
+                    buffer.cols * app.font.cell_w // 2,
+                    (y + 2 + len(art)) * app.font.cell_h,
+                )
             body_y = y + 3 + len(art)
             for i, line in enumerate(wrap(hero.blurb, width - 8)):
                 if body_y + i >= stats_top - 1:
@@ -75,6 +104,24 @@ class HeroSelectScreen(Screen):
         )
         self._centre(buffer, y + height - 2, roster, BONE)
         self._centre(buffer, buffer.rows - 2, "← → choose   enter begin   esc back", ASH)
+
+    def paste(self, image, app) -> None:
+        """The hero, in pixels, over the card the grid drew.
+
+        At its own size and not scaled, which is the same promise the arena
+        keeps: these are painted figures, and a painted figure put through a
+        resize looks like a mistake.
+        """
+        hero = self.current
+        art = portrait(hero.name) if hero is not None else None
+        if self._where is None or art is None:
+            # Nothing to place it on, or nothing to place: the card is a letter
+            # or a question mark, and the grid has already drawn it.
+            return
+        cx, baseline = self._where
+        painter = QPainter(image)
+        painter.drawImage(cx - art.width() // 2, baseline - art.height(), art)
+        painter.end()
 
     @staticmethod
     def _centre(buffer, y: int, text: str, style: str) -> None:
