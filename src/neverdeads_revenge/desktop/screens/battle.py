@@ -20,6 +20,8 @@ called, which sound a landed blow makes, and how long a beat lasts.
 
 from __future__ import annotations
 
+from typing import Any
+
 import math
 from dataclasses import dataclass
 
@@ -622,6 +624,24 @@ class BattleScreen(Screen):
         #: landed, not the moment the rules decided it. Everything that reads a
         #: figure's aliveness for the picture reads this instead.
         self._dying: dict[int, float] = {}
+        #: And which wounds have been *seen*: the same rule one step further, for
+        #: the badge row. The rules inflict a wound at the swing -- they resolve
+        #: the whole turn at once -- and the room must not: a badge that turned up
+        #: while the sword was still in the air is the fight telling the player
+        #: the ending of the sentence they are in the middle of.
+        self._wearing: dict[int, tuple[str, ...]] = {}
+        #: Who the fight still owes a look at, and when. Everything in here is
+        #: read at the frame it comes due, which is always the frame a blow lands
+        #: in or a wound bites -- never the frame the rules knew.
+        self._wounds_due: list[tuple[float, Any]] = []
+        self._catching_up()
+        #: The three numbers on the plate that a *level* moves -- the count, the
+        #: level, and how wide the purse is -- read the way the bars are read and
+        #: not live: the rules raise a level the moment the kill resolves, and the
+        #: fight must not say so until the arrow is going up. Everything else on
+        #: the plate is the hero's own turn rather than a blow's, and stays live.
+        self._plate: dict[str, int] = {}
+        self._reading()
         #: White silhouettes of the sprites, made once and reused: a hit flash is
         #: the figure painted solid white for a few frames.
         self._flashes: dict[tuple[int, str], QImage] = {}
@@ -1948,10 +1968,51 @@ class BattleScreen(Screen):
         if not living:
             self._resync()
 
+    def _reading(self) -> None:
+        """Take down what the plate is allowed to say about the level.
+
+        Not a cache: a *reading*, taken at the moments the fight is not being
+        watched -- the first frame, the end of a round -- and at the one moment
+        it is being watched and ought to move, which is the level-up's own
+        animation. The rules are a moment ahead of the room everywhere else too;
+        this is the same promise the health bars keep.
+        """
+        self._plate = {
+            "kills": self.state.kills_to_level,
+            "level": self.state.level,
+            "top": max(1, self.state.kill_points_max),
+        }
+
     def _snapshot(self) -> None:
         """Freeze what the bars say, so the playback can move them itself."""
         for actor in [self.battle.hero, *self.battle.enemies]:
             self._shown[id(actor)] = actor.stats.hp
+        self._catching_up()
+        self._reading()
+
+    def _catching_up(self, actor=None) -> None:
+        """Read the rules' own wounds, for the badge row to catch up with.
+
+        Called where the fight is *not being watched* -- the first frame, and
+        the moment a round has finished being played -- so that a row can never
+        arrive before the thing it is about. When an actor is named, only that
+        one is read: that is the call the playback makes, one actor at a blow.
+        """
+        actors = (
+            [actor]
+            if actor is not None
+            else [self.battle.hero, *self.battle.enemies]
+        )
+        for one in actors:
+            self._wearing[id(one)] = self._worn_for(one)
+
+    def _worn_for(self, actor) -> tuple[str, ...]:
+        """What the *rules* say this figure is wearing, as a badge row."""
+        return tuple(sorted(key for key in actor.statuses if key in STATUS_ICONS))
+
+    def _worn(self, actor) -> tuple[str, ...]:
+        """What the *room* has shown so far. Empty until an animation says so."""
+        return self._wearing.get(id(actor), ())
 
     def _fall_due(self, app) -> None:
         """Everything that was owed to a blow, once its moment has come.
@@ -1971,6 +2032,16 @@ class BattleScreen(Screen):
             self._showers = [one for one in self._showers if self._clock < one[0]]
             for _when, point, colour, count in due:
                 app.effects.spark(point, colour, count)
+        if self._wounds_due:
+            # And the wounds, on the same clock as the numbers and the sparks:
+            # this is the frame a blow lands in, and a wound belongs to the blow
+            # that made it -- not to the swing, and not to the rules.
+            due = [actor for when, actor in self._wounds_due if self._clock >= when]
+            self._wounds_due = [
+                (when, actor) for when, actor in self._wounds_due if self._clock < when
+            ]
+            for actor in due:
+                self._catching_up(actor)
 
     @staticmethod
     def _beat_for(event) -> float:
@@ -1991,6 +2062,11 @@ class BattleScreen(Screen):
         """Truth, once the round has finished being played."""
         for actor in [self.battle.hero, *self.battle.enemies]:
             self._shown[id(actor)] = actor.stats.hp
+        self._catching_up()
+        # And the plate reads again, so a kill that did *not* raise a level still
+        # moves its count -- at the end of the round, which is where the next
+        # choice is made and nothing is in the middle of being watched.
+        self._reading()
         # And the order: `upcoming` already begins with the turn in flight, so
         # standing still and mid-swing give the same strip and nothing slides. A
         # couple spare, so that the row the panel draws is never shorter than the
@@ -2104,6 +2180,9 @@ class BattleScreen(Screen):
             if not outcome.hit:
                 number.sound = ""
             self._popups.append(number)
+            # Owed, and paid at the impact: a wound the blow inflicts is read on
+            # the frame the number is, which is what "the sword did it" means.
+            self._wounds_due.append((self._clock + IMPACT_AT, struck.target))
             if outcome.hit and not outcome.dodged:
                 point = self._point_of(struck.target, app)
                 if point is not None:
@@ -2182,11 +2261,24 @@ class BattleScreen(Screen):
             # the damage off the real actor, and this is the screen catching up.
             was = self._shown.get(id(actor), actor.stats.hp + status.damage)
             self._shown[id(actor)] = max(0, was - status.damage)
-            self._popups.append(self._popup(str(status.damage), colour, figure, app, False))
+            number = self._popup(str(status.damage), colour, figure, app, False)
+            number.age = -IMPACT_AT
+            number.target_id = id(actor)
+            # A wound that finished it is a *killing blow* like any other, and
+            # the room has to let the figure go -- which it does off this flag.
+            # It was only ever set by a sword, so a monster that bled to death
+            # stayed standing there: no health, the fight over, and a corpse
+            # the arena had never been told about.
+            number.killed = actor.stats.hp <= 0
+            self._popups.append(number)
         point = self._point_of(actor, app)
         if point is not None:
             app.effects.spark(point, colour, SPARKS.get(look, 16))
             app.view.shake(strength=2, seconds=0.12)
+        # And the badge row catches up on the same frame the number does -- which
+        # is also the frame a wound that has *run out* stops being worn, so the
+        # row is never a list of problems the fight is finished with.
+        self._wounds_due.append((self._clock + IMPACT_AT, actor))
         app.play(STATUS_SOUNDS.get(status.key, "hurt"))
 
     def _wash_blow(self, struck: Struck, app) -> None:
@@ -2815,7 +2907,7 @@ class BattleScreen(Screen):
             # which told the player about one trick out of eight; this says what
             # there is to spend, and the price of everything is on the list.
             points = self.kill_points
-            top = max(1, self.state.kill_points_max)
+            top = self._plate["top"]
             # The number stays, small beside it, because at a deep level the
             # stones run out of room before the purse runs out of points.
             room = max(3, width - 14)
@@ -2833,8 +2925,8 @@ class BattleScreen(Screen):
             # The same count the side panel keeps, because a level is the one
             # thing a fight is *for* and the player should not have to leave the
             # room to find out how close it is.
-            to_go = self.state.kills_to_level
-            level = self.state.level
+            to_go = self._plate["kills"]
+            level = self._plate["level"]
             buffer.text(
                 x + 2,
                 y + 4,
@@ -2999,6 +3091,10 @@ class BattleScreen(Screen):
         popup = self._popup(LEVEL_UP, LEVEL_UP_COLOUR, figure, app, True)
         popup.y -= 12  # clear of the damage numbers, which land on the same head
         self._popups.append(popup)
+        # And *now* the plate may say it: the count, the level and the purse all
+        # move with the arrow, which is the moment the level happened for the
+        # player rather than the moment the rules worked it out.
+        self._reading()
         app.play("level")
 
     def _took_a_turn(self, actor) -> None:
@@ -3035,7 +3131,7 @@ class BattleScreen(Screen):
         # in words a player has not had to learn from anywhere else. "The dark"
         # was the fight's own name for its tricks and it read as a mystery; the
         # purse is the same stones the plate counts.
-        top = max(1, self.state.kill_points_max)
+        top = self._plate["top"]
         purse = POINT * min(self.kill_points, top) + HOLLOW * max(
             0, top - self.kill_points
         )

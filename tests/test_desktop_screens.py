@@ -3616,12 +3616,14 @@ def test_a_wound_is_a_badge_on_the_plate_and_not_a_light_on_the_monster(app, fon
         ]
 
     inflict(battle.state, hero, ("burn",))
+    screen._catching_up(hero)  # the room has been *shown* the wound (see below)
     _, burning = drawn(screen, app, font)
     assert not changed(burning, ground), "the wound is still lighting the room"
     assert changed(burning, plate), "the wound was not shown on the plate"
     first = max(changed(burning, plate))
 
     inflict(battle.state, hero, ("chill",))
+    screen._catching_up(hero)
     _, both = drawn(screen, app, font)
     assert max(changed(both, plate)) > first, (
         "the second wound did not line up beside the first"
@@ -3632,6 +3634,7 @@ def test_a_wound_is_a_badge_on_the_plate_and_not_a_light_on_the_monster(app, fon
     # on screen says is wounded.
     bare = drawn(screen, app, font)[1]
     inflict(battle.state, battle.enemies[0], ("poison",))
+    screen._catching_up(battle.enemies[0])
     _, poisoned = drawn(screen, app, font)
     assert changed(poisoned, ground, bare), (
         "the monster's wound is not on the floor with it"
@@ -3639,6 +3642,75 @@ def test_a_wound_is_a_badge_on_the_plate_and_not_a_light_on_the_monster(app, fon
     assert not changed(poisoned, plate, bare), (
         "a monster's wound was written on the player's plate"
     )
+
+
+def test_a_wound_reaches_the_room_only_when_the_blow_lands(app, font):
+    """The animation first, and every display after it.
+
+    Which is the rule the whole arena is built on and the one this row broke:
+    the rules resolve a turn at once, so the *status* is on the monster the
+    moment the hero presses the key -- and the fight must not say so until the
+    sword has arrived. A badge that turned up during the swing is the fight
+    telling the player the ending of the sentence they are in the middle of.
+
+    Read at the swing and at the impact, and the swing is the hard half: the
+    monster has the wound already, in the rules, and the room is still not
+    allowed to have seen it.
+    """
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.world.items import ITEMS, make_item
+
+    battle = arena(count=1)
+    screen = BattleScreen(battle)
+    target = battle.enemies[0]
+    target.stats.hp = 999
+    # A blade that leaves something in: the wound is the *attack's*, and an
+    # attack that wounds nobody would test nothing.
+    battle.hero.equipment["weapon"] = make_item(ITEMS["wound"])
+
+    screen.verb = 0  # ATTACK
+    screen._choose(app)
+
+    assert "bleed" in target.statuses, "the blade did not land its wound at all"
+    assert screen._worn(target) == (), "the wound was shown before the blow landed"
+
+    for _ in range(30):  # past the impact, which is where the sword arrives
+        screen.step(1 / 30.0, app)
+
+    assert "bleed" in screen._worn(target), "the wound never reached the room"
+
+
+def test_a_monster_killed_by_its_own_wound_is_let_go_like_any_other(app, font):
+    """The fade is owed to a *death*, and the room only ever heard about the
+    ones a sword did.
+
+    A monster that bled to death kept its zero health and stayed standing: the
+    fight was over, the room was quiet, and the corpse was still in it -- which
+    is a fight with no monster in it and a monster in it. The flag the fade
+    hangs off was set by a killing *blow* and by nothing else, and a wound that
+    finishes something is not a blow. It is a death like any other.
+    """
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+
+    battle = arena(count=2)
+    screen = BattleScreen(battle)
+    other, wounded = battle.enemies
+    other.stats.hp = 999  # so the hero's own swing is not what finishes it
+    wounded.stats.hp = 1
+    wounded.statuses["bleed"] = 1
+
+    screen.verb = 0  # ATTACK at the first of them
+    screen._choose(app)
+    for _ in range(240):  # the wounds bite last, after the blows have played
+        screen.step(1 / 30.0, app)
+        if id(wounded) in screen._dying:
+            break
+
+    assert not wounded.stats.alive, "the wound did not finish it"
+    assert id(wounded) in screen._dying, "the wound's kill was never seen as a death"
+    for _ in range(5):  # a few frames of the going, which is half a second
+        screen.step(1 / 30.0, app)
+    assert screen._fade(id(wounded)) < 1.0, "the corpse is still standing in the room"
 
 
 def test_the_arena_does_not_offer_a_way_out_that_is_not_there(app, font):
