@@ -40,7 +40,7 @@ def _let_it_strike(state) -> None:
     for the round to come round to the monster.
     """
     from neverdeads_revenge.game.actions import resolve_player_attack
-    from neverdeads_revenge.game.battle import DEFEND, open_fight
+    from neverdeads_revenge.game.battle import ATTACK, open_fight
 
     fight = open_fight(state)
     if fight is None:
@@ -49,7 +49,7 @@ def _let_it_strike(state) -> None:
     living = fight.living_enemies()
     if fight.over or not living:
         return
-    fight.choose(DEFEND)
+    fight.choose(ATTACK, fight.living_enemies()[0])
 
 
 def _wait(state, times: int = 1) -> None:
@@ -842,7 +842,12 @@ def test_the_shop_sells_damage_and_crit_now():
     assert edge.crit == 0.05 and edge.max_stacks == 3
 
     state = start_run(HEROES["noxx"], 5, upgrades={"whetstone": 2, "edge": 2})
-    assert state.player.stats.damage == (6, 8), "two stones did not sharpen"
+    from neverdeads_revenge.game.actors import NOXX
+
+    base = NOXX.stats.damage
+    assert state.player.stats.damage == (base[0] + 2, base[1] + 2), (
+        "two stones did not sharpen"
+    )
     assert abs(state.player.stats.crit_chance - 0.35) < 1e-9
 
 

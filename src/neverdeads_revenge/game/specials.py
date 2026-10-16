@@ -24,6 +24,7 @@ from dataclasses import dataclass
 __all__ = [
     "AVALANCHE",
     "BELLS_THROW",
+    "CHORD",
     "BETWEEN_BLOWS",
     "DEVOURING_DARKNESS",
     "ECHOING_CUT",
@@ -32,14 +33,19 @@ __all__ = [
     "FRIENDS_LIKE_THESE",
     "HOARFROST",
     "LEFT_HAND",
+    "LONG_WINTER",
     "OPEN_VEIN",
     "ORB_OF_PTAMERA",
+    "OVERTURE",
     "RIME",
     "SHATTERED_BELL",
+    "SILENCE",
+    "SNOW_BLIND",
     "SPECIALS",
     "SPECIALS_BY_HERO",
     "STILLNESS",
     "TRUE_NOTE",
+    "QUAKE",
     "VOID",
     "Special",
     "learned_at",
@@ -57,11 +63,17 @@ OPEN_VEIN = "open_vein"
 BETWEEN_BLOWS = "between_blows"
 VOID = "the_void"
 AVALANCHE = "avalanche"
+SNOW_BLIND = "snow_blind"
+QUAKE = "quake"
+LONG_WINTER = "long_winter"
 RIME = "rime"
 HOARFROST = "hoarfrost"
 STILLNESS = "stillness"
 FORTRESS = "frozen_fortress"
 FIRST_NOTE = "first_note"
+OVERTURE = "overture"
+CHORD = "ringing_chord"
+SILENCE = "silence_after"
 BELLS_THROW = "bells_throw"
 TRUE_NOTE = "true_note"
 ECHOING_CUT = "echoing_cut"
@@ -208,6 +220,15 @@ YETI_SPECIALS: tuple[Special, ...] = (
         level=2,
     ),
     Special(
+        key=SNOW_BLIND,
+        cost=3,
+        effect="a cut, and it loses its place",
+        look="throw",
+        name="THE SNOW BLIND",
+        blurb="the mountain does not shout; it puts out the light",
+        level=3,
+    ),
+    Special(
         key=RIME,
         cost=3,
         effect="small cut, slows them 4 turns",
@@ -237,6 +258,24 @@ YETI_SPECIALS: tuple[Special, ...] = (
         look="aura",
     ),
     Special(
+        key=QUAKE,
+        cost=10,
+        effect="all of them at 70%, and shoved",
+        look="shatter",
+        name="THE QUAKE",
+        blurb="he puts the mountain into the floor, and the floor answers",
+        level=7,
+    ),
+    Special(
+        key=LONG_WINTER,
+        cost=9,
+        effect="all of them: a cut, and chilled",
+        look="frost",
+        name="THE LONG WINTER",
+        blurb="the cold comes in and stays; the legs are the first to go",
+        level=8,
+    ),
+    Special(
         key=FORTRESS,
         cost=12,
         effect="armour x2, blows halved (floor)",
@@ -261,6 +300,15 @@ WALKYRION_SPECIALS: tuple[Special, ...] = (
         name="THE FIRST NOTE",
         blurb="one cut, and the note of it carries to what is behind him",
         level=2,
+    ),
+    Special(
+        key=OVERTURE,
+        cost=4,
+        effect="a note on all of them, at 60%",
+        look="wave",
+        name="THE OVERTURE",
+        blurb="the first bar is for everyone in the room",
+        level=3,
     ),
     Special(
         key=BELLS_THROW,
@@ -289,6 +337,24 @@ WALKYRION_SPECIALS: tuple[Special, ...] = (
         name="THE ECHOING CUT",
         blurb="the cut lands once and is heard three times",
         level=6,
+    ),
+    Special(
+        key=CHORD,
+        cost=10,
+        effect="a heavy blow, and thrown back",
+        look="throw",
+        name="THE RINGING CHORD",
+        blurb="three notes at once, and the last of them is the floor",
+        level=7,
+    ),
+    Special(
+        key=SILENCE,
+        cost=9,
+        effect="all of them, and all thrown back",
+        look="wave",
+        name="THE SILENCE AFTER",
+        blurb="he stops playing, and the room has lost its place",
+        level=8,
     ),
     Special(
         key=SHATTERED_BELL,

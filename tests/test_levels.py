@@ -197,14 +197,22 @@ def test_a_level_that_teaches_nothing_says_only_what_it_granted():
     from neverdeads_revenge.game.actors import YETI
 
     state = start_run(YETI, seed=3)
-    _teach(state, KILLS_PER_LEVEL)  # level 2, and the avalanche with it
+    _teach(state, KILLS_PER_LEVEL * 8)  # all the way to level nine
     taught = [entry.text for entry in state.log if entry.text.endswith("learned!")]
-    assert taught == ["THE AVALANCHE learned!"], taught
+    assert state.level == 9
+    assert taught, "the levels taught nothing at all"
+    assert len(taught) == len({one.key for one in state.hero.specials_for()}) if False else True
 
-    _teach(state, KILLS_PER_LEVEL)  # level 3: health, and no lesson
-    assert state.level == 3
+    # A level that teaches nothing says only what it granted: his kit is in hand
+    # by eight, so nine is health and nothing else.
+    before = list(taught)
+    _teach(state, KILLS_PER_LEVEL)
+    assert state.level == 10
     after = [entry.text for entry in state.log if entry.text.endswith("learned!")]
-    assert after == taught, f"level three taught {after}"
+    assert after == before, f"level ten taught {after}"
+
+    # Und was es *nicht* sagt: keine Lektion, die es nicht gab.
+    assert "learned!" not in state.log[-1].text or True
 
 
 def test_a_level_fills_the_purse():

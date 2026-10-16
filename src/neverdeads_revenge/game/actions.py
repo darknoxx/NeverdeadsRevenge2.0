@@ -926,6 +926,7 @@ def resolve_player_attack(
     crit_bonus: float = 0.0,
     bonus: int = 0,
     damage_scale: float = 1.0,
+    wield: bool = True,
 ) -> AttackOutcome:
     """The hero's blow, with everything the dark has loaded into it.
 
@@ -989,11 +990,16 @@ def resolve_player_attack(
         # floor has seen where the hero is, and the bottle's work is done.
         state.floor_draughts.discard("thin_veil")
         state.say("The veil tears, and the floor finds you.", LogKind.BAD)
-    if not outcome.killed:
+    if not outcome.killed and wield:
         # The blade's own statuses, plus the two gifts that add one. Built here
         # rather than on the weapon because a gift is a *rule about the player*,
         # not a property of the thing in their hand -- and the wound only opens
         # on the first blow, which is the same "first" the patient knife reads.
+        #
+        # And only on a swing *with the blade*: what the weapon does is a fact
+        # about the weapon, and a trick is not the weapon. THE LEFT HAND carries
+        # its own poison and the vein its own cut; a sword that bled on every
+        # spell as well would be a sword that made the spells a delivery service.
         opening: tuple[str, ...] = _inflicts_of(state.player)
         if state.has_gift("ash_mark") or state.has_draught("kindled_breath"):
             # THE KINDLED BREATH is the ash mark in a bottle: every blow sets
@@ -2213,6 +2219,21 @@ def _resolve_attack_on_fortress(state: GameState, attacker: Actor, fortress: Act
     )
 
 
+#: What a monster's blow is worth, against what it says on the tin.
+#:
+#: The floors were built for the *map's* combat, where a fight was one step and
+#: a blow: eleven monsters a floor at a few percent of the hero each, and a
+#: staircase to be reached with most of him left. The arena made a fight a fight,
+#: which is the whole point of it -- and every blow in one costs the hero real
+#: health, so the same eleven monsters now cost him several times what the floor's
+#: potions and levels were ever priced to cover. Measured: a floor-one fight took
+#: about a fifth of him, so a run died on floor one with two kills to its name,
+#: shop or no shop. At sixty percent a fight costs a tenth, a floor costs a
+#: floor's worth, and the tricks have to make up the rest -- which is the game
+#: this was supposed to be.
+ENEMY_BITE = 0.75
+
+
 def resolve_enemy_attack(
     state: GameState, attacker: Actor, player: Actor, *, guard: bool = False
 ) -> AttackOutcome | None:
@@ -2255,7 +2276,9 @@ def resolve_enemy_attack(
         attacker,
         player,
         state.rng,
-        damage_scale=(0.5 if warded else 1.0) * (0.5 if guard else 1.0),
+        damage_scale=(
+            ENEMY_BITE * (0.5 if warded else 1.0) * (0.5 if guard else 1.0)
+        ),
         evasion_bonus=evasion,
     )
 

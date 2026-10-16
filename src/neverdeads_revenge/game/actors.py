@@ -419,10 +419,10 @@ NOXX = Hero(
     # the wraith already uses. Hex renders exactly and stays his own.
     color="#a855f7",
     stats=Stats(
-        max_hp=26,
-        hp=26,
+        max_hp=42,
+        hp=42,
         speed=1.5,
-        damage=(4, 6),
+        damage=(6, 9),
         crit_chance=0.25,
         crit_multiplier=2.2,
         accuracy=1,
@@ -462,8 +462,8 @@ YETI = Hero(
     glyph="Y",
     color="#7fd4ff",
     stats=Stats(
-        max_hp=52,
-        hp=52,
+        max_hp=66,
+        hp=66,
         speed=0.75,
         # Damage is what makes a slow hero work, and the sweep keeps saying so.
         # Raising his health changed nothing (54 hp measured the same as 46).
@@ -509,8 +509,8 @@ WALKYRION = Hero(
         # "Balanced" measured as the worst hero in the game until that edge
         # existed: a middle of two specialists is below both of them unless it
         # gets a small speciality of its own, and never missing is a quiet one.
-        max_hp=36,
-        hp=36,
+        max_hp=46,
+        hp=46,
         speed=1.15,
         damage=(6, 9),
         crit_chance=0.20,

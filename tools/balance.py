@@ -34,6 +34,12 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from neverdeads_revenge.core.direction import Direction  # noqa: E402
 from neverdeads_revenge.game.actions import Action, perform_action  # noqa: E402
+from neverdeads_revenge.game.battle import (  # noqa: E402
+    ATTACK,
+    ITEM,
+    SPECIAL,
+    open_fight,
+)
 from neverdeads_revenge.game.actors import HEROES  # noqa: E402
 from neverdeads_revenge.game.shop import Loadout  # noqa: E402
 from neverdeads_revenge.game.state import RunState, start_run  # noqa: E402
@@ -53,6 +59,8 @@ DRINK_BELOW = 0.55
 CARRY_LIMIT = 3
 
 #: What a turn is worth before the bot decides it is stuck and gives up.
+#: How long one fight may run before the bot gives up on it.
+FIGHT_CAP = 200
 MAX_IDLE_TURNS = 80
 
 #: The turn cap for one run. Well past any real run; a safety net, not a policy.
@@ -75,6 +83,12 @@ class Run:
     curses: int = 0
     cleansed: int = 0
     escaped: bool = False
+    fights: int = 0
+    tricks: int = 0
+    #: The run did not end, it *stopped*: the bot had nothing it could do. Worth
+    #: separating from a death, because a stall is the tool's fault and a death is
+    #: the game's, and the report used to call both of them dying.
+    stuck: bool = False
 
     @property
     def died(self) -> bool:
@@ -125,11 +139,51 @@ def _bfs_step(state, goals) -> tuple[int, int] | None:
     return None
 
 
+def fight_out(state, fight, spend: bool = False) -> int:
+    """Play one fight the way the bot plays everything: competently, no ideas.
+
+    Swing; drink when the wound is bad; and -- only if the caller asked for it --
+    spend kill points on the *dearest* thing he can afford, which is what a player
+    who wants the big numbers does. Off by default: the bot is the floor of what a
+    player is, and the floor does not use its tricks.
+
+    This used to be the floor's own business: a monster was fought by walking into
+    it, and the dungeon resolved the blow. The arena resolves them now, so a run
+    bot that walked on with an encounter pending was measuring a game where
+    nothing could be killed -- which is exactly what it reported, for a while:
+    every hero, floor one, no kills.
+    """
+    spent = 0
+    fight.begin()
+    guard = 0
+    while not fight.over and guard < FIGHT_CAP:
+        guard += 1
+        living = fight.living_enemies()
+        if not living:
+            break
+        hurt = state.player.hp / state.player.max_hp < DRINK_BELOW
+        if hurt and any(item.heal for item in state.inventory):
+            fight.choose(ITEM)
+            continue
+        chosen = None
+        if spend:
+            affordable = [one for one in fight.learned() if fight.special_available(one)]
+            if affordable:
+                chosen = max(affordable, key=lambda one: one.cost)
+        if chosen is None:
+            fight.choose(ATTACK, living[0])
+        else:
+            fight.choose(SPECIAL, living[0], special=chosen.key)
+            spent += 1
+    return spent
+
+
 def play(
     seed: int,
     hero: str = "noxx",
     loadout: Loadout | None = None,
     fame: bool = False,
+    tricks: bool = False,
 ) -> Run:
     """Play one run to its end and report what happened.
 
@@ -168,7 +222,17 @@ def play(
             action = Action.TAKE_FAME if fame else Action.OPEN_CHEST
         elif beside is not None:
             action = _towards(state, beside.position)
-        elif standing_on is not None and not on_chest:
+        elif (
+            standing_on is not None
+            and not on_chest
+            and len(state.inventory) < CARRY_LIMIT
+        ):
+            # Only when there is room for it. A full pack refuses the pickup and
+            # the *turn is not spent*, so a bot that asked anyway stood on the
+            # same coin pressing the same key until the idle rule ended the run
+            # -- which is what "died on floor one with two kills" was, for every
+            # hero, in every loadout, for as long as this file has been measuring
+            # a game with an arena in it.
             action = Action.PICK_UP
         elif hurt and carrying:
             action = Action.QUAFF
@@ -181,8 +245,15 @@ def play(
             action = _explore(state, can_afford_a_wash)
 
         perform_action(state, action)
+        if state.encounter is not None:
+            # The floor handed a fight over and the arena is where blows happen.
+            fight = open_fight(state)
+            if fight is not None:
+                run.fights += 1
+                run.tricks += fight_out(state, fight, spend=tricks)
         idle = 0 if state.total_turns != before_turns else idle + 1
         if idle > MAX_IDLE_TURNS:
+            run.stuck = True
             break
 
     run.kills = state.kills
@@ -226,11 +297,49 @@ def _explore(state, can_afford_a_wash: bool, seek_chests: bool = False) -> Actio
         if item.slot is not None and item.slot not in state.player.equipment
     ]
 
-    if not targets:
-        targets = [state.exit_pos] if state.exit_pos else []
+    # The exit is *always* on the list. It used to be the fallback for when there
+    # was nothing else to want, which meant one unreachable coin -- behind a
+    # monster, across a gap -- starved the whole run: the bot asked for a step to
+    # the loot, got none, and waited out the turn cap standing still. Which is
+    # what every "runs die on floor one with two kills" number in this file was
+    # actually measuring.
+    if state.exit_pos is not None:
+        targets.append(state.exit_pos)
+
+    # A goal with somebody standing on it is only walkable-at if that somebody is
+    # a monster: a monster's square is a fight and a fight is progress, but an
+    # NPC's square refuses the move and spends no turn, so the path to it is a
+    # path to a wall. That was the last of the stalls: a coin under an NPC, and a
+    # bot pressing the same key at it until the idle rule ended the run.
+    living = {id(enemy) for enemy in state.living_enemies}
+    targets = [
+        pos
+        for pos in targets
+        if state.actor_at(pos) is None or id(state.actor_at(pos)) in living
+    ]
 
     step = _bfs_step(state, targets)
-    return Action.WAIT if step is None else _towards(state, step)
+    if step is not None:
+        return _towards(state, step)
+
+    # And if even the stairs cannot be walked to, the way there is *through*
+    # something: go at the nearest monster that can be reached, and let the arena
+    # settle it. A player does this without thinking about it.
+    reachable = [
+        enemy
+        for enemy in state.living_enemies
+        if _bfs_step(state, [enemy.position]) is not None
+    ]
+    if reachable:
+        nearest = min(
+            reachable,
+            key=lambda enemy: max(
+                abs(enemy.position[0] - state.player.position[0]),
+                abs(enemy.position[1] - state.player.position[1]),
+            ),
+        )
+        return _towards(state, nearest.position)
+    return Action.WAIT
 
 
 #: Everything the shop sells, bought. The "fully upgraded" row of the tables.
@@ -283,11 +392,14 @@ def batch(
     loadout: Loadout | None = None,
     label: str = "",
     fame: bool = False,
+    tricks: bool = False,
 ) -> list[Run]:
     """Play ``seeds`` runs a hero and report them."""
     runs: list[Run] = []
     for hero in heroes:
-        hero_runs = [play(seed, hero, loadout, fame=fame) for seed in range(seeds)]
+        hero_runs = [
+            play(seed, hero, loadout, fame=fame, tricks=tricks) for seed in range(seeds)
+        ]
         runs += hero_runs
         name = f"{hero}{label}"
         print(Report(name, hero_runs))
@@ -309,6 +421,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="pay every chest's price for the promise instead of the blade",
     )
+    parser.add_argument(
+        "--tricks",
+        action="store_true",
+        help="spend kill points on the dearest trick he can afford",
+    )
     args = parser.parse_args(argv)
 
     heroes = args.hero or list(HEROES)
@@ -319,9 +436,10 @@ def main(argv: list[str] | None = None) -> int:
     loadout = FULL if args.loadout == "full" else None
     print(
         f"{args.seeds} seeds a hero, loadout: {args.loadout}"
-        f"{', every chest taken for fame' if args.fame else ''}\n"
+        f"{', every chest taken for fame' if args.fame else ''}"
+        f"{', spending kill points' if args.tricks else ', swinging only'}\n"
     )
-    runs = batch(heroes, args.seeds, loadout, fame=args.fame)
+    runs = batch(heroes, args.seeds, loadout, fame=args.fame, tricks=args.tricks)
 
     print()
     depths = Counter(run.depth for run in runs)

@@ -299,11 +299,11 @@ def test_three_waits_in_a_row_close_the_circle():
 
     # The ward is raised; the line it writes is written when a blow is turned
     # aside, and blows land in the arena now.
-    from neverdeads_revenge.game.battle import DEFEND, open_fight
+    from neverdeads_revenge.game.battle import ATTACK, open_fight
 
     fight = open_fight(state, enemy)
     assert fight is not None, "there was no fight to open"
-    fight.choose(DEFEND)
+    fight.choose(ATTACK, fight.living_enemies()[0])
 
     assert any(
         "cannot find you" in entry.text and entry.kind is LogKind.PLAIN

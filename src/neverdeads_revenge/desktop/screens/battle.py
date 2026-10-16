@@ -37,7 +37,6 @@ from PySide6.QtGui import (
 
 from ...game.battle import (
     ATTACK,
-    DEFEND,
     FLEE,
     ITEM,
     SPECIAL,
@@ -152,12 +151,18 @@ FLAIR_COLOURS: dict[str, str] = {
     "the_void": "#e8ffff",
     # Yeti: the mountain, the rime, the hoarfrost, the stillness, the wall.
     "avalanche": "#cfe8ff",
+    "snow_blind": "#dff4ff",
+    "quake": "#bcdcff",
+    "long_winter": "#8fcdf0",
     "rime": "#9fd8f5",
     "hoarfrost": "#bff0ff",
     "stillness": "#7fd4ff",
     "frozen_fortress": "#dff4ff",
     # Walkyrion: the note, the throw, the true note, the echo, the bell.
     "first_note": "#ffd34d",
+    "overture": "#ffdd77",
+    "ringing_chord": "#ffc21f",
+    "silence_after": "#fff3c4",
     "bells_throw": "#ffc21f",
     "true_note": "#ffb000",
     "echoing_cut": "#ffe9a8",
@@ -335,6 +340,12 @@ BEAT = 0.30
 #: beat. A round is a handful of blows and twice as many lines, and this is the
 #: difference between a fight and a queue.
 LINE_BEAT = 0.12
+#: And the end holds the stage for almost nothing. The blow that finishes a fight
+#: has already been watched; the verdict is what the player is waiting for, and
+#: waiting a further beat for the *frame* it arrives in is the fight refusing to
+#: be over -- which is exactly what it looked like from the outside: a fight that
+#: took a few more presses of enter to admit it had ended.
+END_BEAT = 0.06
 #: How long a number hangs in the air over a head. Short: it is not holding the
 #: keyboard any more (see :attr:`BattleScreen.busy`), and a number that outlives
 #: the blow it belongs to is the fight talking about itself.
@@ -1607,7 +1618,7 @@ class BattleScreen(Screen):
             self.verb = (self.verb + 1) % len(VERBS)
             app.play("move")
             return True
-        shortcut = {"a": ATTACK, "s": SPECIAL, "i": ITEM, "d": DEFEND, "f": FLEE}
+        shortcut = {"a": ATTACK, "s": SPECIAL, "i": ITEM, "f": FLEE}
         if name in shortcut:
             self.verb = VERBS.index(shortcut[name])
             self._confirm(app)
@@ -1909,7 +1920,11 @@ class BattleScreen(Screen):
         a round is a handful of blows and twice as many lines, and one number for
         both was the fight narrating at the speed it strikes.
         """
-        return LINE_BEAT if isinstance(event, Said) else BEAT
+        if isinstance(event, Said):
+            return LINE_BEAT
+        if isinstance(event, Over):
+            return END_BEAT
+        return BEAT
 
     def _resync(self) -> None:
         """Truth, once the round has finished being played."""
@@ -2783,7 +2798,7 @@ class BattleScreen(Screen):
         box(buffer, x, y, width, height, title="COMMAND", border=BLOOD, fill=True)
         if height < 4 or width < 12:
             return
-        keys = {ATTACK: "a", SPECIAL: "s", ITEM: "i", DEFEND: "d", FLEE: "f"}
+        keys = {ATTACK: "a", SPECIAL: "s", ITEM: "i", FLEE: "f"}
         rows = [(keys[verb], verb.upper()) for verb in VERBS[: height - 2]]
         chosen = self.verb if self.verb < len(rows) else 0
         ready = self.battle.special_ready()
@@ -2894,16 +2909,21 @@ class BattleScreen(Screen):
         # The purse is in the *frame* of the list and not only on the plate,
         # because the list is what covers the plate: a player choosing what to
         # spend has to be able to see what there is to spend.
+        # The frame says what the panel is, what it costs and what the keys do --
+        # in words a player has not had to learn from anywhere else. "The dark"
+        # was the fight's own name for its tricks and it read as a mystery; the
+        # purse is the same stones the plate counts.
+        top = max(1, self.state.kill_points_max)
+        purse = POINT * min(self.kill_points, top) + HOLLOW * max(
+            0, top - self.kill_points
+        )
         box(
             buffer,
             x,
             y,
             width,
             height,
-            title=(
-                f"THE DARK      {self.kill_points}/{self.state.kill_points_max} kill points"
-                f"      enter  ask      esc  back"
-            ),
+            title=f"SPECIAL ATTACKS      {purse}      enter  use      esc  back",
             border=BLOOD,
             fill=True,
         )
@@ -2925,12 +2945,16 @@ class BattleScreen(Screen):
             # The number in front of it used to be a *keypress*, which is not a
             # thing to read a menu by.
             line = f"{marker} {special.name} {POINT * special.cost}"
+            # Three steps and not two, and the gap between them wide: what he
+            # can pay for is *bright*, what he cannot is barely there, and the
+            # one under the marker is brighter still. The old middle step (ash
+            # next to grey) was a difference the player had to hunt for.
             if not usable:
                 style = parse_style("grey23")
             elif chosen:
                 style = parse_style(f"bold {BONE}")
             else:
-                style = parse_style(ASH)
+                style = parse_style("bold #b9b3c8")
             buffer.text(
                 x + 2 + (index // rows) * column_w,
                 y + 1 + (index % rows),

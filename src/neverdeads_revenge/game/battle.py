@@ -41,9 +41,11 @@ from .combat import AttackOutcome
 from .statuses import status_by_key
 from .specials import (
     AVALANCHE,
+    CHORD,
     DEVOURING_DARKNESS,
     FLEETING_SHADOW,
     FRIENDS_LIKE_THESE,
+    LONG_WINTER,
     BELLS_THROW,
     BETWEEN_BLOWS,
     ECHOING_CUT,
@@ -52,8 +54,12 @@ from .specials import (
     LEFT_HAND,
     OPEN_VEIN,
     ORB_OF_PTAMERA,
+    OVERTURE,
+    QUAKE,
     RIME,
     SHATTERED_BELL,
+    SILENCE,
+    SNOW_BLIND,
     STILLNESS,
     TRUE_NOTE,
     VOID,
@@ -67,7 +73,6 @@ from .state import GameState, LogKind
 
 __all__ = [
     "ATTACK",
-    "DEFEND",
     "FLEE",
     "ITEM",
     "SPECIAL",
@@ -94,9 +99,8 @@ STAGE = 3
 ATTACK = "attack"
 SPECIAL = "special"
 ITEM = "item"
-DEFEND = "defend"
 FLEE = "flee"
-VERBS: tuple[str, ...] = (ATTACK, SPECIAL, ITEM, DEFEND, FLEE)
+VERBS: tuple[str, ...] = (ATTACK, SPECIAL, ITEM, FLEE)
 
 
 @dataclass(frozen=True, slots=True)
@@ -197,6 +201,17 @@ TRUE_NOTE_DAMAGE = 3
 #: the verbs are all meant to be worth a turn, and the attack is still the one
 #: that costs nothing and never runs out.
 PLAIN_SWING = 0.85
+
+#: What an area trick does to *each* one of them, against what a single-target
+#: trick does to the one. The crowd is the payment: three at sixty percent is
+#: more than one at a hundred, and none of these should ever be the right answer
+#: against a single monster -- which is the choice they are for.
+QUAKE_SCALE = 0.7
+OVERTURE_SCALE = 0.6
+WINTER_SCALE = 0.5
+SILENCE_SCALE = 0.5
+#: And the one heavy note, for the price of a full purse, on one target.
+CHORD_SCALE = 1.6
 
 #: The orb of Ptamera is *loaded* and not promised: it hunts the throat without
 #: ever being certain of it, which is the one thing that tells it apart from the
@@ -579,7 +594,7 @@ class Battle:
             if enemy is None:
                 return False
             outcome = resolve_player_attack(
-                self.state, enemy, damage_scale=PLAIN_SWING
+                self.state, enemy, damage_scale=PLAIN_SWING, wield=True
             )
             self._splice(before, events)
             events.append(Struck(self.hero, enemy, outcome))
@@ -602,14 +617,6 @@ class Battle:
             result = perform_action(self.state, Action.QUAFF)
             self._splice(before, events)
             return result.consumed_turn
-
-        if command == DEFEND:
-            self._guarded = True
-            before = len(self.state.log)
-            self.state.say("You set your feet and wait for it.", LogKind.PLAIN)
-            self._splice(before, events)
-            events.append(Guarded(self.hero.name))
-            return True
 
         if command == FLEE:
             self._flee(events)
@@ -658,6 +665,12 @@ class Battle:
             DEVOURING_DARKNESS: self._special_devouring_darkness,
             FRIENDS_LIKE_THESE: self._special_friends_like_these,
             OPEN_VEIN: self._special_open_vein,
+            SNOW_BLIND: self._special_snow_blind,
+            QUAKE: self._special_quake,
+            LONG_WINTER: self._special_long_winter,
+            OVERTURE: self._special_overture,
+            CHORD: self._special_ringing_chord,
+            SILENCE: self._special_silence_after,
             BETWEEN_BLOWS: self._special_between_blows,
             VOID: self._special_the_void,
             AVALANCHE: self._special_avalanche,
@@ -698,6 +711,10 @@ class Battle:
             crit_bonus=crit_bonus,
             bonus=bonus,
             damage_scale=damage_scale,
+            # A trick is not the weapon: what the sword does it does when it is
+            # swung, and a spell that carried the sword's wound as well would make
+            # every trick a delivery service for the thing in his hand.
+            wield=False,
         )
         self._splice(before, events)
         events.append(Struck(self.hero, enemy, outcome, flair=flair))
@@ -817,6 +834,96 @@ class Battle:
         self.state.say("You are already somewhere else.", LogKind.GOOD)
         self._splice(before, events)
         self._unseen = True
+
+    def _special_snow_blind(self, target: Actor | None, events: list[Event]) -> None:
+        """A cut, and it loses its place: the snow takes its eyes for a moment.
+
+        The bell's throw in Yeti's hands -- the same shove back down the queue and
+        no bell to do it with. What a mountain has instead of a note.
+        """
+        enemy = self._pick(target)
+        if enemy is None:
+            return
+        before = len(self.state.log)
+        self.state.say("The snow takes the light out of the room.", LogKind.SYSTEM)
+        self._splice(before, events)
+        self._blow(enemy, events, flair=SNOW_BLIND)
+        if enemy.stats.alive:
+            self._throw_back(enemy)
+
+    def _special_quake(self, target: Actor | None, events: list[Event]) -> None:
+        """The floor answers: everything standing takes it, at seventy percent.
+
+        An area trick and priced like one. Against a single monster it is a
+        *worse* blow than the avalanche for twice the points, which is the whole
+        of the choice: the crowd is what pays for it.
+        """
+        before = len(self.state.log)
+        self.state.say("He puts the mountain into the floor.", LogKind.SYSTEM)
+        self._splice(before, events)
+        for enemy in self.living_enemies():
+            if not self.hero.stats.alive:
+                break
+            self._blow(enemy, events, flair=QUAKE, damage_scale=QUAKE_SCALE)
+
+    def _special_long_winter(self, target: Actor | None, events: list[Event]) -> None:
+        """The cold comes in and stays: a cut on each of them, and the chill with it.
+
+        The rime's own wound, handed out to the room: slow legs for everyone, and
+        a little damage while it settles.
+        """
+        before = len(self.state.log)
+        self.state.say("The cold comes in and does not leave.", LogKind.SYSTEM)
+        self._splice(before, events)
+        for enemy in self.living_enemies():
+            if not self.hero.stats.alive:
+                break
+            self._blow(enemy, events, flair=LONG_WINTER, damage_scale=WINTER_SCALE)
+            if enemy.stats.alive:
+                before = len(self.state.log)
+                inflict(self.state, enemy, ("chill",))
+                self._splice(before, events)
+
+    def _special_overture(self, target: Actor | None, events: list[Event]) -> None:
+        """The first bar is for everyone in the room: a note on all of them."""
+        before = len(self.state.log)
+        self.state.say("He strikes the first bar, and the room hears it.", LogKind.SYSTEM)
+        self._splice(before, events)
+        for enemy in self.living_enemies():
+            if not self.hero.stats.alive:
+                break
+            self._blow(enemy, events, flair=OVERTURE, damage_scale=OVERTURE_SCALE)
+
+    def _special_ringing_chord(self, target: Actor | None, events: list[Event]) -> None:
+        """Three notes at once, and the last of them is the floor: a heavy blow,
+        and what it lands on is thrown off its feet."""
+        enemy = self._pick(target)
+        if enemy is None:
+            return
+        before = len(self.state.log)
+        self.state.say(
+            "Three notes at once, and the last of them is the floor.", LogKind.SYSTEM
+        )
+        self._splice(before, events)
+        self._blow(enemy, events, flair=CHORD, damage_scale=CHORD_SCALE)
+        if enemy.stats.alive:
+            self._throw_back(enemy)
+
+    def _special_silence_after(self, target: Actor | None, events: list[Event]) -> None:
+        """He stops playing: every one of them loses its place, and takes a little.
+
+        Not damage -- *order*. The room is put back to the far end of the queue,
+        which is worth more than a blow when there are three of them and one of him.
+        """
+        before = len(self.state.log)
+        self.state.say("He stops, and the room has lost its place.", LogKind.SYSTEM)
+        self._splice(before, events)
+        for enemy in self.living_enemies():
+            if not self.hero.stats.alive:
+                break
+            self._blow(enemy, events, flair=SILENCE, damage_scale=SILENCE_SCALE)
+            if enemy.stats.alive:
+                self._throw_back(enemy)
 
     def _special_the_void(self, target: Actor | None, events: list[Event]) -> None:
         """The dungeon's own ask, in the room: the dark answers, and everything

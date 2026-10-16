@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import pytest
 
+from neverdeads_revenge.game.actions import ENEMY_BITE  # noqa: F401
 from neverdeads_revenge.game.actions import (
     Action,
     perform_action,
@@ -324,8 +325,18 @@ def test_the_grave_ward_halves_the_first_blow_of_each_floor():
     state, brute = duel("grave_ward", brute_damage=(20, 20))
     armour = state.player.armor
 
-    assert land_one_blow(state, brute) == 10 - armour, "the first blow was not halved"
-    assert land_one_blow(state, brute) == 20 - armour, "the ward covered two blows"
+    # The monster's bite is scaled by ENEMY_BITE on its way in (the floors were
+    # built for the map's combat and the arena made a fight a fight), so the
+    # expectation carries the same number the rule does.
+    # The bite, then the halving, then the armour -- the order the rule applies
+    # them in, and the expectation is written in the same order so it cannot pass
+    # by arithmetic accident.
+    assert land_one_blow(state, brute) == round(20 * ENEMY_BITE * 0.5) - armour, (
+        "the first blow was not halved"
+    )
+    assert land_one_blow(state, brute) == round(20 * ENEMY_BITE) - armour, (
+        "the ward covered two blows"
+    )
 
 
 def test_the_grave_ward_is_armed_again_on_the_next_floor():
@@ -374,7 +385,10 @@ def test_a_missed_swing_does_not_spend_the_ward():
 
 def test_without_the_ward_nothing_is_halved():
     state, brute = duel(None, brute_damage=(20, 20))
-    assert land_one_blow(state, brute) == 20 - state.player.armor
+    assert (
+        land_one_blow(state, brute)
+        == round(20 * ENEMY_BITE) - state.player.armor
+    )
 
 
 # -- deathwatch --------------------------------------------------------------

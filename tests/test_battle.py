@@ -20,7 +20,6 @@ from neverdeads_revenge.game.actions import (
 from neverdeads_revenge.game.actors import HEROES
 from neverdeads_revenge.game.battle import (
     ATTACK,
-    DEFEND,
     FLEE,
     ITEM,
     ROOM,
@@ -39,6 +38,7 @@ from neverdeads_revenge.game.battle import (
 )
 from neverdeads_revenge.game.specials import (
     AVALANCHE,
+    CHORD,
     DEVOURING_DARKNESS,
     FLEETING_SHADOW,
     FRIENDS_LIKE_THESE,
@@ -48,10 +48,15 @@ from neverdeads_revenge.game.specials import (
     FIRST_NOTE,
     HOARFROST,
     LEFT_HAND,
+    LONG_WINTER,
     OPEN_VEIN,
     ORB_OF_PTAMERA,
+    OVERTURE,
+    QUAKE,
     RIME,
     SHATTERED_BELL,
+    SILENCE,
+    SNOW_BLIND,
     SPECIALS,
     STILLNESS,
     TRUE_NOTE,
@@ -176,14 +181,21 @@ def test_guarding_halves_what_lands():
         assert with_guard.damage <= without.damage, "guarding did not help"
 
 
-def test_defending_is_a_turn_the_fight_takes():
-    """The verb says it was set, and the round moves on behind it."""
+def test_there_is_no_defend_verb_any_more():
+    """Four verbs and not five: waiting was never worth a turn.
+
+    Standing still halved what landed and did nothing else -- a choice that is
+    only ever right when there is nothing better to do, which is a choice the
+    game should not have offered. The *mechanic* is still here, and still the
+    hero's: THE STILLNESS and THE FROZEN FORTRESS set exactly that guard, which
+    is where halving a blow belongs -- paid for, and on a turn that did something.
+    """
+    from neverdeads_revenge.game.battle import ATTACK, FLEE, ITEM, SPECIAL
+
     state = run()
     battle = Battle(state, take(state))
 
-    events = battle.choose(DEFEND)
-
-    assert any(isinstance(event, Guarded) for event in events)
+    assert battle.commands() == [ATTACK, SPECIAL, ITEM, FLEE]
 
 
 def test_the_void_takes_everything_and_costs_everything():
@@ -333,7 +345,7 @@ def test_the_menu_offers_all_five_verbs():
     state = run(ultimate_level=99)
     battle = Battle(state, take(state))
 
-    assert battle.commands() == [ATTACK, SPECIAL, ITEM, DEFEND, FLEE]
+    assert battle.commands() == [ATTACK, SPECIAL, ITEM, FLEE]
     assert not battle.special_ready(), "the menu would not dim the ask"
 
 
@@ -479,7 +491,7 @@ def test_the_left_hand_is_a_cut_that_leaves_something_in():
     assert "poison" in enemy.statuses, "the dagger left nothing in him"
 
     hp = enemy.stats.hp
-    battle.choose(DEFEND)  # a round goes by: the poison does its work
+    battle.choose(ATTACK, battle.living_enemies()[0])  # a round goes by: the poison does its work
     assert enemy.stats.hp < hp, "the poison never bit"
 
 
@@ -516,6 +528,97 @@ def test_the_round_reads_back_in_the_order_it_was_taken():
     assert taken == swung, f"the round went {taken} and the blows came {swung}"
     assert taken.count(battle.hero.glyph) == 1, f"his turn is in there twice: {taken}"
     assert battle.hero.glyph in taken, f"his turn is not in there at all: {taken}"
+
+
+def test_the_snow_blind_takes_its_place_in_the_queue():
+    """It is not a bigger blow -- it is a blow that costs the target its *turn*.
+
+    The bell's shove in Yeti's hands: whatever was next for it is now last, and
+    against something quick that is worth more than the damage ever was.
+    """
+    battle = duel("yeti", 3, count=3)
+    for enemy in battle.enemies:
+        enemy.stats.hp = 999
+    chosen = battle.enemies[0]
+    chosen.stats.speed = 9.0  # would act first, and does not any more
+
+    battle.choose(SPECIAL, chosen, special=SNOW_BLIND)
+
+    last = battle.upcoming(4)[-1]
+    assert last is chosen, f"the blind did not cost it its place: {last.name}"
+
+
+def test_the_quake_is_for_a_crowd_and_pays_for_the_crowd():
+    """Everything standing takes it at seventy percent: worse than the avalanche
+    against one, and better against three -- which is the choice it is for."""
+    from neverdeads_revenge.game.battle import QUAKE_SCALE
+
+    assert QUAKE_SCALE < 1.0, "an area trick that hit harder than the single one"
+    battle = duel("yeti", 7, count=3)
+    for enemy in battle.enemies:
+        enemy.stats.hp = 999
+
+    events = battle.choose(SPECIAL, battle.enemies[0], special=QUAKE)
+
+    hit = [one for one in strikes(events) if one.actor is battle.hero]
+    assert [one.target for one in hit] == battle.enemies, "the quake missed somebody"
+    assert {one.flair for one in hit} == {QUAKE}
+
+
+def test_the_long_winter_chills_the_whole_room():
+    """The rime's own wound, handed out to every one of them."""
+    battle = duel("yeti", 8, count=3)
+    for enemy in battle.enemies:
+        enemy.stats.hp = 999
+
+    battle.choose(SPECIAL, battle.enemies[0], special=LONG_WINTER)
+
+    assert all("chill" in enemy.statuses for enemy in battle.enemies), "someone kept warm"
+
+
+def test_the_overture_plays_to_the_whole_room():
+    from neverdeads_revenge.game.battle import OVERTURE_SCALE
+
+    assert OVERTURE_SCALE < 1.0
+    battle = duel("walkyrion", 3, count=3)
+    for enemy in battle.enemies:
+        enemy.stats.hp = 999
+
+    events = battle.choose(SPECIAL, battle.enemies[0], special=OVERTURE)
+
+    hit = [one for one in strikes(events) if one.actor is battle.hero]
+    assert [one.target for one in hit] == battle.enemies, "the overture missed somebody"
+
+
+def test_the_ringing_chord_hits_hard_and_throws():
+    from neverdeads_revenge.game.battle import CHORD_SCALE
+
+    assert CHORD_SCALE > 1.0, "the dearest single-target note is not heavy"
+    battle = duel("walkyrion", 7, count=3)
+    for enemy in battle.enemies:
+        enemy.stats.hp = 999
+    chosen = battle.enemies[0]
+    chosen.stats.speed = 9.0
+
+    events = battle.choose(SPECIAL, chosen, special=CHORD)
+
+    hit = [one for one in strikes(events) if one.flair == CHORD]
+    assert hit and hit[0].outcome.damage > 0, "the chord made no sound"
+    assert battle.upcoming(4)[-1] is chosen, "the chord did not throw it"
+
+
+def test_the_silence_leaves_the_room_without_its_place():
+    """Not damage -- *order*: everything is put back to the far end of the queue."""
+    battle = duel("walkyrion", 8, count=3)
+    for enemy in battle.enemies:
+        enemy.stats.hp = 999
+    for enemy in battle.enemies:
+        enemy.stats.speed = 9.0
+
+    battle.choose(SPECIAL, battle.enemies[0], special=SILENCE)
+
+    ahead = battle.upcoming(4)
+    assert ahead[-1] in battle.enemies, "nobody was left at the back"
 
 
 def test_the_orb_hunts_crits_without_promising_them():
@@ -648,7 +751,7 @@ def test_the_purse_fills_one_point_a_turn():
     battle.begin()  # so the round this measures is the hero's, and not the opening one
     battle.state.kill_points = 1
 
-    battle.choose(DEFEND)
+    battle.choose(ATTACK, battle.living_enemies()[0])
 
     assert battle.state.kill_points == 2, "the purse did not fill"
 
@@ -659,7 +762,7 @@ def test_the_purse_never_holds_more_than_the_level_allows():
     battle = levelled(3)
     battle.state.kill_points = battle.state.kill_points_max
 
-    battle.choose(DEFEND)
+    battle.choose(ATTACK, battle.living_enemies()[0])
 
     assert battle.state.kill_points == battle.state.kill_points_max, "it overflowed"
 
@@ -704,7 +807,7 @@ def test_the_open_vein_keeps_costing_him():
     assert "bleed" in enemy.statuses, "the vein was opened and nothing ran"
 
     hp = enemy.stats.hp
-    battle.choose(DEFEND)  # a round goes by: the wound does its work
+    battle.choose(ATTACK, battle.living_enemies()[0])  # a round goes by: the wound does its work
     assert enemy.stats.hp < hp, "the bleed never bit"
 
 
@@ -722,7 +825,7 @@ def test_a_wound_that_bites_is_said_and_shown():
     battle.choose(SPECIAL, enemy, special=OPEN_VEIN)
     assert "bleed" in enemy.statuses
 
-    events = battle.choose(DEFEND)  # a round goes by: the wound does its work
+    events = battle.choose(ATTACK, battle.living_enemies()[0])  # a round goes by: the wound does its work
 
     told = [event.text for event in events if isinstance(event, Said)]
     assert any("bleeding" in text for text in told), f"the wound bit in silence: {told}"
@@ -847,7 +950,9 @@ def test_each_hero_has_their_own_kit():
         assert kit[0].key == first and kit[-1].uses_floor, (
             f"{hero}'s kit is in the wrong order or has no ultimate"
         )
-    assert len(kits["noxx"]) > len(kits["yeti"]), "Noxx's kit did not grow"
+    # Eight each and none shared: a kit is a *character*, and a character whose
+    # moves are somebody else's is a coat of paint.
+    assert len(kits["noxx"]) == len(kits["yeti"]) == len(kits["walkyrion"]) == 8
     assert not kits["noxx"] & kits["yeti"], "the two share a trick"
     assert not kits["noxx"] & kits["walkyrion"], "the two share a trick"
     assert not kits["yeti"] & kits["walkyrion"], "the two share a trick"
