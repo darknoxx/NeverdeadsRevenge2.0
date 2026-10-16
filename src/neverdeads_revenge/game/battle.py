@@ -732,8 +732,12 @@ class Battle:
         enemy = self._pick(target)
         if enemy is None:
             return
-        self._blow(enemy, events, flair=LEFT_HAND)
-        if enemy.stats.alive:
+        outcome = self._blow(enemy, events, flair=LEFT_HAND)
+        # A wound needs a wound *to be in*: a dagger that missed cannot leave
+        # poison in anybody, for the same reason a sword that missed cannot
+        # leave a cut. The weapon's own effects have always been gated on the
+        # hit -- the *tricks* were not, which is the inconsistency this closes.
+        if outcome.hit and enemy.stats.alive:
             before = len(self.state.log)
             inflict(self.state, enemy, ("poison",))
             self._splice(before, events)
@@ -818,8 +822,8 @@ class Battle:
         enemy = self._pick(target)
         if enemy is None:
             return
-        self._blow(enemy, events, flair=OPEN_VEIN)
-        if enemy.stats.alive:
+        outcome = self._blow(enemy, events, flair=OPEN_VEIN)
+        if outcome.hit and enemy.stats.alive:
             before = len(self.state.log)
             inflict(self.state, enemy, ("bleed",))
             self._splice(before, events)
@@ -847,8 +851,8 @@ class Battle:
         before = len(self.state.log)
         self.state.say("The snow takes the light out of the room.", LogKind.SYSTEM)
         self._splice(before, events)
-        self._blow(enemy, events, flair=SNOW_BLIND)
-        if enemy.stats.alive:
+        outcome = self._blow(enemy, events, flair=SNOW_BLIND)
+        if outcome.hit and enemy.stats.alive:
             self._throw_back(enemy)
 
     def _special_quake(self, target: Actor | None, events: list[Event]) -> None:
@@ -878,8 +882,10 @@ class Battle:
         for enemy in self.living_enemies():
             if not self.hero.stats.alive:
                 break
-            self._blow(enemy, events, flair=LONG_WINTER, damage_scale=WINTER_SCALE)
-            if enemy.stats.alive:
+            outcome = self._blow(
+                enemy, events, flair=LONG_WINTER, damage_scale=WINTER_SCALE
+            )
+            if outcome.hit and enemy.stats.alive:
                 before = len(self.state.log)
                 inflict(self.state, enemy, ("chill",))
                 self._splice(before, events)
@@ -905,8 +911,8 @@ class Battle:
             "Three notes at once, and the last of them is the floor.", LogKind.SYSTEM
         )
         self._splice(before, events)
-        self._blow(enemy, events, flair=CHORD, damage_scale=CHORD_SCALE)
-        if enemy.stats.alive:
+        outcome = self._blow(enemy, events, flair=CHORD, damage_scale=CHORD_SCALE)
+        if outcome.hit and enemy.stats.alive:
             self._throw_back(enemy)
 
     def _special_silence_after(self, target: Actor | None, events: list[Event]) -> None:
@@ -921,8 +927,8 @@ class Battle:
         for enemy in self.living_enemies():
             if not self.hero.stats.alive:
                 break
-            self._blow(enemy, events, flair=SILENCE, damage_scale=SILENCE_SCALE)
-            if enemy.stats.alive:
+            outcome = self._blow(enemy, events, flair=SILENCE, damage_scale=SILENCE_SCALE)
+            if outcome.hit and enemy.stats.alive:
                 self._throw_back(enemy)
 
     def _special_the_void(self, target: Actor | None, events: list[Event]) -> None:
@@ -948,8 +954,8 @@ class Battle:
         enemy = self._pick(target)
         if enemy is None:
             return
-        self._blow(enemy, events, flair=RIME)
-        if enemy.stats.alive:
+        outcome = self._blow(enemy, events, flair=RIME)
+        if outcome.hit and enemy.stats.alive:
             before = len(self.state.log)
             inflict(self.state, enemy, ("chill",))
             self._splice(before, events)
@@ -992,9 +998,11 @@ class Battle:
         enemy = self._pick(target)
         if enemy is None:
             return
-        self._blow(enemy, events, flair=FIRST_NOTE)
+        outcome = self._blow(enemy, events, flair=FIRST_NOTE)
         others = [one for one in self.living_enemies() if one is not enemy]
-        if others:
+        if outcome.hit and others:
+            # The note carries *because* it was struck. Miss, and there is no
+            # note to carry.
             self._blow(others[0], events, flair=FIRST_NOTE, damage_scale=0.6)
 
     def _throw_back(self, enemy: Actor) -> None:
@@ -1015,11 +1023,12 @@ class Battle:
         enemy = self._pick(target)
         if enemy is None:
             return
-        self._blow(enemy, events, flair=BELLS_THROW)
-        self._throw_back(enemy)
-        before = len(self.state.log)
-        self.state.say("The ring of it throws him back on his heels.", LogKind.GOOD)
-        self._splice(before, events)
+        outcome = self._blow(enemy, events, flair=BELLS_THROW)
+        if outcome.hit and enemy.stats.alive:
+            self._throw_back(enemy)
+            before = len(self.state.log)
+            self.state.say("The ring of it throws him back on his heels.", LogKind.GOOD)
+            self._splice(before, events)
 
     def _special_true_note(self, target: Actor | None, events: list[Event]) -> None:
         """He finds the note the sword is for, and keeps it: every blow after."""

@@ -797,6 +797,61 @@ def test_the_ultimate_is_the_dearest_thing_in_every_kit():
         assert all(one.cost > 0 for one in kit), f"{hero} has a trick for free"
 
 
+def test_a_miss_leaves_no_wound_behind():
+    """A trick that misses is a trick that missed: no poison, no bleed, no cold.
+
+    The *weapon's* effects have always been gated on the hit -- a sword that
+    missed did not open a wound. The tricks were not, so a dagger that went past
+    your ear left venom in you anyway, and the rime chilled a monster it never
+    touched. One rule for both: a wound needs a wound to be in.
+
+    The blow is stubbed rather than made unlikely: the rule is about what the
+    legs of a trick do with a *missed* outcome, and a test that rolled for one
+    would be a test that passes most of the time.
+    """
+    from neverdeads_revenge.game.combat import AttackOutcome
+    from neverdeads_revenge.game.specials import LEFT_HAND, LONG_WINTER, OPEN_VEIN, RIME
+
+    missed = AttackOutcome(hit=False, crit=False, damage=0, killed=False, dodged=True)
+    riders = (
+        ("noxx", LEFT_HAND, "poison"),
+        ("noxx", OPEN_VEIN, "bleed"),
+        ("yeti", RIME, "chill"),
+        ("yeti", LONG_WINTER, "chill"),
+    )
+    for hero, key, status in riders:
+        battle = duel(hero, 8, count=2)
+        for enemy in battle.enemies:
+            enemy.stats.hp = 999
+        battle._blow = lambda *a, **k: missed  # type: ignore[method-assign]
+
+        battle.choose(SPECIAL, battle.enemies[0], special=key)
+
+        for enemy in battle.enemies:
+            assert status not in enemy.statuses, (
+                f"{key} left {status} on a monster it never touched"
+            )
+
+
+def test_a_miss_throws_nobody():
+    """And the shove is the same rule: the bell that missed does not move him."""
+    from neverdeads_revenge.game.combat import AttackOutcome
+    from neverdeads_revenge.game.specials import BELLS_THROW, SNOW_BLIND
+
+    missed = AttackOutcome(hit=False, crit=False, damage=0, killed=False, dodged=True)
+    for hero, key in (("walkyrion", BELLS_THROW), ("yeti", SNOW_BLIND)):
+        battle = duel(hero, 8, count=1)
+        for enemy in battle.enemies:
+            enemy.stats.hp = 999
+        battle._blow = lambda *a, **k: missed  # type: ignore[method-assign]
+        thrown: list = []
+        battle._throw_back = thrown.append  # type: ignore[method-assign]
+
+        battle.choose(SPECIAL, battle.enemies[0], special=key)
+
+        assert not thrown, f"{key} threw a monster it never touched"
+
+
 def test_the_open_vein_keeps_costing_him():
     """A wound that will not close: the status is left, and a round makes it bite."""
     battle = levelled(5)
