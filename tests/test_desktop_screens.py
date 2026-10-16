@@ -2657,13 +2657,13 @@ def test_the_arena_reads_out_a_lesson(app):
     from PySide6.QtCore import Qt
 
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
-    from neverdeads_revenge.game.levels import KILLS_PER_LEVEL
+    from neverdeads_revenge.game.levels import kills_for_level
 
     # The dark answers at seven here and not at one: with `--testrun` every trick
     # is learned from the start, and a level that teaches nothing (correctly)
     # says nothing either.
     battle = arena(count=1, ultimate_level=7)
-    battle.state.kills = KILLS_PER_LEVEL - 1  # one kill short of level two
+    battle.state.kills = kills_for_level(2) - 1  # one kill short of level two
     battle.state.level = 1
     battle.enemies[0].stats.hp = 1
     screen = BattleScreen(battle)

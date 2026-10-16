@@ -30,7 +30,8 @@ from .actors import Actor
 
 __all__ = [
     "Gain",
-    "KILLS_PER_LEVEL",
+    "LEVEL_COSTS",
+    "kills_for_level",
     "MAX_LEVEL",
     "KILL_POINTS",
     "kill_points_for",
@@ -40,20 +41,39 @@ __all__ = [
     "apply_gain",
 ]
 
-#: Kills that buy one level.
+#: What each level costs, in kills -- level two is the first entry, and the rest
+#: follow it up.
 #:
-#: Four, and the number is doing two jobs. The floors hold ``11 + depth`` monsters,
-#: so a floor you clear is two or three levels -- fast enough that the reward for
-#: fighting arrives while the fight still matters. And it makes the *deep* floors
-#: the ones that teach fastest, which is the right way round: the run should
-#: accelerate into the danger, not away from it.
-KILLS_PER_LEVEL = 4
+#: It used to be one number: four kills a level, forever. That is a *line*, and a
+#: line is the wrong shape for two reasons.
+#:
+#: The first is that it is invisible. A flat cost means the fifty-fifth kill of a
+#: run is worth exactly what the third was, so the only thing growing is a
+#: number, and what the player feels is a treadmill rather than a curve.
+#:
+#: The second is that the floors are not flat. Every descent makes the monsters
+#: tougher and the floor longer, so a flat cost hands the hero *more* levels per
+#: floor as the run goes on -- exactly when the run is supposed to be getting
+#: harder. Which is what "it gets easier the longer you play" looks like from the
+#: inside.
+#:
+#: So the cost climbs: cheap at the start (the first floor teaches three things,
+#: so a new hero has a kit by the time it matters) and dearer as the run goes, so
+#: the deep floors are the ones you *earn* rather than the ones you are handed.
+#: Roughly: a full clear of the first five floors is level nine, where it used to
+#: be eighteen -- and the ceiling is a promise no run has to reach.
+LEVEL_COSTS: tuple[int, ...] = (
+    3, 4, 5, 6, 7, 8, 9, 11, 12, 14,  # levels 2 to 11
+    15, 17, 19, 20, 22, 24, 26, 28, 30, 32,  # 12 to 21
+    34, 36, 38, 40, 43, 45, 48, 50, 53, 55,  # 22 to 31
+    58, 61, 63, 66, 69, 72, 75, 78, 81, 84,  # 32 to 41
+)
 
 #: The level a run stops teaching at.
 #:
 #: Set at the ceiling rather than near it. A perfect clear is every monster on
 #: all ten floors, and there are ``sum(11 + depth for depth in 1..10)`` = 165 of
-#: them, which at :data:`KILLS_PER_LEVEL` is level 42. Forty-one is the last
+#: them, which the flat curve used to buy at level 42. Forty-one is the last
 #: level a run can be *working toward*: the last few kills of a perfect clear
 #: have nothing left to teach, and they are only reachable by clearing every
 #: floor completely, which no measured run has ever come close to.
@@ -132,14 +152,33 @@ class Gain:
         return ", ".join(parts) if parts else "nothing worth writing down"
 
 
+def kills_for_level(level: int) -> int:
+    """The kills it takes to have *reached* ``level``: the steps added up.
+
+    Cumulative and not the step, because that is the question a run asks -- "is
+    he level five yet?" -- and because a table of steps is a table nobody can
+    check by eye. Summed rather than stored, so the two can never drift.
+    """
+    if level <= 1:
+        return 0
+    return sum(LEVEL_COSTS[: min(level, MAX_LEVEL) - 1])
+
+
 def level_for(kills: int) -> int:
     """The level a run with this many kills has reached.
 
     Derived rather than counted up, so a level can never be lost or double-paid
     by a missed call: the kill count is the truth and everything else follows
-    from it.
+    from it. Walks the curve instead of dividing by it, because there is no one
+    number to divide by any more -- each level costs more than the one before.
     """
-    return max(1, min(MAX_LEVEL, 1 + kills // KILLS_PER_LEVEL))
+    level = 1
+    for cost in LEVEL_COSTS:
+        if kills < cost:
+            break
+        kills -= cost
+        level += 1
+    return min(MAX_LEVEL, level)
 
 
 def gains_for(level: int) -> Gain:

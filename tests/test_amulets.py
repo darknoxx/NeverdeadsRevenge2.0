@@ -790,13 +790,13 @@ def test_a_kill_the_mirror_finishes_is_still_a_kill():
 def test_the_mirror_teaches_like_any_other_kill():
     """The same bug from the other end: the kill count feeds the levels, and a
     kill that was not counted was a level the player never got."""
-    from neverdeads_revenge.game.levels import KILLS_PER_LEVEL
+    from neverdeads_revenge.game.levels import kills_for_level
 
     state = wearing("mirror")
     player = state.player
     before = player.max_hp
 
-    for _ in range(KILLS_PER_LEVEL):
+    for _ in range(kills_for_level(2)):
         brute = _a_brute_beside(player, hp=1)
         state.enemies = [brute]
         state.turn_queue = type(state.turn_queue)([player, brute])
@@ -807,6 +807,6 @@ def test_the_mirror_teaches_like_any_other_kill():
             land_one_blow(state, brute)
         assert not brute.alive, "the mirror never finished one"
 
-    assert state.kills == KILLS_PER_LEVEL
+    assert state.kills == kills_for_level(2)
     assert state.level == 2
     assert player.max_hp == before + 2

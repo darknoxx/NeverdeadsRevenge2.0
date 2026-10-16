@@ -15,7 +15,7 @@ from neverdeads_revenge.game.actions import Action, perform_action
 from neverdeads_revenge.game.actors import ENEMIES, NOXX, make_enemy, make_hero
 from neverdeads_revenge.game.combat import AttackOutcome
 from neverdeads_revenge.game.levels import (
-    KILLS_PER_LEVEL,
+    kills_for_level,
     MAX_LEVEL,
     Gain,
     apply_gain,
@@ -30,10 +30,13 @@ from neverdeads_revenge.game.state import start_run
 # -- the curve ---------------------------------------------------------------
 def test_a_run_starts_at_level_one_and_earns_one_every_few_kills():
     assert level_for(0) == 1
-    for kills in range(KILLS_PER_LEVEL):
+    for kills in range(kills_for_level(2)):
         assert level_for(kills) == 1
-    assert level_for(KILLS_PER_LEVEL) == 2
-    assert level_for(KILLS_PER_LEVEL * 2) == 3
+    assert level_for(kills_for_level(2)) == 2
+    # Curve-agnostic: one *less* than the next level's price is still the old
+    # level, whatever the table happens to say the price is.
+    assert level_for(kills_for_level(3) - 1) == 2
+    assert level_for(kills_for_level(3)) == 3
 
 
 def test_the_level_never_goes_backwards():
@@ -48,25 +51,23 @@ def test_the_curve_stops_teaching_at_the_cap():
     assert gains_for(MAX_LEVEL + 20) == Gain()
 
 
-def test_the_cap_sits_where_a_run_can_still_be_working_toward_it():
-    """A cap below the ceiling is a wall a thorough run can feel without ever
-    being told it is there, which is what twenty was.
+def test_the_cap_is_a_promise_and_not_a_wall():
+    """The ceiling is high enough that no run can reach it.
 
-    A perfect clear is every monster on all ten floors. The cap has to be
-    reachable, and it must not leave more than the last level unearned -- a
-    whole level of kills that teach nothing would be the same wall again.
+    It used to be tuned the other way round: a perfect clear -- every monster on
+    all ten floors -- was meant to *arrive* at the cap, with one kill to spare.
+    On a curve that is the wrong thing to want. The cap is there to stop the
+    arithmetic, not to be reached, and a perfect clear that touched it would have
+    kills that taught nothing. The promise is that there is always more to earn.
     """
     from neverdeads_revenge.world.generator import ESCAPE_DEPTH, enemy_count
 
     perfect = sum(enemy_count(depth) for depth in range(1, ESCAPE_DEPTH + 1))
-    # Uncapped, because level_for clamps and would make this test vacuous.
-    ceiling = 1 + perfect // KILLS_PER_LEVEL
 
-    assert ceiling >= MAX_LEVEL, f"a perfect clear is level {ceiling}, below the cap"
-    assert ceiling - MAX_LEVEL <= 1, (
-        f"a perfect clear is level {ceiling}, so the cap wastes {ceiling - MAX_LEVEL} "
-        f"of them"
-    )
+    assert kills_for_level(MAX_LEVEL) > perfect, "a perfect clear hits the ceiling"
+    earned = level_for(perfect)
+    assert earned < MAX_LEVEL, f"a perfect clear is level {earned}, which is the cap"
+    assert earned >= 12, f"a perfect clear is only level {earned}"
 
 
 def test_every_level_after_the_first_grants_something():
@@ -167,7 +168,7 @@ def test_a_kill_teaches_the_hero():
     state = start_run(NOXX, seed=3)
     before = state.player.max_hp
 
-    _teach(state, KILLS_PER_LEVEL)
+    _teach(state, kills_for_level(2))
 
     assert state.level == 2
     assert state.player.max_hp == before + 2
@@ -184,7 +185,7 @@ def test_a_level_says_what_it_taught():
     state = start_run(NOXX, seed=3)
     assert state.level == 1
 
-    _teach(state, KILLS_PER_LEVEL)  # level 2, and the knife arrives with it
+    _teach(state, kills_for_level(2))  # level 2, and the knife arrives with it
 
     told = [entry.text for entry in state.log]
     assert "Level 2" in " ".join(told), told
@@ -197,7 +198,7 @@ def test_a_level_that_teaches_nothing_says_only_what_it_granted():
     from neverdeads_revenge.game.actors import YETI
 
     state = start_run(YETI, seed=3)
-    _teach(state, KILLS_PER_LEVEL * 8)  # all the way to level nine
+    _teach(state, kills_for_level(9))  # all the way to level nine
     taught = [entry.text for entry in state.log if entry.text.endswith("learned!")]
     assert state.level == 9
     assert taught, "the levels taught nothing at all"
@@ -206,7 +207,7 @@ def test_a_level_that_teaches_nothing_says_only_what_it_granted():
     # A level that teaches nothing says only what it granted: his kit is in hand
     # by eight, so nine is health and nothing else.
     before = list(taught)
-    _teach(state, KILLS_PER_LEVEL)
+    _teach(state, kills_for_level(10) - kills_for_level(9))  # exactly one more level
     assert state.level == 10
     after = [entry.text for entry in state.log if entry.text.endswith("learned!")]
     assert after == before, f"level ten taught {after}"
@@ -227,7 +228,7 @@ def test_a_level_fills_the_purse():
     state.kill_points = 0
     assert kill_points_for(2) > kill_points_for(1), "the ceiling did not rise"
 
-    _teach(state, KILLS_PER_LEVEL)  # level 2
+    _teach(state, kills_for_level(2))  # level 2
 
     assert state.level == 2
     assert state.kill_points == state.kill_points_max == kill_points_for(2)
@@ -252,7 +253,7 @@ def test_a_new_floor_is_a_new_purse():
 
 def test_a_kill_that_does_not_reach_a_level_says_nothing():
     state = start_run(NOXX, seed=3)
-    _teach(state, KILLS_PER_LEVEL - 1)
+    _teach(state, kills_for_level(2) - 1)
     assert state.level == 1
     assert not any(entry.text.startswith("Level") for entry in state.log)
 
@@ -261,7 +262,7 @@ def test_what_a_run_taught_survives_the_next_floor():
     """The whole reason it goes into the hero's own stats rather than into a
     bonus field: REVENGE lapses on the way down, and a level must not."""
     state = start_run(NOXX, seed=3)
-    _teach(state, KILLS_PER_LEVEL)
+    _teach(state, kills_for_level(2))
     before = state.player.max_hp
     assert state.revenge_stacks > 0
 
@@ -274,18 +275,18 @@ def test_what_a_run_taught_survives_the_next_floor():
 
 def test_the_level_is_a_run_total_and_not_a_floor_one():
     state = start_run(NOXX, seed=3)
-    _teach(state, KILLS_PER_LEVEL * 2)
+    _teach(state, kills_for_level(3))
     assert state.level == 3
 
     state.build_floor(3)
 
     assert state.level == 3
-    assert state.kills == KILLS_PER_LEVEL * 2
+    assert state.kills == kills_for_level(3)
 
 
 def test_a_fresh_run_starts_at_level_one_however_the_last_one_ended():
     state = start_run(NOXX, seed=3)
-    _teach(state, KILLS_PER_LEVEL * 5)
+    _teach(state, kills_for_level(2) * 5)
     assert state.level > 1
 
     fresh = start_run(NOXX, seed=3)
@@ -301,7 +302,8 @@ def test_a_fresh_run_starts_at_level_one_however_the_last_one_ended():
 
 def test_levelling_does_not_make_a_hero_stronger_than_the_cap():
     state = start_run(NOXX, seed=3, loadout=Loadout(upgrades={"vigour": 3}))
-    _teach(state, KILLS_PER_LEVEL * 40)
+    # More kills than any run can get: the cap is what stops the arithmetic.
+    _teach(state, kills_for_level(MAX_LEVEL) + 100)
     assert state.level == MAX_LEVEL
     # The cap is a level cap, not a stat cap: the hero keeps whatever the
     # shop and the equipment gave him on top.
@@ -312,7 +314,7 @@ def test_the_walk_into_a_monster_still_works_after_a_level():
     """The integration, played rather than poked: a real kill through
     ``perform_action`` has to level the hero and leave the game coherent."""
     state = start_run(NOXX, seed=3)
-    for _ in range(KILLS_PER_LEVEL):
+    for _ in range(kills_for_level(2)):
         victim = make_enemy(
             ENEMIES["ghoul"], (state.player.position[0] + 1, state.player.position[1])
         )
@@ -331,6 +333,6 @@ def test_the_walk_into_a_monster_still_works_after_a_level():
             if fight is not None:
                 fight.choose(ATTACK, victim)
 
-    assert state.kills == KILLS_PER_LEVEL
+    assert state.kills == kills_for_level(2)
     assert state.level == 2
     assert state.player.alive
