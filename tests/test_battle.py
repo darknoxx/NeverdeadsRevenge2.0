@@ -682,6 +682,12 @@ def test_devouring_darkness_keeps_half_of_what_it_bites():
     enemy.stats.hp = 9999
     battle.hero.stats.hp = 1
     battle.hero.stats.max_hp = 99
+    # And nothing else laying a hand on him, because what comes back out is
+    # measured by how far the number went up: a room that took four off him in
+    # the same turn would make a working siphon read as nothing coming back.
+    for other in battle.enemies:
+        other.stats.damage = (0, 0)
+        other.inflicts = ()
 
     events = battle.choose(SPECIAL, enemy, special=DEVOURING_DARKNESS)
 

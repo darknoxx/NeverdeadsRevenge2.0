@@ -2309,7 +2309,7 @@ def test_the_turning_runs_out_the_letter_of_what_was_walked_into(app, font):
     the promise is made -- so it is measured in pixels, where a player reads it.
     """
     from neverdeads_revenge.desktop.buffer import PatternBuffer
-    from neverdeads_revenge.desktop.screens.encounter import GROW_FROM, GROW_TO
+    from neverdeads_revenge.desktop.screens.encounter import FLASH_IN, GROW_FROM, GROW_TO
     from neverdeads_revenge.desktop.theme import parse_style
 
     begin_run_in(app)
@@ -2318,8 +2318,16 @@ def test_the_turning_runs_out_the_letter_of_what_was_walked_into(app, font):
     ink = parse_style(enemy.color).fg
     rgb = (ink.red(), ink.green(), ink.blue())
 
-    def ink_at(age: float) -> int:
-        """The monster's colour, in the middle of the frame, at this moment."""
+    def ink_at(age: float, tolerance: int = 12) -> int:
+        """The monster's colour, in the middle of the frame, at this moment.
+
+        Counted nearly exactly, and not "roughly the colour": the step's own
+        white -- the flash, and the rings going out of the square -- passes
+        through *every* grey on its way up out of the dark floor, so a loose
+        match counts the effect as the letter whenever the letter is grey, which
+        the skeleton's is. What is counted here is the glyph's own ink, which is
+        what a player sees a moment later filling the room.
+        """
         screen.age = age
         buffer = PatternBuffer(96, 27, font)
         # The map has to be drawn by *something*: in the app it is the game
@@ -2335,10 +2343,13 @@ def test_the_turning_runs_out_the_letter_of_what_was_walked_into(app, font):
             1
             for y in range(top, bottom, 2)
             for x in range(left, right, 2)
-            if _is_colour(image.pixelColor(x, y), rgb, 70)
+            if _is_colour(image.pixelColor(x, y), rgb, tolerance)
         )
 
-    small = ink_at(GROW_FROM + 0.02)
+    # Sampled once the white has gone: GROW_FROM is when the letter starts
+    # moving, and the rings are out of the room by twice the flash. What is
+    # being measured is the movement, not the first frame of it.
+    small = ink_at(FLASH_IN * 2 + 0.02)
     big = ink_at(GROW_TO - 0.02)
     assert big > small * 3, f"the letter did not come at the camera ({small} -> {big})"
 
@@ -3158,6 +3169,11 @@ def _time_a_round(font, count: int = 3, *, dt: float = 1 / 30.0) -> float:
     for enemy in battle.enemies:
         enemy.stats.hp = 9999
         enemy.stats.damage = (0, 0)
+        # No riders either. A monster that poisons narrates two lines more than
+        # one that does not -- news the player wants, and a number this test
+        # must not read as the fight being slow. The question here is the
+        # clock, and which monster the seed deals should not be part of it.
+        enemy.inflicts = ()
     screen = BattleScreen(battle)
     app = _Quiet(font)
     for _ in range(60):  # anything quicker than the hero gets its turn first

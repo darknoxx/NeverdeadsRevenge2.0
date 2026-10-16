@@ -38,12 +38,21 @@ __all__ = [
     "GeneratedFloor",
     "generate_floor",
     "enemy_count",
+    "CLUSTER",
+    "CLUSTER_REACH",
     "npc_count",
     "ESCAPE_DEPTH",
     "NPC_CHANCE",
     "HUNTER_CHANCE_BY_DEPTH",
     "hunter_chance",
 ]
+
+
+#: How many stand in one room together, and how far apart they can be and still
+#: be in one room. Three is the stage's own limit -- the arena draws three -- and
+#: two squares keeps a group inside the reach a fight is taken at.
+CLUSTER = 3
+CLUSTER_REACH = 2
 
 
 def enemy_count(depth: int) -> int:
@@ -57,8 +66,15 @@ def enemy_count(depth: int) -> int:
     floors felt thin: more bodies is a *different* kind of hard from bigger
     numbers -- it costs turns, it crowds corridors, and it is the thing a slow
     hero has least of.
+
+    And raised once more now that a fight is a *room* rather than a step:
+    monsters stand close enough to be met together, so a denser floor is not
+    more fights but bigger ones -- two and three in the room instead of one and
+    two -- which is where the tricks that hit everything finally have something
+    to hit. The count roughly doubles by the deep floors, and the gold per kill
+    is halved to match: the floor pays the same, in more mouths.
     """
-    return 11 + depth
+    return 13 + depth * 2
 
 
 #: How likely a floor is to have somebody on it.
@@ -382,7 +398,33 @@ def generate_floor(
     # Never hand out fewer spawn points than we need; a cramped floor is fine.
     if enemy_budget is None:
         enemy_budget = min(enemy_count(depth), len(candidates))
-    spawn_points = rng.shuffled(candidates)[:enemy_budget]
+    # Clusters rather than a scatter. A floor used to spread its monsters evenly
+    # over every room's interior, which is a floor of *duels*: walk in, meet one,
+    # and the room behind it is empty. The arena takes the whole room at once, so
+    # a floor wants rooms with two or three in them -- and a room with one in it
+    # is a room where the tricks that hit everything have nothing to hit.
+    #
+    # An anchor and its neighbours, up to the stage's three: the first candidate
+    # takes whoever is standing within CLUSTER_REACH of it, and the rest carry on
+    # as before.
+    spawn_points: list[Pos] = []
+    pool = rng.shuffled(candidates)
+    while pool and len(spawn_points) < enemy_budget:
+        anchor = pool.pop(0)
+        spawn_points.append(anchor)
+        # How many join this one is a roll, and not the full three every time: a
+        # floor where every room holds a crowd is a floor of set pieces, and a
+        # lone monster between them is what makes the crowd *feel* like one.
+        # Some anchors stay alone, most take one, some take two.
+        size = rng.between(0, CLUSTER - 1)
+        crowd = [
+            pos
+            for pos in pool
+            if max(abs(pos[0] - anchor[0]), abs(pos[1] - anchor[1])) <= CLUSTER_REACH
+        ][:size]
+        for pos in crowd:
+            pool.remove(pos)
+            spawn_points.append(pos)
 
     # The hunter, sometimes, on ground nothing else is standing on. Placed
     # before the spring, the npcs and the loot so that the spring's tile rule

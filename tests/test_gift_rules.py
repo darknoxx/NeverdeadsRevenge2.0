@@ -217,15 +217,21 @@ def test_a_blow_you_take_is_what_the_debt_is():
     assert state.blood_debt == 6
 
 
-def test_a_miss_does_not_spend_the_debt():
+def test_a_miss_does_not_spend_the_debt(monkeypatch):
     state = _run("blood_debt")
     state.blood_debt = 9
-    state.player.stats.accuracy = -99  # a swing that cannot land
     enemy = _beside(state, hp=999)
-    enemy.stats.evasion = 99
+
+    # A swing that cannot land, which took telling the die rather than the two
+    # numbers: the game floors a hit at thirty in a hundred whatever the actors
+    # are, so "accuracy -99 against evasion 99" was five *real* rolls that come
+    # up hit about one time in six. That is how this test passed -- on a seed
+    # where five rolls happened to miss -- and how it failed on the next floor
+    # that drew one number more before it.
+    monkeypatch.setattr(state.rng, "chance", lambda probability: False)
 
     for _ in range(5):
-        resolve_player_attack(state, enemy)
+        assert not resolve_player_attack(state, enemy).hit, "the die was told no"
 
     assert state.blood_debt == 9, "a swing that missed is not the blow it was owed on"
 

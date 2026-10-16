@@ -423,7 +423,14 @@ def test_everything_prefers_the_ice_to_the_hero():
 
     _wait(state, 2)
 
-    assert fortress.stats.hp < before_ice, "the wall was ignored"
+    # What the wall is *for* is being bitten, and a bite that glances off it is
+    # still a monster that walked past the hero to get at the ice. So the
+    # promise is read off the log -- the swing, not the wound -- because the
+    # wound is dice, and this test stood or fell on whether one roll of fifteen
+    # in a hundred came up short.
+    spoken = " ".join(line.text for line in state.log)
+    assert "the ice" in spoken, "the wall was ignored"
+    assert fortress.stats.hp <= before_ice, "the wall outgrew itself"
     assert state.player.stats.hp == before_hero, "the hero was bitten anyway"
 
 

@@ -471,6 +471,12 @@ def _hunter_spoils(state: GameState, enemy: Actor) -> None:
     )
 
 
+#: What a kill leaves behind, against what the monster says it was worth. See
+#: :func:`_drop_coins`: the floors hold more monsters now, and this is the other
+#: half of that trade, so that a floor still pays a floor.
+COIN_SCALE = 0.5
+
+
 def _drop_coins(state: GameState, enemy: Actor) -> None:
     """Leave what the monster was carrying where it fell.
 
@@ -483,7 +489,19 @@ def _drop_coins(state: GameState, enemy: Actor) -> None:
     if high <= 0:
         return
 
-    value = max(1, round(state.rng.between(low, high) * state.coin_factor))
+    # Half of what a monster used to drop, because the floors hold twice as
+    # many of them: a purse's worth of coin per floor, spread over more kills.
+    # The score reads the purse too, so the *coin* half of a run's score is
+    # halved with it -- which is the point: more bodies is not meant to pay more.
+    #
+    # Not the hunter, though. There is still one hunter a floor and no more of
+    # them than there ever was, so its purse is not a share of the floor's but a
+    # reward of its own -- and a decision worth taking must not pay half of what
+    # it paid last week.
+    scale = 1.0 if enemy.behaviour == "hunter" else COIN_SCALE
+    value = max(
+        1, round(state.rng.between(low, high) * state.coin_factor * scale)
+    )
     _scatter_coins(state, enemy.position, value)
 
 

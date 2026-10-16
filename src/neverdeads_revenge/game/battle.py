@@ -227,8 +227,11 @@ DEEP_BLEED = "maul"
 
 #: How far from the hero the room reaches. A fight takes whoever is standing in
 #: the same room, and "the same room" is a distance rather than a graph of walls:
-#: two squares is close enough to join in, and a monster across the floor is not.
-ROOM = 2
+#: this many squares is close enough to join in, and a monster across the floor
+#: is not. Three rather than two, because the floors hold more monsters now, and
+#: a room that took only the ones touching the hero still made a crowd of one:
+#: the stage holds three, so three is the reach that fills it.
+ROOM = 3
 
 
 def encounter_around(

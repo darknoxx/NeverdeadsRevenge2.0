@@ -363,8 +363,14 @@ def test_the_coin_multiplier_reaches_the_pile_on_the_floor():
 
         _drop_coins(state, enemy)
 
-    assert plain.dungeon_map.item_at(plain.player.position).gold == 10
-    assert greedy.dungeon_map.item_at(greedy.player.position).gold == 20
+    from neverdeads_revenge.game.actions import COIN_SCALE
+
+    # The floors pay half of what they used to, and *double* the plain run's
+    # half: the gamble is worth a ratio, not a number, and the test says so.
+    plain_gold = plain.dungeon_map.item_at(plain.player.position).gold
+    greedy_gold = greedy.dungeon_map.item_at(greedy.player.position).gold
+    assert plain_gold == max(1, round(10 * COIN_SCALE))
+    assert greedy_gold == plain_gold * 2
 
 
 def test_a_run_without_a_loadout_is_the_run_it_always_was():

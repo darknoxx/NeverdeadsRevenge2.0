@@ -232,13 +232,18 @@ def test_the_coin_hand_stacks_with_a_wild_offer():
 
 
 def test_the_coin_hand_reaches_the_pile_on_the_floor():
-    from neverdeads_revenge.game.actions import _drop_coins
+    from neverdeads_revenge.game.actions import COIN_SCALE, _drop_coins
 
     state, brute = duel("coin_hand")
     brute.gold = (10, 10)
     _drop_coins(state, brute)
 
-    assert state.dungeon_map.item_at(brute.position).gold == 12
+    # Ten, a quarter more for the hand, and the floors' own half on top: the
+    # hand is still worth having, and still worth less than it was when a floor
+    # held half as many monsters.
+    assert state.dungeon_map.item_at(brute.position).gold == max(
+        1, round(10 * 1.25 * COIN_SCALE)
+    )
 
 
 # -- marrow ------------------------------------------------------------------

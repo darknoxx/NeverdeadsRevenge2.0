@@ -1975,8 +1975,14 @@ def test_a_kill_leaves_coins_where_the_monster_fell():
     dropped = state.dungeon_map.item_at(pos)
     assert dropped is not None
     assert dropped.kind == "coin"
+    # Half of what the monster was carrying, because the floors hold twice as
+    # many of them: the floor still pays a floor, in more mouths.
+    from neverdeads_revenge.game.actions import COIN_SCALE
+
     low, high = enemy.gold
-    assert low <= dropped.gold <= high
+    assert (
+        max(1, round(low * COIN_SCALE)) <= dropped.gold <= max(1, round(high * COIN_SCALE))
+    )
 
 
 def test_killing_pays_score_and_the_base_is_still_depth():
