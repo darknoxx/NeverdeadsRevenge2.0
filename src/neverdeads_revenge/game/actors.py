@@ -215,6 +215,12 @@ class Actor:
     glyph: str = "?"
     color: str = "white"
     is_player: bool = False
+    #: Whether this actor is still in the fight. Kept beside ``stats.hp`` and
+    #: not derived from it, so the two have to be kept in step by hand -- and a
+    #: dead thing that still answers ``alive`` blocks the tile it died on and
+    #: raises a fight the arena refuses, which is a corpse the player presses
+    #: into for nothing. Every death goes through ``_on_death``; that is where
+    #: the two are made to agree.
     alive: bool = True
     #: Coins this actor leaves behind when it dies. Copied from the template so
     #: the kill does not have to go looking for which monster it was.

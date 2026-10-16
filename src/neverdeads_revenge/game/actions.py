@@ -336,6 +336,12 @@ def _on_death(state: GameState, enemy: Actor) -> None:
     no level and no ember -- which made an amulet quietly cost the player a
     handful of things it had never mentioned.
     """
+    # The two answers to one question, made to agree here: every death comes
+    # through this door, and a monster left ``alive`` with no health in it is a
+    # monster the map still draws, still walks around, and still raises an
+    # encounter for -- and the arena refuses that fight, because it asks the
+    # *health*. The player presses into a corpse and nothing happens.
+    enemy.alive = False
     state.kills += 1
     state.deaths.append(enemy.position)
     # THE CARRION TONGUE reads this long after the blood has been cleared: a
