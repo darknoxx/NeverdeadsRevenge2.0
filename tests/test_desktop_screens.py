@@ -635,7 +635,7 @@ def test_an_old_hold_cannot_cash_itself_in():
     hold = HoldToContinue()
     assert hold.press("enter") is False
 
-    _time.sleep(1.05)  # long enough to be a release, long enough for 1.0s
+    _time.sleep(1.15)  # long enough to be a release, long enough for 1.0s
     assert hold.press("enter") is False, "a stale hold spent itself in one tap"
 
 
@@ -906,7 +906,7 @@ def test_the_wayland_silence_does_not_tear_the_hold():
 
     hold = HoldToContinue()
     hold.press("enter")  # the fill starts
-    _time.sleep(0.35)  # the repeat delay
+    _time.sleep(0.40)  # the repeat delay, and then some
     hold.release("enter")  # the compositor lifts the key: too long to be a tap
     _time.sleep(0.25)  # ...and its repeats come back late
 
@@ -922,7 +922,7 @@ def test_the_wayland_silence_does_not_tear_the_hold():
     # a lift that stands alone -- short, unrepeated -- is still a tap
     hold.press("enter")
     hold.release("enter")  # immediate: a short down
-    _time.sleep(0.4)
+    _time.sleep(0.45)
     assert hold.press("enter") is False, "a tap's bank paid the next press"
 
 
@@ -1078,6 +1078,12 @@ def test_the_sidebar_knows_the_statuses(app):
 
 
 # -- one compositor lift banks; a second is a hand --------------------------------
+#: Every sleep in this section is deliberately *longer* than the bar it is
+#: measuring, and the margin is not decoration: ``sleep`` on Windows comes back up
+#: to a timer tick early, so a hold that slept exactly 0.4 seconds for a 0.4
+#: second bar reads 0.391 -- and the v0.3.0 release failed on precisely that.
+#: These tests are about whether a hold banks or bridges, which is a race the
+#: held *key* runs against the bar; the machine they run on is not part of it.
 def test_the_second_release_discharges_the_bank():
     """Deliberate half-second taps would otherwise add up through banking:
     the first release inside a fill is bridgeable (the compositor lifts once),
@@ -1088,12 +1094,12 @@ def test_the_second_release_discharges_the_bank():
 
     hold = HoldToContinue()
     hold.press("enter")
-    _time.sleep(0.4)
+    _time.sleep(0.45)
     hold.release("enter")  # the compositor's lift: banked
-    assert hold.progress >= 0.4
+    assert hold.progress >= 0.4, "the lift banked less than it was held for"
 
     hold.press("enter")
-    _time.sleep(0.4)
+    _time.sleep(0.45)
     hold.release("enter")  # a second lift: nobody's compositor did that
     assert hold.progress == 0.0, "long taps added up through the bank"
 
