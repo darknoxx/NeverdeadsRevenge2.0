@@ -314,18 +314,18 @@ CRIT_SHOVE = 1.6
 #: a hitstop and it is the whole of the weight: three frames in which *nothing*
 #: moves, so the hit lands on a room that has stopped rather than on one that is
 #: politely carrying on. Short enough to feel like impact and not like a stall.
-HITSTOP = 0.045
-CRIT_STOP = 0.075
+HITSTOP = 0.035
+CRIT_STOP = 0.05
 HITSTOPS: dict[str, float] = {
-    "orb": 0.07,
-    "drain": 0.06,
-    "shatter": 0.09,
-    "wave": 0.09,
-    "dissolve": 0.11,
-    "throw": 0.07,
-    "shadow": 0.06,
-    "ring": 0.055,
-    "frost": 0.055,
+    "orb": 0.05,
+    "drain": 0.045,
+    "shatter": 0.065,
+    "wave": 0.065,
+    "dissolve": 0.07,
+    "throw": 0.05,
+    "shadow": 0.045,
+    "ring": 0.045,
+    "frost": 0.045,
 }
 #: The wash over the whole room when a blow lands, and how long it holds. Drawn
 #: last and felt first: on a small screen a frame of colour across everything is
@@ -341,11 +341,19 @@ HARD_BLOWS: frozenset[str] = frozenset({"shatter", "wave", "dissolve"})
 #: once would be a spreadsheet with letters drawn on it -- but a fight that
 #: *narrates* at the speed it strikes is a fight that makes the player wait for
 #: its own prose, so a blow and a line do not hold the stage for the same time.
-BEAT = 0.30
+BEAT = 0.34
 #: A line is read at a glance and does not need to be *watched*: a fifth of a
 #: beat. A round is a handful of blows and twice as many lines, and this is the
 #: difference between a fight and a queue.
 LINE_BEAT = 0.12
+#: The invariant the three of them keep: a *beat* is long enough for the
+#: animation it starts, plus the longest stop a blow can be given. Everything
+#: else in a fight waits on the beat -- the next event, the line about it, a
+#: level-up over the hero's head -- so a beat shorter than the blink means the
+#: player is told what happens next before it has finished happening. That is
+#: what it looked like: the sword still coming down and "LVL UP" already over
+#: him. A test holds it.
+#:
 #: And the end holds the stage for almost nothing. The blow that finishes a fight
 #: has already been watched; the verdict is what the player is waiting for, and
 #: waiting a further beat for the *frame* it arrives in is the fight refusing to
@@ -365,7 +373,7 @@ BOB_HEIGHT = 2
 #: before the beat that started it is over -- and the blow lands a fifth of a
 #: second after the player asked for it, which is the number that decides whether
 #: a fight feels like a fight or like a form to fill in.
-STRIKE = 0.44
+STRIKE = 0.26
 IMPACT_AT = STRIKE * 0.46
 #: How long a struck figure shakes, and how far.
 JOLT = 0.20

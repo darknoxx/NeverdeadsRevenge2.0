@@ -3305,6 +3305,29 @@ def test_the_bar_and_the_sparks_wait_for_the_blow(app):
     assert app.effects.particles, "the blow landed without throwing anything"
 
 
+def test_a_beat_is_long_enough_for_the_animation_it_starts():
+    """The invariant that keeps the fight from telling the player what is next
+    before the last thing has finished: a beat covers a whole blink *and* the
+    longest stop a blow can be given.
+
+    It did not, and the symptom was the level-up arriving over the hero's head
+    while the sword was still coming down -- and the same for every log line that
+    followed a strike.
+    """
+    from neverdeads_revenge.desktop.screens.battle import (
+        BEAT,
+        CRIT_STOP,
+        HITSTOP,
+        HITSTOPS,
+        STRIKE,
+    )
+
+    worst = STRIKE + max(HITSTOP, CRIT_STOP, *HITSTOPS.values())
+    assert BEAT >= worst, (
+        f"a beat is {BEAT:.2f}s and the slowest strike takes {worst:.2f}s"
+    )
+
+
 def test_the_order_strip_says_who_acts_next(app, font):
     """Three turns at the bottom of the room, in the alphabet it is made of.
 
