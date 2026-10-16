@@ -2744,6 +2744,50 @@ def test_a_level_up_gets_an_arrow_over_the_hero(app):
     assert "level" in played, f"the level-up made no sound: {played}"
 
 
+def test_the_command_panel_names_what_the_blade_does(app, font):
+    """The weapon's own wounds, beside the verb that swings it.
+
+    In the colours the room draws them in, so the menu and the monsters speak the
+    same vocabulary and the player learns it once -- and `( = X` when his hand is
+    empty, which is worth saying, because fighting bare-handed is a choice.
+    """
+    from types import SimpleNamespace
+
+    from neverdeads_revenge.desktop.screens.battle import STATUS_COLOURS, BattleScreen
+    from neverdeads_revenge.desktop.theme import parse_style
+    from neverdeads_revenge.world.items import ITEMS
+
+    battle = arena(count=1)
+    screen = BattleScreen(battle)
+
+    def panel():
+        buffer, _ = drawn(screen, app, font)
+        for row in buffer.cells:
+            text = "".join(cell.char for cell in row)
+            if "( = " in text:
+                return row, text
+        return [], ""
+
+    _, written = panel()
+    assert "( = X" in written, "a bare hand goes unmentioned"
+
+    blade = next(
+        one for one in ITEMS.values() if one.kind == "weapon" and one.inflicts
+    )
+    # A blade is anything with `inflicts` on it: the screen reads the slot, not
+    # the factory, so this is the whole of what it needs to be.
+    battle.state.player.equipment["weapon"] = SimpleNamespace(inflicts=blade.inflicts)
+
+    row, written = panel()
+    for key in blade.inflicts:
+        assert key in written, f"the blade's {key} is not named"
+        at = written.index(key)
+        inks = {row[col].style.fg.name() for col in range(at, at + len(key))}
+        assert parse_style(STATUS_COLOURS[key]).fg.name() in inks, (
+            f"{key} is not written in its own colour"
+        )
+
+
 def test_a_key_with_nothing_behind_it_says_so(app):
     """SPECIAL at level one is a door onto an empty room, and this one is shut."""
     from PySide6.QtCore import Qt

@@ -308,8 +308,7 @@ def _inflicts_of(actor: Actor) -> tuple[str, ...]:
     """
     if not actor.is_player:
         return actor.inflicts
-    weapon = actor.equipment.get("weapon")
-    return weapon.inflicts if weapon is not None else ()
+    return actor.weapon_inflicts
 
 
 def _remove_corpse(state: GameState, enemy: Actor) -> None:

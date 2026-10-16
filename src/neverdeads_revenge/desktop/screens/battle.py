@@ -2836,6 +2836,33 @@ class BattleScreen(Screen):
             else:
                 style = parse_style(ASH)
             buffer.text(x + 2, y + 1 + index, f"{marker} {key}  {label}", style)
+            if verb == ATTACK:
+                self._draw_wield(buffer, x + 14, y + 1 + index, width - 16)
+
+    def _draw_wield(
+        self, buffer: PatternBuffer, x: int, y: int, room: int
+    ) -> None:
+        """What the blade in his hand does, beside the verb that swings it.
+
+        Short, and in the colours the wounds are drawn in on the monsters: the
+        menu and the room say the same thing, so a player learns the vocabulary
+        once. `( = X` when his hand is empty -- which is worth saying, because
+        fighting bare-handed is a *choice* the game lets him make.
+
+        Read from the equipment and not remembered, so a weapon swapped mid-floor
+        shows up here before the next swing rather than after it.
+        """
+        keys = self.state.player.weapon_inflicts
+        if not keys:
+            buffer.text(x, y, "( = X", parse_style("grey30"))
+            return
+        column = buffer.text(x, y, "( = ", parse_style(ASH))
+        for index, key in enumerate(keys):
+            if index:
+                column = buffer.text(column, y, " + ", parse_style(ASH))
+            if column - x >= room:
+                return
+            column = buffer.text(column, y, key, parse_style(STATUS_COLOURS[key]))
 
     def _draw_targets(
         self, buffer: PatternBuffer, x: int, y: int, width: int, height: int

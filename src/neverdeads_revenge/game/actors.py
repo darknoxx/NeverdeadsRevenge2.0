@@ -299,6 +299,18 @@ class Actor:
         return total
 
     @property
+    def weapon_inflicts(self) -> tuple[str, ...]:
+        """What the blade in his hand leaves behind -- and nothing if he has none.
+
+        Read off the equipment and not remembered, so a weapon swapped mid-floor
+        shows what the *next* swing will do. The arena writes it next to ATTACK,
+        which is why it lives here rather than in the rule that uses it: one
+        answer, two readers.
+        """
+        weapon = self.equipment.get("weapon")
+        return weapon.inflicts if weapon is not None else ()
+
+    @property
     def speed(self) -> float:
         """Effective speed.
 
