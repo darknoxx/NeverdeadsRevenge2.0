@@ -297,6 +297,14 @@ class SdlApp:
         for screen in self.screens[start:]:
             screen.draw(self.grid, self)
         self._surface = paint(self.grid, self.font)
+        # And a screen may paint straight onto the frame once the grid is drawn:
+        # that is where the art lives -- sprites do not fit in a character cell.
+        # It is called `paint_over` and not `paste`, which is Qt's name for the
+        # same pass, because the Qt screens in this same stack have a `paste` too
+        # and it wants a QImage: one name for two media is one crash waiting.
+        paint_over = getattr(self.screens[-1], "paint_over", None)
+        if paint_over is not None:
+            paint_over(self._surface, self)
         self._present()
 
     def _present(self) -> None:

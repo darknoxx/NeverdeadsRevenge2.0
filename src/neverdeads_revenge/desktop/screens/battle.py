@@ -770,7 +770,7 @@ class BattleScreen(Screen):
             x = left + inset - (row % 2) * (tw // 2)
             index = 0
             while x < right - inset:
-                stone = self._floor_stone(index, row, index % 2 == 0)
+                stone = tile(self._floor_stone(index, row, index % 2 == 0))
                 painter.drawImage(int(x), int(y), stone or (light if index % 2 == 0 else dark))
                 x += tw
                 index += 1
@@ -2644,17 +2644,20 @@ class BattleScreen(Screen):
         painter.restore()
 
     @staticmethod
-    def _floor_stone(along: int, row: int, light: bool):
-        """Which flagstone is here: the tone the checker wants, and sometimes what
-        is lying on it.
+    def _floor_stone(along: int, row: int, light: bool) -> str:
+        """Which flagstone is here, by name: the tone the checker wants, and
+        sometimes what is lying on it.
 
         Chosen from the place and not rolled for, for the same reason the wall's
-        scatter is: bones stay where they were left.
+        scatter is: bones stay where they were left. Named rather than loaded,
+        because *which* stone belongs at a place is the room's rule and loading
+        it is the painter's business -- which is what lets a front end with no
+        QPainter lay the same floor.
         """
         tone = "a" if light else "b"
         if _scatter(along, row) % FLOOR_BONES == 0:
-            return tile(f"floor_{tone}_bones") or tile(f"floor_{tone}")
-        return tile(f"floor_{tone}")
+            return f"floor_{tone}_bones"
+        return f"floor_{tone}"
 
     @staticmethod
     def _stone(along: int, course: int):

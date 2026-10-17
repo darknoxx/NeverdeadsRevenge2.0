@@ -80,12 +80,18 @@ def main(argv: list[str] | None = None) -> int:
     surface = paint(grid, font)
     pygame.image.save(surface, str(target))
 
-    print(f"{target}  {surface.get_width()}x{surface.get_height()}  cell {font.cell_w}x{font.cell_h}")
+    print(
+        f"{target}  {surface.get_width()}x{surface.get_height()}"
+        f"  cell {font.cell_w}x{font.cell_h}"
+    )
 
     if arena_target is not None:
         fight = _drawn_into_a_fight()
         pygame.image.save(fight, str(arena_target))
-        print(f"{arena_target}  {fight.get_width()}x{fight.get_height()}  the arena, one round in")
+        print(
+            f"{arena_target}  {fight.get_width()}x{fight.get_height()}"
+            "  the arena, one round in"
+        )
     return 0
 
 

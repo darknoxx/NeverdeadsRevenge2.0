@@ -1,18 +1,21 @@
-"""The fight, as cells: the real arena's panels, and a round that resolves at once.
+"""The fight, as cells and pixels: the real arena's panels, and a round read at once.
 
 This is the same seam job the theme and the grid already had, one screen further
-along, and it came out cleaner than expected. The arena *says* almost everything
-it has to say in cells -- the plate with the purse and the kill count, the log,
-the four verbs, the order strip, and the monsters' own health bars, all of it
-``buffer.text(...)`` and ``self._bar(...)`` rather than a painter. Measured, that
-whole ``draw`` path asks Qt for no typeface, which is why this screen can hand it
-a grid and get a real fight back.
+along. The arena *says* almost everything it has to say in cells -- the plate with
+the purse and the kill count, the log, the four verbs, the order strip, and the
+monsters' own health bars -- all of it ``buffer.text(...)`` and ``self._bar(...)``
+rather than a painter. Measured, that whole ``draw`` path asks Qt for no typeface,
+which is why this screen can hand it a grid and get a real fight back.
 
-What the Qt screen does in *pixels* is the stage: painted tiles, sprites at their
-own size, sparks, flashes, a shaking glass. So the figures are written here as the
-letters they have always been, in their own colours, which is exactly what the
-dungeon drew a moment before the fight -- and the positions come from the arena's
-own staging, so there is one layout and not two.
+Then there is the second pass, which is where the *art* is: the flagstones, the
+sprites standing on them, the shadows, the stripe under each monster. That one is
+`stage.Stage`, and it is not a rewrite either -- the art is PNG files and both
+toolkits read the same ones, and the geometry comes from the arena's own `_field`
+and `_figures`. One room, two painters.
+
+A figure the sheets have no picture for is written as its letter instead, which is
+what the whole arena was for a session and what the art was added on top of: the
+alphabet is still underneath every picture in this game.
 
 One deliberate difference: there is no playback. The Qt arena resolves a round
 into a queue of events and plays them a beat at a time, because every beat is a
@@ -21,7 +24,8 @@ are measured in pixels of a Qt typeface, which this front end must not ask for.
 There is nothing to watch here anyway, so a round is *read* rather than watched:
 the lines go into the log, the verdict goes up, and the screen's own resync puts
 the bars, the badges and the plate where the rules already put them. That is the
-terminal game's own tempo.
+terminal game's own tempo -- and the reason the room stands still, which is what
+the strike poses and the numbers are waiting on.
 """
 
 from __future__ import annotations
@@ -29,6 +33,8 @@ from __future__ import annotations
 from ..desktop.screens.battle import LOG_LINES, BattleScreen
 from ..desktop.theme import parse_style
 from ..game.battle import Over, Said
+from .paint import paint
+from .stage import Stage
 
 __all__ = ["SdlArena"]
 
@@ -41,10 +47,14 @@ class SdlArena:
     def __init__(self, battle) -> None:
         self.battle = battle
         #: The Qt fight, used for everything that is not pixels: its panels, its
-        #: verbs, its order strip, its health bars, and the whole of the rules
-        #: behind them. It is never asked to `paste`, and never asked to `step`,
-        #: which are the two places its painting lives.
+        #: verbs, its order strip, its staging, its floor's geometry, and the whole
+        #: of the rules behind them. It is never asked to `paste` or to `step`,
+        #: which are the two places its *own* painting lives -- the second pass
+        #: here is `stage.Stage`, and the first is its `draw`.
         self.arena = BattleScreen(battle)
+        #: The painted room: the flagstones, the sprites on them, the shadows and
+        #: the stripes. Loaded once, because a room is painted every frame.
+        self._stage = Stage()
         # Whatever happened before the hero's first command -- anything quicker
         # than he is acts first, and that is where a slow hero's fight opens with
         # a blow already thrown at him. The Qt build plays those as the queue is
@@ -55,32 +65,65 @@ class SdlArena:
 
     # -- the picture --------------------------------------------------------
     def draw(self, buffer, app) -> None:
+        """The first pass: the panels, and a letter for anything without art.
+
+        The letters were the whole of the arena for a session and are the fallback
+        now -- exactly the promise the art was added on top of. A figure the
+        sheets have a picture for is left to the second pass, because a letter
+        written here would stand *through* the sprite pasted over it.
+        """
         self.arena.draw(buffer, app)
         cell_w = max(1, buffer.font.cell_w)
         for figure in self.arena._figures(buffer.cols, buffer.rows, buffer.font):
+            if figure.sprite is not None:
+                continue
             x = int(figure.cx) // cell_w
             row = int(figure.row)
             if 0 <= x < buffer.cols and 0 <= row < buffer.rows:
                 buffer.put(x, row, figure.glyph, parse_style(figure.colour))
-        if self.arena.verdict is not None:
-            self._verdict(buffer)
 
-    def _verdict(self, buffer) -> None:
-        """What the fight came to, stamped over the stage the way Qt blits it.
+    def paint_over(self, surface, app) -> None:
+        """The second pass: the room, painted.
+
+        The Qt arena's own order, with the passes that are not here yet left out
+        by name: floor, bars, shadows, figures, and the verdict over the top of
+        them. Missing still are the walls, the wound rows, the arrow, the damage
+        numbers, the strike poses and the colour wash -- the last three of which
+        need a round to be *watched*, which this front end does not do.
+
+        Called `paint_over` rather than `paste` because the Qt screens this app
+        reuses have a `paste` of their own, and it takes a QImage.
+        """
+        cols, rows = self.arena._dims(app)
+        font = app.font
+        figures = self.arena._figures(cols, rows, font)
+        field = self.arena._field(cols, rows, font.cell_w, font.cell_h)
+        fades = {id(one.actor): self.arena._fade(id(one.actor)) for one in figures}
+        self._stage.floor(surface, field)
+        self._stage.health(
+            surface, figures, font, self.arena._shown, self.battle.hero, fades
+        )
+        # The shadows first: they live on the floor, so a figure standing on one
+        # stands on it rather than carrying it around.
+        for figure in figures:
+            self._stage.shadow(surface, figure, font, fades[id(figure.actor)])
+        for figure in figures:
+            self._stage.figure(
+                surface, figure, font, self.arena._clock, fades[id(figure.actor)]
+            )
+        if self.arena.verdict is not None:
+            self._verdict(surface, font, cols, rows)
+
+    def _verdict(self, surface, font, cols: int, rows: int) -> None:
+        """What the fight came to, over the stage the way Qt blits it.
 
         The panel is the arena's own -- the same box, the same rule, the same
-        hint -- asked for as cells and copied whole, spaces and all, so that it is
-        opaque here exactly as it is opaque there. Written *into* the grid rather
-        than over it, because a grid has no second layer: this front end has no
-        pasted figures to cover, so the panel cannot land under anything.
+        hint -- asked for as cells, painted by the grid painter, and laid on top.
+        Painted rather than stamped into the grid because the *room* is painted
+        over the grid: a panel written into it would be buried under the floor.
         """
-        panel, x, y = self.arena._verdict_panel(
-            buffer.cols, buffer.rows, buffer.font
-        )
-        for py in range(panel.rows):
-            for px in range(panel.cols):
-                cell = panel.cells[py][px]
-                buffer.put(x + px, y + py, cell.char, cell.style)
+        panel, x, y = self.arena._verdict_panel(cols, rows, font)
+        surface.blit(paint(panel, font), (x * font.cell_w, y * font.cell_h))
 
     # -- the fight ----------------------------------------------------------
     def key(self, name, event, app) -> bool:
@@ -114,7 +157,11 @@ class SdlArena:
                 )
                 if app is not None:
                     app.play(
-                        "victory" if event.won else "stairs" if event.escaped else "death"
+                        "victory"
+                        if event.won
+                        else "stairs"
+                        if event.escaped
+                        else "death"
                     )
                 if not event.won and not event.escaped and app is not None:
                     # The run ended in here. The arena steps out of the way

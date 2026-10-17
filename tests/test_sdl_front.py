@@ -261,10 +261,21 @@ def test_a_monster_is_walked_into_fought_and_the_floor_comes_back():
     arena = app.screens[-1]
     assert not arena.busy, "the arena is holding a beat it has nothing to show for"
 
-    # And the fight says how it ended, over the stage: the verdict panel is the
-    # arena's own, drawn as cells here instead of blitted as a picture.
-    picture = "\n".join("".join(cell.char for cell in row) for row in app.grid.cells)
-    assert "VICTORY" in picture, "the fight ended without saying so"
+    # And the fight says how it ended. The panel is the arena's own -- the same
+    # box, rule and hint the Qt build blits -- and it is painted *over* the stage
+    # now that the stage is a picture, so the check is the panel and its place
+    # rather than the grid, which the floor is painted over.
+    panel, vx, vy = arena.arena._verdict_panel(
+        app.grid.cols, app.grid.rows, app.font
+    )
+    said = "".join(cell.char for row in panel.cells for cell in row)
+    assert "VICTORY" in said, "the fight ended without saying so"
+    assert (vx + panel.cols) * app.font.cell_w <= app._surface.get_width(), (
+        "the verdict panel lands outside the picture"
+    )
+    assert (vy + panel.rows) * app.font.cell_h <= app._surface.get_height(), (
+        "the verdict panel lands outside the picture"
+    )
 
     app.key("enter")  # leave the verdict
 
@@ -279,14 +290,13 @@ def test_a_monster_is_walked_into_fought_and_the_floor_comes_back():
     assert ghoul not in state.living_enemies, "the dead thing is still on the floor"
 
 
-def test_the_arena_draws_its_panels_and_its_monsters_as_letters():
-    """What a fight looks like on the second front end, asked of the picture.
+def test_the_arena_writes_its_panels_and_leaves_the_figures_to_the_art():
+    """Which pass owns what: the panels are cells, a painted monster is not a letter.
 
     The whole point of the panel split is that this is *readable* without Qt: the
-    plate with the purse, the four verbs, the order strip, the log, and the fight
-    itself as letters in their own colours. The test reads the grid the app drew
-    -- the same grid the painter blits -- and asks for the facts a player would
-    see at a glance: the hero, the monster, its name in the log, and the verbs.
+    plate with the purse, the four verbs, the order strip, the log. The fight
+    itself moved on: a figure the sheets have a picture for is left to the painter,
+    because a letter written here would stand *through* the sprite pasted over it.
     """
     from neverdeads_revenge.game.actors import ENEMIES, make_enemy
     from neverdeads_revenge.sdl_front.app import SdlApp
@@ -308,31 +318,118 @@ def test_the_arena_draws_its_panels_and_its_monsters_as_letters():
 
     app.key("right")  # walk into it
 
-    assert isinstance(app.screens[-1], SdlArena), "the fight did not open"
+    arena = app.screens[-1]
+    assert isinstance(arena, SdlArena), "the fight did not open"
 
-    lines = ["".join(cell.char for cell in row) for row in app.grid.cells]
-    picture = "\n".join(lines)
-
-    # The two figures, in the alphabet the dungeon used a moment before: the
-    # hero's letter and the monster's, on the stage rather than painted over it.
-    assert state.player.glyph in picture, "the hero is not on the stage"
-    assert vipers.glyph in picture, "the monster is not on the stage"
-    # And the verbs, which is the panel the player actually has to read -- and
-    # the plate, which is where the purse and the kill count live.
+    picture = "\n".join("".join(cell.char for cell in row) for row in app.grid.cells)
+    # The verbs, which is the panel the player actually has to read, and the plate,
+    # which is where the purse and the kill count live.
     assert "ATTACK" in picture, "the verb panel is missing"
     assert "NOXX" in picture, "the plate is missing"
 
     # A fast hero acts first, so the room opens in silence and the log is empty
     # until something happens. That is the rules' own shape and not the port's.
-    assert app.screens[-1].arena.lines == [], "the log spoke before anything did"
+    assert arena.arena.lines == [], "the log spoke before anything did"
+
+    # The monster has a picture, so its cell holds no letter: that is the rule the
+    # second pass depends on, checked where the staging actually stands it.
+    figure = next(
+        one
+        for one in arena.arena._figures(app.grid.cols, app.grid.rows, app.font)
+        if one.actor is vipers
+    )
+    assert figure.sprite is not None, "the sheets have no picture for the viper"
+    cell = app.grid.cells[figure.row][figure.cx // app.font.cell_w]
+    assert cell.char != vipers.glyph, "a letter is standing under the sprite"
 
     # Then the blow, and the fight's voice arrives with it: the line names the
-    # monster, and the picture carries it because the log is a cell panel.
+    # monster, and the picture carries it because the log is still a cell panel.
     app.key("a")
     app.key("enter")
-    log = [line.text for line in app.screens[-1].arena.lines]
+    log = [line.text for line in arena.arena.lines]
     assert any(vipers.name in line for line in log), f"the log is silent: {log}"
-    picture = "\n".join(
-        "".join(cell.char for cell in row) for row in app.grid.cells
-    )
+    picture = "\n".join("".join(cell.char for cell in row) for row in app.grid.cells)
     assert vipers.name in picture, "the log panel did not draw what the fight said"
+
+
+def test_the_arena_paints_the_flagstones_and_the_monsters_on_them():
+    """The second pass, asked of the pixels: a room recedes, and a monster stands in it.
+
+    Two facts that only a painted room can have. The floor is laid in flagstones
+    and darkened a row at a time -- heavier the further back -- which is the whole
+    of how distance is drawn here, and is why the far row must measure darker than
+    the near one. And the sprite is a *picture*: the colours the PNG carries have
+    to be on the frame where the staging put the figure, or the monster is a name
+    in a log and nothing else.
+    """
+    font, _ = _sdl()
+    from neverdeads_revenge.desktop.screens.battle import THICKNESS
+    from neverdeads_revenge.game.actors import ENEMIES, make_enemy
+    from neverdeads_revenge.sdl_front.app import SdlApp
+    from neverdeads_revenge.world.tiles import Tile
+
+    app = SdlApp(seed=3)
+    app.key("enter")  # NEW RUN
+    app.key("enter")  # the first hero
+
+    state = app.run
+    here = state.player.position
+    beside = (here[0] + 1, here[1])
+    state.dungeon_map.set_tile(beside, Tile.FLOOR)
+    ghoul = make_enemy(ENEMIES["ghoul"], beside)
+    state.enemies.append(ghoul)
+    state.turn_queue.add(ghoul)
+    state.refresh_vision()
+
+    app.key("right")  # walk into it
+
+    arena = app.screens[-1]
+    surface = app._surface
+    assert surface is not None, "nothing was painted at all"
+
+    cols, rows = arena.arena._dims(app)
+    field = arena.arena._field(cols, rows, app.font.cell_w, app.font.cell_h)
+    top, cell_h = int(field["top"]), int(field["cell_h"])
+
+    def brightness(y: int) -> float:
+        row = [surface.get_at((x, y)) for x in range(surface.get_width())]
+        return sum(one.r + one.g + one.b for one in row) / (len(row) * 3)
+
+    # Sampled through the *middle* of a row of stones and not on its first pixel:
+    # a flagstone's edge is transparent and lets the grid underneath show, which is
+    # the whole point of the art being laid over the alphabet and not instead of it.
+    far, near = (
+        brightness(top + cell_h // 2),
+        brightness(top + (int(field["cells_h"]) - 1) * cell_h + cell_h // 2),
+    )
+    assert far < near, f"the room does not recede: far {far:.1f} vs near {near:.1f}"
+
+    # And the monster itself: the painted figure lands where the staging puts it.
+    # Measured by *withdrawing* the pass and looking at what changes -- a sprite is
+    # blended and not stamped (its edges are soft), so matching its exact colours on
+    # a dark floor would be a test of the blender, not of the port.
+    figure = next(
+        one
+        for one in arena.arena._figures(cols, rows, app.font)
+        if one.actor is ghoul
+    )
+    art = arena._stage.sprite(ghoul.name)
+    assert art is not None, "the sheets have no picture for the ghoul"
+    baseline = figure.row * font.cell_h - THICKNESS
+    box = (
+        max(0, figure.cx - art.get_width() // 2),
+        max(0, baseline - art.get_height()),
+        min(surface.get_width(), figure.cx + art.get_width() // 2),
+        min(surface.get_height(), baseline),
+    )
+    painted = surface.copy()
+    arena._stage.figure = lambda *args, **rest: False
+    app.redraw()
+    bare = app._surface
+    changed = sum(
+        1
+        for x in range(box[0], box[2])
+        for y in range(box[1], box[3])
+        if painted.get_at((x, y)) != bare.get_at((x, y))
+    )
+    assert changed > 200, f"the monster left {changed} pixels on the frame"
