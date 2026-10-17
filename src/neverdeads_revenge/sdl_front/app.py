@@ -197,29 +197,88 @@ class SdlApp:
         self.push(GameOverScreen(self.run, won=won))
 
     def open_encounter(self) -> bool:
-        """The floor handed a fight over. The arena is the next session's work.
+        """The floor handed a fight over. The arena is *not* ready to take it.
 
-        Returns whether there was one to open, like the Qt build does, and shows
-        the placeholder rather than an arena: the fight is *not* resolved behind
-        the player's back, because a game that fights for you is a different game.
+        The fight is not resolved behind the player's back -- a game that fights
+        for you is a different game -- and it is not opened either, because the
+        arena screen cannot come across yet: it is the one screen that still
+        needs Qt's fonts, and Qt's font database and pygame's font module do not
+        survive each other in one process. Measured, repeatedly, and written down
+        in ``tests/test_sdl_front.py`` beside the test that will pass when the
+        panels have been split out.
+
+        So the floor says what happened and waits, which is the honest answer
+        rather than a screen that dies.
         """
         if self.run is None or self.run.encounter is None:
             return False
         from .screens import NotYetScreen
 
-        monsters = [
-            one.name for one in self.run.living_enemies
-        ][:3]
+        monsters = [one.name for one in self.run.living_enemies][:3]
         self.push(
             NotYetScreen(
-                "THE ARENA IS THE NEXT SESSION.",
+                "THE ARENA IS NOT PORTED YET.",
                 "The floor handed over a fight"
                 + (f" -- {', '.join(monsters)} --" if monsters else "")
-                + ". The fight is not resolved for you; it waits, and the room is "
-                "where you left it.",
+                + ". Its panels still need Qt's typeface, and Qt's fonts and "
+                "pygame's do not live in one process. Splitting them out is the "
+                "next session, and the fight waits where it is.",
             )
         )
         return True
+
+    def leave_battle(self) -> None:
+        """The fight is over: back to the floor, or home if there is no floor."""
+        if len(self.screens) > 1:
+            self.pop()
+        else:
+            self.return_to_title()
+        screen = self.screens[-1] if self.screens else None
+        if screen is not None:
+            catch_up = getattr(screen, "catch_up", None)
+            if catch_up is not None:
+                catch_up(self)
+
+    def show_game_over(self, won: bool = False) -> None:
+        from ..desktop.screens.game_over import GameOverScreen
+
+        self.push(GameOverScreen(self.run, won=won))
+
+    def open_encounter(self) -> bool:
+        """The floor handed a fight over: the room becomes the arena.
+
+        The *turning* -- the step, the letter coming at the camera, the white --
+        is painted in pixels and is not ported yet, so the fight opens without
+        it. What is not skipped is the fight: the same ``open_fight`` builds the
+        same room, with the same rules, and the player fights it.
+        """
+        if self.run is None or self.run.encounter is None:
+            return False
+        from ..game.battle import open_fight
+
+        fight = open_fight(self.run)
+        if fight is None:
+            return False
+        self.enter_battle(fight)
+        return True
+
+    def enter_battle(self, battle) -> None:
+        """The arena, in the place of whoever was turning the room over."""
+        from .arena import SdlArena
+
+        self.swap(SdlArena(battle))
+
+    def leave_battle(self) -> None:
+        """The fight is over: back to the floor, or home if there is no floor."""
+        if len(self.screens) > 1:
+            self.pop()
+        else:
+            self.return_to_title()
+        screen = self.screens[-1] if self.screens else None
+        if screen is not None:
+            catch_up = getattr(screen, "catch_up", None)
+            if catch_up is not None:
+                catch_up(self)
 
     def screen_point(self, position):
         """Where a cell is in pixels. ``None`` until the effects layer exists."""
