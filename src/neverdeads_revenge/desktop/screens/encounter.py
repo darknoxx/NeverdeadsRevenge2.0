@@ -31,6 +31,7 @@ import math
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPen
 
+from ..buffer import qcolour
 from ..render import screen_point
 from ..theme import parse_style
 from .base import Screen
@@ -196,9 +197,9 @@ class EncounterScreen(Screen):
         baseline = y + metrics.capHeight() / 2.0
         ink = parse_style(getattr(self.trigger, "color", "#ffffff")).fg
         weight = max(3.0, size / 22.0)
-        painter.setPen(ink.darker(340))
+        painter.setPen(qcolour(ink).darker(340))
         painter.drawText(QPointF(left, baseline + weight), glyph)
-        painter.setPen(ink)
+        painter.setPen(qcolour(ink))
         painter.drawText(QPointF(left, baseline), glyph)
 
     def _paste_white(self, painter: QPainter, width: float, height: float) -> None:

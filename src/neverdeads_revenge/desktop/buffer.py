@@ -20,9 +20,29 @@ from PySide6.QtCore import QRect
 from PySide6.QtGui import QColor, QImage, QPainter
 
 from .font import BitmapFont
-from .theme import BACKGROUND, Style
+from .theme import BACKGROUND, Colour, Style
 
-__all__ = ["Cell", "PatternBuffer"]
+__all__ = ["Cell", "PatternBuffer", "qcolour"]
+
+
+def qcolour(colour) -> QColor:
+    """A colour as the one thing Qt paints with, whatever kind it arrived as.
+
+    Forgiving on purpose. The theme's own `Colour`, a ``QColor`` a painter made
+    for itself, or the hex string a constant was written as all mean the same
+    thing to Qt -- and a seam that has to be told which is which is a seam that
+    gets told wrong once, in a fight, and crashes. So this takes all three and
+    answers the one question the painter asked.
+    """
+    if isinstance(colour, QColor):
+        return colour
+    if isinstance(colour, Colour):
+        return QColor(colour.r, colour.g, colour.b)
+    if isinstance(colour, str):
+        parsed = Colour.parse(colour)
+        if parsed is not None:
+            return QColor(parsed.r, parsed.g, parsed.b)
+    return QColor(colour)
 
 
 @dataclass(slots=True)
@@ -90,7 +110,7 @@ class PatternBuffer:
             self.rows * font.cell_h,
             QImage.Format.Format_ARGB32_Premultiplied,
         )
-        image.fill(BACKGROUND)
+        image.fill(qcolour(BACKGROUND))
 
         painter = QPainter(image)
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, False)
@@ -116,11 +136,17 @@ class PatternBuffer:
         # opaque: the box fills its inside with a colour before anything is
         # written on it, so the dungeon cannot show through.
         if style.bg is not None:
-            painter.fillRect(QRect(left, top, width, self.font.cell_h), style.bg)
+            painter.fillRect(
+                QRect(left, top, width, self.font.cell_h), qcolour(style.bg)
+            )
 
         if style.reverse:
-            painter.fillRect(QRect(left, top, width, self.font.cell_h), style.fg)
-            painter.setPen(style.bg if style.bg is not None else BACKGROUND)
+            painter.fillRect(
+                QRect(left, top, width, self.font.cell_h), qcolour(style.fg)
+            )
+            painter.setPen(
+                qcolour(style.bg) if style.bg is not None else qcolour(BACKGROUND)
+            )
         else:
             painter.setPen(self._ink(style))
 
@@ -142,13 +168,10 @@ class PatternBuffer:
 
     @staticmethod
     def _ink(style: Style) -> QColor:
-        """The colour a glyph is drawn in, with ``dim`` folded in."""
-        if not style.dim:
-            return style.fg
-        # Dim toward the background rather than toward black: the phosphor fades,
-        # it does not switch off, and a remembered wall has to stay a wall.
-        ink = QColor(style.fg)
-        ink.setRed((ink.red() + BACKGROUND.red()) // 2)
-        ink.setGreen((ink.green() + BACKGROUND.green()) // 2)
-        ink.setBlue((ink.blue() + BACKGROUND.blue()) // 2)
-        return ink
+        """The colour a glyph is drawn in, with ``dim`` folded in.
+
+        The dimming itself is the colour's own business now (see
+        ``Colour.dimmed``), because it is a fact about the style rather than
+        about Qt -- and the front end that is not Qt needs it just as much.
+        """
+        return qcolour(style.fg.dimmed() if style.dim else style.fg)

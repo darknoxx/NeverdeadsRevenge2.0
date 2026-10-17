@@ -20,6 +20,7 @@ from PySide6.QtGui import QColor, QImage, QPainter
 
 from neverdeads_revenge.game.actors import ActorKind
 from neverdeads_revenge.game.draughts import draught_by_key
+from .buffer import qcolour
 from neverdeads_revenge.game.levels import RAVAGING_POINTS
 from neverdeads_revenge.game.npcs import NPC_COLOR, NPC_GLYPH
 from neverdeads_revenge.game.state import GameState, LogKind
@@ -35,7 +36,7 @@ from neverdeads_revenge.world.tiles import Tile
 
 from .buffer import PatternBuffer
 from .chrome import ASH, rule
-from .theme import BACKGROUND, Style, parse_style
+from .theme import BACKGROUND, Colour, Style, parse_style
 
 __all__ = [
     "SIDEBAR",
@@ -334,7 +335,7 @@ def paste_sidebar(image, state, cols, rows, cell_w, cell_h, small, now: float | 
     sx, sy, sw, _sh = areas["sidebar"]
 
     painter = QPainter(image)
-    dim = parse_style("grey30").fg
+    dim = qcolour(parse_style("grey30").fg)
     top = (sy + small_face_top(state)) * cell_h
     left = sx * cell_w + small.cell_w
     text_x = left + small.cell_w * 2  # one cell for a glyph, one for air under it
@@ -343,7 +344,7 @@ def paste_sidebar(image, state, cols, rows, cell_w, cell_h, small, now: float | 
 
     def draw(text: str, x: int, y: int, fg) -> None:
         painter.setFont(small.normal)
-        painter.setPen(fg)
+        painter.setPen(qcolour(fg))
         painter.drawText(QRect(x, y, text_w + small.cell_w, small.cell_h + 4), 0, text)
 
     y = top
@@ -539,7 +540,7 @@ def paste_log(
     painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, False)
     # The log's own panel: drawn solid rather than left to whatever the frame
     # had underneath, which is nothing at all now that the cells are clear.
-    painter.fillRect(rect, BACKGROUND)
+    painter.fillRect(rect, qcolour(BACKGROUND))
 
     line_h = small.cell_h
     lines_fit = max(1, rect.height() // line_h)
@@ -549,7 +550,7 @@ def paste_log(
     y = rect.bottom() - line_h * len(visible) + 1
     for entry in visible:
         style = parse_style(log_style(entry.kind))
-        painter.setPen(style.fg)
+        painter.setPen(qcolour(style.fg))
         chars = max(1, text_w // small.cell_w)
         painter.setFont(small.normal)
         painter.drawText(
@@ -574,25 +575,25 @@ ULTIMATE_PROMPTS: dict[str, tuple[str, tuple[int, int, int]]] = {
 #: The blood the floor keeps while the carrion tongue works. Dark, so a coin
 #: or a glyph on top of it still reads, and so it reads as a soaked square
 #: rather than as a second kind of floor.
-BLOOD_TINT = QColor("#3a0f12")
+BLOOD_TINT = Colour(0x3A, 0x0F, 0x12)
 
 #: The cold the floor goes while the Frozen Fortress stands. A cold grey-blue
 #: rather than paper white: bright enough to be the fortress's own weather,
 #: dark enough that the grey of a remembered wall still reads against it.
-FROST = QColor("#bfced2")
+FROST = Colour(0xBF, 0xCE, 0xD2)
 
 #: And the red it goes while it burns. *Dark* red rather than a bright one, for
 #: the opposite reason to the frost being pale: the frost had to keep dark
 #: glyphs legible on it, and this has to keep every glyph in the dungeon legible,
 #: because the things that are not burning keep the colours they had. A bright
 #: red would make the map a warning sign with writing on it.
-EMBER = QColor("#4a120c")
+EMBER = Colour(0x4A, 0x12, 0x0C)
 
 #: And what the fire itself is drawn in: the walls and everything walking on
 #: them. Amber rather than the background's red, because the two are the fire and
 #: what it has caught -- an ember ground with ember writing is a frame, and the
 #: *dungeon* is what should look like it is burning.
-EMBER_INK = QColor("#ffb02e")
+EMBER_INK = Colour(0xFF, 0xB0, 0x2E)
 
 
 def ultimate_ready(state: GameState) -> bool:

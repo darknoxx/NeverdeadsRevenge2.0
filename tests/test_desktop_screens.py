@@ -2330,7 +2330,11 @@ def test_the_battle_floor_recedes(app, font):
     assert far.style.bg is not None and near.style.bg is not None, (
         "a row of the floor is not floor at all"
     )
-    assert near.style.bg.lightness() > far.style.bg.lightness(), (
+    # Brightness as the channels add up, and not Qt's `lightness()`: where the
+    # floor fades is a fact about the *game's* palette, and a test that asks a
+    # GUI toolkit what "light" means is a test that has to be told again when
+    # the front end changes.
+    assert sum(near.style.bg) > sum(far.style.bg), (
         "the floor does not fade with distance"
     )
     assert buffer.cells[y][x].style.bg is None, "the far row is as wide as the near one"

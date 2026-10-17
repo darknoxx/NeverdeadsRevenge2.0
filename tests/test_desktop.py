@@ -252,13 +252,14 @@ def test_the_log_is_a_smaller_face_and_still_clear_of_the_corner(qapp, font, sta
     from PySide6.QtGui import QColor, QImage
 
     from neverdeads_revenge.desktop.font import BitmapFont
+    from neverdeads_revenge.desktop.buffer import qcolour
     from neverdeads_revenge.desktop.render import paste_log, regions
     from neverdeads_revenge.desktop.theme import BACKGROUND
 
     small = BitmapFont(pixel_size=9)
     cols, rows, cw, ch = 96, 27, font.cell_w, font.cell_h
     image = QImage(cols * cw, rows * ch, QImage.Format.Format_ARGB32_Premultiplied)
-    image.fill(BACKGROUND)
+    image.fill(qcolour(BACKGROUND))
     paste_log(image, state, cols, rows, cw, ch, small)
 
     area = regions(cols, rows)["log"]
@@ -267,7 +268,7 @@ def test_the_log_is_a_smaller_face_and_still_clear_of_the_corner(qapp, font, sta
 
     # The first cells of the panel: background, not a word.
     for x in range(left, left + small.cell_w + 2, 2):
-        assert QColor(image.pixelColor(x, middle_y)) == BACKGROUND, (
+        assert QColor(image.pixelColor(x, middle_y)) == qcolour(BACKGROUND), (
             f"a word within {(x - left) / small.cell_w:.1f} cells of the corner"
         )
 

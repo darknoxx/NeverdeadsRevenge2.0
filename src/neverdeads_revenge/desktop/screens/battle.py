@@ -52,6 +52,7 @@ from ...game.battle import (
 )
 from ...game.specials import SPECIALS, Special, special_by_key
 from ...game.statuses import status_by_key
+from ..buffer import qcolour
 from ...game.state import LogKind
 from ..buffer import PatternBuffer
 from ..chrome import ASH, BLOOD, BONE, box, rule
@@ -812,9 +813,12 @@ class BattleScreen(Screen):
                 else "bright_red"
             )
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.fillRect(QRectF(left, top, width, height), parse_style("grey19").fg)
             painter.fillRect(
-                QRectF(left, top, width * ratio, height), parse_style(colour).fg
+                QRectF(left, top, width, height), qcolour(parse_style("grey19").fg)
+            )
+            painter.fillRect(
+                QRectF(left, top, width * ratio, height),
+                qcolour(parse_style(colour).fg),
             )
             # And what is eating it, at the end of the bar: the room used to say
             # this with a light around the figure, and a light could not say
@@ -846,7 +850,7 @@ class BattleScreen(Screen):
         tint = QColor(self._wash.colour)
         painter.setOpacity(self._wash.strength * (1.0 - age / FLASH_LIFE))
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(tint)
+        painter.setBrush(qcolour(tint))
         painter.drawRect(QRectF(0.0, 0.0, float(image.width()), float(image.height())))
         painter.setOpacity(1.0)
 
@@ -1079,7 +1083,7 @@ class BattleScreen(Screen):
         for step in (3, 2, 1):
             trail = QColor(colour)
             trail.setAlpha(20 + step * 16)
-            painter.setBrush(trail)
+            painter.setBrush(qcolour(trail))
             radius = size * (1.0 - step * 0.22)
             painter.drawEllipse(
                 QRectF(
@@ -1356,7 +1360,7 @@ class BattleScreen(Screen):
         # of its own.
         painter.setPen(QColor(0, 0, 0, 220))
         painter.drawText(QPointF(x + 1.0, y - ascent + 1.0), text_)
-        painter.setPen(parse_style("bold white").fg)
+        painter.setPen(qcolour(parse_style("bold white").fg))
         painter.drawText(QPointF(x, y - ascent), text_)
 
     def _paste_wounds(self, painter: QPainter, cols: int, rows: int, app) -> None:
@@ -1444,7 +1448,7 @@ class BattleScreen(Screen):
         stain = QColor(colour)
         stain.setAlpha(200)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(stain)
+        painter.setBrush(qcolour(stain))
         painter.drawEllipse(QRectF(cx - 9, top + 2, 18, 7))
         fall = min(1.0, age / 0.42)
         for index in range(4):
@@ -1455,7 +1459,7 @@ class BattleScreen(Screen):
             painter.setPen(QPen(drop, 2))
             painter.drawLine(QPointF(x, y), QPointF(x, y + 8))
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(drop)
+            painter.setBrush(qcolour(drop))
             painter.drawEllipse(QRectF(x - 2, y + 8, 4, 4))
 
     def _shards(self, painter, cx, top, cell_w, colour, age) -> None:
@@ -1464,7 +1468,7 @@ class BattleScreen(Screen):
         shard = QColor(colour)
         shard.setAlpha(int(255 * (1.0 - throw)))
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(shard)
+        painter.setBrush(qcolour(shard))
         for index in range(12):
             angle = index * math.pi / 6 + 0.3
             dx, dy = math.cos(angle), math.sin(angle) * 0.65
@@ -1548,7 +1552,7 @@ class BattleScreen(Screen):
             painter.setPen(QPen(streak, 2))
             painter.drawLine(QPointF(x, head - 14), QPointF(x, head))
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(streak)
+            painter.setBrush(qcolour(streak))
             painter.drawEllipse(QRectF(x - 2, head - 2, 4, 4))
 
     def _band(self, painter, cx, top, cell_w, colour, age) -> None:
@@ -2561,7 +2565,8 @@ class BattleScreen(Screen):
         ground_top = float(field["top"])
         wall_top = float(field.get("wall_top", ground_top - 60.0))
         band = ground_top - wall_top
-        far_ink, near_ink = parse_style(WALL_FAR).fg, parse_style(WALL_NEAR).fg
+        far_ink = qcolour(parse_style(WALL_FAR).fg)
+        near_ink = qcolour(parse_style(WALL_NEAR).fg)
         # Everything is masonry, and the room is the band it stands in: the wall
         # behind the monsters and the two at the sides all end at the same line,
         # because in this projection they are all the same height. Without the
@@ -2685,7 +2690,7 @@ class BattleScreen(Screen):
         painter.setFont(font.bold)
         advance = QFontMetrics(font.bold).horizontalAdvance("#")
 
-        painter.setPen(parse_style(WALL_FAR).fg)
+        painter.setPen(qcolour(parse_style(WALL_FAR).fg))
         span = field["width_px"] - field["inset_px"] * 2
         count = max(1, round(span / advance))
         start = field["left"] + field["inset_px"]
@@ -2696,8 +2701,8 @@ class BattleScreen(Screen):
         side_font = letter_font(side_size)
         painter.setFont(side_font.bold)
         advance = QFontMetrics(side_font.bold).horizontalAdvance("#")
-        far_ink = parse_style(WALL_FAR).fg
-        near_ink = parse_style(WALL_NEAR).fg
+        far_ink = qcolour(parse_style(WALL_FAR).fg)
+        near_ink = qcolour(parse_style(WALL_NEAR).fg)
         for side in (0, 1):
             # Each wall recedes its own way: the left one goes away up and to
             # the right, the right one up and to the left, and both are the same
@@ -2786,15 +2791,15 @@ class BattleScreen(Screen):
         painter.setFont(glyph_font.bold)
         metrics = QFontMetrics(glyph_font.bold)
         left = cx - metrics.horizontalAdvance(figure.glyph) // 2
-        ink = parse_style(figure.colour).fg
+        ink = qcolour(parse_style(figure.colour).fg)
         painter.setOpacity(opacity)
-        painter.setPen(ink.darker(320))
+        painter.setPen(qcolour(ink).darker(320))
         painter.drawText(left, baseline + THICKNESS, figure.glyph)
         if flash_age is not None:
             painter.setPen(QColor(colour))
             painter.setOpacity(opacity * (1.0 - flash_age / JOLT) * 0.85)
         else:
-            painter.setPen(ink)
+            painter.setPen(qcolour(ink))
         painter.drawText(left, baseline, figure.glyph)
         painter.setOpacity(1.0)
 
@@ -2813,7 +2818,7 @@ class BattleScreen(Screen):
         font = letter_font(max(16, figure.size // 2))
         painter.setFont(font.bold)
         metrics = QFontMetrics(font.bold)
-        ink = parse_style(figure.colour).fg
+        ink = qcolour(parse_style(figure.colour).fg)
         if figure.sprite is not None:
             top = figure.sprite.height()
         else:
@@ -2821,9 +2826,9 @@ class BattleScreen(Screen):
         baseline = figure.row * cell_h - THICKNESS - top - metrics.height() // 3
         baseline -= round(math.sin(self._clock * 5.0) * 2) - 1
         left = figure.cx - metrics.horizontalAdvance(ARROW) // 2
-        painter.setPen(ink.darker(320))
+        painter.setPen(qcolour(ink).darker(320))
         painter.drawText(left, baseline + THICKNESS, ARROW)
-        painter.setPen(ink)
+        painter.setPen(qcolour(ink))
         painter.drawText(left, baseline, ARROW)
 
     def _paste_popup(self, painter: QPainter, popup: Popup) -> None:
@@ -2845,9 +2850,9 @@ class BattleScreen(Screen):
         ink = QColor(
             int(ink.red() * fade), int(ink.green() * fade), int(ink.blue() * fade)
         )
-        painter.setPen(ink.darker(240))
+        painter.setPen(qcolour(ink).darker(240))
         painter.drawText(left, baseline + 3, popup.text)
-        painter.setPen(ink)
+        painter.setPen(qcolour(ink))
         painter.drawText(left, baseline, popup.text)
 
     # -- the ground ---------------------------------------------------------

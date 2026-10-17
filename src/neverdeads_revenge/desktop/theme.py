@@ -1,30 +1,30 @@
 """Colours, and the terminal styles translated.
 
 The game carries its colours the way the terminal version did: hex values and
-Rich colour names. This is where those become something Qt can paint, so the
-palette the player sees on the map is still the palette the game chose -- the
-desktop build is a *renderer*, not a re-skin.
+Rich colour names. This is where those become something a front end can paint,
+so the palette the player sees on the map is still the palette the game chose --
+the desktop build is a *renderer*, not a re-skin.
 
 A ``Style`` is the small part of Rich's style string the game actually uses:
 a foreground, bold, dim, and reverse. Everything the screens pass around --
 ``"bold green"``, ``"dim cyan"``, ``"red"`` -- is parsed here, once, so the
 screens can keep speaking the language they were written in.
+
+**Qt-free on purpose.** This is the seam the two front ends share: one of them
+turns a :class:`Colour` into a ``QColor`` where it paints, the other hands the
+triple to SDL, and neither has to know about the other. It used to hold
+``QColor`` objects, which made the theme -- and therefore every screen that reads
+it -- impossible to use anywhere Qt is not, which is everywhere a handheld is.
+``Colour`` spells itself (``.name()``) exactly as ``QColor`` did, so nothing that
+already read a colour had to be told about the change.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import NamedTuple
 
-from PySide6.QtGui import QColor
-
-__all__ = ["Style", "parse_style", "BACKGROUND", "FOREGROUND"]
-
-
-#: The dungeon's own black, and the phosphor the text is drawn in. Not pure
-#: black and pure white: a CRT never was, and the scanline pass has nothing to
-#: work with against a flat 0 or 255.
-BACKGROUND = QColor("#0b0b0b")
-FOREGROUND = QColor("#c8c8c8")
+__all__ = ["Colour", "Style", "as_colour", "parse_style", "BACKGROUND", "FOREGROUND"]
 
 #: The named colours the game uses, as RGB. Standard and bright ANSI, the two
 #: greys, and the one orange a damage line is drawn in -- the same values the
@@ -51,6 +51,81 @@ NAMED: dict[str, tuple[int, int, int]] = {
     "orange1": (255, 135, 0),
 }
 
+
+class Colour(NamedTuple):
+    """An RGB triple that knows how to spell itself, and what dimming means.
+
+    A tuple and not a class with fields, because both front ends want it as a
+    tuple -- ``QColor(*colour)`` and ``surface.fill(colour)`` -- and because a
+    ``Style`` compares and hashes by it, which is what lets the renderer draw a
+    *run* of same-styled cells as one string.
+    """
+
+    r: int
+    g: int
+    b: int
+
+    @classmethod
+    def parse(cls, word: str) -> Colour | None:
+        """A colour from a name or a hex value, or ``None`` if it is not one."""
+        if word in NAMED:
+            return cls(*NAMED[word])
+        if word.startswith("#"):
+            digits = word[1:]
+            if len(digits) == 3:  # #abc is #aabbcc, the way terminals read it
+                digits = "".join(digit * 2 for digit in digits)
+            if len(digits) == 6:
+                try:
+                    return cls(*(int(digits[i : i + 2], 16) for i in (0, 2, 4)))
+                except ValueError:
+                    return None
+            return None
+        if word.startswith("grey") or word.startswith("gray"):
+            tail = word[4:]
+            if tail.isdigit():
+                level = max(0, min(100, int(tail))) * 255 // 100
+                return cls(level, level, level)
+        return None
+
+    def name(self) -> str:
+        """The colour as ``#rrggbb``, the way ``QColor.name()`` spells it."""
+        return f"#{self.r:02x}{self.g:02x}{self.b:02x}"
+
+    # And the three Qt *readers*, spelled the way Qt spells them, so code that
+    # painstakingly unpacks a colour into its channels -- the wall gradient does
+    # exactly that -- reads the same whether it is holding this or a QColor. The
+    # goal is a seam nobody has to think about, and the cheapest way there is to
+    # answer to both vocabularies.
+    def red(self) -> int:
+        return self.r
+
+    def green(self) -> int:
+        return self.g
+
+    def blue(self) -> int:
+        return self.b
+
+    def dimmed(self) -> Colour:
+        """Halfway to the dungeon's own black.
+
+        Toward the background rather than toward black: the phosphor fades, it
+        does not switch off, and a remembered wall has to stay a wall. It lives
+        here rather than in a renderer because it is a fact about the *style* --
+        a dim line is dim whichever front end is drawing it.
+        """
+        return Colour(
+            (self.r + BACKGROUND.r) // 2,
+            (self.g + BACKGROUND.g) // 2,
+            (self.b + BACKGROUND.b) // 2,
+        )
+
+
+#: The dungeon's own black, and the phosphor the text is drawn in. Not pure
+#: black and pure white: a CRT never was, and the scanline pass has nothing to
+#: work with against a flat 0 or 255.
+BACKGROUND = Colour(0x0B, 0x0B, 0x0B)
+FOREGROUND = Colour(0xC8, 0xC8, 0xC8)
+
 #: Style words that are not a colour.
 _BOLD = {"bold", "b"}
 _DIM = {"dim", "d"}
@@ -58,31 +133,47 @@ _REVERSE = {"reverse", "reversed", "r"}
 _ITALIC = {"italic", "i"}
 
 
+def as_colour(value) -> Colour | None:
+    """Whatever a caller meant by a colour, as the shared one.
+
+    Duck-typed rather than imported, and that is the whole trick: a ``QColor``
+    has ``red``/``green``/``blue`` and so does this, and the theme must not know
+    -- or care -- which of them a front end is holding. A hex string is parsed,
+    a triple is taken as it is, and anything else is nothing.
+
+    The arena used to build ``Style``s out of ``QColor`` objects it had made
+    itself, which is exactly the mixing this ends: one type, understood by
+    everybody, normalised where the object is built rather than where it is
+    painted.
+    """
+    if value is None or isinstance(value, Colour):
+        return value
+    if isinstance(value, str):
+        return Colour.parse(value)
+    if isinstance(value, (tuple, list)) and len(value) == 3:
+        return Colour(*value)
+    if hasattr(value, "red") and hasattr(value, "green") and hasattr(value, "blue"):
+        return Colour(value.red(), value.green(), value.blue())
+    return None
+
+
 @dataclass(frozen=True, slots=True)
 class Style:
     """A foreground, an optional background, and four flags."""
 
-    fg: QColor = field(default_factory=lambda: QColor(FOREGROUND))
-    bg: QColor | None = None
+    fg: Colour = FOREGROUND
+    bg: Colour | None = None
     bold: bool = False
     dim: bool = False
     reverse: bool = False
     italic: bool = False
 
-
-def _colour(word: str) -> QColor | None:
-    """A colour from a name or a hex value, or ``None`` if it is not one."""
-    if word in NAMED:
-        return QColor(*NAMED[word])
-    if word.startswith("#") and len(word) in (4, 7):
-        colour = QColor(word)
-        return colour if colour.isValid() else None
-    if word.startswith("grey") or word.startswith("gray"):
-        digits = word[4:]
-        if digits.isdigit():
-            level = max(0, min(100, int(digits))) * 255 // 100
-            return QColor(level, level, level)
-    return None
+    def __post_init__(self) -> None:
+        # Normalised on the way in, so a Style is *always* made of the shared
+        # colours whatever the caller had in hand: a QColor, a hex string, a
+        # triple. Nobody downstream has to ask which kind of colour this is.
+        object.__setattr__(self, "fg", as_colour(self.fg) or FOREGROUND)
+        object.__setattr__(self, "bg", as_colour(self.bg))
 
 
 def parse_style(text: str, base: Style | None = None) -> Style:
@@ -109,7 +200,7 @@ def parse_style(text: str, base: Style | None = None) -> Style:
         elif word == "on" or word == "not":
             continue
         else:
-            colour = _colour(word)
+            colour = Colour.parse(word)
             if colour is not None:
                 fg = colour
     return Style(fg=fg, bold=bold, dim=dim, reverse=reverse, italic=italic)
