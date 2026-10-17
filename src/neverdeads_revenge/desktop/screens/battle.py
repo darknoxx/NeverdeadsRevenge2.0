@@ -179,10 +179,17 @@ AIMED: tuple[str, ...] = (ATTACK, SPECIAL)
 #: its health bar running off the frame, and the row was as wide as the room
 #: instead of as wide as a row. The arc is the same shape, pulled in.
 ROWS: dict[int, tuple[tuple[float, float], ...]] = {
-    1: ((0.0, 0.18),),
-    2: ((-0.14, 0.30), (0.14, 0.30)),
-    3: ((-0.19, 0.30), (-0.02, 0.10), (0.19, 0.46)),
+    1: ((0.0, 0.88),),
+    2: ((-0.12, 1.00), (0.12, 1.00)),
+    3: ((-0.15, 1.00), (-0.02, 0.88), (0.15, 1.13)),
 }
+
+#: Where the hero stands, as a depth like the monsters': past the foot of the
+#: floor band, which is where the room's *front* is now that the painting has a
+#: horizon at forty-five per cent of the frame. He ends up a row above the plate,
+#: whichever grid the window was derived for -- the depth is a share of the band
+#: and the band is a share of the frame, so the two move together.
+HERO_DEPTH = 1.25
 
 #: How big a letter stands, in font pixels. The hero is nearest and largest; the
 #: monsters scale with their depth.
@@ -2569,7 +2576,7 @@ class BattleScreen(Screen):
                 colour=hero.color,
                 size=size,
                 cx=(centre + 1) * cell_w,
-                row=y0 + height - 1,
+                row=y0 + round(HERO_DEPTH * height),
                 cells=self._span(art, cell_w),
                 art=art,
                 # In front of the row and out of step with it: the hero breathes
