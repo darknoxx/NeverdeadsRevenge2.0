@@ -53,7 +53,7 @@ from ..desktop.screens.battle import (
 )
 from ..desktop.theme import Colour, parse_style
 from .paint import load, paint
-from .stage import Stage
+from .stage import Stage, bar_box
 
 __all__ = ["SdlArena"]
 
@@ -320,11 +320,7 @@ class SdlArena(Screen):
         for figure in figures:
             if figure.actor is self.battle.hero or fades[id(figure.actor)] < 1.0:
                 continue
-            cells = max(8, min(14, figure.cells * 2))
-            width = cells * font.cell_w
-            height = font.cell_h // 2
-            left = round(figure.cx - width / 2.0)
-            top = figure.row * font.cell_h + height
+            left, top, width, height = bar_box(figure, font)
             self._wound_row(
                 surface,
                 app,

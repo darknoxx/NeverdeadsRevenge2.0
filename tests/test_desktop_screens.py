@@ -2114,14 +2114,15 @@ def figure_baseline(figure, font) -> int:
     return figure.row * font.cell_h - THICKNESS
 
 
-def test_the_monsters_carry_their_health_under_them(app, font):
-    """A bar under every monster, and none under the hero.
+def test_the_monsters_carry_their_health_over_them(app, font):
+    """A bar over every monster, and none over the hero.
 
-    Painted now and not written into the grid: the floor is a picture, so a bar in
-    the grid would be a bar *under* the picture. Same stripe, same place -- half a
-    cell of it, under the feet -- and the hero keeps his own numbers on his plate.
+    It was under the feet, on the floor -- and on a floor made of a *painting* a
+    stripe lying across the flagstones reads as part of the room. Over the head it
+    is at the figure's own outline. The hero keeps his own numbers on his plate.
     """
-    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.desktop.art import size as art_size
+    from neverdeads_revenge.desktop.screens.battle import THICKNESS, BattleScreen
     from neverdeads_revenge.desktop.theme import parse_style
 
     battle = arena(count=3)
@@ -2134,8 +2135,11 @@ def test_the_monsters_carry_their_health_under_them(app, font):
     ]
 
     def bar_pixels(figure) -> int:
-        """How much of a bar is lying under this figure, read off the frame."""
-        y = figure.row * font.cell_h + font.cell_h * 3 // 4
+        """How much of a bar is lying over this figure, read off the frame."""
+        measured = art_size(figure.art) if figure.art is not None else None
+        sprite_h = measured[1] if measured is not None else font.cell_h * 3
+        height = font.cell_h // 2
+        y = figure.row * font.cell_h - THICKNESS - sprite_h - height - 2 + height // 2
         cells = max(8, min(14, figure.cells * 2))
         left = figure.cx - cells * font.cell_w // 2
         found = 0
@@ -2152,9 +2156,9 @@ def test_the_monsters_carry_their_health_under_them(app, font):
 
     for figure in figures:
         if figure.actor is battle.hero:
-            assert bar_pixels(figure) == 0, "the hero's health is on the floor as well"
+            assert bar_pixels(figure) == 0, "the hero's health is up there as well"
             continue
-        assert bar_pixels(figure) > 20, f"no bar under the {figure.actor.name}"
+        assert bar_pixels(figure) > 20, f"no bar over the {figure.actor.name}"
 
 
 def test_a_whole_fight_plays_out_by_keys(app, font):

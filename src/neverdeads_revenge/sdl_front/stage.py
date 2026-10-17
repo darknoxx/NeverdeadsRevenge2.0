@@ -25,7 +25,15 @@ from __future__ import annotations
 
 import math
 
-from ..desktop.screens.battle import FAR_LIGHT, WALL_FAR, WALL_NEAR, BattleScreen
+from ..desktop.art import size as art_size
+from ..desktop.screens.battle import (
+    FAR_LIGHT,
+    MONSTER_BADGE,
+    THICKNESS,
+    WALL_FAR,
+    WALL_NEAR,
+    BattleScreen,
+)
 from ..desktop.theme import parse_style
 from .paint import load
 
@@ -276,12 +284,16 @@ class Stage:
 
     # -- what is standing on it ---------------------------------------------
     def health(self, surface, figures, font, shown, hero, fades) -> None:
-        """The stripe under every monster, on the floor it is standing on.
+        """The stripe over every monster's head, where its wounds are worn too.
 
-        Painted here and not written into the grid, because the grid's floor is a
-        picture now and a bar in the grid would be a bar *under* the picture. The
-        same three colours the cell version uses, so the reading does not change
-        with the front end.
+        It was under the feet, on the floor -- and on a floor made of a *painting*
+        a stripe lying across the flagstones reads as part of the room rather than
+        as a fact about the monster standing in it. Over the head it is at the
+        figure's own outline, which is where a player looks to see what is left of
+        something.
+
+        Same three colours, same length, same end for the wound symbols: one place
+        decides the box, and the icons follow it.
         """
         import pygame
 
@@ -295,11 +307,7 @@ class Stage:
             total = max(1, figure.actor.max_hp)
             shown_hp = shown.get(id(figure.actor), figure.actor.stats.hp)
             ratio = max(0.0, min(1.0, shown_hp / total))
-            cells = max(8, min(14, figure.cells * 2))
-            width = cells * font.cell_w
-            height = font.cell_h // 2
-            left = round(figure.cx - width / 2.0)
-            top = figure.row * font.cell_h + height
+            left, top, width, height = bar_box(figure, font)
             pygame.draw.rect(surface, _rgb("grey19"), (left, top, width, height))
             filled = round(width * ratio)
             if filled:
@@ -364,6 +372,26 @@ class Stage:
         if figure.art is None:
             return None
         return load(figure.art)
+
+
+def bar_box(figure, font) -> tuple[int, int, int, int]:
+    """Where a monster's bar goes: over its head, as wide as its own footprint.
+
+    Measured off the *picture's* height and not the figure's nominal size, because
+    the sprites are drawn at their own size: a bar placed from a number the art
+    does not have would end up in the middle of somebody's skull.
+
+    One function for the bar and for the wound symbols, because the symbols live at
+    the end of the bar and two calculations of one place is two places.
+    """
+    cells = max(8, min(14, figure.cells * 2))
+    width = cells * font.cell_w
+    height = font.cell_h // 2
+    measured = art_size(figure.art) if figure.art is not None else None
+    sprite_h = measured[1] if measured is not None else font.cell_h * 3
+    left = round(figure.cx - width / 2.0)
+    top = figure.row * font.cell_h - THICKNESS - sprite_h - height - 2
+    return left, top, width, height
 
 
 def _blank(size):

@@ -946,18 +946,19 @@ def test_a_monsters_wounds_are_worn_at_the_end_of_its_bar():
     app.redraw()
     clean = app._surface.copy()
 
+    from neverdeads_revenge.sdl_front.stage import bar_box
+
     figure = next(
         one
         for one in arena.arena._figures(app.grid.cols, app.grid.rows, app.font)
         if one.actor is monster
     )
-    cells = max(8, min(14, figure.cells * 2))
-    right = round(figure.cx + cells * app.font.cell_w / 2)
+    left, top, width, height = bar_box(figure, app.font)
     box = (
-        right,
-        figure.row * app.font.cell_h,
-        min(app._surface.get_width(), right + 60),
-        figure.row * app.font.cell_h + 40,
+        left + width,
+        max(0, top - 10),
+        min(app._surface.get_width(), left + width + 60),
+        top + height + 10,
     )
 
     arena.arena._wearing[id(monster)] = ("bleed",)

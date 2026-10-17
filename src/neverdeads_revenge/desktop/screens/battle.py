@@ -842,12 +842,13 @@ class BattleScreen(Screen):
             painter.restore()
 
     def _paste_health(self, painter: QPainter, figures, font) -> None:
-        """The bar under every monster, in pixels, on the floor it is standing on.
+        """The bar over every monster's head, in pixels.
 
-        The same stripe in the same place the grid used to write -- half a cell
-        tall, under the feet -- and none under the hero: the letter is the monster
-        and the log is the story, so the one thing a monster cannot say about
-        itself is how much of it is left.
+        It was under the feet, on the floor -- and on a floor made of a *painting* a
+        stripe lying across the flagstones reads as part of the room rather than as
+        a fact about the monster standing in it. Over the head it is at the figure's
+        own outline, which is where a player looks to see what is left of something.
+        None over the hero: his own numbers are on the plate.
         """
         for figure in figures:
             if figure.actor is self.battle.hero:
@@ -863,7 +864,9 @@ class BattleScreen(Screen):
             width = float(cells * font.cell_w)
             height = float(font.cell_h // 2)
             left = float(figure.cx) - width / 2.0
-            top = float(figure.row * font.cell_h) + height
+            measured = art_size(figure.art) if figure.art is not None else None
+            sprite_h = measured[1] if measured is not None else font.cell_h * 3
+            top = float(figure.row * font.cell_h) - THICKNESS - sprite_h - height - 2.0
             colour = (
                 "bright_green"
                 if ratio > 0.5
@@ -2982,17 +2985,17 @@ class BattleScreen(Screen):
     def _draw_health(
         self, buffer: PatternBuffer, area: tuple[int, int, int, int]
     ) -> None:
-        """Under each monster, the part of it that is left.
+        """Under each monster *that has no picture*, the part of it that is left.
 
-        Not a name: the letter *is* the monster, and who did what to whom is the
-        log's business. What the letter cannot say is how much of it there is,
-        and that is the one number a fight is actually about. Drawn half a cell
-        tall and long -- a stripe on the floor rather than a slab of colour --
-        because a monster's bar is a fact about the room and not a panel.
+        The fallback and not the bar: a figure the sheets have art for gets its
+        stripe over its head in the paste, and a stripe here as well would be a
+        second one -- which is what it looked like the moment the two places came
+        apart. For a figure with no art the letter is the monster, the floor is the
+        only room there is, and this is the sole place its health can be said.
         """
         font = buffer.font
         for figure in self._figures(buffer.cols, buffer.rows, font):
-            if figure.actor is self.battle.hero:
+            if figure.actor is self.battle.hero or figure.art is not None:
                 continue
             total = max(1, figure.actor.max_hp)
             shown = self._shown.get(id(figure.actor), figure.actor.stats.hp)
