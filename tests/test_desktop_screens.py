@@ -1063,6 +1063,115 @@ def test_struck_cells_flash_in_reverse(font):
     assert not plain.style.reverse and struck.style.reverse, "the flash never lit"
 
 
+def test_the_burning_floor_writes_walls_and_monsters_in_ember(font):
+    """RAVAGING FIRE, as the map's alphabet sees it.
+
+    The walls and the things walking on them go the fire's colour -- ``#`` and
+    ``g`` in ember -- and everything else keeps what it had. That is the whole
+    of the promise on this screen: it is the *dungeon* that is burning, and the
+    player still has to be able to find himself, and his loot, in it.
+    """
+    from neverdeads_revenge.desktop.buffer import PatternBuffer
+    from neverdeads_revenge.desktop.render import (
+        EMBER_INK,
+        _draw_map,
+        regions,
+        viewport,
+    )
+    from neverdeads_revenge.game.actors import ENEMIES, HEROES, make_enemy
+    from neverdeads_revenge.game.state import start_run
+    from neverdeads_revenge.world.tiles import Tile
+
+    state = start_run(HEROES["inferno"], 3)
+    here = state.player.position
+    square = (here[0] + 1, here[1])
+    state.dungeon_map.set_tile(square, Tile.FLOOR)
+    ghoul = make_enemy(ENEMIES["ghoul"], square)
+    state.enemies.append(ghoul)
+    state.refresh_vision()
+
+    area = regions(40, 16)["map"]
+    left, top, _, _ = viewport(state, area[2], area[3])
+
+    def cell(buffer, pos):
+        return buffer.cells[pos[1] - top][pos[0] - left]
+
+    def drawn(ravaging: bool):
+        state.ravaging = ravaging
+        buffer = PatternBuffer(40, 16, font)
+        _draw_map(buffer, state, area)
+        return buffer
+
+    plain = drawn(False)
+    assert cell(plain, square).style.fg.name() != EMBER_INK.name(), (
+        "the ghoul was already on fire"
+    )
+
+    burning = drawn(True)
+    assert cell(burning, square).style.fg.name() == EMBER_INK.name(), (
+        "the monster did not catch"
+    )
+    assert cell(burning, here).style.fg.name() != EMBER_INK.name(), (
+        "the hero was set alight with the room"
+    )
+
+    # And the walls, which is what "the dungeon is burning" looks like: `#` in
+    # ember, not the grey it was.
+    walls = [
+        cell(burning, (left + x, top + y))
+        for y in range(area[3])
+        for x in range(area[2])
+        if cell(burning, (left + x, top + y)).char == "#"
+    ]
+    assert walls, "the test found no wall to burn"
+    assert all(one.style.fg.name() == EMBER_INK.name() for one in walls), (
+        "a wall is not burning"
+    )
+    floors = [
+        cell(burning, (left + x, top + y))
+        for y in range(area[3])
+        for x in range(area[2])
+        if cell(burning, (left + x, top + y)).char in (".", "·")
+    ]
+    assert floors and all(one.style.fg.name() != EMBER_INK.name() for one in floors), (
+        "the floor burned as well, and the map is now a sign with no writing"
+    )
+
+
+def test_a_wound_more_than_one_stack_carries_its_depth(app, font):
+    """The number on the badge, and only once there is more than one.
+
+    Read as a *difference*: the same wound at two stacks and at one differs in
+    exactly one place -- the badge's corner -- which is the honest way to test a
+    digit nobody wants to parse out of pixels.
+    """
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+
+    battle = arena(count=1)
+    screen = BattleScreen(battle)
+    hero = battle.hero
+    hero.statuses["bleed"] = 3
+
+    hero.status_stacks["bleed"] = 2
+    screen._catching_up(hero)
+    _, two = drawn(screen, app, font)
+
+    hero.status_stacks["bleed"] = 1
+    screen._catching_up(hero)
+    _, one = drawn(screen, app, font)
+
+    assert bytes(two.constBits()) != bytes(one.constBits()), (
+        "two stacks look exactly like one"
+    )
+
+    hero.statuses.clear()
+    screen._catching_up(hero)
+    _, clean = drawn(screen, app, font)
+    assert bytes(clean.constBits()) != bytes(one.constBits()), (
+        "the badge stayed after the wound had gone"
+    )
+
+
 def test_the_sidebar_knows_the_statuses(app):
     from PySide6.QtCore import Qt
 

@@ -198,7 +198,7 @@ META_UPGRADES: dict[str, MetaUpgrade] = {
     # happens in the run. They are the reason to play all three.
     "bleeding_edge": MetaUpgrade(
         key="bleeding_edge",
-        note_for=lambda n: f"a crit leaves a wound {2 * n} turns longer",
+        note_for=lambda n: f"a crit's wound is {n} stacks deep",
         name="Bleeding Edge",
         description="a wound you open with a lucky blow keeps opening",
         price=180,

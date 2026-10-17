@@ -42,15 +42,25 @@ class Status:
     speed_factor: float = 1.0
     #: How many of the victim's turns it lasts.
     turns: int = 3
+    #: Whether a second one *deepens* it rather than only refreshing it. Only
+    #: the two wounds do: a fast cheap blade is meant to build a cut, and a
+    #: poison that stacked would make the viper -- already the monster that
+    #: punishes a slow kill -- a damage multiplier instead. A slow stacks
+    #: nothing at all; it is a different weapon for a different fight.
+    stackable: bool = False
 
 
 STATUSES: dict[str, Status] = {
-    "bleed": Status(key="bleed", name="bleeding", damage=2, turns=3),
+    "bleed": Status(
+        key="bleed", name="bleeding", damage=2, turns=3, stackable=True
+    ),
     #: And the deep one: what Atritas leaves when he brings company. Four a turn
     #: and not two, so "heavy" is heavier and not only longer -- a wound that
     #: costs the same per turn and simply lasts would not be worth a turn of its
     #: own, and the trick is meant to be.
-    "maul": Status(key="maul", name="bleeding badly", damage=4, turns=4),
+    "maul": Status(
+        key="maul", name="bleeding badly", damage=4, turns=4, stackable=True
+    ),
     "poison": Status(key="poison", name="poisoned", damage=1, turns=8),
     "burn": Status(key="burn", name="burning", damage=3, turns=2),
     "chill": Status(key="chill", name="chilled", speed_factor=0.6, turns=4),

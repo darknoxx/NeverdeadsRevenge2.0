@@ -215,25 +215,29 @@ def tick_statuses(state: GameState, actor: Actor) -> None:
         status = status_by_key(key)
         if status is None:
             del actor.statuses[key]
+            actor.status_stacks.pop(key, None)
             continue
 
         actor.statuses[key] -= 1
         if actor.statuses[key] <= 0:
             del actor.statuses[key]
+            actor.status_stacks.pop(key, None)
 
         if not status.damage:
             continue
 
-        actor.stats.hp = max(0, actor.stats.hp - status.damage)
+        # The depth is the damage: one stack is what the status says it is, and
+        # three of them is that three times. It is the only thing a stack means,
+        # which is what makes the number on the badge and the number in the log
+        # the same number.
+        dealt = status.damage * max(1, actor.status_stacks.get(key, 1))
+        actor.stats.hp = max(0, actor.stats.hp - dealt)
         state.hits.append(actor.position)
         if actor.is_player:
-            state.say(
-                f"You are {status.name}. {status.damage}.", LogKind.DAMAGE
-            )
+            state.say(f"You are {status.name}. {dealt}.", LogKind.DAMAGE)
         else:
             state.say(
-                f"The {actor.name} is {status.name}. {status.damage}.",
-                LogKind.GOOD,
+                f"The {actor.name} is {status.name}. {dealt}.", LogKind.GOOD
             )
 
         if actor.stats.hp <= 0:
@@ -254,13 +258,20 @@ def inflict(
     keys: tuple[str, ...],
     *,
     turns_bonus: int = 0,
+    stacks: int | None = None,
 ) -> None:
     """Leave something running on whoever was just hit.
 
-    Refreshed rather than stacked. A second wound on a bleeding thing makes the
-    bleeding *last longer*; it does not make it bleed twice as hard. Stacking
-    would turn a fast cheap blade into a damage multiplier, which is the one
-    thing the cheap blades are not allowed to become.
+    Refreshed, and -- for the two wounds -- *deepened*, to three at most. A
+    second cut on a bleeding thing makes the bleeding last its own turns again
+    and bleed one stack harder, which is the shape a fast cheap blade wants: it
+    builds a wound rather than a damage multiplier, and three is the ceiling
+    that keeps it one.
+
+    ``stacks`` is for the two rules that are not a second blow: the bloodline
+    that says how deep a crit's wound is, and the trick that says *three*. It
+    sets the depth rather than adding to it, because "how deep" is the sentence
+    those two are written in.
     """
     if not keys or not target.stats.alive:
         return
@@ -270,13 +281,14 @@ def inflict(
         if status is None:
             continue
         fresh = key not in target.statuses
-        # The bonus is the one per-actor knob the status system has: it holds
-        # turns, not strength, so a bloodline that deepens a wound deepens its
-        # *duration* -- which is what ``_inflict`` already believes a second
-        # wound does.
         target.statuses[key] = max(
             target.statuses.get(key, 0), status.turns + turns_bonus
         )
+        if stacks is not None:
+            target.status_stacks[key] = max(1, min(STACK_LIMIT, stacks))
+        elif status.stackable:
+            was = target.status_stacks.get(key, 0)
+            target.status_stacks[key] = min(STACK_LIMIT, was + 1)
         if not fresh:
             continue
         if target.is_player:
@@ -1039,14 +1051,12 @@ def resolve_player_attack(
             opening += ("bleed",)
         inflict(state, target, opening)
         if outcome.crit and state.bleed_on_crit:
-            # BLEEDING EDGE. A lucky blow leaves a wound that keeps opening:
-            # the bleed, and turns enough longer to matter.
-            inflict(
-                state,
-                target,
-                ("bleed",),
-                turns_bonus=BLEED_EDGE_TURNS * state.bleed_on_crit,
-            )
+            # BLEEDING EDGE. A lucky blow opens a wound as deep as the bloodline
+            # is: one stack, two, three -- the ceiling the wounds have. It used
+            # to make the wound *last* longer, which was the same ladder told in
+            # the other currency; the depth is the one a player can see, because
+            # it is the number on the badge.
+            inflict(state, target, ("bleed",), stacks=state.bleed_on_crit)
         if state.pushback_chance and state.rng.chance(state.pushback_chance):
             # RING OF THE BELL. Walkyrion's blows throw what they land on --
             # the same shove the dead weight amulet buys, on a coin.
@@ -2149,7 +2159,10 @@ HUNGRY_ROAD_TRAIL = 10
 
 #: How much longer a crit's wound bleeds per BLEEDING EDGE stack, in the
 #: victim's turns.
-BLEED_EDGE_TURNS = 2
+#: How deep a wound can be cut: the ceiling a second blade, a bloodline or a
+#: trick with the word "three" in it can reach. Three is a wound that is a
+#: problem without being a sentence.
+STACK_LIMIT = 3
 
 #: What NOTHING WASTED puts into everything beside the drinker.
 NOTHING_WASTED_DAMAGE = 4

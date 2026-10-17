@@ -915,10 +915,14 @@ def test_emberheart_sets_alight_what_inferno_lands_on():
     assert "burn" in enemy.statuses, "his hand left no fire in it"
 
 
-def test_bleeding_edge_makes_a_crits_wound_keep_opening():
-    """Noxx's bloodline: a lucky blow leaves a bleed that lasts longer, which
-    is the only knob the status system has -- and the one ``_inflict`` already
-    believes a second wound turns."""
+def test_bleeding_edge_makes_a_crits_wound_as_deep_as_the_bloodline():
+    """Noxx's bloodline: a lucky blow opens a wound as deep as it is bought.
+
+    It used to make the wound *last* longer, which was the same ladder told in
+    the other currency -- and the currency nobody could see, because length is a
+    number in the log. The depth is the number on the badge, and three is the
+    ceiling the wounds have.
+    """
     from neverdeads_revenge.game.actors import HEROES
     from neverdeads_revenge.game.actions import perform_action
     from neverdeads_revenge.game.state import start_run
@@ -933,11 +937,13 @@ def test_bleeding_edge_makes_a_crits_wound_keep_opening():
 
     resolve_player_attack(state, enemy)
 
+    from neverdeads_revenge.game.statuses import STATUSES
+
     assert "bleed" in enemy.statuses
-    assert enemy.statuses["bleed"] >= 3 + 2 * 3, (
-        f"the wound lasts {enemy.statuses['bleed']} turns, not the nine a "
-        f"three-stack crit should leave"
-    )
+    assert enemy.status_stacks["bleed"] == 3, "the crit did not cut three deep"
+    # And *not* longer: the clock is the status's own now, which is the part
+    # that changed. The bloodline buys depth and nothing else.
+    assert enemy.statuses["bleed"] == STATUSES["bleed"].turns
 
 
 def test_hoarfrost_freezes_whoever_strikes_yeti():

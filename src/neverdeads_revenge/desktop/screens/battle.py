@@ -639,6 +639,10 @@ class BattleScreen(Screen):
         #: while the sword was still in the air is the fight telling the player
         #: the ending of the sentence they are in the middle of.
         self._wearing: dict[int, tuple[str, ...]] = {}
+        #: And how deep each of those is, read at the same moment: the badge
+        #: carries a number once a wound is more than one stack, and a number
+        #: that arrived before its blow would be the same lie as a badge that did.
+        self._depths: dict[int, dict[str, int]] = {}
         #: Who the fight still owes a look at, and when. Everything in here is
         #: read at the frame it comes due, which is always the frame a blow lands
         #: in or a wound bites -- never the frame the rules knew.
@@ -1301,20 +1305,18 @@ class BattleScreen(Screen):
         same symbol in the other, drawn the same way. Sized by the caller: the
         plate has a panel to fill and the floor has a monster to avoid covering.
         """
-        icons = [
-            art
-            for art in (
-                status_icon(STATUS_ICONS[key]) for key in self._worn(actor)
-            )
-            if art is not None
+        pairs = [
+            (key, art)
+            for key in self._worn(actor)
+            if (art := status_icon(STATUS_ICONS[key])) is not None
         ]
-        if not icons:
+        if not pairs:
             return
         slot = max(6, round(size * STATUS_SLOT))
         step = slot + STATUS_GAP
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
-        for index, art in enumerate(icons):
+        for index, (key, art) in enumerate(pairs):
             # Fitted, not stretched: the largest box of its own shape that fits
             # in the slot, and then centred in it, so the row's spacing is even
             # and every symbol keeps its own proportions.
@@ -1327,7 +1329,35 @@ class BattleScreen(Screen):
                 art,
                 QRectF(art.rect()),
             )
+            depth = self._depths.get(id(actor), {}).get(key, 1)
+            if depth >= 2:
+                self._paste_depth(painter, str(depth), x + width, middle + height / 2.0, size)
         painter.restore()
+
+    def _paste_depth(
+        self, painter: QPainter, text_: str, right: float, bottom: float, size: int
+    ) -> None:
+        """How deep a wound is, stamped on its own badge.
+
+        Bottom right, a hair inside the symbol -- *in front of* it, which is what
+        a stamp on a seal is -- and only once there is more than one stack: a
+        wound that says "1" on every monster is a number nobody reads, and the
+        one that means something is the one that changed.
+        """
+        face = letter_font(max(10, round(size * 0.42)))
+        metrics = QFontMetrics(face.bold)
+        width = metrics.horizontalAdvance(text_)
+        ascent = metrics.ascent()
+        x = right - width - max(1.0, size * 0.04)
+        y = bottom - max(1.0, size * 0.06)
+        painter.setFont(face.bold)
+        # A dark copy under a bright one, the same two passes the arena uses for
+        # every letter: a number that has to sit on an icon has to have an edge
+        # of its own.
+        painter.setPen(QColor(0, 0, 0, 220))
+        painter.drawText(QPointF(x + 1.0, y - ascent + 1.0), text_)
+        painter.setPen(parse_style("bold white").fg)
+        painter.drawText(QPointF(x, y - ascent), text_)
 
     def _paste_wounds(self, painter: QPainter, cols: int, rows: int, app) -> None:
         """The hero's wounds, as the sheets' symbols, beside his life bar.
@@ -2020,6 +2050,7 @@ class BattleScreen(Screen):
         )
         for one in actors:
             self._wearing[id(one)] = self._worn_for(one)
+            self._depths[id(one)] = dict(one.status_stacks)
 
     def _worn_for(self, actor) -> tuple[str, ...]:
         """What the *rules* say this figure is wearing, as a badge row."""

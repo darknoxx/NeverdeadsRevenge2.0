@@ -876,6 +876,30 @@ def test_the_roundhouse_takes_the_whole_room():
     ), "one of them was out of the spin"
 
 
+def test_friends_like_these_cuts_three_deep():
+    """Atritas brings company, and the company is the deepest wound there is.
+
+    The trick is the one that says *three* out loud: every monster in the room
+    gets the deep bleeding at the full ceiling, which on three of them is the
+    room ending before the floor runs dry.
+    """
+    from neverdeads_revenge.game.specials import FRIENDS_LIKE_THESE
+
+    battle = duel("noxx", 7, count=3)
+    for enemy in battle.enemies:
+        enemy.stats.hp = 9999
+        enemy.stats.evasion = 0
+
+    battle.choose(SPECIAL, special=FRIENDS_LIKE_THESE)
+
+    assert all("maul" in enemy.statuses for enemy in battle.enemies), (
+        "something in the room was not opened"
+    )
+    assert all(enemy.status_stacks.get("maul") == 3 for enemy in battle.enemies), (
+        "the deep wound was not cut at its ceiling"
+    )
+
+
 def test_devouring_darkness_keeps_half_of_what_it_bites():
     """The steal: half of the damage, back to him -- and never nothing, because a
     mouthful of a mouthful is still a mouthful."""

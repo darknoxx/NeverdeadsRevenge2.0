@@ -270,6 +270,11 @@ class Actor:
     #: each. Empty for almost everything: only something a weapon or a monster
     #: inflicted lives here, and it empties itself as it runs out.
     statuses: dict[str, int] = field(default_factory=dict)
+    #: How deep each of those is: one stack by default, three at most, and only
+    #: for the wounds that stack. Kept beside ``statuses`` rather than inside it
+    #: because a dict of ints is what a hundred lines of this game already read
+    #: (the turns), and the depth is one number that two rules write.
+    status_stacks: dict[str, int] = field(default_factory=dict)
     #: Which of the three REVENGE grants this actor collects. Copied from the
     #: hero so the game layer never has to look the hero up mid-fight.
     trait: Trait = Trait.SPEED

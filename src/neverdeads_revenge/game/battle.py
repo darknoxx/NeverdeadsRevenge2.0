@@ -28,6 +28,7 @@ from dataclasses import dataclass
 from neverdeads_revenge.core.direction import chebyshev
 
 from .actions import (
+    STACK_LIMIT,
     Action,
     inflict,
     perform_action,
@@ -885,9 +886,10 @@ class Battle:
     def _special_friends_like_these(self, target: Actor | None, events: list[Event]) -> None:
         """Atritas comes, and he does not come alone.
 
-        On *every* one of them, and deep: the vein's own cut is two a turn for
-        three turns, and this is four a turn for four -- a room of three opened at
-        once is a room that is over before the floor runs dry.
+        On *every* one of them, and three wounds deep: the vein's own cut is a
+        single stack, and this is the deepest a wound goes -- four a turn for
+        four turns, times three. A room of three opened at once is a room that is
+        over before the floor runs dry.
         """
         before = len(self.state.log)
         self.state.say("Atritas comes, and he does not come alone.", LogKind.SYSTEM)
@@ -896,7 +898,7 @@ class Battle:
         for enemy in self.living_enemies():
             before = len(self.state.log)
             self.state.say(f"Something in the {enemy.name} opens.", LogKind.GOOD)
-            inflict(self.state, enemy, (DEEP_BLEED,))
+            inflict(self.state, enemy, (DEEP_BLEED,), stacks=STACK_LIMIT)
             self._splice(before, events)
 
     def _special_open_vein(self, target: Actor | None, events: list[Event]) -> None:

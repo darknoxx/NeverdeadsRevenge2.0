@@ -18,6 +18,7 @@ import time
 from PySide6.QtCore import QRect
 from PySide6.QtGui import QColor, QImage, QPainter
 
+from neverdeads_revenge.game.actors import ActorKind
 from neverdeads_revenge.game.draughts import draught_by_key
 from neverdeads_revenge.game.levels import RAVAGING_POINTS
 from neverdeads_revenge.game.npcs import NPC_COLOR, NPC_GLYPH
@@ -204,11 +205,16 @@ def _draw_map(buffer, state, area) -> None:
                 )
             if burning and style.bg is None:
                 fg = style.fg
-                if dungeon.display_tile(position) is Tile.WALL:
-                    # The walls go darker with the heat on them, exactly as they
-                    # go darker under the frost: an ember ground with ember walls
-                    # is a room with no shape in it.
-                    fg = parse_style("grey15").fg
+                actor = state.actor_at(position)
+                if dungeon.display_tile(position) is Tile.WALL or (
+                    actor is not None and actor.kind is ActorKind.ENEMY
+                ):
+                    # THE FLOOR BURNS. The walls and the things walking on them
+                    # are the fire's own colour -- the map's whole alphabet for
+                    # "this floor is alight" -- while the floor, the loot and the
+                    # hero keep theirs: it is the *dungeon* that is on fire, and
+                    # the player still has to be able to find himself in it.
+                    fg = EMBER_INK
                 style = Style(
                     fg=fg,
                     bg=EMBER,
@@ -578,9 +584,15 @@ FROST = QColor("#bfced2")
 #: And the red it goes while it burns. *Dark* red rather than a bright one, for
 #: the opposite reason to the frost being pale: the frost had to keep dark
 #: glyphs legible on it, and this has to keep every glyph in the dungeon legible,
-#: because while the floor is on fire nothing about the actors changes. A bright
+#: because the things that are not burning keep the colours they had. A bright
 #: red would make the map a warning sign with writing on it.
 EMBER = QColor("#4a120c")
+
+#: And what the fire itself is drawn in: the walls and everything walking on
+#: them. Amber rather than the background's red, because the two are the fire and
+#: what it has caught -- an ember ground with ember writing is a frame, and the
+#: *dungeon* is what should look like it is burning.
+EMBER_INK = QColor("#ffb02e")
 
 
 def ultimate_ready(state: GameState) -> bool:

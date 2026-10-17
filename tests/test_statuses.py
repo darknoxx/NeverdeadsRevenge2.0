@@ -56,21 +56,45 @@ def test_a_status_runs_out_after_the_turns_it_promises():
     assert enemy.hp == before - STATUSES["bleed"].damage * STATUSES["bleed"].turns
 
 
-def test_a_second_wound_refreshes_rather_than_stacks():
-    """Two wounds make the bleeding last longer, not bleed twice as hard. A
-    status that stacked would turn a fast cheap blade into a multiplier."""
+def test_a_second_wound_deepens_the_bleeding():
+    """Two cuts open a deeper wound, three is the ceiling, and four does nothing.
+
+    It used to be the other way round -- a second wound only refreshed the same
+    shallow cut, which made a fast cheap blade a way to keep a wound *alive*
+    rather than a way to open one. The ceiling is what keeps the other reading
+    from happening: three stacks is a wound that is a problem, and a fourth is
+    not a sentence.
+    """
     state = start_run(NOXX, seed=3)
     enemy = _enemy(state)
 
     inflict(state, enemy, ("bleed",))
+    assert enemy.status_stacks["bleed"] == 1, "one cut was already two deep"
     enemy.statuses["bleed"] = 1  # nearly over
     inflict(state, enemy, ("bleed",))
 
-    assert enemy.statuses["bleed"] == STATUSES["bleed"].turns
+    assert enemy.statuses["bleed"] == STATUSES["bleed"].turns, "the clock restarted"
+    assert enemy.status_stacks["bleed"] == 2
 
     before = enemy.hp
     tick_statuses(state, enemy)
-    assert enemy.hp == before - STATUSES["bleed"].damage, "it bled twice"
+    assert enemy.hp == before - 2 * STATUSES["bleed"].damage, "it bled once, not twice"
+
+    for _ in range(4):
+        inflict(state, enemy, ("bleed",))
+    assert enemy.status_stacks["bleed"] == 3, "the wound went past its ceiling"
+
+
+def test_a_poison_refreshes_and_never_deepens():
+    """Only the wounds stack. The viper already punishes a slow kill, and a
+    poison that deepened as well would make it a damage multiplier instead."""
+    state = start_run(NOXX, seed=3)
+    enemy = _enemy(state)
+
+    inflict(state, enemy, ("poison",))
+    inflict(state, enemy, ("poison",))
+
+    assert enemy.status_stacks.get("poison", 1) == 1
 
 
 def test_chill_slows_the_victim_and_then_lets_it_go():
