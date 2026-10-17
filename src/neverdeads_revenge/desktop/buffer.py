@@ -49,7 +49,7 @@ class PatternBuffer(Grid):
         """Paint the whole grid into an image at one pixel per font pixel."""
         return render_grid(self)
 
-def render_grid(grid: PatternBuffer) -> QImage:
+def render_grid(grid: PatternBuffer, rows: tuple[int, int] | None = None) -> QImage:
     """Any grid, as an image at one pixel per font pixel.
 
     A function and not only a method, because the grid it paints need not be this
@@ -58,19 +58,27 @@ def render_grid(grid: PatternBuffer) -> QImage:
     still has to be able to put that panel on a frame. Taking the grid as an
     argument is what lets one screen's cells be rendered by whichever toolkit is
     doing the drawing.
+
+    ``rows`` is ``(first, last)`` in cells and draws *that band only*, as tall as
+    the band: a painter that already has the grid on its frame and needs one part
+    of it again, on top of the art it has drawn there since. The band starts at the
+    top of what was asked for, so the caller puts it back where the band is.
     """
+    first, last = rows if rows is not None else (0, grid.rows)
     font = grid.font or BitmapFont()
     image = QImage(
         grid.cols * font.cell_w,
-        grid.rows * font.cell_h,
+        (last - first) * font.cell_h,
         QImage.Format.Format_ARGB32_Premultiplied,
     )
     image.fill(qcolour(BACKGROUND))
 
     painter = QPainter(image)
     painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, False)
+    painter.translate(0, -first * font.cell_h)
     for x, y, run in grid.runs():
-        _paint_run(painter, grid, x, y, run)
+        if first <= y < last:
+            _paint_run(painter, grid, x, y, run)
     painter.end()
     return image
 

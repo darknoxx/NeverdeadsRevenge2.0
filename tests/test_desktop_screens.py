@@ -2111,7 +2111,7 @@ def figure_baseline(figure, font) -> int:
     """Where a figure's feet are, as the stage draws them."""
     from neverdeads_revenge.desktop.screens.battle import THICKNESS
 
-    return figure.row * font.cell_h - THICKNESS
+    return int(figure.row * font.cell_h) - THICKNESS
 
 
 def test_the_monsters_carry_their_health_over_them(app, font):
@@ -2139,7 +2139,7 @@ def test_the_monsters_carry_their_health_over_them(app, font):
         measured = art_size(figure.art) if figure.art is not None else None
         sprite_h = measured[1] if measured is not None else font.cell_h * 3
         height = font.cell_h // 2
-        y = figure.row * font.cell_h - THICKNESS - sprite_h - height - 8 + height // 2
+        y = int(figure.row * font.cell_h) - THICKNESS - sprite_h - height - 8 + height // 2
         cells = max(8, min(14, figure.cells * 2))
         left = figure.cx - cells * font.cell_w // 2
         found = 0
@@ -3961,3 +3961,49 @@ def test_the_five_can_be_walked_across_as_well_as_down(app):
     screen.special = 0
     press(app, Qt.Key.Key_Left)
     assert screen.special == 0, "the choice wandered out of the list"
+
+
+def test_the_panels_come_out_over_the_hero_on_the_qt_build(app, font):
+    """The same promise on the other painter: the menu is not behind the hero.
+
+    The band is put down a second time in the paste step, and this is the half of
+    that which the Qt build owns. Asked by withdrawing the hero's picture: nothing
+    inside the band may move, because everything in there is a panel, and above the
+    band he must be plainly there -- a rule that hid him altogether would pass the
+    first half of this on its own.
+    """
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+
+    battle = arena(count=3)
+    screen = BattleScreen(battle)
+    _, with_him = drawn(screen, app, font)
+
+    hero = battle.hero
+    kept = BattleScreen._paste_figure
+
+    def without_him(self, painter, figure, app_, figures):
+        if figure.actor is hero:
+            return
+        return kept(self, painter, figure, app_, figures)
+
+    BattleScreen._paste_figure = without_him
+    try:
+        _, without = drawn(screen, app, font)
+    finally:
+        BattleScreen._paste_figure = kept
+
+    first, last = screen.panel_band(96, 27)
+    cell_h = font.cell_h
+
+    def differs(box) -> int:
+        return sum(
+            1
+            for y in range(box[1], box[3])
+            for x in range(box[0], box[2])
+            if with_him.pixelColor(x, y) != without.pixelColor(x, y)
+        )
+
+    band = (0, first * cell_h, with_him.width(), last * cell_h)
+    room = (0, 0, with_him.width(), first * cell_h)
+    assert differs(band) == 0, "the hero showed through the panels"
+    assert differs(room) > 200, "the hero was not drawn at all"

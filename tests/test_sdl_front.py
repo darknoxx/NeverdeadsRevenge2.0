@@ -378,7 +378,9 @@ def test_the_arena_writes_its_panels_and_leaves_the_figures_to_the_art():
         if one.actor is vipers
     )
     assert figure.art is not None, "the sheets have no picture for the viper"
-    cell = app.grid.cells[figure.row][figure.cx // app.font.cell_w]
+    # Rounded, because a figure may be standing on half a row: the grid is
+    # written in whole cells and the staging is not.
+    cell = app.grid.cells[round(figure.row)][figure.cx // app.font.cell_w]
     assert cell.char != vipers.glyph, "a letter is standing under the sprite"
 
     # Then the blow, and the fight's voice arrives with it -- a frame or two into
@@ -462,7 +464,7 @@ def test_the_arena_paints_the_flagstones_and_the_monsters_on_them():
     )
     art = load(figure.art)
     assert art is not None, "the sheets have no picture for the ghoul"
-    baseline = figure.row * font.cell_h - THICKNESS
+    baseline = int(figure.row * font.cell_h) - THICKNESS
     box = (
         max(0, figure.cx - art.get_width() // 2),
         max(0, baseline - art.get_height()),
@@ -931,7 +933,12 @@ def test_aiming_puts_a_marker_over_the_monster_that_is_being_aimed_at():
     # And it is *above* the monster and not over its body: the same box one line
     # down is where the sprite is, and a marker there would be a marker nobody
     # could read a monster through.
-    low = (box[0], figure.row * app.font.cell_h - 30, box[2], figure.row * app.font.cell_h)
+    low = (
+        box[0],
+        int(figure.row * app.font.cell_h) - 30,
+        box[2],
+        int(figure.row * app.font.cell_h),
+    )
     assert _changed(plain, aimed, low) == 0, "the marker was drawn over the monster"
 
 
@@ -2274,7 +2281,7 @@ def test_a_shadow_lies_under_a_figure_and_fades_towards_its_rim():
         for one in arena.arena._figures(app.grid.cols, app.grid.rows, app.font)
         if one.art is not None
     )
-    feet = figure.row * app.font.cell_h - 5
+    feet = int(figure.row * app.font.cell_h) - 5
     box = (figure.cx - 60, feet, figure.cx + 60, feet + 20)
     assert _changed(without, with_pool, box) > 40, "the shadow is not there at all"
     # Over the sprite's own band nothing of it shows: it is drawn first, so a
@@ -2491,3 +2498,88 @@ def test_skipping_the_cell_floor_changes_no_pixel_of_the_painting():
     assert pygame.image.tobytes(app._surface, "RGB") == skipped, (
         "the painting moved when the cell floor was skipped"
     )
+
+
+def test_a_figure_can_stand_on_half_a_row():
+    """The staging in halves, because the eye asks in halves.
+
+    A depth is a share of the band, so it lands on a whole row -- and a row is
+    twenty pixels, which was a step too much for the monster in the middle of the
+    arc and three quarters of one too much for the hero, who is asked to stand in
+    the panel rather than over it. So a row may be a *half* row: the painters
+    multiply it out into pixels, the grid's own work rounds it, and nothing has to
+    be told which kind of row it is holding.
+
+    Asked of the fight and of the hero both, and asked of ``bar_box`` as well --
+    a box that came back a half pixel would be a bar drawn nowhere.
+    """
+    from neverdeads_revenge.sdl_front.app import SdlApp
+    from neverdeads_revenge.sdl_front.stage import bar_box
+
+    app = SdlApp(seed=3, battle_scene=True, no_sound=True)
+    arena = app.screens[-1]
+    figures = arena.arena._figures(app.cols, app.rows, app.font)
+    monsters = [one for one in figures if one.actor is not arena.battle.hero]
+    hero = next(one for one in figures if one.actor is arena.battle.hero)
+    assert len(monsters) == 3, "this is the three-monster staging"
+
+    middle = monsters[1]
+    assert middle.row % 1 == 0.5, f"the middle of the arc is on {middle.row}"
+    assert monsters[0].row % 1 == 0 and monsters[2].row % 1 == 0, (
+        "the outer two moved with it"
+    )
+    assert hero.row % 1 != 0, "the hero is back on a whole row"
+    assert 0 < hero.row % 1 < 0.5 or hero.row % 1 > 0.5, hero.row
+
+    # Every one of them is still a whole number of pixels to a painter.
+    for figure in figures:
+        left, top, width, height = bar_box(figure, app.font)
+        assert all(isinstance(value, int) for value in (left, top, width, height)), (
+            f"{figure.actor.name}'s bar box is not in whole pixels"
+        )
+
+
+def test_the_panels_are_painted_over_the_hero_and_not_under_him():
+    """The menu is the fight's own layer, and a figure cannot stand in front of it.
+
+    The panels are written into the grid and the grid is *under* the art, so the
+    hero -- who is placed in the panel band, which is the point of the drop -- was
+    painted over the plate he is standing in. Both painters put the band down again
+    once the figures are in place.
+
+    Asked by withdrawing the hero's picture: inside the band his absence must
+    change nothing at all, and above it he must be plainly there. Withdrawing him
+    takes his shadow with him in the same breath, which is the other half of the
+    promise -- a shadow inside the band would be a shadow on the panel.
+    """
+    import pygame
+
+    from neverdeads_revenge.sdl_front.arena import SdlArena
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3, battle_scene=True, no_sound=True)
+    arena = app.screens[-1]
+    hero = arena.battle.hero
+    app.redraw()
+    with_him = app._surface.copy()
+
+    kept = SdlArena._figure
+
+    def without_him(self, surface, app_, figure, figures, fade):
+        if figure.actor is hero:
+            return
+        return kept(self, surface, app_, figure, figures, fade)
+
+    SdlArena._figure = without_him
+    try:
+        app.redraw()
+    finally:
+        SdlArena._figure = kept
+    without = app._surface.copy()
+
+    first, last = arena.arena.panel_band(app.cols, app.rows)
+    width = app._surface.get_width()
+    band = (0, first * app.font.cell_h, width, last * app.font.cell_h)
+    room = (0, 0, width, first * app.font.cell_h)
+    assert _changed(with_him, without, band) == 0, "the hero showed through the panels"
+    assert _changed(with_him, without, room) > 200, "the hero was not drawn at all"

@@ -51,7 +51,7 @@ from ..desktop.screens.battle import (
     BattleScreen,
     Popup,
 )
-from ..desktop.theme import Colour, parse_style
+from ..desktop.theme import BACKGROUND, Colour, parse_style
 from .paint import load, paint
 from .stage import Stage, bar_box
 
@@ -163,13 +163,27 @@ class SdlArena(Screen):
             surface, figures, font, self.arena._shown, self.battle.hero, fades
         )
         self._wounds(surface, app, figures, fades)
-        self._hero_wounds(surface, app, cols, rows)
         # The shadows first: they live on the floor, so a figure standing on one
         # stands on it rather than carrying it around.
         for figure in figures:
             self._stage.shadow(surface, figure, font, fades[id(figure.actor)])
         for figure in self._ordered(figures):
             self._figure(surface, app, figure, figures, fades[id(figure.actor)])
+        # The panels again, over whoever is standing in front of them: the plate
+        # the hero's feet are in, and the list of the five when it is open. Painted
+        # from the grid -- which is under the art and has to be, or the room would
+        # not be a room -- so this is the one part of the cells that lands on top
+        # of a sprite. The numbers come after it, because a hit that says "8" over
+        # the plate is still a hit and the number has to be read.
+        first, last = self.arena.panel_band(cols, rows)
+        paper = self.paper(cols, rows, app.font) or BACKGROUND
+        band = paint(app.grid, app.font, paper, (first, last))
+        surface.blit(band, (0, first * app.font.cell_h))
+        # The hero's own row of wounds, and only now: it is painted on the plate,
+        # and the plate is the panel this band has just put down. Drawn before the
+        # band, it was a row of symbols painted over and hidden by the panel it
+        # belongs to.
+        self._hero_wounds(surface, app, cols, rows)
         for figure in figures:
             if figure.chosen:
                 self._arrow(surface, app, figure)
@@ -241,7 +255,7 @@ class SdlArena(Screen):
             raise_px = round(
                 math.sin(self.arena._clock * BOB_SPEED + figure.phase) * BOB_HEIGHT
             )
-        home = figure.row * cell_h - THICKNESS
+        home = round(figure.row * cell_h - THICKNESS)
         home -= self.arena._knockback(figure, cell_h)
         cx, baseline, opacity = figure.cx, home - raise_px, 1.0
         pose = self.arena._strike_pose(figure, figures, home, cell_w, cell_h)

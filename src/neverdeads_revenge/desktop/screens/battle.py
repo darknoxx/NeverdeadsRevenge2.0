@@ -165,30 +165,37 @@ STAGE = 3
 AIMED: tuple[str, ...] = (ATTACK, SPECIAL)
 
 #: Where a row of monsters stands, by how many there are: the lane across the
-#: room and how far into it, both as fractions of the ground's width and height.
+#: room, how far into it, and a nudge up, all as fractions of the ground's width
+#: and height. Both a lane and a depth are shares and not pixels, so the row moves
+#: with the band; the third number is in rows as well, and half of one is the ten
+#: pixels the eye asks for when whole rows stand a monster too low.
 #:
 #: A fight of *one* should look like a fight of one. The stage was built for
 #: three, and a single monster was being shoved into the left-hand slot of a row
 #: that was not there -- so the row is laid out by its own count: one in the
 #: middle of the room, two on either side of that middle, and three in the
 #: shallow arc the stage was drawn for, with the outer ones a little nearer, the
-#: way a line of anything stands.
+#: way a line of anything stands. The one in the arc that stands furthest back is
+#: lifted half a row, because a row was a step too much for it and a *half* row is
+#: exactly what the floor between two of them wants.
 #:
 #: Nothing stands at the rim. The floor tapers, so the far corners of it are
 #: *wall* -- an outer monster at the very edge was standing in the masonry with
 #: its health bar running off the frame, and the row was as wide as the room
 #: instead of as wide as a row. The arc is the same shape, pulled in.
-ROWS: dict[int, tuple[tuple[float, float], ...]] = {
-    1: ((0.0, 0.88),),
-    2: ((-0.20, 1.00), (0.20, 1.00)),
-    3: ((-0.30, 1.00), (-0.02, 0.88), (0.30, 1.13)),
+ROWS: dict[int, tuple[tuple[float, float, float], ...]] = {
+    1: ((0.0, 0.88, 0.0),),
+    2: ((-0.20, 1.00, 0.0), (0.20, 1.00, 0.0)),
+    3: ((-0.30, 1.00, 0.0), (-0.02, 0.88, 0.5), (0.30, 1.13, 0.0)),
 }
 
 #: How far below the foot of the floor band the hero stands, in rows. He is the
 #: room's front: on the plate, which is four or five rows under the band whatever
 #: grid the window was derived for -- so a row count keeps him there, and a share
-#: of the band (which is what a depth is) would not.
-HERO_DROP = 7
+#: of the band (which is what a depth is) would not. The quarter is the fifteen
+#: pixels he was asked to come up by: a row is twenty, and he stands in the panel
+#: he is in front of rather than on top of it.
+HERO_DROP = 6.25
 
 #: How far up the whole stage stands, in rows, from the row it was laid out on.
 #:
@@ -627,7 +634,10 @@ class Staged:
         #: The centre of the letter, in pixels.
         self.cx = cx
         #: The cell row it stands on: the top of the pool of shadow, so the
-        #: figure stands behind its own shadow rather than on top of it.
+        #: figure stands behind its own shadow rather than on top of it. A whole
+        #: row usually and *half* a row where half a row is the right place to
+        #: stand -- it is multiplied out into pixels by both painters, so a
+        #: fraction costs nothing and saves the row of floor the eye can see.
         self.row = row
         self.cells = cells
         self.chosen = chosen
@@ -671,6 +681,12 @@ class BattleScreen(Screen):
         self._shown: dict[int, int] = {}
         self.verdict: str | None = None
         self._size: tuple[int, int] | None = None
+        #: The grid this screen was last drawn into, kept because the paste step
+        #: needs one part of it *again*: the panels are cells, the cells are under
+        #: the art, and the menu has to end up on top of whoever is standing in
+        #: front of it. The same reason ``_size`` is kept -- a painter that paints
+        #: in two passes has to agree with itself about the first one.
+        self._grid = None
         #: The arena's own clock, in seconds. The idle breath and every phase of
         #: a strike are read off it, so nothing here owns a timer.
         self._clock = 0.0
@@ -741,6 +757,7 @@ class BattleScreen(Screen):
         #: placed in pixels and the paste step has to agree with the grid pass
         #: about where the floor is, and the grid pass is the one that knows.
         self._size = (buffer.cols, buffer.rows)
+        self._grid = buffer
         buffer.clear()
         areas = self._areas(buffer.cols, buffer.rows)
         # The cell floor is a *dial*, because a front end with a painting for a
@@ -757,6 +774,23 @@ class BattleScreen(Screen):
         self._draw_plate(buffer, *areas["plate"])
         self._draw_commands(buffer, *areas["commands"])
         self._draw_order(buffer, *areas["order"])
+
+    def panel_band(self, cols: int, rows: int) -> tuple[int, int]:
+        """The rows the three panels own: the fight's own layer, top to bottom.
+
+        The panels are written into the grid, and the grid is *under* the art -- so
+        a figure standing in front of them is painted over the menu that is asking
+        about it. Both painters put this band down a second time once the figures
+        are in place, which is what keeps the menu on top of whoever is standing in
+        front of it: the hero is covered by the plate he is standing in, and the
+        list of tricks covers him entirely.
+
+        A band and not the three areas, because which panel is showing is the
+        screen's business: the verbs, the list of the five, the target row and the
+        plate all come and go inside these rows.
+        """
+        plate = self._areas(cols, rows)["plate"]
+        return plate[1], plate[1] + plate[3]
 
     def paste(self, image, app) -> None:
         """The room, the models, and everything that moves in them.
@@ -777,7 +811,6 @@ class BattleScreen(Screen):
         # The bars are painted here and not written into the grid: the floor is a
         # picture now, and a bar in the grid would be a bar *under* the picture.
         self._paste_health(painter, figures, app.font)
-        self._paste_wounds(painter, cols, rows, app)
         # The shadows first: they live on the floor, so a figure standing on one
         # stands on it rather than carrying it around.
         for figure in figures:
@@ -804,6 +837,26 @@ class BattleScreen(Screen):
                 self._paste_figure(painter, figure, app, figures)
         for figure in front:
             self._paste_figure(painter, figure, app, figures)
+        # The panels again, over whoever is standing in front of them: the plate
+        # the hero's feet are in, and the list of the five when it is open. Drawn
+        # from the *grid*, which was painted before the art -- so this is the one
+        # part of the cells that is allowed to land on top of a sprite.
+        first, last = self.panel_band(cols, rows)
+        grid = self._grid if self._grid is not None else getattr(app, "_buffer", None)
+        if grid is not None:
+            band = render_grid(grid, (first, last))
+            painter.drawImage(
+                QRectF(
+                    0.0,
+                    float(first * app.font.cell_h),
+                    float(band.width()),
+                    float(band.height()),
+                ),
+                band,
+            )
+        # The hero's own row of wounds, and only now: it is painted on the plate,
+        # and the plate is the panel this band has just put down.
+        self._paste_wounds(painter, cols, rows, app)
         for figure in figures:
             if figure.chosen:
                 self._paste_arrow(painter, figure, app.font.cell_h)
@@ -2461,7 +2514,7 @@ class BattleScreen(Screen):
             text=text,
             colour=colour,
             x=figure.cx,
-            y=figure.row * app.font.cell_h - THICKNESS,
+            y=round(figure.row * app.font.cell_h - THICKNESS),
             crit=crit,
             size=figure.size,
         )
@@ -2571,7 +2624,7 @@ class BattleScreen(Screen):
         places = ROWS.get(len(monsters), ROWS[STAGE])
         staged: list[Staged] = []
         for index, enemy in enumerate(monsters):
-            lane, depth = places[min(index, len(places) - 1)]
+            lane, depth, lift = places[min(index, len(places) - 1)]
             size = round(MONSTER_SIZES[min(index, len(MONSTER_SIZES) - 1)] * scale)
             art = _picture(enemy.name)
             staged.append(
@@ -2581,7 +2634,7 @@ class BattleScreen(Screen):
                     colour=enemy.color,
                     size=size,
                     cx=(centre + round(lane * width) + 1) * cell_w,
-                    row=y0 + max(1, round(depth * height)) - STAGE_LIFT,
+                    row=y0 + max(1, round(depth * height)) - STAGE_LIFT - lift,
                     cells=self._span(art, cell_w),
                     chosen=enemy is marked,
                     art=art,
@@ -2636,7 +2689,9 @@ class BattleScreen(Screen):
         if figure is None:
             return None
         cell_w, cell_h = app.font.cell_w, app.font.cell_h
-        return (figure.cx, figure.row * cell_h)
+        # Rounded, because a figure may stand on half a row and a pixel a
+        # painter is handed is a whole one.
+        return (figure.cx, int(figure.row * cell_h))
 
     # -- what is pasted -----------------------------------------------------
     def _paste_walls(self, painter: QPainter, field: dict[str, float]) -> None:
@@ -3025,8 +3080,10 @@ class BattleScreen(Screen):
             cells = max(8, min(14, figure.cells * 2))
             left = round(figure.cx / font.cell_w) - cells // 2
             # In the figure's own row, which is the one its feet are at the top
-            # of: a bar a row lower was a bar floating about on its own.
-            self._bar(buffer, left, figure.row, cells, shown / total, thin=True)
+            # of: a bar a row lower was a bar floating about on its own. Rounded,
+            # because a bar written into the grid lands on whole rows and a figure
+            # may be standing on half of one.
+            self._bar(buffer, left, round(figure.row), cells, shown / total, thin=True)
 
     def _draw_log(self, buffer: PatternBuffer, area: tuple[int, int, int, int]) -> None:
         """The lines the fight speaks in, newest last, in the dungeon's colours.

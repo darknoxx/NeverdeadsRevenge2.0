@@ -57,7 +57,7 @@ def clear() -> None:
     _LOADED.clear()
 
 
-def paint(grid: PatternBuffer, font: SdlFont, background=BACKGROUND) -> Surface:
+def paint(grid: PatternBuffer, font: SdlFont, background=BACKGROUND, rows=None) -> Surface:
     """The whole grid, as a surface at one pixel per font pixel.
 
     ``background`` is a colour or a *picture*: hand it a surface and the frame is
@@ -65,17 +65,25 @@ def paint(grid: PatternBuffer, font: SdlFont, background=BACKGROUND) -> Surface:
     lets it show through. That is how a painted room gets behind the panels and
     the log, and it is the same one line either way -- empty cells write nothing,
     which they had to do anyway.
+
+    ``rows`` is ``(first, last)`` in cells and paints *that band only*, as tall as
+    the band, for a painter that already has the grid down and needs one part of it
+    again on top of the art drawn there since. The painting comes with it, shifted
+    by the same amount, so the band is the same band.
     """
-    surface = Surface((grid.cols * font.cell_w, grid.rows * font.cell_h))
+    first, last = rows if rows is not None else (0, grid.rows)
+    surface = Surface((grid.cols * font.cell_w, (last - first) * font.cell_h))
     if isinstance(background, Surface):
-        surface.blit(background, (0, 0))
+        surface.blit(background, (0, -first * font.cell_h))
     else:
         surface.fill(background)
 
     for x, y, run in grid.runs():
+        if not first <= y < last:
+            continue
         style = run[0].style
         left = x * font.cell_w
-        top = y * font.cell_h
+        top = (y - first) * font.cell_h
         width = len(run) * font.cell_w
         if style.bg is not None:
             # A panel is opaque the same way it is in the Qt build: the box
