@@ -261,8 +261,11 @@ def test_each_hero_is_the_best_at_something():
     # And the fourth: the one who hits hardest *once*, on the body least able to
     # survive being hit back.
     assert best_damage is INFERNO, "Inferno does not hit the hardest"
-    assert min(heroes, key=lambda h: h.stats.max_hp) is INFERNO, (
-        "the hardest hitter is not the one who can take the least"
+    # And the hardest hitter *shares* the smallest body in the roster: Noxx came
+    # down to meet him at thirty-four, which is the trade both of them made --
+    # one for damage, one for tempo, neither for the right to survive a fight.
+    assert INFERNO.stats.max_hp == min(hero.stats.max_hp for hero in heroes), (
+        "the hardest hitter is not among the ones who can take the least"
     )
 
 
