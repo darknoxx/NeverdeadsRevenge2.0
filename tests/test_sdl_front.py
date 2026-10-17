@@ -6,12 +6,17 @@ measurement: the same typeface at the same size has to give the same cell, or
 every layout in the game (all of which counts in cells) lands somewhere else. The
 second is that painting needs nothing from the game but cells.
 
-The numbers are the contrast here rather than a comparison in-process. pygame and
-Qt do *not* survive being initialised in the same process -- Qt's font database
-crashes if SDL got there first, which is worth knowing and is half the reason the
-two front ends are two front ends -- so this file brings up only pygame.freetype
-and never the video or font subsystems, and it stays out of the way of a suite
-that has Qt up already.
+The numbers are the contrast here rather than a comparison in-process, and the
+reason is worth writing down because it was chased: pygame and Qt live together
+perfectly well -- both orders, in this suite, on this machine. What does not
+survive is Qt's *font database* being asked to load a face before a
+``QGuiApplication`` exists, which is a mistake in the caller and not a war
+between toolkits.
+
+The comparison still belongs in two processes (see ``tools/sdl_probe.py`` and the
+Qt half beside it) for a duller reason: each wants its own toolkit's idea of a
+cell, and a test that imports both to check one number has to keep both alive to
+say one sentence.
 """
 
 from __future__ import annotations
