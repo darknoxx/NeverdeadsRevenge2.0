@@ -736,7 +736,9 @@ class BattleScreen(Screen):
         areas = self._areas(buffer.cols, buffer.rows)
         self._draw_ground(buffer, areas["ground"])
         self._draw_health(buffer, areas["ground"])
-        self._draw_log(buffer, areas["log"])
+        # The log lives at the *top* of the frame: the room has the bottom now,
+        # and a fight's account of itself belongs where the eye goes first.
+        self._draw_log(buffer, (0, 0, buffer.cols, areas["log"][3] + 1))
         self._draw_plate(buffer, *areas["plate"])
         self._draw_commands(buffer, *areas["commands"])
         self._draw_order(buffer, *areas["order"])
@@ -3010,17 +3012,26 @@ class BattleScreen(Screen):
 
         The same mapping the dungeon log uses, which is the point: a curse is
         the same red here as it is down there, and a kill is the same bad news.
+
+        Behind the words is a strip of the dungeon's own black, the width of the
+        frame: this is read over a *painting* now, and a line of prose on stone is
+        a line nobody reads. The strip is one row taller than the words need, which
+        is the air that keeps three lines from looking squeezed against the edge.
         """
+        from ..theme import BACKGROUND
+
         x, y, width, height = area
         if width < 20:
             return
-        shown = self.lines[-height:]
+        for row in range(y, y + height):
+            buffer.fill_row(row, " ", Style(bg=BACKGROUND))
+        shown = self.lines[-(height - 1) :]
         for index, line in enumerate(shown):
             text = line.text[: max(0, width - 4)]
             style = parse_style(log_style(line.kind))
-            buffer.text(x + 2, y + index, text, style)
+            buffer.text(x + 2, y + 1 + index, text, style)
             if index == len(shown) - 1:
-                buffer.put(x, y + index, "►", style)
+                buffer.put(x, y + 1 + index, "►", style)
 
     # -- the panels ---------------------------------------------------------
     def _draw_plate(

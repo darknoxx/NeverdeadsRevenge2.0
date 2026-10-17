@@ -2164,11 +2164,18 @@ def test_the_arena_can_be_one_painting_instead_of_tiles():
     )
     assert greenish > 20, "the painting does not look like itself"
 
+    # The log's strip, on the other hand, is black on purpose -- and the width of
+    # the frame, which is what was asked for.
+    strip = painted._surface.get_at((10, 5))[:3]
+    assert strip == tuple(BACKGROUND), f"the log strip is not the dungeon's black: {strip}"
+
     # And no black is left: the edges of the frame, where no panel reaches, are the
-    # painting too -- behind the sidebar and beside the plate. That is the whole of
-    # what was asked for, and it is a fact about four pixels rather than a promise.
+    # painting too -- behind the sidebar and beside the plate. The *top* is the one
+    # exception now and it is deliberate: the fight's log sits there on a strip of
+    # the dungeon's own black, the width of the frame. So the corners below are
+    # where the painting has to show.
     width, height = painted._surface.get_size()
-    for x, y in ((2, 2), (width - 3, 2), (2, height // 2), (width - 3, height // 2)):
+    for x, y in ((2, height - 20), (width - 3, height - 20)):
         assert painted._surface.get_at((x, y))[:3] != tuple(BACKGROUND), (
             f"there is still a field of black at {(x, y)}"
         )
