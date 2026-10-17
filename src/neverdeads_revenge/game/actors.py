@@ -468,8 +468,14 @@ NOXX = Hero(
     # colours was two characters in one coat.
     color=ATRITAS_PETROL,
     stats=Stats(
-        max_hp=42,
-        hp=42,
+        # Thirty-eight, down from forty-two, and the four points come off his
+        # *health* because that is the one dial he can afford to lose: his
+        # defence is evasion and his tempo (he gets more turns than anything in
+        # the dungeon), so health is what he has least claim on. Measured, the
+        # evasion cut from five to three already moved him from the roster's
+        # best to its second; this is the rest of the same correction.
+        max_hp=38,
+        hp=38,
         speed=1.5,
         damage=(6, 9),
         crit_chance=0.25,
