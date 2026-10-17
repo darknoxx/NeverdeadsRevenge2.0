@@ -411,7 +411,9 @@ def test_the_arena_paints_the_flagstones_and_the_monsters_on_them():
     from neverdeads_revenge.sdl_front.paint import load
     from neverdeads_revenge.world.tiles import Tile
 
-    app = SdlApp(seed=3)
+    # The tiles, not the painting: this is a test about the flagstones, and with
+    # the backdrop on there are none -- the room is one picture.
+    app = SdlApp(seed=3, backdrop=False)
     app.key("enter")  # NEW RUN
     app.key("enter")  # the first hero
     app.key("escape")  # the prologue, skipped
@@ -2160,3 +2162,40 @@ def test_the_arena_can_be_one_painting_instead_of_tiles():
         if surface.get_at((x, y))[1] > surface.get_at((x, y))[0] + 12
     )
     assert greenish > 20, "the painting does not look like itself"
+
+    # And no black is left: the edges of the frame, where no panel reaches, are the
+    # painting too -- behind the sidebar and beside the plate. That is the whole of
+    # what was asked for, and it is a fact about four pixels rather than a promise.
+    width, height = painted._surface.get_size()
+    for x, y in ((2, 2), (width - 3, 2), (2, height // 2), (width - 3, height // 2)):
+        assert painted._surface.get_at((x, y))[:3] != tuple(BACKGROUND), (
+            f"there is still a field of black at {(x, y)}"
+        )
+        assert tiled._surface.get_at((x, y))[:3] == tuple(BACKGROUND), (
+            f"the tiled room should have been black at {(x, y)}"
+        )
+
+    # And the arena's own cell floor is not drawn under the painting: it is a
+    # checker of opaque cells, and leaving it in was a grey patch in the middle of
+    # the picture. (Written into the cells outright, because `put` keeps the
+    # background a cell already has -- a word must not lift a panel.)
+    from neverdeads_revenge.desktop.pattern import PatternBuffer
+
+    grid = PatternBuffer(painted.cols, painted.rows, painted.font)
+    arena.arena.draw(grid, painted)
+    x0, y0, ground_w, ground_h = areas["ground"]
+    inked = sum(
+        1
+        for row in range(y0, y0 + ground_h)
+        for column in range(x0, x0 + ground_w)
+        if grid.cells[row][column].style.bg is not None
+    )
+    assert inked > 100, "the cell floor vanished even without a painting"
+    arena._bare_ground(grid)
+    left = sum(
+        1
+        for row in range(y0, y0 + ground_h)
+        for column in range(x0, x0 + ground_w)
+        if grid.cells[row][column].style.bg is not None
+    )
+    assert left == 0, f"{left} cells of cell floor are still under the painting"

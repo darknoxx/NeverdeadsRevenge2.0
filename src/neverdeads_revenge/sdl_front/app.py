@@ -24,7 +24,7 @@ import time
 from pathlib import Path
 
 from ..persistence import load_meta
-from ..desktop.theme import Colour
+from ..desktop.theme import BACKGROUND, Colour
 from .font import SdlFont
 from .effects import SdlEffects
 from .keys import name_of, typed
@@ -658,7 +658,16 @@ class SdlApp:
                 start = index
         for screen in self.screens[start:]:
             screen.draw(self.grid, self)
-        self._surface = paint(self.grid, self.font)
+        # A screen may bring its own paper: the arena's painted room goes *under*
+        # the cells, so the panels, the log and the sidebar sit on it instead of
+        # on a black field beside it.
+        base = BACKGROUND
+        paper = getattr(self.screens[-1], "paper", None)
+        if paper is not None:
+            # A screen with no painting to show answers None, and flat paper is
+            # what the frame wanted all along.
+            base = paper(self.cols, self.rows, self.font) or BACKGROUND
+        self._surface = paint(self.grid, self.font, base)
         self._small_face()
         # And a screen may paint straight onto the frame once the grid is drawn:
         # that is where the art lives -- sprites do not fit in a character cell.

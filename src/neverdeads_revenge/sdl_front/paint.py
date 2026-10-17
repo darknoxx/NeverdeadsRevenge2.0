@@ -57,12 +57,20 @@ def clear() -> None:
     _LOADED.clear()
 
 
-def paint(
-    grid: PatternBuffer, font: SdlFont, background: Colour = BACKGROUND
-) -> Surface:
-    """The whole grid, as a surface at one pixel per font pixel."""
+def paint(grid: PatternBuffer, font: SdlFont, background=BACKGROUND) -> Surface:
+    """The whole grid, as a surface at one pixel per font pixel.
+
+    ``background`` is a colour or a *picture*: hand it a surface and the frame is
+    drawn on that instead of on flat paper, and every cell that has nothing to say
+    lets it show through. That is how a painted room gets behind the panels and
+    the log, and it is the same one line either way -- empty cells write nothing,
+    which they had to do anyway.
+    """
     surface = Surface((grid.cols * font.cell_w, grid.rows * font.cell_h))
-    surface.fill(background)
+    if isinstance(background, Surface):
+        surface.blit(background, (0, 0))
+    else:
+        surface.fill(background)
 
     for x, y, run in grid.runs():
         style = run[0].style

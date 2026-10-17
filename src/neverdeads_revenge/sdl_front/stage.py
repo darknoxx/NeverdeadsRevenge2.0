@@ -230,33 +230,20 @@ class Stage:
         return self._stones[key]
 
     # -- and the room in one picture ----------------------------------------
-    def backdrop(self, surface, field, cols: int, rows: int, areas) -> bool:
-        """The whole room as one painting, where the game has one.
+    def paper(self, cols: int, rows: int, font):
+        """The painting, fitted to the whole frame, or ``None`` if there is none.
 
-        The alternative this stands in for is the floor and the three planes of
-        wall, which is what the game *ships* -- so this is a test of the idea and
-        not a replacement of it: no backdrop, or a file that will not load, and
-        the painted room is what is drawn.
-
-        Covered and not stretched: the painting is three by two and the room is
-        nearer eight by three, so it is scaled until it fills and then centred,
-        which crops rather than squashes. A dial worth turning by eye, and this is
-        the neutral setting.
+        Covered and not stretched: the painting is three by two and a frame is
+        sixteen by nine, so it is scaled until it fills and centred -- crops,
+        rather than squashes. One dial for the eye, and this is the neutral
+        setting.
         """
         image = load("backdrops/arena.png")
         if image is None:
-            return False
-        wall_x, wall_y, wall_w, wall_h = areas["wall"]
-        ground_x, ground_y, ground_w, ground_h = areas["ground"]
-        cell_w, cell_h = self._cell(field)
-        rect = (
-            wall_x * cell_w,
-            wall_y * cell_h,
-            wall_w * cell_w,
-            (ground_y + ground_h - wall_y) * cell_h,
+            return None
+        return self._backdrop_for(
+            image, (cols * font.cell_w, rows * font.cell_h)
         )
-        surface.blit(self._backdrop_for(image, rect[2:]), (rect[0], rect[1]))
-        return True
 
     def _backdrop_for(self, image, size):
         """The painting, fitted to that rectangle, once per size."""

@@ -87,6 +87,18 @@ class SdlArena(Screen):
         #: landed blow throws a colour over everything for a few frames.
         self._overlay = None
 
+    def paper(self, cols: int, rows: int, font):
+        """The whole frame's paper, when the room is a painting.
+
+        Fitted to the *frame* and not to the room band: the painting goes behind
+        everything -- the sidebar, the log, the panels -- and the cells that have
+        nothing to say let it show. Which is the difference between a room with a
+        picture in it and a picture of a room that the game is standing in.
+        """
+        if not self.backdrop:
+            return None
+        return self._stage.paper(cols, rows, font)
+
     # -- the first pass -----------------------------------------------------
     def draw(self, buffer, app) -> None:
         """The panels, and a letter for anything the sheets have no picture of.
@@ -97,6 +109,12 @@ class SdlArena(Screen):
         written here would stand through the sprite pasted over it.
         """
         self.arena.draw(buffer, app)
+        if self.backdrop:
+            # The painting *is* the room, so the grid's room is not drawn: the
+            # arena's cell floor is a checker of opaque cells, and leaving it in
+            # would be a grey patch in the middle of the picture. The wall band
+            # is left alone -- it is glyphs, and they are ink either way.
+            self._bare_ground(buffer)
         cell_w = max(1, buffer.font.cell_w)
         for figure in self.arena._figures(buffer.cols, buffer.rows, buffer.font):
             if figure.art is not None:
@@ -125,9 +143,10 @@ class SdlArena(Screen):
         field = self.arena._field(cols, rows, font.cell_w, font.cell_h)
         areas = self.arena._areas(cols, rows)
         fades = {id(one.actor): self.arena._fade(id(one.actor)) for one in figures}
-        if not (self.backdrop and self._stage.backdrop(surface, field, cols, rows, areas)):
-            # No painting, or none asked for: the room this game ships -- the
-            # flagstones and the three planes of wall.
+        if not self.backdrop:
+            # No painting: the room this game ships -- the flagstones and the
+            # three planes of wall. With one, the room is already on the frame:
+            # it is the paper the cells were drawn on.
             self._stage.floor(surface, field)
             if not self._stage.wall(surface, field):
                 self._hash_walls(surface, app, field)
@@ -272,6 +291,23 @@ class SdlArena(Screen):
                         surface.blit(glyph, (x + index * face.cell_w, y))
             y += face.cell_h
             step += 1
+
+    def _bare_ground(self, buffer) -> None:
+        """Take the arena's own floor back out of the grid: the painting has one.
+
+        Written straight into the cells and *not* through ``put``, which keeps the
+        background a cell already has -- a word written on a panel must not lift
+        the panel out from under it, and that rule is right. It is also why the
+        first version of this did nothing at all: five hundred and ninety-two
+        cells still had their floor. Clearing is not writing a word, so it is the
+        one place that writes a cell outright.
+        """
+        from ..desktop.pattern import Cell
+
+        x0, y0, width, height = self.arena._areas(buffer.cols, buffer.rows)["ground"]
+        for row in range(y0, y0 + height):
+            for column in range(x0, x0 + width):
+                buffer.cells[row][column] = Cell()
 
     def _wounds(self, surface, app, figures, fades) -> None:
         """What is eating each monster, at the end of its bar.
