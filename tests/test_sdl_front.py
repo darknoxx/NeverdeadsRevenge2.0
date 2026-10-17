@@ -1110,3 +1110,37 @@ def test_every_menu_is_qt_free_too():
     )
     assert result.returncode == 0, result.stderr
     assert "MENUS-OK" in result.stdout, result.stdout
+
+
+def test_the_room_has_walls_on_the_second_front_end():
+    """Three planes of stone, asked of the frame and of the cache.
+
+    The far wall faces the camera and needs no shear; the two at the sides are the
+    floor's own edges standing up. Both are built once per window size -- a shear
+    is a column of one-pixel strips at a walking offset, which is nothing to do
+    once and far too much to do every frame -- so the test asks two things: that
+    there is stone in the band above the floor, and that the second frame is a
+    blit of the same surface rather than another build.
+    """
+    from neverdeads_revenge.desktop.theme import BACKGROUND
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3, battle_scene=True)
+    arena = app.screens[-1]
+    surface = app._surface
+    cols, rows = arena.arena._dims(app)
+    field = arena.arena._field(cols, rows, app.font.cell_w, app.font.cell_h)
+
+    stone = sum(
+        1
+        for x in range(0, surface.get_width(), 3)
+        for y in range(round(field["wall_top"]), round(field["top"]), 3)
+        if surface.get_at((x, y))[:3] != tuple(BACKGROUND)
+    )
+    assert stone > 200, f"the wall band is empty: {stone} pixels of stone"
+
+    key = tuple(sorted(field.items()))
+    built = arena._stage._walls.get(key)
+    assert built is not None, "the wall was not built at all"
+    app.redraw()
+    assert arena._stage._walls[key] is built, "the wall was built a second time"

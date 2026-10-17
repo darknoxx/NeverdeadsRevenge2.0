@@ -2654,7 +2654,7 @@ class BattleScreen(Screen):
             x = int(left + inset_px + index * art.width())
             for course in range(down):
                 y = int(ground_top - (course + 1) * art.height())
-                stone = self._stone(index, course)
+                stone = tile(self._stone(index, course)) or art
                 painter.drawImage(x, y, stone)
                 self._shade(painter, x, y, stone, far_ink, FAR_LIGHT)
 
@@ -2685,7 +2685,7 @@ class BattleScreen(Screen):
                 # *above* the line its edge is on, which is where a wall is --
                 # and courses of them, because one course is a kerb.
                 for course in range(down):
-                    stone = self._stone(step, course)
+                    stone = tile(self._stone(step, course)) or art
                     painter.drawImage(
                         -art.width() // 2, -(course + 1) * art.height(), stone
                     )
@@ -2719,16 +2719,17 @@ class BattleScreen(Screen):
         return f"floor_{tone}"
 
     @staticmethod
-    def _stone(along: int, course: int):
-        """Which stone is at this place in a wall: mostly plain, sometimes not.
+    def _stone(along: int, course: int) -> str:
+        """Which stone is at this place in a wall, by name: mostly plain,
+        sometimes not.
 
         Chosen from the place in the wall and not rolled for, so the scattered
-        bones stay where they were laid: a room that re-dressed itself every frame
-        would be a room made of flicker.
+        vines stay where they grew: a room that re-dressed itself every frame
+        would be a room made of flicker. Named and not loaded -- the same split
+        the floor's stones keep -- so a front end with no QPainter can lay the
+        same wall.
         """
-        plain = tile("wall")
-        wanted = WALL_STONES[_scatter(along, course) % len(WALL_STONES)]
-        return tile(wanted) or plain
+        return WALL_STONES[_scatter(along, course) % len(WALL_STONES)]
 
     def _shade(
         self,

@@ -23,7 +23,9 @@ this one.
 
 from __future__ import annotations
 
-from ..desktop.screens.battle import BattleScreen
+import math
+
+from ..desktop.screens.battle import FAR_LIGHT, WALL_FAR, WALL_NEAR, BattleScreen
 from ..desktop.theme import parse_style
 from .paint import load
 
@@ -46,6 +48,11 @@ class Stage:
     def __init__(self) -> None:
         self._washes: dict[tuple[int, int, int], object] = {}
         self._shadow: object | None = None
+        #: The stones, shaded, and the whole wall built out of them -- both kept,
+        #: because masonry does not change and a shear is not something to do
+        #: every frame. Keyed by what they were asked for.
+        self._stones: dict[tuple[str, int], object] = {}
+        self._walls: dict[tuple, object] = {}
 
     # -- the art ------------------------------------------------------------
     def tile(self, name: str):
@@ -114,6 +121,104 @@ class Stage:
             strip.fill((*FADE_COLOUR, alpha))
             self._washes[key] = strip
         return strip
+
+    # -- the room around it -------------------------------------------------
+    def wall(self, surface, field) -> bool:
+        """The room: three planes of the same stone, built once and blitted.
+
+        The far wall faces the viewer and needs no shear; the two at the sides
+        are the floor's own edges standing up, so each is the *same* transform of
+        the same tile. A shear is a column of one-pixel strips at a walking
+        offset -- far too much to do every frame and nothing at all to do once --
+        so the whole thing is built on the first frame of a window size and
+        blitted after that. Returns whether there was any wall art to build from.
+        """
+        key = tuple(sorted(field.items()))
+        if key not in self._walls:
+            self._walls[key] = self._build_wall(field, surface.get_size())
+        built = self._walls[key]
+        if built is None:
+            return False
+        surface.blit(built, (0, 0))
+        return True
+
+    def _build_wall(self, field, size):
+        """The three planes, on their own surface, with the shade baked in."""
+        import pygame
+
+        art = self.tile("wall")
+        if art is None:
+            return None
+        wall = _blank(size)
+        tw, th = art.get_width(), art.get_height()
+        left = float(field["left"])
+        inset = float(field["inset_px"])
+        ground_top = float(field["top"])
+        wall_top = float(field.get("wall_top", ground_top - 60.0))
+        bottom = float(field["bottom"])
+        down = max(1, math.ceil((ground_top - wall_top) / th))
+
+        # The far wall: laid *up* from the floor's own edge, because a wall that
+        # grew downwards would be standing on the floor.
+        across = max(1, math.ceil((float(field["width_px"]) - inset * 2) / tw))
+        for index in range(across):
+            x = round(left + inset + index * tw)
+            for course in range(down):
+                stone = self._stone(BattleScreen._stone(index, course), FAR_LIGHT)
+                if stone is not None:
+                    wall.blit(stone, (x, round(ground_top - (course + 1) * th)))
+
+        # And the two sides, sheared along the floor's own edge -- the light
+        # coming from the hero's end, so the far corner is the darkest thing.
+        edge_x, edge_y = float(field["edge_x"]), float(field["edge_y"])
+        steps = max(1, round(float(field["edge_len"]) / tw))
+        for side in (0, 1):
+            ux = edge_x if side == 0 else -edge_x
+            if side:
+                ax0 = float(field["right"]) - inset
+                ax1 = float(field["right"])
+            else:
+                ax0, ax1 = left + inset, left
+            ay0, ay1 = ground_top, bottom
+            for step in range(steps):
+                along = (step + 0.5) / steps
+                ax = ax0 + (ax1 - ax0) * along
+                ay = ay0 + (ay1 - ay0) * along
+                for course in range(down):
+                    stone = self._stone(
+                        BattleScreen._stone(step, course), FAR_LIGHT - along * 0.75
+                    )
+                    if stone is not None:
+                        _shear_into(
+                            wall, stone, ux, edge_y, ax - tw // 2, ay - (course + 1) * th
+                        )
+
+        # The clip: courses climb, and a wall does not have to cover the sky.
+        if wall_top > 0:
+            wall.fill((0, 0, 0, 0), pygame.Rect(0, 0, size[0], round(wall_top)))
+        return wall
+
+    def _stone(self, name: str, how_much: float):
+        """One stone, with the room's own dark laid over it, made once.
+
+        The hashes were *drawn* in three greys; a picture cannot be, so the
+        difference between the far wall and the near corner is a wash of the
+        darkness over the top of it -- the same idea, one layer up.
+        """
+        alpha = max(0, min(255, int(150 * how_much)))
+        key = (name, alpha)
+        if key not in self._stones:
+            art = self.tile(name)
+            if art is None:
+                self._stones[key] = None
+            else:
+                art = art.copy()
+                if alpha:
+                    wash = _blank(art.get_size())
+                    wash.fill((6, 6, 10, alpha))
+                    art.blit(wash, (0, 0))
+                self._stones[key] = art
+        return self._stones[key]
 
     # -- what is standing on it ---------------------------------------------
     def health(self, surface, figures, font, shown, hero, fades) -> None:
@@ -205,6 +310,28 @@ class Stage:
         if figure.art is None:
             return None
         return load(figure.art)
+
+
+def _blank(size):
+    """A transparent surface, made the one way: SDL needs the import, too."""
+    import pygame
+
+    return pygame.Surface(size, pygame.SRCALPHA)
+
+
+def _shear_into(target, stone, ux: float, uy: float, ax: float, ay: float) -> None:
+    """Blit a tile as its *plane*: every column shifted up and along.
+
+    Which is what a shear is, done the only way a blitter can do it without a
+    matrix: one column at a time, at a walking offset. Done once per window and
+    never again, which is the whole reason it is affordable.
+    """
+    import pygame
+
+    width, height = stone.get_size()
+    for column in range(width):
+        strip = stone.subsurface(pygame.Rect(column, 0, 1, height))
+        target.blit(strip, (round(ax + ux * column), round(ay + uy * column)))
 
 
 def _bar_colour(ratio: float) -> str:

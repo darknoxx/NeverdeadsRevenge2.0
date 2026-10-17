@@ -122,6 +122,8 @@ class SdlArena(Screen):
         field = self.arena._field(cols, rows, font.cell_w, font.cell_h)
         fades = {id(one.actor): self.arena._fade(id(one.actor)) for one in figures}
         self._stage.floor(surface, field)
+        if not self._stage.wall(surface, field):
+            self._hash_walls(surface, app, field)
         self._stage.health(
             surface, figures, font, self.arena._shown, self.battle.hero, fades
         )
@@ -239,6 +241,30 @@ class SdlArena(Screen):
             glyph = face.glyph(ARROW, colour)
             if glyph is not None:
                 surface.blit(glyph, (centre, above + offset))
+
+    def _hash_walls(self, surface, app, field) -> None:
+        """The room without the art: the dungeon's own ``#``, drawn big.
+
+        The Qt build has the same fallback for the same reason -- the alphabet is
+        underneath every picture in this game, so a machine with no wall art gets
+        the room it always had. Here it is a row of glyphs in the wall's own grey,
+        which is what the grid drew before there were pictures at all.
+        """
+        art = app.font
+        face = self._face(art.path, max(16, art.cell_h * 2))
+        top = int(field.get("wall_top", field["top"] - 60.0))
+        colour = parse_style(WALL_NEAR).fg
+        y = max(0, top)
+        stride = face.cell_w * 2
+        step = 0
+        while y < field["top"] and step < 3:
+            for x in range(0, surface.get_width(), stride):
+                for index in range(2):
+                    glyph = face.glyph("#", colour if index == 0 else parse_style(WALL_FAR).fg)
+                    if glyph is not None:
+                        surface.blit(glyph, (x + index * face.cell_w, y))
+            y += face.cell_h
+            step += 1
 
     def _wounds(self, surface, app, figures, fades) -> None:
         """What is eating each monster, at the end of its bar.
