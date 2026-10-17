@@ -1169,7 +1169,7 @@ def test_the_room_has_walls_on_the_second_front_end():
     from neverdeads_revenge.desktop.theme import BACKGROUND
     from neverdeads_revenge.sdl_front.app import SdlApp
 
-    app = SdlApp(seed=3, battle_scene=True)
+    app = SdlApp(seed=3, battle_scene=True, backdrop=False)
     arena = app.screens[-1]
     surface = app._surface
     cols, rows = arena.arena._dims(app)
@@ -2119,3 +2119,44 @@ def test_the_grid_comes_from_the_window_like_the_qt_build(monkeypatch):
     assert (app.cols, app.rows) == (128, 36), "the grid did not follow the window"
     assert app._shown == (2560, 1440), "the picture did not fill the screen"
     assert app._shown_at == (0, 0), "there is a bar left over"
+
+
+def test_the_arena_can_be_one_painting_instead_of_tiles():
+    """The backdrop: one picture where the floor and three walls used to be.
+
+    The game ships *no* painting -- the room it draws is the tiles, and that is
+    what the Qt build has and what this one falls back to. So this is a dial for
+    looking at art, and the fact worth holding down is that the dial is the only
+    difference: same arena, same staging, same figures, and the room under them
+    comes from somewhere else.
+
+    Asked by difference, because a painting has no colour the tiles cannot have.
+    """
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    painted = SdlApp(seed=3, battle_scene=True, no_sound=True, backdrop=True)
+    tiled = SdlApp(seed=3, battle_scene=True, no_sound=True, backdrop=False)
+    arena = painted.screens[-1]
+    cols, rows = arena.arena._dims(painted)
+    areas = arena.arena._areas(cols, rows)
+    cell_w, cell_h = painted.font.cell_w, painted.font.cell_h
+    _, wall_y, _, _ = areas["wall"]
+    _, ground_y, _, ground_h = areas["ground"]
+    box = (
+        0,
+        wall_y * cell_h,
+        painted._surface.get_width(),
+        (ground_y + ground_h) * cell_h,
+    )
+    assert _changed(tiled._surface, painted._surface, box) > 2000, (
+        "the backdrop changed nothing in the room"
+    )
+    # And it is the painting's own colours, not a tint: greens for the vines.
+    surface = painted._surface
+    greenish = sum(
+        1
+        for x in range(0, surface.get_width(), 5)
+        for y in range(box[1], box[3], 5)
+        if surface.get_at((x, y))[1] > surface.get_at((x, y))[0] + 12
+    )
+    assert greenish > 20, "the painting does not look like itself"

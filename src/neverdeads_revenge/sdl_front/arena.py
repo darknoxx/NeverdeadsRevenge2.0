@@ -67,8 +67,11 @@ NUMBER_LIFT = 2
 class SdlArena(Screen):
     """The arena's own panels, its playback, and the room painted by pygame."""
 
-    def __init__(self, battle) -> None:
+    def __init__(self, battle, backdrop: bool = True) -> None:
         self.battle = battle
+        #: Whether the room is one painting or the game's own flagstones and
+        #: walls. On by default where the art is there, and off with --no-backdrop.
+        self.backdrop = backdrop
         #: The Qt build's arena, used for everything that is not pixels: its
         #: panels, its verbs, its order strip, its staging, its floor's geometry,
         #: *its playback*, and the whole of the rules behind them. It is never
@@ -120,10 +123,14 @@ class SdlArena(Screen):
         font = app.font
         figures = self.arena._figures(cols, rows, font)
         field = self.arena._field(cols, rows, font.cell_w, font.cell_h)
+        areas = self.arena._areas(cols, rows)
         fades = {id(one.actor): self.arena._fade(id(one.actor)) for one in figures}
-        self._stage.floor(surface, field)
-        if not self._stage.wall(surface, field):
-            self._hash_walls(surface, app, field)
+        if not (self.backdrop and self._stage.backdrop(surface, field, cols, rows, areas)):
+            # No painting, or none asked for: the room this game ships -- the
+            # flagstones and the three planes of wall.
+            self._stage.floor(surface, field)
+            if not self._stage.wall(surface, field):
+                self._hash_walls(surface, app, field)
         self._stage.health(
             surface, figures, font, self.arena._shown, self.battle.hero, fades
         )

@@ -88,6 +88,7 @@ class SdlApp:
         no_sound: bool = True,
         battle_scene: bool = False,
         fps: bool = False,
+        backdrop: bool = True,
     ) -> None:
         import pygame
 
@@ -119,6 +120,9 @@ class SdlApp:
         #: A frame counter, for the flag that asks for one. Smoothed, because a
         #: number that jitters by ten a frame tells you nothing.
         self.show_fps = fps
+        #: Whether the arena is one painted room or the game's own tiles. The
+        #: reference build has no painting, so this is a dial for looking at art.
+        self.backdrop = backdrop
         self.frames = 0.0
         self.seed = seed
         self.run = None
@@ -298,7 +302,7 @@ class SdlApp:
         """The arena, in the place of whoever was turning the room over."""
         from .arena import SdlArena
 
-        self.swap(SdlArena(battle))
+        self.swap(SdlArena(battle, backdrop=self.backdrop))
 
     def leave_battle(self) -> None:
         """The fight is over: back to the floor, or home if there is no floor."""
@@ -349,7 +353,9 @@ class SdlApp:
 
         if self.run is None:
             self.run = start_run(HEROES["noxx"], self._a_seed())
-        self.screens = [SdlArena(Battle(self.run, self.run.enemies[:3]))]
+        self.screens = [
+            SdlArena(Battle(self.run, self.run.enemies[:3]), backdrop=self.backdrop)
+        ]
         self.redraw()
 
     def open_shop(self) -> None:

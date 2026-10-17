@@ -52,6 +52,11 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--no-backdrop",
+        action="store_true",
+        help="draw the arena's own flagstones and walls instead of the painting",
+    )
+    parser.add_argument(
         "--fps",
         action="store_true",
         help="show a frame counter in the corner (second front end)",
@@ -85,6 +90,7 @@ def main(argv: list[str] | None = None) -> int:
             no_sound=args.no_sound,
             battle_scene=args.battle_scene,
             fps=args.fps,
+            backdrop=not args.no_backdrop,
         )
         window.open_window()
         return 0

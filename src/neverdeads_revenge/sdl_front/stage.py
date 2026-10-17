@@ -53,6 +53,9 @@ class Stage:
         #: every frame. Keyed by what they were asked for.
         self._stones: dict[tuple[str, int], object] = {}
         self._walls: dict[tuple, object] = {}
+        #: The backdrop, fitted to the room once and blitted after: the painting
+        #: is four megapixels and scaling that per frame is a crawl.
+        self._fitted: dict[tuple[int, int], object] = {}
 
     # -- the art ------------------------------------------------------------
     def tile(self, name: str):
@@ -225,6 +228,64 @@ class Stage:
                     art.blit(wash, (0, 0))
                 self._stones[key] = art
         return self._stones[key]
+
+    # -- and the room in one picture ----------------------------------------
+    def backdrop(self, surface, field, cols: int, rows: int, areas) -> bool:
+        """The whole room as one painting, where the game has one.
+
+        The alternative this stands in for is the floor and the three planes of
+        wall, which is what the game *ships* -- so this is a test of the idea and
+        not a replacement of it: no backdrop, or a file that will not load, and
+        the painted room is what is drawn.
+
+        Covered and not stretched: the painting is three by two and the room is
+        nearer eight by three, so it is scaled until it fills and then centred,
+        which crops rather than squashes. A dial worth turning by eye, and this is
+        the neutral setting.
+        """
+        image = load("backdrops/arena.png")
+        if image is None:
+            return False
+        wall_x, wall_y, wall_w, wall_h = areas["wall"]
+        ground_x, ground_y, ground_w, ground_h = areas["ground"]
+        cell_w, cell_h = self._cell(field)
+        rect = (
+            wall_x * cell_w,
+            wall_y * cell_h,
+            wall_w * cell_w,
+            (ground_y + ground_h - wall_y) * cell_h,
+        )
+        surface.blit(self._backdrop_for(image, rect[2:]), (rect[0], rect[1]))
+        return True
+
+    def _backdrop_for(self, image, size):
+        """The painting, fitted to that rectangle, once per size."""
+        import pygame
+
+        key = (int(size[0]), int(size[1]))
+        if key not in self._fitted:
+            width, height = key
+            factor = max(width / image.get_width(), height / image.get_height())
+            scaled = pygame.transform.smoothscale(
+                image,
+                (
+                    max(1, round(image.get_width() * factor)),
+                    max(1, round(image.get_height() * factor)),
+                ),
+            )
+            self._fitted[key] = scaled.subsurface(
+                pygame.Rect(
+                    (scaled.get_width() - width) // 2,
+                    (scaled.get_height() - height) // 2,
+                    width,
+                    height,
+                )
+            )
+        return self._fitted[key]
+
+    def _cell(self, field) -> tuple[int, int]:
+        """The cell the room is measured in, off the field it was built from."""
+        return (int(field["cell_w"]), int(field["cell_h"]))
 
     # -- what is standing on it ---------------------------------------------
     def health(self, surface, figures, font, shown, hero, fades) -> None:
