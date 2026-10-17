@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import math
 import time
+from dataclasses import dataclass
 
 from neverdeads_revenge.game.actors import ActorKind
 from neverdeads_revenge.game.draughts import draught_by_key
@@ -38,11 +39,14 @@ __all__ = [
     "SIDEBAR",
     "BOTTOM",
     "HUD_WIDTH",
+    "Ink",
     "regions",
     "viewport",
     "screen_point",
     "draw_game",
+    "log_text",
     "paste_log",
+    "sidebar_text",
     "paste_sidebar",
     "draw_title",
     "hud_lines",
@@ -317,76 +321,157 @@ def small_face_top(state) -> int:
     return len(hud_lines(state)) + 1
 
 
-def paste_sidebar(image, state, cols, rows, cell_w, cell_h, small, now: float | None = None) -> None:
-    """Everything under the HUD's rule, in one small face.
+#: One line of the small face: what it says, where it goes, and in which of the
+#: palette's colours. A *shape* and not a drawing, because two front ends draw
+#: these rows and only one of them has QPainter -- the same split the verdict
+#: panel and the roster's portraits already keep.
+@dataclass(frozen=True)
+class Ink:
+    text: str
+    x: int
+    y: int
+    colour: str
 
-    The glance groups first -- lower case now, they were shouting in a panel
-    meant for a glance, and the small face has no room for headlines anyway --
-    then the void's line, then a thin rule, then the legend. All of it measured
-    from the same top row the drawing above hands over, so the two can never
-    drift apart. ``now`` drives the ready state's breath; it defaults so a
-    caller that has no clock -- a test -- still gets a prompt drawn.
+
+def sidebar_text(
+    state,
+    cols: int,
+    rows: int,
+    cell_w: int,
+    cell_h: int,
+    small_cell_w: int,
+    small_cell_h: int,
+    now: float | None = None,
+) -> tuple[list[Ink], tuple[int, int, int] | None]:
+    """Everything under the HUD's rule, as rows to draw.
+
+    The glance groups first -- lower case now, they were shouting in a panel meant
+    for a glance, and a small face has no room for headlines anyway -- then the
+    void's line, then a thin rule, then the pointer to the legend. Measured from
+    the same top row the map hands over, so the two cannot drift apart, and
+    measured in the *caller's* cell: both front ends lay this out in their own
+    small face, and how wide a small cell is is the face's business. ``now`` drives
+    the ready state's breath; it defaults so a caller with no clock still gets a
+    prompt drawn.
+    """
+    areas = regions(cols, rows)
+    sx, sy, sw, _sh = areas["sidebar"]
+
+    out: list[Ink] = []
+    top = (sy + small_face_top(state)) * cell_h
+    left = sx * cell_w + small_cell_w
+    text_x = left + small_cell_w * 2  # one cell for a glyph, one for air under it
+    text_w = (sx + sw) * cell_w - text_x - small_cell_w
+    chars = max(1, text_w // small_cell_w)
+    bottom = rows * cell_h
+
+    y = top
+    for kind in ("curses", "gifts", "effects", "draughts", "statuses"):
+        if y + small_cell_h > bottom:
+            break
+        out.append(Ink(kind, left, y, "grey30"))
+        y += small_cell_h
+        names = marks_names(state, kind)
+        if names:
+            for name in names:
+                if y + small_cell_h > bottom:
+                    break
+                out.append(Ink(name[:chars], text_x, y, _STYLE_BY_GROUP[kind]))
+                y += small_cell_h
+        else:
+            out.append(Ink("-", text_x, y, "grey30"))
+            y += small_cell_h
+
+    # The void's own line, belonging to the group of rules the sidebar keeps: grey
+    # until the level, dark petrol and breathing while it can be given into, grey
+    # again once the floor has had it. The pulse is luminance on purpose -- the
+    # shader's bloom is already a reading of brightness, so the glow needs no new
+    # pass.
+    prompt = _void_prompt(state, time.time() if now is None else now)
+    if prompt is not None:
+        text, colour = prompt
+        if y + small_cell_h <= bottom:
+            out.append(Ink(text[:chars], text_x, y, colour.name()))
+            y += small_cell_h + small_cell_h // 4
+    y += small_cell_h // 3  # air between the groups and the legend
+    rule = None
+    if y < bottom:
+        # The thin rule between the run and the pointer: handed over as its two
+        # ends, because a line is the one thing here that is not a row of text.
+        rule = (sx * cell_w + small_cell_w, (sx + sw) * cell_w - small_cell_w, y)
+        y += (small_cell_h * 3) // 2
+    # The legend lives in its own menu now (`l`). The sidebar's job is the run in
+    # progress, and a reference that never changes was spending the best rows on
+    # every turn -- so what is left here is the pointer to it.
+    if y + small_cell_h <= bottom:
+        out.append(Ink("l legend   ? reference", left, y, "grey30"))
+    return out, rule
+
+
+def log_text(
+    state,
+    cols: int,
+    rows: int,
+    cell_w: int,
+    cell_h: int,
+    small_cell_w: int,
+    small_cell_h: int,
+) -> tuple[tuple[int, int, int, int], list[Ink]]:
+    """The combat log as a panel and the rows to draw in it.
+
+    The log gets a smaller face than the rest of the frame, and that is the one
+    place a mixed size pays for itself: a battle is words, and words a player is
+    reading while deciding what to press next are worth more of the frame than the
+    ground they are printed on. The panel is handed over with the rows because it
+    is drawn solid -- the frame underneath it is nothing at all now that the cells
+    are clear -- and because where it is is not the painter's guess.
+    """
+    areas = regions(cols, rows)
+    x0, y0, width, height = areas["log"]
+    # Aligned with the columns beside it: their headings sit one row into the
+    # bottom strip, so the log starts there too and shares its floor line with
+    # them.
+    rect = (x0 * cell_w, (y0 + 1) * cell_h, width * cell_w, (height - 1) * cell_h)
+    left = rect[0] + small_cell_w * 2  # still clear of the corner
+    text_w = rect[0] + rect[2] - left - small_cell_w
+    chars = max(1, text_w // small_cell_w)
+    lines_fit = max(1, rect[3] // small_cell_h)
+    visible = state.log[-lines_fit:]
+    y = rect[1] + rect[3] - small_cell_h * len(visible) + 1
+    out: list[Ink] = []
+    for entry in visible:
+        out.append(Ink(entry.text[:chars], left, y, log_style(entry.kind)))
+        y += small_cell_h
+    return rect, out
+
+def paste_sidebar(image, state, cols, rows, cell_w, cell_h, small, now: float | None = None) -> None:
+    """The sidebar's rows, drawn in the small face Qt has.
+
+    The rows themselves come from :func:`sidebar_text`, which is where the layout
+    lives: this is the painter and nothing else, which is what lets the front end
+    without a QPainter draw the same rows in its own face.
     """
     from PySide6.QtCore import QRect
     from PySide6.QtGui import QPainter
 
     from .buffer import qcolour
 
-    areas = regions(cols, rows)
-    sx, sy, sw, _sh = areas["sidebar"]
-
+    out, rule = sidebar_text(
+        state, cols, rows, cell_w, cell_h, small.cell_w, small.cell_h, now
+    )
     painter = QPainter(image)
-    dim = qcolour(parse_style("grey30").fg)
-    top = (sy + small_face_top(state)) * cell_h
-    left = sx * cell_w + small.cell_w
-    text_x = left + small.cell_w * 2  # one cell for a glyph, one for air under it
-    text_w = (sx + sw) * cell_w - text_x - small.cell_w
-    chars = max(1, text_w // small.cell_w)
-
-    def draw(text: str, x: int, y: int, fg) -> None:
-        painter.setFont(small.normal)
-        painter.setPen(qcolour(fg))
-        painter.drawText(QRect(x, y, text_w + small.cell_w, small.cell_h + 4), 0, text)
-
-    y = top
-    # The glance groups.
-    for kind in ("curses", "gifts", "effects", "draughts", "statuses"):
-        if y + small.cell_h > rows * cell_h:
-            break
-        draw(kind, left, y, dim)
-        y += small.cell_h
-        names = marks_names(state, kind)
-        if names:
-            for name in names:
-                if y + small.cell_h > rows * cell_h:
-                    break
-                draw(name[:chars], text_x, y, parse_style(_STYLE_BY_GROUP[kind]).fg)
-                y += small.cell_h
-        else:
-            draw("-", text_x, y, dim)
-            y += small.cell_h
-    # The void's own line, belonging to the group of rules the sidebar keeps:
-    # grey until the level, dark petrol and breathing while it can be given
-    # into, grey again once the floor has had it. The pulse is luminance on
-    # purpose -- the shader's bloom is already a reading of brightness, so the
-    # glow needs no new pass.
-    prompt = _void_prompt(state, time.time() if now is None else now)
-    if prompt is not None:
-        text, colour = prompt
-        if y + small.cell_h <= rows * cell_h:
-            draw(text[:chars], text_x, y, colour)
-            y += small.cell_h + small.cell_h // 4
-    y += small.cell_h // 3  # air between the groups and the legend
-    if y < rows * cell_h:
-        painter.setPen(dim)
-        painter.drawLine(left, y, (sx + sw) * cell_w - small.cell_w, y)
-        y += (small.cell_h * 3) // 2
-    # The legend lives in its own menu now (`l`). The sidebar's job is the run
-    # in progress, and a reference that never changes was spending the best
-    # rows on every turn -- so what is left here is the pointer to it.
-    if y + small.cell_h <= rows * cell_h:
-        draw("l legend   ? reference", left, y, dim)
-        y += small.cell_h
+    painter.setFont(small.normal)
+    for ink in out:
+        painter.setPen(qcolour(parse_style(ink.colour).fg))
+        # As wide as what is left of the frame: the row was already cut to the
+        # sidebar in the spec, and a rect that clamps a second time would be a
+        # second opinion about where the sidebar ends.
+        painter.drawText(
+            QRect(ink.x, ink.y, image.width() - ink.x, small.cell_h + 4), 0, ink.text
+        )
+    if rule is not None:
+        painter.setPen(qcolour(parse_style("grey30").fg))
+        painter.drawLine(rule[0], rule[2], rule[1], rule[2])
     painter.end()
 
 
@@ -521,51 +606,28 @@ def log_style(kind: LogKind) -> str:
 def paste_log(
     image, state: GameState, cols: int, rows: int, cell_w: int, cell_h: int, small
 ) -> None:
-    """Draw the combat log straight onto a rendered frame.
+    """The combat log, drawn in the small face Qt has.
 
-    The log gets a smaller face than the rest of the frame, and that is the one
-    place a mixed size pays for itself: a battle is words, and words a player is
-    reading while deciding what to press next are worth more of the frame than
-    the ground they are printed on. The smaller face fits more of them into the
-    same ten rows, without shrinking anything the player aims with.
+    The panel and the rows come from :func:`log_text`; this fills the panel and
+    puts the words in it.
     """
     from PySide6.QtCore import QRect
     from PySide6.QtGui import QPainter
 
     from .buffer import qcolour
 
-    areas = regions(cols, rows)
-    x0, y0, width, height = areas["log"]
-    # Aligned with the columns beside it: their headings sit one row into the
-    # bottom strip, so the log starts there too and shares its floor line with
-    # them. A couple of its rows go for it, and the three panels sit on one top
-    # line instead of two.
-    rect = QRect(x0 * cell_w, (y0 + 1) * cell_h, width * cell_w, (height - 1) * cell_h)
-
+    rect, out = log_text(state, cols, rows, cell_w, cell_h, small.cell_w, small.cell_h)
     painter = QPainter(image)
     painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, False)
-    # The log's own panel: drawn solid rather than left to whatever the frame
-    # had underneath, which is nothing at all now that the cells are clear.
-    painter.fillRect(rect, qcolour(BACKGROUND))
-
-    line_h = small.cell_h
-    lines_fit = max(1, rect.height() // line_h)
-    visible = state.log[-lines_fit:]
-    left = rect.left() + small.cell_w * 2  # still clear of the corner
-    text_w = rect.right() - left - small.cell_w
-    y = rect.bottom() - line_h * len(visible) + 1
-    for entry in visible:
-        style = parse_style(log_style(entry.kind))
-        painter.setPen(qcolour(style.fg))
-        chars = max(1, text_w // small.cell_w)
-        painter.setFont(small.normal)
-        painter.drawText(
-            QRect(left, y, text_w, line_h + 4),
-            0,
-            entry.text[:chars],
-        )
-        y += line_h
+    # The log's own panel: drawn solid rather than left to whatever the frame had
+    # underneath, which is nothing at all now that the cells are clear.
+    painter.fillRect(QRect(*rect), qcolour(BACKGROUND))
+    painter.setFont(small.normal)
+    for ink in out:
+        painter.setPen(qcolour(parse_style(ink.colour).fg))
+        painter.drawText(QRect(ink.x, ink.y, rect[2], small.cell_h + 4), 0, ink.text)
     painter.end()
+
 
 
 #: Each hero's promise, as the sidebar says it: the name, and the colour it

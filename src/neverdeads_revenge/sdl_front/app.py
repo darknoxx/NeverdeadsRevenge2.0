@@ -28,7 +28,12 @@ from .effects import SdlEffects
 from .keys import name_of, typed
 from .paint import paint
 
-__all__ = ["SdlApp", "FONT", "MIN_COLS", "MIN_ROWS"]
+__all__ = ["SdlApp", "FONT", "MIN_COLS", "MIN_ROWS", "SMALL_PIXELS"]
+
+#: The size of the smaller face the sidebar and the log are drawn in, one step
+#: down from the grid: the Qt build uses the same number, which is what makes the
+#: two layouts come out the same.
+SMALL_PIXELS = 11
 
 FONT = Path(__file__).resolve().parent.parent / "desktop" / "fonts" / "DejaVuSansMono.ttf"
 
@@ -76,6 +81,9 @@ class SdlApp:
 
         pygame.init()
         self.font = SdlFont(str(FONT))
+        #: The same smaller face the Qt build uses for the sidebar and the log:
+        #: one size down, which is the one place a mixed size pays for itself.
+        self.font_small = SdlFont(str(FONT), SMALL_PIXELS)
         self.progress = load_meta()
         self.seed = seed
         self.run = None
@@ -298,6 +306,7 @@ class SdlApp:
         for screen in self.screens[start:]:
             screen.draw(self.grid, self)
         self._surface = paint(self.grid, self.font)
+        self._small_face()
         # And a screen may paint straight onto the frame once the grid is drawn:
         # that is where the art lives -- sprites do not fit in a character cell.
         # It is called `paint_over` and not `paste`, which is Qt's name for the
@@ -311,6 +320,68 @@ class SdlApp:
         # happened, drawn last so they land on top of everything.
         self.effects.draw(self._surface)
         self._present()
+
+    def _small_face(self) -> None:
+        """The sidebar's lower rows and the combat log, one size down.
+
+        The Qt build draws these straight onto the frame after the grid, and this
+        is the same pass with a pygame painter: the *rows* come from the shared
+        specs in ``desktop/render.py`` -- what to say, where, in which colour --
+        and only the blitting is this application's. That is why the two front
+        ends can show the same sidebar without one of them owning the layout.
+        """
+        import pygame
+
+        from ..desktop.render import log_text, sidebar_text
+        from ..desktop.theme import BACKGROUND, parse_style
+
+        screen = self.screens[-1]
+        if not getattr(screen, "smaller_face", False) or self.run is None:
+            return
+        face = self.font_small
+        surface = self._surface
+        rect, rows = log_text(
+            self.run,
+            self.grid.cols,
+            self.grid.rows,
+            self.font.cell_w,
+            self.font.cell_h,
+            face.cell_w,
+            face.cell_h,
+        )
+        # The log's own panel, drawn solid: nothing is underneath it now that the
+        # cells above it are clear.
+        surface.fill(tuple(BACKGROUND), pygame.Rect(*rect))
+        for ink in rows:
+            self._put_small(surface, face, ink)
+        out, rule = sidebar_text(
+            self.run,
+            self.grid.cols,
+            self.grid.rows,
+            self.font.cell_w,
+            self.font.cell_h,
+            face.cell_w,
+            face.cell_h,
+        )
+        for ink in out:
+            self._put_small(surface, face, ink)
+        if rule is not None:
+            surface.fill(
+                tuple(parse_style("grey30").fg),
+                pygame.Rect(rule[0], rule[2], rule[1] - rule[0], 1),
+            )
+
+    def _put_small(self, surface, face, ink) -> None:
+        """One row of the small face: a string, blitted a glyph at a time."""
+        from ..desktop.theme import parse_style
+
+        colour = parse_style(ink.colour).fg
+        for index, char in enumerate(ink.text):
+            if char == " ":
+                continue
+            glyph = face.glyph(char, colour)
+            if glyph is not None:
+                surface.blit(glyph, (ink.x + index * face.cell_w, ink.y))
 
     def _blit_art(self) -> None:
         """The pictures a screen asked for, put where it asked for them.

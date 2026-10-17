@@ -738,3 +738,80 @@ def test_a_damage_number_is_painted_over_the_monster_that_took_it():
         for y in range(max(0, box[1]), min(surface.get_height(), box[3]))
     }
     assert len(seen) > 3, f"the number left no ink over the monster: {len(seen)} colours"
+
+
+def test_the_small_face_is_the_same_size_on_both_sides():
+    """Seven by fourteen, and it is the number the whole lower layout turns on.
+
+    The sidebar's lower rows and the log are drawn one size down, and the *layout*
+    of both is computed from that cell -- which is why the two front ends measure
+    it the same way the grid measures its own. Measured against the Qt build in a
+    process of its own, for the reason at the top of this file: ``BitmapFont(11)``
+    gives 7x14 there, and this has to agree or the sidebar drifts a row.
+    """
+    from neverdeads_revenge.sdl_front.font import SdlFont
+
+    _sdl()  # a pygame up, which is all this needs of it
+    small = SdlFont(FONT, 11)
+    assert (small.cell_w, small.cell_h) == (7, 14), (
+        "the small face does not measure what the Qt build measures"
+    )
+
+
+def test_the_floor_shows_the_log_and_the_sidebar_on_the_second_front_end():
+    """The two smaller-face passes, asked of the frame.
+
+    The combat log is how the game talks to the player -- what was found, what
+    bit them, what the floor is -- and the sidebar's lower rows are the rest of
+    the run at a glance. Both are drawn straight onto the frame after the grid on
+    the Qt side, and this is the same pass with a pygame painter, reading the same
+    rows from the same spec. What is asserted is that there is ink where the spec
+    says: a panel of background with words in it.
+    """
+    from neverdeads_revenge.desktop.render import log_text, sidebar_text
+    from neverdeads_revenge.desktop.theme import BACKGROUND
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3)
+    app.key("enter")  # NEW RUN
+    app.key("enter")  # the first hero
+
+    surface = app._surface
+    face = app.font_small
+    assert app.run.log, "the run said nothing to begin with"
+
+    rect, rows = log_text(
+        app.run,
+        app.grid.cols,
+        app.grid.rows,
+        app.font.cell_w,
+        app.font.cell_h,
+        face.cell_w,
+        face.cell_h,
+    )
+    assert rows, "the log's spec is empty"
+    ink = sum(
+        1
+        for x in range(rect[0], min(surface.get_width(), rect[0] + rect[2]))
+        for y in range(rect[1], min(surface.get_height(), rect[1] + rect[3]))
+        if surface.get_at((x, y))[:3] != tuple(BACKGROUND)
+    )
+    assert ink > 100, f"the log panel is blank: {ink} pixels of ink"
+
+    out, _rule = sidebar_text(
+        app.run,
+        app.grid.cols,
+        app.grid.rows,
+        app.font.cell_w,
+        app.font.cell_h,
+        face.cell_w,
+        face.cell_h,
+    )
+    below = min(one.y for one in out)
+    ink = sum(
+        1
+        for x in range(0, surface.get_width())
+        for y in range(below, surface.get_height())
+        if surface.get_at((x, y))[:3] != tuple(BACKGROUND)
+    )
+    assert ink > 100, f"the sidebar's lower rows are blank: {ink} pixels of ink"
