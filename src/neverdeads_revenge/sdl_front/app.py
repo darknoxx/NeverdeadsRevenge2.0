@@ -421,7 +421,10 @@ class SdlApp:
         from ..game.shop import loadout_from
         from ..game.state import start_run
 
-        if not self.seed:
+        #: A fresh seed per run -- unless the player pinned one with ``--seed``,
+        #: in which case every new run in this session is the same dungeon. ``is
+        #: None`` and not a truth test: seed 0 is a seed.
+        if self.seed is None:
             self.seed = random.SystemRandom().randrange(2**32)
         self.run = start_run(
             HEROES[hero_key], self.seed, loadout=loadout_from(self.progress)
