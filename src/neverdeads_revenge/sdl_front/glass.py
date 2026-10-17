@@ -71,14 +71,37 @@ class SdlGlass:
             self.display_size[0] // max(1, self.buffer_size[0]),
             self.display_size[1] // max(1, self.buffer_size[1]),
         )
-        self.scale = max(1, scale)
-        self.offset = (
-            (self.display_size[0] - self.buffer_size[0] * self.scale) // 2,
-            (self.display_size[1] - self.buffer_size[1] * self.scale) // 2,
+        self._fit_scale = max(1, scale)
+        self._fit_offset = (
+            (self.display_size[0] - self.buffer_size[0] * self._fit_scale) // 2,
+            (self.display_size[1] - self.buffer_size[1] * self._fit_scale) // 2,
         )
         self.program["pattern"] = 0
         self.program["buffer"] = self.buffer_size
+        self.fit(self.display_size, self._fit_scale, self._fit_offset)
+
+    def fit(self, display_size, scale: int, offset) -> None:
+        """The window changed: where the picture goes, and how big it is.
+
+        Which has to be *recomputed* and not kept: full screen is a different
+        window, and the whole-number scale that fits it is a different number.
+        The viewport goes with it, because that is the thing whose origin is the
+        bottom left corner -- a glass that never moved it draws the game into the
+        corner of the screen and leaves the rest black, which is exactly what
+        full screen looked like.
+        """
+        self.display_size = (int(display_size[0]), int(display_size[1]))
+        self.scale = max(1, int(scale))
+        self.offset = (int(offset[0]), int(offset[1]))
+        self.ctx.viewport = (0, 0, *self.display_size)
         self.program["resolution"] = self.display_size
+        if self.offscreen:
+            # An offscreen glass is a test or a probe, and those never resize --
+            # but a wrong-sized framebuffer would be an empty picture, so it is
+            # rebuilt rather than trusted.
+            self._screen = self.ctx.framebuffer(
+                color_attachments=[self.ctx.texture(self.display_size, 3)]
+            )
 
     @property
     def effects(self) -> bool:
@@ -96,6 +119,10 @@ class SdlGlass:
 
         import moderngl
 
+        # Cheap, and it keeps the one thing that must not go stale correct: the
+        # viewport is the framebuffer's, and this is called from whichever
+        # context is current.
+        self.ctx.viewport = (0, 0, *self.display_size)
         self.texture.write(pygame.image.tostring(surface, "RGBA", True))
         self.texture.use(0)
         self.program["scale"] = float(self.scale)

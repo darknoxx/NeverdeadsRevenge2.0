@@ -1669,3 +1669,116 @@ def test_the_frame_counter_is_there_when_it_is_asked_for():
     )
     ink = _changed(quiet._surface, counted._surface, corner)
     assert ink > 30, f"the counter was not drawn: {ink} pixels"
+
+
+def test_the_picture_is_fitted_to_the_window_it_is_actually_in():
+    """Full screen is a different window, and the picture has to follow it.
+
+    Which it did not: the present step scaled by the number the command line
+    asked for and never looked at the window again, so a full-screen picture
+    stayed its own size in a corner with the rest of the screen black. The scale
+    and the centring are reckoned from the window's *current* size now.
+    """
+    import pygame
+
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3, scale=1, no_sound=True)
+    app.redraw()
+    base = app._buffer_size()
+    assert app._shown == base, "the picture was not even its own size"
+
+    pygame.display.set_mode((base[0] * 2, base[1] * 2))
+    app._fit()
+    assert app._shown == (base[0] * 2, base[1] * 2), "a doubled window doubled nothing"
+    assert app._shown_at == (0, 0), "a picture that fits exactly is not centred"
+
+    pygame.display.set_mode((base[0] + 40, base[1] + 60))
+    app._fit()
+    assert app._shown == base, "a window that fits one whole scale should use one"
+    assert app._shown_at == (20, 30), "the remainder was not shared out evenly"
+
+
+def test_the_glass_hears_about_a_window_that_changed():
+    """The same for the shader: its uniform, and the viewport it draws into.
+
+    The viewport is the one that showed: it is the framebuffer's, its origin is
+    the bottom left, and a glass that never moves it draws the game into that
+    corner and leaves everything else black -- which is what full screen looked
+    like.
+    """
+    try:
+        import moderngl
+    except ImportError:  # pragma: no cover - the dev extra is not always there
+        return
+    from neverdeads_revenge.desktop.crt_gl import CrtSettings
+    from neverdeads_revenge.sdl_front.glass import SdlGlass
+
+    try:
+        context = moderngl.create_standalone_context(require=120)
+    except Exception:  # pragma: no cover - no driver, no glass
+        return
+    glass = SdlGlass(CrtSettings(), (960, 540), (960, 540), context=context)
+    glass.fit((1920, 1080), 2, (0, 0))
+    assert glass.display_size == (1920, 1080), "the glass kept the old window size"
+    assert (glass.scale, glass.offset) == (2, (0, 0)), "the glass kept the old fit"
+    assert tuple(glass.program["resolution"].value) == (1920.0, 1080.0)
+    assert glass.ctx.viewport == (0, 0, 1920, 1080), "the viewport was left in a corner"
+    glass.release()
+
+
+def test_full_screen_re_fits_the_picture_to_the_screen(monkeypatch):
+    """F11: the window is the whole screen now, so the picture follows it.
+
+    Asked of the numbers, because a test has no screen: the window is *told* to
+    be the size of one. What went wrong is worth keeping in mind -- the picture
+    stayed its own size in the bottom left corner, because the GL viewport's
+    origin is the bottom left and nothing had moved it -- so the facts here are
+    the scale and the centring, both of which have to come from the window and
+    neither of which may be left at the size the command line asked for.
+    """
+    import pygame
+
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    screen = (2048, 1152)
+    app = SdlApp(seed=3, scale=1, no_sound=True)
+    app.redraw()
+    base = app._buffer_size()
+
+    # A window manager, in two lines: the window is the size of the screen once
+    # it is full, and its own size again when it comes back. (A test has no
+    # screen, and a window that never changed size would prove nothing.)
+    live = {"full": False}
+    monkeypatch.setattr(
+        pygame.display,
+        "get_window_size",
+        lambda: screen if live["full"] else base,
+    )
+
+    def toggle() -> None:
+        live["full"] = not live["full"]
+
+    monkeypatch.setattr(pygame.display, "toggle_fullscreen", toggle)
+
+    # And the other way a window can go full screen: without a glass the app asks
+    # for a full-screen *surface*, so the flag has to be watched there too.
+    real_mode = pygame.display.set_mode
+
+    def fake_mode(size=(0, 0), flags=0, **rest):
+        live["full"] = bool(flags & pygame.FULLSCREEN)
+        return real_mode(size, flags, **rest)
+
+    monkeypatch.setattr(pygame.display, "set_mode", fake_mode)
+
+    app.feed(_pressed(pygame.K_F11))
+    assert app._fullscreen, "F11 did not ask for full screen"
+    assert app._shown == (base[0] * 2, base[1] * 2), "the picture did not grow"
+    assert app._shown_at == (
+        (screen[0] - base[0] * 2) // 2,
+        (screen[1] - base[1] * 2) // 2,
+    ), "the picture was not centred on the screen"
+
+    app.feed(_pressed(pygame.K_F11))
+    assert not app._fullscreen, "F11 did not come back"
+    assert app._shown == base, "the picture did not shrink back"

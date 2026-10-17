@@ -150,6 +150,12 @@ class SdlApp:
         self._window = None
         self._surface = None
         self._last_frame: float | None = None
+        #: Whether the window is the whole screen, and where the picture sits in
+        #: whatever size the window has now. Both move on F11 and on a resize.
+        self._fullscreen = False
+        self._shown = self._buffer_size()
+        self._shown_at = (0, 0)
+        self._title = "Neverdead's Revenge"
         #: Whether the window loop should keep going. Only ``quit`` clears it --
         #: there is no window object to ask on this front end.
         self._running = True
@@ -515,6 +521,9 @@ class SdlApp:
                 text,
             )
         elif event.type == pygame.VIDEORESIZE:
+            # The window manager's answer, not ours: the picture is fitted to
+            # whatever it says, and the glass hears about it.
+            self._fit()
             self.redraw()
 
     def tick(self, dt: float) -> None:
@@ -686,6 +695,113 @@ class SdlApp:
                 ),
             )
 
+    def _buffer_size(self) -> tuple[int, int]:
+        """The picture's own size, in pixels: a cell is ten by twenty, always."""
+        return (self.cols * self.font.cell_w, self.rows * self.font.cell_h)
+
+    def _open_window(self) -> None:
+        """Make the window, once, before the loop starts.
+
+        The GL attributes have to be set *before* the display exists -- pygame
+        refuses them afterwards -- so the whole of the window's creation is here
+        and a full screen toggle never comes back through it. Any of this
+        failing -- no driver, no context, a profile that will not take the shader
+        -- is a plain window and no CRT: the game goes on either way.
+        """
+        import pygame
+
+        base = self._buffer_size()
+        size = (base[0] * self.scale, base[1] * self.scale)
+        if self.crt.scanlines or self.crt.bloom or self.crt.geometry:
+            try:
+                import moderngl
+
+                pygame.display.gl_set_attribute(
+                    pygame.GL_CONTEXT_MAJOR_VERSION, 2
+                )
+                pygame.display.gl_set_attribute(
+                    pygame.GL_CONTEXT_MINOR_VERSION, 1
+                )
+                self._window = pygame.display.set_mode(
+                    size, pygame.OPENGL | pygame.DOUBLEBUF
+                )
+                from .glass import SdlGlass
+
+                self.glass = SdlGlass(
+                    self.crt,
+                    base,
+                    self._window.get_size(),
+                    context=moderngl.create_context(),
+                )
+                self._fit()
+                return
+            except Exception:
+                self.glass = None
+        self._window = pygame.display.set_mode(size)
+        self._fit()
+
+    def _toggle_fullscreen(self) -> None:
+        """F11: the window's own full screen, then the fit and the viewport.
+
+        Not ``set_mode`` again, which is what this did first: that makes a *new*
+        GL context, and the shader program -- with every texture in it -- belongs
+        to the old one, so the object that was dropped took the process with it.
+        SDL's own toggle keeps the window and its context alive. What it does
+        *not* do is move the GL viewport or re-fit the picture, and that is the
+        whole of what went wrong: the game stayed in the bottom left corner --
+        the viewport's origin -- with the rest of the screen black.
+        """
+        import pygame
+
+        self._fullscreen = not self._fullscreen
+        if self.glass is not None:
+            # SDL's own toggle keeps the window *and its context*: a `set_mode`
+            # here would make a new context and leave the shader program behind
+            # in the old one. What SDL does not do is move the GL viewport or
+            # tell the shader that the window changed -- which is the whole of
+            # what went wrong.
+            pygame.display.toggle_fullscreen()
+        else:
+            # No glass: the surface itself is what gets blitted, so full screen
+            # means a full-screen surface, and there is no context to lose.
+            base = self._buffer_size()
+            if self._fullscreen:
+                size = pygame.display.get_desktop_sizes()[0]
+                self._window = pygame.display.set_mode(size, pygame.FULLSCREEN)
+            else:
+                self._window = pygame.display.set_mode(
+                    (base[0] * self.scale, base[1] * self.scale)
+                )
+        self._fit()
+
+    def _fit(self) -> None:
+        """How big the picture is on this window, and where it sits.
+
+        Reckoned from the window's *current* size and not from the one that was
+        asked for: full screen is a different window, and the whole-number scale
+        that fits it is a different number. Without this the picture stays in the
+        corner it was first drawn in -- the GL viewport's own origin, which is the
+        bottom left.
+        """
+        import pygame
+
+        # The *window's* size and not the surface's, which are two different
+        # numbers: pygame keeps the display surface at the size it was made at,
+        # so a full-screen window still reports 960x540 and the picture stays
+        # that size in the corner of a black screen. The window knows.
+        if pygame.display.get_init() and pygame.display.get_surface() is not None:
+            width, height = pygame.display.get_window_size()
+        elif self._window is not None:
+            width, height = self._window.get_size()
+        else:
+            return
+        buffer_w, buffer_h = self._buffer_size()
+        fit = max(1, min(width // buffer_w, height // buffer_h))
+        self._shown = (fit * buffer_w, fit * buffer_h)
+        self._shown_at = ((width - self._shown[0]) // 2, (height - self._shown[1]) // 2)
+        if self.glass is not None:
+            self.glass.fit((width, height), fit, self._shown_at)
+
     def _present(self) -> None:
         """Put the picture on the screen, whole-number scaled, or nowhere.
 
@@ -699,18 +815,24 @@ class SdlApp:
             return
         surface = self._window
         offset = self.effects.offset()
+        fit = max(1, self._shown[0] // max(1, self._buffer_size()[0]))
         if self.glass is not None:
             # The glass has the whole picture and the whole window: it is the
             # thing that scales, so the shake goes in as part of its offset.
-            self.glass.draw(self._surface, (offset[0] * self.scale, offset[1] * self.scale))
+            self.glass.draw(
+                self._surface, (offset[0] * fit, offset[1] * fit)
+            )
             pygame.display.flip()
             return
         surface.fill((0, 0, 0))
         scaled = pygame.transform.scale(
             self._surface,
-            (self._surface.get_width() * self.scale, self._surface.get_height() * self.scale),
+            (self._surface.get_width() * fit, self._surface.get_height() * fit),
         )
-        surface.blit(scaled, (offset[0] * self.scale, offset[1] * self.scale))
+        surface.blit(
+            scaled,
+            (self._shown_at[0] + offset[0] * fit, self._shown_at[1] + offset[1] * fit),
+        )
         pygame.display.flip()
 
     # -- the keys -----------------------------------------------------------
@@ -736,7 +858,8 @@ class SdlApp:
         import pygame
 
         if name == "f11":
-            pygame.display.toggle_fullscreen()
+            self._toggle_fullscreen()
+            self.redraw()
             return True
         turned = {
             "f2": "scanlines",
@@ -769,41 +892,9 @@ class SdlApp:
         """
         import pygame
 
-        size = (
-            self.cols * self.font.cell_w * self.scale,
-            self.rows * self.font.cell_h * self.scale,
-        )
-        if self.crt.scanlines or self.crt.bloom or self.crt.geometry:
-            # A GL window, and the glass in it. Any of this failing -- no driver,
-            # no context, a profile that will not take the shader -- is a plain
-            # window and no CRT: the game goes on either way.
-            try:
-                import moderngl
-
-                pygame.display.gl_set_attribute(
-                    pygame.GL_CONTEXT_MAJOR_VERSION, 2
-                )
-                pygame.display.gl_set_attribute(
-                    pygame.GL_CONTEXT_MINOR_VERSION, 1
-                )
-                self._window = pygame.display.set_mode(
-                    size, pygame.OPENGL | pygame.DOUBLEBUF
-                )
-                self.redraw()
-                from .glass import SdlGlass
-
-                self.glass = SdlGlass(
-                    self.crt,
-                    (self._surface.get_width(), self._surface.get_height()),
-                    size,
-                    context=moderngl.create_context(),
-                )
-            except Exception:
-                self.glass = None
-                self._window = pygame.display.set_mode(size)
-        else:
-            self._window = pygame.display.set_mode(size)
+        self._title = title
         pygame.display.set_caption(title)
+        self._open_window()
         self.redraw()
         clock = pygame.time.Clock()
         self._running = True
