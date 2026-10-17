@@ -2041,3 +2041,43 @@ def test_a_glass_key_says_what_it_did():
         if surface.get_at((x, y))[:3] != tuple(BACKGROUND)
     )
     assert ink > 20, "the note is not on the frame"
+
+
+def test_a_new_screen_wants_a_fresh_press():
+    """Holding enter through a screen change must not answer the next one.
+
+    Reported: hold enter to start, the hold bar fills, and the screens after it
+    are run through -- the name entry behind the death screen among them. The bar
+    was never the problem; the *repeats* were, arriving at a screen that had never
+    been told the key was already down. A key that was down before this screen
+    existed has to come up and be pressed again, and holds still get their food
+    once it is this screen's key.
+    """
+    import time
+
+    import pygame
+
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3, no_sound=True)
+    app.feed(_pressed(pygame.K_n))
+    assert type(app.screens[-1]).__name__ == "HeroSelectScreen"
+
+    app.feed(_pressed(pygame.K_RETURN))  # the run begins, and the key stays down
+    assert type(app.screens[-1]).__name__ == "PrologueScreen"
+
+    for _ in range(16):  # the key is still held: its repeats must be ignored
+        time.sleep(0.09)  # at the pace a held key actually repeats -- long
+        app.feed(_pressed(pygame.K_RETURN, repeat=True))  # enough to fill the bar
+    assert type(app.screens[-1]).__name__ == "PrologueScreen", (
+        "a hold carried over and walked through the premise"
+    )
+
+    app.feed(_released(pygame.K_RETURN))  # up ...
+    app.feed(_pressed(pygame.K_RETURN))  # ... and down again: now it is this screen's
+    for _ in range(16):
+        time.sleep(0.09)
+        app.feed(_pressed(pygame.K_RETURN, repeat=True))
+        if type(app.screens[-1]).__name__ == "GameScreen":
+            break
+    assert type(app.screens[-1]).__name__ == "GameScreen", "a fresh hold did not work"

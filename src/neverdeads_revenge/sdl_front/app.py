@@ -156,6 +156,13 @@ class SdlApp:
         #: Whether the window is the whole screen, and where the picture sits in
         #: whatever size the window has now. Both move on F11 and on a resize.
         self._fullscreen = False
+        #: Keys that are *down* right now, and the ones that were already down
+        #: when the screen on top changed. A held key repeats thirty times a
+        #: second, and a new screen must not be answered by a press that happened
+        #: before it existed -- holding enter to start used to run straight
+        #: through the name entry behind the death screen.
+        self._down: set[str] = set()
+        self._stale: set[str] = set()
         self._shown = self._buffer_size()
         self._shown_at = (0, 0)
         self._title = "Neverdead's Revenge"
@@ -166,15 +173,28 @@ class SdlApp:
             self.open_battle_scene()
 
     # -- the stack ---------------------------------------------------------
+    def _forget_presses(self) -> None:
+        """A new screen has to be told the key is already down, and not by a press.
+
+        The houses rule in this game is that a screen answers a *press*: a key
+        held from the screen before this one must not choose anything here. Holds
+        keep their repeats -- they live on them -- but the first press on a new
+        screen has to be a fresh one.
+        """
+        self._stale |= self._down
+
     def push(self, screen) -> None:
         self.screens.append(screen)
+        self._forget_presses()
 
     def pop(self) -> None:
         if len(self.screens) > 1:
             self.screens.pop()
+        self._forget_presses()
 
     def swap(self, screen) -> None:
         self.screens[-1:] = [screen]
+        self._forget_presses()
 
     def return_to_title(self) -> None:
         from ..desktop.screens.title import TitleScreen
@@ -555,6 +575,13 @@ class SdlApp:
             self.quit()
         elif event.type == pygame.KEYDOWN:
             text = typed(event)
+            name = name_of(event)
+            if name is not None and name in self._stale:
+                # Down before this screen existed: it has to come up and be
+                # pressed again before anything here hears it.
+                return
+            if name is not None:
+                self._down.add(name)
             self.key(
                 name_of(event),
                 # ``repeat`` and not the event: the screens ask whether the key
@@ -568,6 +595,9 @@ class SdlApp:
             # through on a press nobody held. Not every platform pairs its
             # repeats with a release; this one does, so it is passed on.
             name = name_of(event)
+            if name is not None:
+                self._down.discard(name)
+                self._stale.discard(name)
             screen = self.screens[-1]
             if name and screen.key_up(name, KeyPress(False, typed(event)), self):
                 self.redraw()
