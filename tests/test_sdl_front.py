@@ -157,3 +157,49 @@ def test_the_same_screen_renders_without_qt_in_the_room():
         if surface.get_at((x, y))[:3] != tuple(BACKGROUND)
     )
     assert inked > 200, f"the title screen came out nearly empty: {inked} cells of ink"
+
+
+def test_a_run_starts_and_the_hero_walks_with_no_qt_in_the_room():
+    """The whole loop of the game, on SDL: choose a hero, begin, walk.
+
+    This is the probe's real question asked the blunt way -- does a *run* work on
+    a front end that is not Qt? -- and it is answered by driving the same three
+    screens the Qt build drives, with the same key names, against the same rules.
+    Nothing here is a mock-up of the game: `start_run` makes the floor, the
+    screens read it, and the painter draws what they wrote.
+    """
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3)
+
+    assert type(app.screens[-1]).__name__ == "TitleScreen"
+
+    app.key("enter")  # NEW RUN
+    assert type(app.screens[-1]).__name__ == "HeroSelectScreen", (
+        "the roster did not open"
+    )
+
+    app.key("enter")  # pick the first hero
+    assert type(app.screens[-1]).__name__ == "GameScreen", "the floor did not open"
+    assert app.run is not None, "there is no run behind the screen"
+
+    # Walk. A room has a floor in at least one direction, and a hero who cannot
+    # take a step is a front end that is not passing anything on.
+    here = app.run.player.position
+    for direction in ("right", "down", "left", "up"):
+        app.key(direction)
+        if app.run.player.position != here:
+            break
+    assert app.run.player.position != here, "the hero could not take a step"
+    assert app.run.player.steps == 1, "the step was not counted"
+    # And *silence* is the right answer here, in both front ends: a step logs
+    # nothing, and what the sound layer plays is the loudest thing that happened.
+    # Fights, stairs and levels make a noise; walking does not.
+    assert app.played == []
+
+    # And the picture is the grid the game drew, at the size its panels need.
+    assert app.grid.cols >= 76 and app.grid.rows >= 24
+    assert app._surface is not None and app._surface.get_size() == (
+        app.grid.cols * app.font.cell_w,
+        app.grid.rows * app.font.cell_h,
+    )
