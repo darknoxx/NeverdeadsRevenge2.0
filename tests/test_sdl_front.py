@@ -815,3 +815,147 @@ def test_the_floor_shows_the_log_and_the_sidebar_on_the_second_front_end():
         if surface.get_at((x, y))[:3] != tuple(BACKGROUND)
     )
     assert ink > 100, f"the sidebar's lower rows are blank: {ink} pixels of ink"
+
+
+def _fight_with_a_monster(seed: int = 3):
+    """An app, a floor, and one monster walked into: the fixture most want."""
+    from neverdeads_revenge.game.actors import ENEMIES, make_enemy
+    from neverdeads_revenge.sdl_front.app import SdlApp
+    from neverdeads_revenge.world.tiles import Tile
+
+    app = SdlApp(seed=seed)
+    app.key("enter")
+    app.key("enter")
+    state = app.run
+    beside = (state.player.position[0] + 1, state.player.position[1])
+    state.dungeon_map.set_tile(beside, Tile.FLOOR)
+    monster = make_enemy(ENEMIES["ghoul"], beside)
+    monster.stats.hp = 40
+    state.enemies.append(monster)
+    state.turn_queue.add(monster)
+    state.refresh_vision()
+    app.key("right")
+    return app, monster
+
+
+def _changed(before, after, box) -> int:
+    """How many pixels in ``box`` the second frame moved."""
+    return sum(
+        1
+        for x in range(box[0], box[2])
+        for y in range(box[1], box[3])
+        if before.get_at((x, y)) != after.get_at((x, y))
+    )
+
+
+def test_aiming_puts_a_marker_over_the_monster_that_is_being_aimed_at():
+    """The arrow, asked of the frame: without it there is no question to read.
+
+    A trick that needs a target asks one, and the arena answers by standing a
+    blade over the monster the choice is on. Measured by *withdrawing* the aim
+    rather than by hunting for a colour: the monster's own sprite is green too,
+    so the fact worth holding is that aiming changes the frame above it and
+    nothing else does.
+    """
+    app, monster = _fight_with_a_monster()
+    arena = app.screens[-1]
+    arena.arena.aiming = False
+    app.redraw()
+    plain = app._surface.copy()
+
+    arena.arena.aiming = True
+    arena.arena.target = 0
+    app.redraw()
+    aimed = app._surface
+
+    figure = next(
+        one
+        for one in arena.arena._figures(app.grid.cols, app.grid.rows, app.font)
+        if one.actor is monster
+    )
+    top = figure.row * app.font.cell_h - 90
+    box = (
+        max(0, figure.cx - 40),
+        max(0, top),
+        min(app._surface.get_width(), figure.cx + 40),
+        figure.row * app.font.cell_h,
+    )
+    assert _changed(plain, aimed, box) > 10, "aiming left no mark on the monster"
+    # And it is *above* the monster and not over its body: the same box one line
+    # down is where the sprite is, and a marker there would be a marker nobody
+    # could read a monster through.
+    low = (box[0], figure.row * app.font.cell_h - 30, box[2], figure.row * app.font.cell_h)
+    assert _changed(plain, aimed, low) == 0, "the marker was drawn over the monster"
+
+
+def test_a_monsters_wounds_are_worn_at_the_end_of_its_bar():
+    """The symbols and the stack number, asked of the frame.
+
+    The bar says how much of a monster is left; the row beside it says what is
+    taking it, which a light around the figure never could. And the number only
+    appears once a wound is *stacked*: a wound that says "1" on every monster is
+    a number nobody reads.
+    """
+    app, monster = _fight_with_a_monster()
+    arena = app.screens[-1]
+    arena.arena._wearing[id(monster)] = ()
+    arena.arena._depths[id(monster)] = {}
+    app.redraw()
+    clean = app._surface.copy()
+
+    figure = next(
+        one
+        for one in arena.arena._figures(app.grid.cols, app.grid.rows, app.font)
+        if one.actor is monster
+    )
+    cells = max(8, min(14, figure.cells * 2))
+    right = round(figure.cx + cells * app.font.cell_w / 2)
+    box = (
+        right,
+        figure.row * app.font.cell_h,
+        min(app._surface.get_width(), right + 60),
+        figure.row * app.font.cell_h + 40,
+    )
+
+    arena.arena._wearing[id(monster)] = ("bleed",)
+    arena.arena._depths[id(monster)] = {"bleed": 1}
+    app.redraw()
+    worn = _changed(clean, app._surface, box)
+    assert worn > 20, f"the wound was not worn: {worn} pixels"
+
+    arena.arena._depths[id(monster)] = {"bleed": 3}
+    app.redraw()
+    stacked = _changed(clean, app._surface, box)
+    assert stacked > worn, (
+        f"the stack number did not appear: {worn} pixels worn, {stacked} stacked"
+    )
+
+
+def test_the_heros_own_wounds_are_worn_on_his_plate():
+    """The hero's row, in the one place that owns his own numbers.
+
+    A wound is what is eating him, and the plate is where his own facts live --
+    health, kills, the purse. It is drawn in the same symbols and by the same
+    helper as a monster's row, which is the promise both rows keep: one symbol,
+    learned once.
+    """
+    app, _monster = _fight_with_a_monster()
+    arena = app.screens[-1]
+    hero = arena.battle.hero
+    arena.arena._wearing[id(hero)] = ()
+    arena.arena._depths[id(hero)] = {}
+    app.redraw()
+    clean = app._surface.copy()
+
+    arena.arena._wearing[id(hero)] = ("burn",)
+    arena.arena._depths[id(hero)] = {"burn": 2}
+    app.redraw()
+
+    x, y, width, height = arena.arena._areas(app.grid.cols, app.grid.rows)["plate"]
+    box = (
+        x * app.font.cell_w,
+        y * app.font.cell_h,
+        (x + width) * app.font.cell_w,
+        (y + height) * app.font.cell_h,
+    )
+    assert _changed(clean, app._surface, box) > 20, "the hero's wounds were not shown"

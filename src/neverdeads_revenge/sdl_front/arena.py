@@ -31,18 +31,28 @@ from __future__ import annotations
 
 import math
 
+from ..desktop.art import size as art_size
 from ..desktop.screens.base import Screen
 from ..desktop.screens.battle import (
+    ARROW,
     BOB_HEIGHT,
     BOB_SPEED,
     FLASH_LIFE,
     JOLT,
+    MONSTER_BADGE,
+    MONSTER_BADGE_GAP,
+    STATUS_BADGE,
+    STATUS_GAP,
+    STATUS_ICONS,
+    STATUS_ROW_DOWN,
+    STATUS_ROW_IN,
+    STATUS_SLOT,
     THICKNESS,
     BattleScreen,
     Popup,
 )
 from ..desktop.theme import Colour, parse_style
-from .paint import paint
+from .paint import load, paint
 from .stage import Stage
 
 __all__ = ["SdlArena"]
@@ -115,12 +125,17 @@ class SdlArena(Screen):
         self._stage.health(
             surface, figures, font, self.arena._shown, self.battle.hero, fades
         )
+        self._wounds(surface, app, figures, fades)
+        self._hero_wounds(surface, app, cols, rows)
         # The shadows first: they live on the floor, so a figure standing on one
         # stands on it rather than carrying it around.
         for figure in figures:
             self._stage.shadow(surface, figure, font, fades[id(figure.actor)])
         for figure in self._ordered(figures):
             self._figure(surface, app, figure, figures, fades[id(figure.actor)])
+        for figure in figures:
+            if figure.chosen:
+                self._arrow(surface, app, figure)
         for popup in self.arena._popups:
             self._number(surface, font, popup)
         if self.arena.verdict is not None:
@@ -198,6 +213,146 @@ class SdlArena(Screen):
         else:
             cx += self.arena._jolt(figure)
         return cx, baseline, opacity * fade
+
+    def _arrow(self, surface, app, figure) -> None:
+        """The blade over the chosen one -- the menus' marker, standing up.
+
+        It hangs above the figure rather than beside it, because beside a figure
+        is where the next monster is: an arrow that means "this one" has to point
+        at the one it means. It only exists while something is being aimed -- it
+        marks the *question*, and there is no question on the floor until a trick
+        has asked one -- and it breathes, one pixel either way, because a marker
+        that stands as still as everything under it is a marker to hunt for.
+        """
+        face = self._face(app.font.path, max(16, figure.size // 2))
+        top = 0
+        if figure.art is not None:
+            top = (art_size(figure.art) or (0, 0))[1]
+        else:
+            top = app.font.cell_h * 2
+        bob = round(math.sin(self.arena._clock * 5.0) * 2) - 1
+        centre = round(figure.cx - len(ARROW) * face.cell_w / 2)
+        above = figure.row * app.font.cell_h - THICKNESS - top - face.cell_h // 3 - bob
+        # A dark copy under a bright one, the same two passes every letter in this
+        # game gets: the edge is the game's own edge and not a drop shadow.
+        for offset, colour in ((THICKNESS, Colour(0, 0, 0)), (0, parse_style(figure.colour).fg)):
+            glyph = face.glyph(ARROW, colour)
+            if glyph is not None:
+                surface.blit(glyph, (centre, above + offset))
+
+    def _wounds(self, surface, app, figures, fades) -> None:
+        """What is eating each monster, at the end of its bar.
+
+        The room used to say this with a light around the figure, and a light
+        could not say *which* wound. A monster whose bar already says how much of
+        it is left is the one place that can also say what is still taking it.
+        """
+        font = app.font
+        for figure in figures:
+            if figure.actor is self.battle.hero or fades[id(figure.actor)] < 1.0:
+                continue
+            cells = max(8, min(14, figure.cells * 2))
+            width = cells * font.cell_w
+            height = font.cell_h // 2
+            left = round(figure.cx - width / 2.0)
+            top = figure.row * font.cell_h + height
+            self._wound_row(
+                surface,
+                app,
+                figure.actor,
+                left + width + MONSTER_BADGE_GAP,
+                top + height / 2.0,
+                MONSTER_BADGE,
+            )
+
+    def _hero_wounds(self, surface, app, cols: int, rows: int) -> None:
+        """The hero's own wounds, beside his life bar on the plate.
+
+        A wound used to be a *light*: the figure stood in a pool of the colour of
+        whatever was eating it until it stopped. This says the same thing more
+        exactly -- which wound, and all of them side by side -- and it says it on
+        the plate, which is the one place in the arena that owns the hero's own
+        numbers.
+        """
+        if self.arena.picking:
+            # The list of tricks covers the whole strip, plate and all, and this
+            # row is *pixels*: it would hang over a panel that is no longer there.
+            return
+        worn = self.arena._worn(self.battle.hero)
+        if not worn:
+            return
+        x, y, width, height = self.arena._areas(cols, rows)["plate"]
+        if height < 4 or width < 12:
+            return
+        font = app.font
+        left = (x + min(STATUS_ROW_IN, max(2, width - 6))) * font.cell_w
+        right = (x + width - 1) * font.cell_w
+        room = max(0, right - left)
+        # Sized to fit and not left to run off the plate: five wounds share the
+        # room the row has, because a row that fell off the end would tell the
+        # player about four of their five problems.
+        size = max(
+            10,
+            min(
+                STATUS_BADGE,
+                3 * font.cell_h,
+                (room - (len(worn) - 1) * STATUS_GAP)
+                // max(1, round(len(worn) * STATUS_SLOT)),
+            ),
+        )
+        top = (y + STATUS_ROW_DOWN) * font.cell_h
+        self._wound_row(surface, app, self.battle.hero, left, top + size / 2.0, size)
+
+    def _wound_row(self, surface, app, actor, start: float, middle: float, size: int) -> None:
+        """One row of wound symbols, from ``start`` and centred on ``middle``.
+
+        The same symbols the plate wears, in the same order and with the same
+        spacing: a player who has learned one of them in one place should find it
+        drawn the same way in the other.
+        """
+        import pygame
+
+        pairs = [
+            (key, load(f"sprites/status/{STATUS_ICONS[key]}.png"))
+            for key in self.arena._worn(actor)
+            if key in STATUS_ICONS
+        ]
+        pairs = [(key, art) for key, art in pairs if art is not None]
+        if not pairs:
+            return
+        slot = max(6, round(size * STATUS_SLOT))
+        step = slot + STATUS_GAP
+        for index, (key, art) in enumerate(pairs):
+            # Fitted, not stretched: the largest box of its own shape that fits in
+            # the slot, so the spacing is even and every symbol keeps its shape.
+            scale = min(slot / art.get_width(), size / art.get_height())
+            width = max(1, round(art.get_width() * scale))
+            height = max(1, round(art.get_height() * scale))
+            x = round(start + index * step + (slot - width) / 2.0)
+            y = round(middle - height / 2.0)
+            if width != art.get_width() or height != art.get_height():
+                surface.blit(pygame.transform.smoothscale(art, (width, height)), (x, y))
+            else:
+                surface.blit(art, (x, y))
+            depth = self.arena._depths.get(id(actor), {}).get(key, 1)
+            if depth >= 2:
+                self._stamp(surface, app, str(depth), x + width, y + height, size)
+
+    def _stamp(self, surface, app, text_: str, right: float, bottom: float, size: int) -> None:
+        """How deep a wound is, stamped on its own badge.
+
+        Bottom right and a hair inside the symbol -- in front of it, which is what
+        a stamp on a seal is -- and only once there is more than one stack: a wound
+        that says "1" on every monster is a number nobody reads.
+        """
+        face = self._face(app.font.path, max(10, round(size * 0.42)))
+        width = len(text_) * face.cell_w
+        x = round(right - width - max(1.0, size * 0.04))
+        y = round(bottom - max(1.0, size * 0.06) - face.cell_h)
+        for offset, colour in ((1, Colour(0, 0, 0)), (0, parse_style("bold white").fg)):
+            glyph = face.glyph(text_, colour)
+            if glyph is not None:
+                surface.blit(glyph, (x + offset, y + offset))
 
     def _number(self, surface, font, popup: Popup) -> None:
         """A damage number, on its way up: the only thing here that moves.
