@@ -1235,3 +1235,47 @@ def test_the_floor_turns_into_the_fight_on_the_second_front_end():
     assert type(app.screens[-1]).__name__ == "SdlArena", "the turning never finished"
     assert len(app.screens) == 2, "the floor was lost in the hand-over"
     assert type(app.screens[0]).__name__ == "GameScreen", "the floor is not underneath"
+
+
+def test_the_second_front_end_has_a_crt():
+    """The same shader, through moderngl, asked of the pixels.
+
+    Scanlines are the honest thing to ask for, because they are a fact about rows:
+    the shader darkens every other row of the *display's* own raster, so an even
+    row and an odd row of the result measure differently -- and with the toggle off
+    they do not. That is the whole of what a scanline is, and it is the one effect
+    that needs no eye to check.
+    """
+    font, paint = _sdl()
+    try:
+        import moderngl
+    except ImportError:  # pragma: no cover - the dev extra is not always there
+        return
+    from neverdeads_revenge.desktop.crt_gl import CrtSettings
+    from neverdeads_revenge.sdl_front.glass import SdlGlass
+
+    try:
+        moderngl.create_standalone_context(require=120).release()
+    except Exception:  # pragma: no cover - no driver, no glass
+        return
+
+    grid = PatternBuffer(96, 27, font)
+    grid.text(2, 3, "SCANLINES AND BLOOM", parse_style("bold white"))
+    grid.fill_row(1, " ", Style(fg=parse_style("grey30").fg, bg=parse_style("grey11").fg))
+    source = paint(grid, font)
+    buffer = source.get_size()
+    display = (buffer[0] * 2, buffer[1] * 2)  # a whole-number scale, so no bars
+
+    def rows(image, parity: int) -> float:
+        picks = [image.get_at((x, y)) for y in range(parity, image.get_height(), 2) for x in range(0, image.get_width(), 7)]
+        return sum(one.r + one.g + one.b for one in picks) / (len(picks) * 3)
+
+    glass = SdlGlass(CrtSettings(scanlines=True, bloom=False), buffer, display)
+    lit = glass.draw(source)
+    assert lit.get_size() == display, "the glass did not draw the whole display"
+    assert rows(lit, 0) / rows(lit, 1) > 1.15, "the scanlines are not there"
+
+    glass.settings.scanlines = False
+    plain = glass.draw(source)
+    assert rows(plain, 0) / rows(plain, 1) < 1.05, "the scanlines did not turn off"
+    glass.release()

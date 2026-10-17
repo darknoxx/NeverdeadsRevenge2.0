@@ -26,7 +26,7 @@ and stages the figures as the letters they have always been. One round is then
 fought, so the log in the picture is a real round and not an empty panel:
 
     python tools/sdl_probe.py /tmp/sdl.png /tmp/sdl_arena.png /tmp/sdl_roster.png \
-        /tmp/sdl_impact.png /tmp/sdl_turning.png
+        /tmp/sdl_impact.png /tmp/sdl_turning.png /tmp/sdl_crt.png
 
 The third picture is the roster, and it is the first *art* on this side of the
 seam: a screen hands over ``Placed`` records -- what, and where -- and this
@@ -86,6 +86,7 @@ def main(argv: list[str] | None = None) -> int:
     roster_target = Path(given[2]) if len(given) > 2 else None
     impact_target = Path(given[3]) if len(given) > 3 else None
     turning_target = Path(given[4]) if len(given) > 4 else None
+    crt_target = Path(given[5]) if len(given) > 5 else None
 
     font = SdlFont(str(FONT))
     grid = PatternBuffer(96, 27)
@@ -112,6 +113,14 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"{roster_target}  {roster.get_width()}x{roster.get_height()}"
             "  the roster, with the hero painted on it"
+        )
+
+    if crt_target is not None:
+        through = _through_the_glass(960 * 2, 540 * 2)
+        pygame.image.save(through, str(crt_target))
+        print(
+            f"{crt_target}  {through.get_width()}x{through.get_height()}"
+            "  the arena through the CRT, at two screen pixels to a game pixel"
         )
 
     if turning_target is not None:
@@ -183,6 +192,28 @@ def _standing_in_a_fight(seed: int = 3, turn_it_over: bool = True):
         app.tick(1 / 30.0)
         frames += 1
     return app, state
+
+
+def _through_the_glass(display_w: int, display_h: int, seed: int = 3):
+    """The arena, through the CRT shader, offscreen.
+
+    The one picture that shows the *glass* and not the game: the fight at the
+    frame the blow lands, put through the same GLSL the Qt build runs, at two
+    screen pixels to a game pixel -- which is what the game looks like on a
+    1080p screen, scanlines and all.
+    """
+    from neverdeads_revenge.desktop.crt_gl import CrtSettings
+    from neverdeads_revenge.sdl_front.glass import SdlGlass
+
+    arena = _caught_at_the_impact(seed)
+    glass = SdlGlass(
+        CrtSettings(scanlines=True, bloom=True, geometry=False),
+        arena.get_size(),
+        (display_w, display_h),
+    )
+    lit = glass.draw(arena)
+    glass.release()
+    return lit
 
 
 def _caught_turning(seed: int = 3):

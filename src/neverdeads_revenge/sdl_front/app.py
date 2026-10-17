@@ -86,6 +86,19 @@ class SdlApp:
         #: one size down, which is the one place a mixed size pays for itself.
         self.font_small = SdlFont(str(FONT), SMALL_PIXELS)
         self.progress = load_meta()
+        #: The glass: the same settings the Qt build reads out of the same file,
+        #: so a player who turned the scanlines off keeps them off. The shader and
+        #: the settings are shared; only the context is this front end's.
+        from ..desktop.crt_gl import CrtSettings
+        from ..desktop.settings import load_settings
+
+        saved = load_settings()
+        self.crt = CrtSettings(
+            scanlines=bool(saved.get("scanlines", True)),
+            bloom=bool(saved.get("bloom", True)),
+            geometry=bool(saved.get("geometry", False)),
+        )
+        self.glass = None
         self.seed = seed
         self.run = None
         #: The premise, told once in the Qt build between the choice and the
@@ -578,6 +591,12 @@ class SdlApp:
             return
         surface = self._window
         offset = self.effects.offset()
+        if self.glass is not None:
+            # The glass has the whole picture and the whole window: it is the
+            # thing that scales, so the shake goes in as part of its offset.
+            self.glass.draw(self._surface, (offset[0] * self.scale, offset[1] * self.scale))
+            pygame.display.flip()
+            return
         surface.fill((0, 0, 0))
         scaled = pygame.transform.scale(
             self._surface,
@@ -591,10 +610,47 @@ class SdlApp:
         """Hand a key to the top screen. Returns whether it was used."""
         if not name:
             return False
+        if self._glass_key(name):
+            return True
         screen = self.screens[-1]
         used = screen.key(name, event or KeyPress(text=text), self)
         self.redraw()
         return bool(used)
+
+    def _glass_key(self, name: str) -> bool:
+        """The four keys that belong to the glass and not to a screen.
+
+        The same four the Qt build answers, under the same names, because a key
+        that turns the scanlines off should do it in either front end. The
+        settings are written down as they change, so the choice survives the
+        window.
+        """
+        import pygame
+
+        if name == "f11":
+            pygame.display.toggle_fullscreen()
+            return True
+        turned = {
+            "f2": "scanlines",
+            "f3": "bloom",
+            "f4": "geometry",
+        }.get(name)
+        if turned is None:
+            return False
+        setattr(self.crt, turned, not getattr(self.crt, turned))
+        self._remember_glass()
+        return True
+
+    def _remember_glass(self) -> None:
+        from ..desktop.settings import save_settings
+
+        save_settings(
+            {
+                "scanlines": self.crt.scanlines,
+                "bloom": self.crt.bloom,
+                "geometry": self.crt.geometry,
+            }
+        )
 
     def open_window(self, *, title: str = "Neverdead's Revenge") -> None:
         """A real window, and the loop that feeds it.
@@ -605,10 +661,40 @@ class SdlApp:
         """
         import pygame
 
-        self._window = pygame.display.set_mode(
-            (self.cols * self.font.cell_w * self.scale,
-             self.rows * self.font.cell_h * self.scale)
+        size = (
+            self.cols * self.font.cell_w * self.scale,
+            self.rows * self.font.cell_h * self.scale,
         )
+        if self.crt.scanlines or self.crt.bloom or self.crt.geometry:
+            # A GL window, and the glass in it. Any of this failing -- no driver,
+            # no context, a profile that will not take the shader -- is a plain
+            # window and no CRT: the game goes on either way.
+            try:
+                import moderngl
+
+                pygame.display.gl_set_attribute(
+                    pygame.GL_CONTEXT_MAJOR_VERSION, 2
+                )
+                pygame.display.gl_set_attribute(
+                    pygame.GL_CONTEXT_MINOR_VERSION, 1
+                )
+                self._window = pygame.display.set_mode(
+                    size, pygame.OPENGL | pygame.DOUBLEBUF
+                )
+                self.redraw()
+                from .glass import SdlGlass
+
+                self.glass = SdlGlass(
+                    self.crt,
+                    (self._surface.get_width(), self._surface.get_height()),
+                    size,
+                    context=moderngl.create_context(),
+                )
+            except Exception:
+                self.glass = None
+                self._window = pygame.display.set_mode(size)
+        else:
+            self._window = pygame.display.set_mode(size)
         pygame.display.set_caption(title)
         self.redraw()
         clock = pygame.time.Clock()
