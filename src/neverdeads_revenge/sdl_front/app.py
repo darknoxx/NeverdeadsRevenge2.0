@@ -431,19 +431,60 @@ class SdlApp:
         self.redraw()
 
     def continue_run(self) -> None:
+        """Pick a saved run back up -- and let go of the file once it is open.
+
+        The same shape as the Qt build's, and for the same reason: a run that is
+        being played lives in memory, and a copy left lying on disk would be the
+        run the player *had* the next time they sat down. A save this build cannot
+        read -- written by another version, or half written when the machine went
+        down -- is thrown away rather than thrown, because a dungeon that will not
+        open is not a crash, it is an empty slot.
+        """
         from ..desktop.screens.game import GameScreen
-        from ..persistence import load_run
+        from ..game.savegame import load
+        from ..persistence import clear_run, load_run
 
         payload = load_run()
-        if payload is None:
+        if not payload:
             return
-        from ..game.state import RunState
-
-        self.run = RunState.from_dict(payload)
-        self.screens = [GameScreen(self.run)]
+        try:
+            state = load(payload)
+        except Exception:
+            clear_run()
+            return
+        clear_run()
+        self.run = state
+        self.screens = [GameScreen(state)]
         self.redraw()
 
     # -- the picture --------------------------------------------------------
+    def feed(self, event) -> None:
+        """Hand one event from the window to the game: all the loop does.
+
+        Its own method, and not three lines inside the loop, because this is the
+        only place where a *real* key press is turned into what a screen answers
+        -- and that is exactly the seam a test could not reach while it lived in
+        a `while` that never returns. It was wrong there for a while: the event
+        object itself was passed where a bool belonged, so every key looked like
+        an auto-repeat, and the menus -- which answer one press and not thirty a
+        second -- swallowed the lot.
+        """
+        import pygame
+
+        if event.type == pygame.QUIT:
+            self.quit()
+        elif event.type == pygame.KEYDOWN:
+            text = typed(event)
+            self.key(
+                name_of(event),
+                # ``repeat`` and not the event: the screens ask whether the key
+                # is being *held*, and anything truthy answers yes.
+                KeyPress(bool(getattr(event, "repeat", False)), text),
+                text,
+            )
+        elif event.type == pygame.VIDEORESIZE:
+            self.redraw()
+
     def tick(self, dt: float) -> None:
         """A frame went by: let the screen play, let the pixels move, repaint.
 
@@ -705,9 +746,5 @@ class SdlApp:
             # on a quicker machine would be a different fight.
             self.tick(min(clock.tick(60) / 1000.0, 1 / 30.0))
             for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    running = False
-                elif event.type == pygame.KEYDOWN:
-                    self.key(name_of(event), KeyPress(event, typed(event)), typed(event))
-                elif event.type == pygame.VIDEORESIZE:
-                    self.redraw()
+                self.feed(event)
+        pygame.quit()

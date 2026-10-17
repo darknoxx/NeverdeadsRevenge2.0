@@ -1279,3 +1279,120 @@ def test_the_second_front_end_has_a_crt():
     plain = glass.draw(source)
     assert rows(plain, 0) / rows(plain, 1) < 1.05, "the scanlines did not turn off"
     glass.release()
+
+
+def _pressed(code, repeat: bool = False):
+    """A real SDL key press, the way the window loop makes one."""
+    import pygame
+
+    event = pygame.event.Event(pygame.KEYDOWN, key=code, unicode="")
+    event.repeat = repeat
+    return event
+
+
+def test_a_real_key_press_reaches_the_screen_it_is_meant_for():
+    """The seam every other test in this file could not reach: a real SDL event.
+
+    Everything else here drives `key` with a name and a made-up event, which is
+    not what happens in a window -- and that is exactly how a real bug hid: the
+    event object was passed where a bool belonged, so `isAutoRepeat()` answered
+    yes to everything, and every menu in the game swallowed every key it was
+    given. The window was up, it repainted thirty times a second, and it was
+    dead. So this feeds *events*, the way `open_window` does.
+    """
+    import pygame
+
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3)
+    assert type(app.screens[-1]).__name__ == "TitleScreen"
+
+    app.feed(_pressed(pygame.K_n))  # a letter picks its line outright
+    assert type(app.screens[-1]).__name__ == "HeroSelectScreen", (
+        "the title swallowed a real key press"
+    )
+
+    app.feed(_pressed(pygame.K_RETURN))
+    assert type(app.screens[-1]).__name__ == "GameScreen", "the run did not begin"
+
+    here = app.run.player.position
+    for code in (pygame.K_RIGHT, pygame.K_DOWN, pygame.K_LEFT, pygame.K_UP):
+        app.feed(_pressed(code))
+        if app.run.player.position != here:
+            break
+    assert app.run.player.position != here, "a real arrow key did not move the hero"
+
+
+def test_a_held_key_is_not_a_second_press():
+    """The other half of it: a *held* key is not another press.
+
+    Menus answer one press and not thirty a second, which is what keeps a key held
+    from the screen before this one out of the shop on the way past. That guard is
+    also why the bug above stayed invisible: it swallowed everything, and
+    swallowing everything looks exactly like nothing being wrong.
+    """
+    import pygame
+
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3)
+    app.feed(_pressed(pygame.K_n, repeat=True))
+    assert type(app.screens[-1]).__name__ == "TitleScreen", "a held key was answered"
+    app.feed(_pressed(pygame.K_n))
+    assert type(app.screens[-1]).__name__ == "HeroSelectScreen", (
+        "the key was still being treated as held"
+    )
+
+
+def test_closing_the_window_closes_the_game():
+    """The X in the corner, which did nothing at all for a while.
+
+    `quit` is the one shape a front end with no window object has to invent: a
+    flag the loop reads. It has to be the flag the QUIT event actually clears.
+    """
+    import pygame
+
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3)
+    assert app._running, "the loop was not running to begin with"
+    app.feed(pygame.event.Event(pygame.QUIT))
+    assert not app._running, "the window was asked to close and did not"
+
+
+def test_a_saved_run_can_be_picked_back_up():
+    """Continue, on this front end: the same file, the same loader as Qt's.
+
+    Worth a test of its own because it is the one path that reads something
+    written by *another* build -- an older version of the game, or the same one
+    yesterday -- and getting it wrong is either a crash on the title screen or a
+    run that comes back with none of its history in it.
+    """
+    from neverdeads_revenge.game.actors import HEROES
+    from neverdeads_revenge.game.savegame import dump
+    from neverdeads_revenge.game.state import start_run
+    from neverdeads_revenge.persistence import load_run, save_run
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    state = start_run(HEROES["noxx"], 3)
+    state.dungeon_map  # built with the run; nothing else needed to save it
+    save_run(dump(state))
+
+    app = SdlApp(seed=3)
+    assert app.has_saved_run(), "the save did not land"
+    app.feed(_pressed(__import__("pygame").K_c))
+    assert type(app.screens[-1]).__name__ == "GameScreen", "the run did not come back"
+    assert app.run is not None and app.run.depth == state.depth, "not the same run"
+    assert load_run() is None, "the save was left on disk while being played"
+
+
+def test_a_save_from_another_version_is_an_empty_slot_not_a_crash():
+    """Nonsense on disk is discarded, the way the Qt build discards it."""
+    from neverdeads_revenge.persistence import load_run, save_run
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    save_run({"not": "a run at all"})
+    app = SdlApp(seed=3)
+    app.feed(_pressed(__import__("pygame").K_c))
+    assert type(app.screens[-1]).__name__ == "TitleScreen", "a bad save was opened"
+    assert load_run() is None, "a bad save was left lying there"
