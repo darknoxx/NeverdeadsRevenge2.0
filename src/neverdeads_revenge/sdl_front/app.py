@@ -197,60 +197,18 @@ class SdlApp:
         self.push(GameOverScreen(self.run, won=won))
 
     def open_encounter(self) -> bool:
-        """The floor handed a fight over. The arena is *not* ready to take it.
+        """The floor handed a fight over: the arena goes on top of the room.
 
-        The fight is not resolved behind the player's back -- a game that fights
-        for you is a different game -- and it is not opened either, because the
-        arena screen cannot come across yet: it is the one screen that still
-        needs Qt's fonts, and Qt's font database and pygame's font module do not
-        survive each other in one process. Measured, repeatedly, and written down
-        in ``tests/test_sdl_front.py`` beside the test that will pass when the
-        panels have been split out.
+        Two things differ from the Qt build, and both are because of what is not
+        ported yet. The *turning* -- the step, the letter coming at the camera,
+        the white -- is painted in pixels, so the fight opens without it; and
+        because there is no turning screen in between, the arena is *pushed* on
+        top of the floor rather than swapped over it. Under Qt the arena replaces
+        the turning screen and the floor is already underneath; pushing is the
+        same stack with the missing screen left out.
 
-        So the floor says what happened and waits, which is the honest answer
-        rather than a screen that dies.
-        """
-        if self.run is None or self.run.encounter is None:
-            return False
-        from .screens import NotYetScreen
-
-        monsters = [one.name for one in self.run.living_enemies][:3]
-        self.push(
-            NotYetScreen(
-                "THE ARENA IS NOT PORTED YET.",
-                "The floor handed over a fight"
-                + (f" -- {', '.join(monsters)} --" if monsters else "")
-                + ". Its panels still need Qt's typeface, and Qt's fonts and "
-                "pygame's do not live in one process. Splitting them out is the "
-                "next session, and the fight waits where it is.",
-            )
-        )
-        return True
-
-    def leave_battle(self) -> None:
-        """The fight is over: back to the floor, or home if there is no floor."""
-        if len(self.screens) > 1:
-            self.pop()
-        else:
-            self.return_to_title()
-        screen = self.screens[-1] if self.screens else None
-        if screen is not None:
-            catch_up = getattr(screen, "catch_up", None)
-            if catch_up is not None:
-                catch_up(self)
-
-    def show_game_over(self, won: bool = False) -> None:
-        from ..desktop.screens.game_over import GameOverScreen
-
-        self.push(GameOverScreen(self.run, won=won))
-
-    def open_encounter(self) -> bool:
-        """The floor handed a fight over: the room becomes the arena.
-
-        The *turning* -- the step, the letter coming at the camera, the white --
-        is painted in pixels and is not ported yet, so the fight opens without
-        it. What is not skipped is the fight: the same ``open_fight`` builds the
-        same room, with the same rules, and the player fights it.
+        What is not skipped is the fight: the same ``open_fight`` builds the same
+        room, with the same rules, and the player fights it.
         """
         if self.run is None or self.run.encounter is None:
             return False
@@ -259,14 +217,10 @@ class SdlApp:
         fight = open_fight(self.run)
         if fight is None:
             return False
-        self.enter_battle(fight)
-        return True
-
-    def enter_battle(self, battle) -> None:
-        """The arena, in the place of whoever was turning the room over."""
         from .arena import SdlArena
 
-        self.swap(SdlArena(battle))
+        self.push(SdlArena(fight))
+        return True
 
     def leave_battle(self) -> None:
         """The fight is over: back to the floor, or home if there is no floor."""

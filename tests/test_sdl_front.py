@@ -9,20 +9,19 @@ second is that painting needs nothing from the game but cells.
 The numbers are the contrast here rather than a comparison in-process, and the
 reason is measured rather than assumed: **Qt's font database and pygame's font
 module do not survive each other in one process.** Both orders were tried, half a
-dozen times, and the process dies -- which is why the two front ends are two front
-ends, and why the arena cannot be reused from the Qt screen until its panels stop
-needing a Qt typeface.
+dozen times, and the process dies. That is why the two front ends are two front
+ends -- and it is also, now, a rule the port is built to keep.
 
-That last sentence is the finding of a whole session, so it is written down where
-it bites. Nothing *else* in this game crosses the two: the suite runs both
-toolkits happily, because nothing in it asks Qt for a font after SDL has asked for
-one. The arena is the first thing that does, and the skipped test at the bottom of
-this file is the one that will pass when it stops.
+The rule is sharper than it sounds. It is *fonts* that do not cross, not the
+toolkits: the arena's whole `draw` path -- plate, log, verbs, order strip -- was
+measured and never asks Qt for a typeface, so the second front end hands it a grid
+and gets a real fight back. What it must not do is use the Qt screen's *pixel*
+staging, which measures a letter to size a shadow, and which is the one thing here
+that has been given a cell port of its own. The test at the bottom of the file
+walks into a monster and fights it with nothing but cells in the room.
 """
 
 from __future__ import annotations
-
-import pytest
 
 from neverdeads_revenge.desktop.pattern import PatternBuffer
 from neverdeads_revenge.desktop.theme import BACKGROUND, Style, parse_style
@@ -38,8 +37,9 @@ def _sdl():
     import pygame
 
     # The full init, because a Surface needs more of SDL than freetype alone
-    # brings up. It is also the thing that fights with Qt's font database when
-    # SDL gets there first -- see the note at the top of this file.
+    # brings up. It is also the thing that fights with Qt's font *database* when
+    # the two meet -- see the note at the top of this file. Nothing in the game
+    # asks Qt for a font once this has run.
     pygame.init()
     from neverdeads_revenge.sdl_front.font import SdlFont
     from neverdeads_revenge.sdl_front.paint import paint
@@ -206,16 +206,6 @@ def test_a_run_starts_and_the_hero_walks_with_no_qt_in_the_room():
     )
 
 
-@pytest.mark.skip(
-    reason=(
-        "the arena's panels still need Qt's typeface, and Qt's font database and "
-        "pygame's font module do not survive each other in one process -- measured, "
-        "every way round, in this file's own runs. The fight *can* be opened and "
-        "fought (the rules are already Qt-free); what cannot happen yet is drawing "
-        "it. Splitting the panels out of the Qt screen is the next session, and it "
-        "is the same seam job the theme and the grid already had."
-    )
-)
 def test_a_monster_is_walked_into_fought_and_the_floor_comes_back():
     """The whole loop of a fight, on the second front end.
 
@@ -225,6 +215,11 @@ def test_a_monster_is_walked_into_fought_and_the_floor_comes_back():
     port is most likely to lose. Nothing here is a mock-up: the same
     ``open_fight`` builds the room and the same ``resolve_player_attack`` lands
     the blow.
+
+    It is also the test that says the font rule holds: the arena reuses the Qt
+    screen's panels, which touch no typeface, and stages the figures in cells
+    itself. If either half starts asking Qt for a font, this process dies rather
+    than fails, which is the loudest failure in the file.
     """
     from neverdeads_revenge.game.actors import ENEMIES, make_enemy
     from neverdeads_revenge.sdl_front.app import SdlApp
@@ -260,9 +255,84 @@ def test_a_monster_is_walked_into_fought_and_the_floor_comes_back():
     assert not ghoul.alive, "the blow did not land"
     assert state.kills == 1, "the kill did not count for the run"
 
+    # The round was *read*, not watched: the SDL arena has no playback, so there
+    # is never anything mid-sentence when a key comes in. That is the whole of the
+    # tempo difference between the front ends, and it is one boolean.
+    arena = app.screens[-1]
+    assert not arena.busy, "the arena is holding a beat it has nothing to show for"
+
+    # And the fight says how it ended, over the stage: the verdict panel is the
+    # arena's own, drawn as cells here instead of blitted as a picture.
+    picture = "\n".join("".join(cell.char for cell in row) for row in app.grid.cells)
+    assert "VICTORY" in picture, "the fight ended without saying so"
+
     app.key("enter")  # leave the verdict
 
     assert type(app.screens[-1]).__name__ == "GameScreen", (
         "the floor did not come back"
     )
-    assert state.player.position == beside, "the hero did not end up where he walked"
+    # And the floor stopped him *in front of* the monster rather than walking him
+    # onto it: the fight took the place of the step, which is the same trade the
+    # rules make in both front ends -- and it is why a room can be cleared without
+    # ever standing where a monster stood.
+    assert state.player.position == here, "the hero walked onto the corpse's square"
+    assert ghoul not in state.living_enemies, "the dead thing is still on the floor"
+
+
+def test_the_arena_draws_its_panels_and_its_monsters_as_letters():
+    """What a fight looks like on the second front end, asked of the picture.
+
+    The whole point of the panel split is that this is *readable* without Qt: the
+    plate with the purse, the four verbs, the order strip, the log, and the fight
+    itself as letters in their own colours. The test reads the grid the app drew
+    -- the same grid the painter blits -- and asks for the facts a player would
+    see at a glance: the hero, the monster, its name in the log, and the verbs.
+    """
+    from neverdeads_revenge.game.actors import ENEMIES, make_enemy
+    from neverdeads_revenge.sdl_front.app import SdlApp
+    from neverdeads_revenge.sdl_front.arena import SdlArena
+    from neverdeads_revenge.world.tiles import Tile
+
+    app = SdlApp(seed=3)
+    app.key("enter")  # NEW RUN
+    app.key("enter")  # the first hero
+
+    state = app.run
+    here = state.player.position
+    beside = (here[0] + 1, here[1])
+    state.dungeon_map.set_tile(beside, Tile.FLOOR)
+    vipers = make_enemy(ENEMIES["viper"], beside)
+    state.enemies.append(vipers)
+    state.turn_queue.add(vipers)
+    state.refresh_vision()
+
+    app.key("right")  # walk into it
+
+    assert isinstance(app.screens[-1], SdlArena), "the fight did not open"
+
+    lines = ["".join(cell.char for cell in row) for row in app.grid.cells]
+    picture = "\n".join(lines)
+
+    # The two figures, in the alphabet the dungeon used a moment before: the
+    # hero's letter and the monster's, on the stage rather than painted over it.
+    assert state.player.glyph in picture, "the hero is not on the stage"
+    assert vipers.glyph in picture, "the monster is not on the stage"
+    # And the verbs, which is the panel the player actually has to read -- and
+    # the plate, which is where the purse and the kill count live.
+    assert "ATTACK" in picture, "the verb panel is missing"
+    assert "NOXX" in picture, "the plate is missing"
+
+    # A fast hero acts first, so the room opens in silence and the log is empty
+    # until something happens. That is the rules' own shape and not the port's.
+    assert app.screens[-1].arena.lines == [], "the log spoke before anything did"
+
+    # Then the blow, and the fight's voice arrives with it: the line names the
+    # monster, and the picture carries it because the log is a cell panel.
+    app.key("a")
+    app.key("enter")
+    log = [line.text for line in app.screens[-1].arena.lines]
+    assert any(vipers.name in line for line in log), f"the log is silent: {log}"
+    picture = "\n".join(
+        "".join(cell.char for cell in row) for row in app.grid.cells
+    )
+    assert vipers.name in picture, "the log panel did not draw what the fight said"

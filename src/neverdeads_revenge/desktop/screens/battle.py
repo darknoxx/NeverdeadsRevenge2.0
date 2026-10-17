@@ -1660,20 +1660,17 @@ class BattleScreen(Screen):
             self._flashes[(id(image), colour)] = cached
         return cached
 
-    def _paste_verdict(
-        self, painter: QPainter, cols: int, rows: int, app
-    ) -> None:
-        """What the fight came to, over the room and over the letters in it.
+    def _verdict_panel(
+        self, cols: int, rows: int, font
+    ) -> tuple[PatternBuffer, int, int]:
+        """What the fight came to, as a panel of cells and where it lands.
 
-        Drawn in the paste rather than in the grid because the monsters are
-        pasted *after* the grid: a panel drawn into the buffer would have a
-        hero's letter standing through the middle of it. A little buffer of its
-        own keeps the game's own chrome -- the box, the rule, the hint -- and
-        still lands on top of everything the stage put down.
-
-        Set on the *stage* and not in the middle of the glass: the last lines of
-        the fight are the only account of how it ended, and a panel dropped over
-        them would be covering the story with its title.
+        Built here and not drawn, because *where* it goes is the arena's business
+        and *what* it says is the fight's -- and because a second front end wants
+        the same panel without a painter. Set on the *stage* and not in the middle
+        of the glass: the last lines of the fight are the only account of how it
+        ended, and a panel dropped over them would be covering the story with its
+        title.
         """
         text = self.verdict or ""
         width = min(cols - 6, max(24, len(text) + 10))
@@ -1685,7 +1682,7 @@ class BattleScreen(Screen):
         x = max(0, (cols - width) // 2)
         y = max(0, min(log_y - height, top + (log_y - top - height) // 2))
 
-        panel = PatternBuffer(width, height, app.font)
+        panel = PatternBuffer(width, height, font)
         colour = {"YOU DIED": BLOOD, "VICTORY": "bright_yellow"}.get(text, ASH)
         box(panel, 0, 0, width, height, border=colour, fill=True)
         ink = parse_style(f"bold {BONE}")
@@ -1693,6 +1690,18 @@ class BattleScreen(Screen):
         panel.text(left, 2, text, ink)
         rule(panel, 1, height - 2, width - 2, ASH)
         panel.text(2, height - 1, "enter  leave the arena", parse_style(ASH))
+        return panel, x, y
+
+    def _paste_verdict(
+        self, painter: QPainter, cols: int, rows: int, app
+    ) -> None:
+        """The verdict panel, on top of everything the stage put down.
+
+        Painted rather than written into the grid because the monsters are pasted
+        *after* the grid: a panel drawn into the buffer would have a hero's letter
+        standing through the middle of it.
+        """
+        panel, x, y = self._verdict_panel(cols, rows, app.font)
         painter.drawImage(x * app.font.cell_w, y * app.font.cell_h, panel.render())
 
     def _dims(self, app) -> tuple[int, int]:

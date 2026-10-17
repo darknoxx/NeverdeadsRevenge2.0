@@ -16,6 +16,16 @@ Run it beside ``tools/qt_probe.py`` and look at the two images:
 
     python tools/sdl_probe.py /tmp/sdl_title.png
     python tools/qt_probe.py /tmp/qt_title.png
+
+It also writes the *arena*, which is the harder question and the one the port
+turned on for a whole session. A fight is the one screen that is not just a grid:
+under Qt it is painted, and the painting is pixels. This draws it through the
+*same* ``BattleScreen.draw`` the Qt build uses -- the plate, the log, the verbs,
+the order strip and the monsters' health bars are cell work and always were --
+and stages the figures as the letters they have always been. One round is then
+fought, so the log in the picture is a real round and not an empty panel:
+
+    python tools/sdl_probe.py /tmp/sdl.png /tmp/sdl_arena.png
 """
 
 from __future__ import annotations
@@ -60,7 +70,9 @@ def main(argv: list[str] | None = None) -> int:
     import pygame
 
     pygame.init()
-    target = Path((argv or sys.argv[1:] or ["/tmp/sdl_title.png"])[0])
+    given = list(argv if argv is not None else sys.argv[1:])
+    target = Path(given[0]) if given else Path("/tmp/sdl_title.png")
+    arena_target = Path(given[1]) if len(given) > 1 else None
 
     font = SdlFont(str(FONT))
     grid = PatternBuffer(96, 27)
@@ -69,7 +81,45 @@ def main(argv: list[str] | None = None) -> int:
     pygame.image.save(surface, str(target))
 
     print(f"{target}  {surface.get_width()}x{surface.get_height()}  cell {font.cell_w}x{font.cell_h}")
+
+    if arena_target is not None:
+        fight = _drawn_into_a_fight()
+        pygame.image.save(fight, str(arena_target))
+        print(f"{arena_target}  {fight.get_width()}x{fight.get_height()}  the arena, one round in")
     return 0
+
+
+def _drawn_into_a_fight(seed: int = 3):
+    """A real fight, reached the way a player reaches one: by walking into it.
+
+    Nothing is faked and nothing is skipped: the same ``open_fight`` the game
+    calls builds the room, the same screen draws the panels, and the round in the
+    picture was decided by the rules. Three monsters are put on the floor so the
+    staging has something to stage -- that is a fixture, and it is the only line
+    here that is.
+    """
+    from neverdeads_revenge.game.actors import ENEMIES, make_enemy
+    from neverdeads_revenge.sdl_front.app import SdlApp
+    from neverdeads_revenge.world.tiles import Tile
+
+    app = SdlApp(seed=seed)
+    app.key("enter")  # NEW RUN
+    app.key("enter")  # the first hero
+
+    state = app.run
+    here = state.player.position
+    beside = (here[0] + 1, here[1])
+    for name, spot in (("viper", beside), ("ghoul", (here[0], here[1] - 1)), ("ooze", here)):
+        if spot != here:
+            state.dungeon_map.set_tile(spot, Tile.FLOOR)
+        monster = make_enemy(ENEMIES[name], spot)
+        state.enemies.append(monster)
+        state.turn_queue.add(monster)
+    state.refresh_vision()
+    app.key("right")  # into them
+    app.key("a")  # ATTACK
+    app.key("enter")  # and swing
+    return app._surface
 
 
 if __name__ == "__main__":
