@@ -914,6 +914,12 @@ def test_devouring_darkness_keeps_half_of_what_it_bites():
     for other in battle.enemies:
         other.stats.damage = (0, 0)
         other.inflicts = ()
+        # And out of the round entirely. A landed blow is never *nothing* -- the
+        # enemy's bite clamps its own damage up to one -- so zeroing the damage
+        # still leaves a point of it coming back at him, which this test never
+        # noticed while Noxx had an armour point to soak it with. What the test
+        # measures is the siphon; an enemy that acts is a number to subtract.
+        other.stats.speed = 0.01
 
     events = battle.choose(SPECIAL, enemy, special=DEVOURING_DARKNESS)
 

@@ -495,7 +495,12 @@ NOXX = Hero(
         # Three still makes him the hardest of the four to land on, which is his
         # half of the trade, without the other half being decided by one stat.
         evasion=3,
-        armor=1,
+        # And *no* armour, down from one. The one point was doing nothing except
+        # blurring the trade: a hero whose whole defence is not being hit should
+        # not also soak, or the next question is why he does not soak more.
+        # Whatever he does not dodge, he takes -- which is the sentence the
+        # evasion is the other half of.
+        armor=0,
     ),
     # REVENGE makes him faster still, which is the same joke his whole kit tells:
     # the fight is over before it started.
@@ -633,10 +638,11 @@ INFERNO = Hero(
         crit_multiplier=1.8,
         accuracy=1,
         evasion=1,
-        # None at all. A fire does not block anything: it burns what comes close
-        # and goes out when it is done, and a hero whose whole argument is the
-        # first blow has no business being able to survive the second.
-        armor=0,
+        # One, and it is the whole of what a fire blocks: the smallest body in
+        # the roster with the cheapest hide over it. Not zero -- a hero whose
+        # argument is the first blow has to survive the first blow -- and not
+        # more, or the trade stops being damage for durability.
+        armor=1,
     ),
     # Every kill teaches the swing a little luck -- see `Trait.CRIT`.
     trait=Trait.CRIT,
