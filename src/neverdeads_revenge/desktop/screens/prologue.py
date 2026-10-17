@@ -63,9 +63,7 @@ class PrologueScreen(Screen):
 
     def _window(self, app) -> tuple[int, int]:
         """``(page length, lines shown)`` -- the clamp and the draw agree on it."""
-        buffer = app._buffer
-        cols = buffer.cols if buffer is not None else 96
-        rows = buffer.rows if buffer is not None else 30
+        cols, rows = app.cells
         height = min(rows - 2, 21)
         return len(self._page(min(cols - 8, 66))), height - 5
 

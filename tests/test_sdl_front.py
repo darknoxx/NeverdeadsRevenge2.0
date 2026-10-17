@@ -1782,3 +1782,129 @@ def test_full_screen_re_fits_the_picture_to_the_screen(monkeypatch):
     app.feed(_pressed(pygame.K_F11))
     assert not app._fullscreen, "F11 did not come back"
     assert app._shown == base, "the picture did not shrink back"
+
+
+def _app_with_a_run(seed: int = 3):
+    """An SDL app with a real run behind it: what the menus need to be asked."""
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=seed, no_sound=True)
+    app.begin_run("noxx")
+    return app
+
+
+def test_the_character_sheet_draws_with_something_worn():
+    """Reported from a real keyboard: 'c' with an item equipped crashed the game.
+
+    The sheet wanted the frame's width, and asked the *application* for its
+    private buffer -- which the Qt build has and this one never did. So: an item
+    in a slot, and the screen drawn, which is the whole of what the report says.
+    """
+    from neverdeads_revenge.desktop.screens.menus import CharacterScreen
+    from neverdeads_revenge.world.items import ITEMS, make_item
+
+    app = _app_with_a_run()
+    weapon = next(key for key, one in ITEMS.items() if one.slot == "weapon")
+    app.run.player.equipment["weapon"] = make_item(ITEMS[weapon])
+
+    app.feed(_pressed(__import__("pygame").K_c))
+    assert type(app.screens[-1]).__name__ == "CharacterScreen", "the sheet did not open"
+    assert app._surface is not None, "nothing was drawn"
+    assert CharacterScreen is not None  # the import above is the point
+
+
+def test_every_shared_menu_draws_on_the_second_front_end():
+    """All of them, because the bug was one screen reaching into the app.
+
+    A screen belongs to the *game* and is drawn by whichever application is
+    running it, so anything a screen asks of the app is a promise both have to
+    keep. The character sheet broke that promise; this walks the rest of the
+    list -- every menu the game can put on the stack -- so the next one that
+    reaches for something only one front end has says so here.
+    """
+    from neverdeads_revenge.desktop.screens.dialogs import ConfirmScreen, InfoScreen
+    from neverdeads_revenge.desktop.screens.game_over import (
+        GameOverScreen,
+        NameEntryScreen,
+    )
+    from neverdeads_revenge.desktop.screens.menus import (
+        CharacterScreen,
+        ChronicleScreen,
+        HelpScreen,
+        LegendScreen,
+        PackScreen,
+        ScoreboardScreen,
+        ShopScreen,
+    )
+    from neverdeads_revenge.desktop.screens.pause import PauseScreen
+    from neverdeads_revenge.world.items import ITEMS, make_item
+
+    app = _app_with_a_run()
+    state = app.run
+    weapon = next(key for key, one in ITEMS.items() if one.slot == "weapon")
+    state.player.equipment["weapon"] = make_item(ITEMS[weapon])
+    state.gold = 120
+
+    screens = [
+        PauseScreen(),
+        HelpScreen(),
+        CharacterScreen(state),
+        PackScreen(state),
+        LegendScreen(state),
+        ShopScreen(),
+        ScoreboardScreen(),
+        ChronicleScreen(),
+        ConfirmScreen("WELL?", "A question with two answers."),
+        InfoScreen("A GIFT", "something", "and what it does"),
+        GameOverScreen(state, won=True, best=99, can_rewind=True),
+        NameEntryScreen(state.score, ""),
+    ]
+    for screen in screens:
+        name = type(screen).__name__
+        app.screens = [screen]
+        app.redraw()
+        assert app._surface is not None, f"{name} drew nothing at all"
+
+
+def test_a_second_run_in_one_session_is_a_second_dungeon():
+    from neverdeads_revenge.sdl_front.app import SdlApp
+    """Two NEW RUNs are two dungeons -- unless the player pinned the seed.
+
+    Which is subtler than it sounds: rolling a fresh seed and *keeping* it gives
+    every run in one session the same floor, and it looks like the seed flag
+    working. The Qt build has a comment about exactly that; this front end grew
+    the bug anyway, which is what a test is for.
+    """
+
+    def floor_of(app):
+        return (
+            app.run.seed,
+            app.run.player.position,
+            sorted((one.name, one.position) for one in app.run.enemies),
+        )
+
+    loose = SdlApp(seed=None)
+    loose.begin_run("noxx")
+    first = floor_of(loose)
+    loose.begin_run("noxx")
+    assert floor_of(loose) != first, "the second run was the same dungeon"
+
+    pinned = SdlApp(seed=7)
+    pinned.begin_run("noxx")
+    kept = floor_of(pinned)
+    pinned.begin_run("noxx")
+    assert floor_of(pinned) == kept, "a pinned seed stopped pinning"
+
+
+def test_the_arena_door_works_without_a_seed():
+    """``--battle-scene`` and no ``--seed``: a random fight, not a TypeError.
+
+    A seed of ``None`` is a legitimate state -- "the player did not pin one" --
+    and it has to be turned into a number before anything is generated.
+    """
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=None, battle_scene=True, no_sound=True)
+    assert app.run is not None, "the arena opened with no run behind it"
+    assert isinstance(app.run.seed, int), f"a seed of {app.run.seed!r}"
+    assert type(app.screens[-1]).__name__ == "SdlArena"

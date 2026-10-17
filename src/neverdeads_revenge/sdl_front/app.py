@@ -225,7 +225,16 @@ class SdlApp:
     def show_game_over(self, won: bool = False) -> None:
         from ..desktop.screens.game_over import GameOverScreen
 
-        self.push(GameOverScreen(self.run, won=won))
+        self.play("victory" if won else "death")
+        self.push(
+            GameOverScreen(
+                state=self.run,
+                won=won,
+                best=max(self.progress.best_score, self.run.score),
+                can_rewind=self.run.rewind_ready and not won,
+                on_done=lambda answer: self.after_summary(answer),
+            )
+        )
 
     def open_encounter(self) -> bool:
         """The floor handed a fight over: the arena goes on top of the room.
@@ -308,7 +317,7 @@ class SdlApp:
         from .arena import SdlArena
 
         if self.run is None:
-            self.run = start_run(HEROES["noxx"], self.seed)
+            self.run = start_run(HEROES["noxx"], self._a_seed())
         self.screens = [SdlArena(Battle(self.run, self.run.enemies[:3]))]
         self.redraw()
 
@@ -450,19 +459,39 @@ class SdlApp:
 
         self.push(HeroSelectScreen())
 
+    def _a_seed(self) -> int:
+        """The seed for the run about to begin.
+
+        Fresh per run -- *not* stored: keeping the roll would make every NEW RUN
+        in one session the same dungeon wearing yesterday's clothes, which is the
+        bug the Qt build has a comment about. A seed the player pinned with
+        ``--seed`` is the exception, and ``is None`` and not a truth test,
+        because seed 0 is a seed.
+        """
+        if self.seed is not None:
+            return self.seed
+        return random.SystemRandom().randrange(2**32)
+
     def begin_run(self, hero_key: str) -> None:
         from ..desktop.screens.game import GameScreen
         from ..game.actors import HEROES
+        from ..game.lore import PAGE_COUNT
         from ..game.shop import loadout_from
         from ..game.state import start_run
 
-        #: A fresh seed per run -- unless the player pinned one with ``--seed``,
-        #: in which case every new run in this session is the same dungeon. ``is
-        #: None`` and not a truth test: seed 0 is a seed.
-        if self.seed is None:
-            self.seed = random.SystemRandom().randrange(2**32)
+        loadout = loadout_from(self.progress)
+        self.save_progress()
         self.run = start_run(
-            HEROES[hero_key], self.seed, loadout=loadout_from(self.progress)
+            HEROES[hero_key],
+            self._a_seed(),
+            loadout=loadout,
+            # The pages this book is still missing, so a run knows what is out
+            # there -- the same tuple the Qt build hands over.
+            pages=tuple(
+                number
+                for number in range(1, PAGE_COUNT + 1)
+                if number not in self.progress.pages
+            ),
         )
         self.effects.clear()
         self.screens = [GameScreen(self.run)]
@@ -694,6 +723,15 @@ class SdlApp:
                     round(piece.bottom - piece.height),
                 ),
             )
+
+    @property
+    def cells(self) -> tuple[int, int]:
+        """How big the frame is, in cells -- the same question the Qt app answers.
+
+        A fixed grid here (the window scales, the grid does not), which is why
+        this is two numbers and not a computation.
+        """
+        return (self.cols, self.rows)
 
     def _buffer_size(self) -> tuple[int, int]:
         """The picture's own size, in pixels: a cell is ten by twenty, always."""

@@ -155,6 +155,18 @@ class DesktopApp(QMainWindow):
         super().resizeEvent(event)
         self.redraw()
 
+    @property
+    def cells(self) -> tuple[int, int]:
+        """How big the frame is, in cells -- for the *screens* to ask.
+
+        Public because a screen sometimes needs it outside ``draw``: a scroll
+        clamp has to know how many rows are showing before anything is painted.
+        Reaching for the app's private buffer instead is how the other front end
+        got an AttributeError in the character sheet, so the question has a name
+        now and both applications answer it.
+        """
+        return self._grid_size()
+
     def _grid_size(self) -> tuple[int, int]:
         """How many cells fit, at the largest whole-number pixel scale."""
         width = max(1, self.view.width())

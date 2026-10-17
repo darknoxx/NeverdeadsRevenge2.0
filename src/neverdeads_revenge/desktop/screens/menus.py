@@ -260,8 +260,7 @@ class CharacterScreen(_Panel):
         the difference between a rule and a rumour."""
         from .dialogs import wrap
 
-        buffer = app._buffer
-        cols = buffer.cols if buffer is not None else 96
+        cols = app.cells[0]
         room = max(16, min(cols - 4, 74) - 6 - 10)
         return wrap(text, room)
 
