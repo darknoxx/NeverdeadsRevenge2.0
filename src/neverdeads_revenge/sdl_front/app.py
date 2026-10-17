@@ -76,6 +76,7 @@ class SdlApp:
         screen=None,
         headline: bool = True,
         no_sound: bool = True,
+        battle_scene: bool = False,
     ) -> None:
         import pygame
 
@@ -120,6 +121,8 @@ class SdlApp:
         self.headline = headline
         self._window = None
         self._surface = None
+        if battle_scene:
+            self.open_battle_scene()
 
     # -- the stack ---------------------------------------------------------
     def push(self, screen) -> None:
@@ -232,6 +235,23 @@ class SdlApp:
         rectangle of them: the corner is where a spray comes from.
         """
         return (position[0] * self.font.cell_w, position[1] * self.font.cell_h)
+
+    def open_battle_scene(self) -> None:
+        """The dev door: a fight against the first monsters of a fresh floor.
+
+        The same door the Qt build has, and for the same reason: a run starts on
+        the floor and a fight is reached by walking into one, which is the game
+        and not a shortcut -- but looking at the arena should not cost a walk.
+        """
+        from ..game.actors import HEROES
+        from ..game.battle import Battle
+        from ..game.state import start_run
+        from .arena import SdlArena
+
+        if self.run is None:
+            self.run = start_run(HEROES["noxx"], self.seed)
+        self.screens = [SdlArena(Battle(self.run, self.run.enemies[:3]))]
+        self.redraw()
 
     def open_shop(self) -> None:
         self.play("deny")

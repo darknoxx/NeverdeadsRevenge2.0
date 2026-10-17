@@ -43,6 +43,21 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="open the arena straight away, against a fresh floor's first monsters",
     )
+    parser.add_argument(
+        "--sdl",
+        action="store_true",
+        help=(
+            "run the second front end instead: the same game, drawn by SDL and "
+            "pygame, with no Qt anywhere in it"
+        ),
+    )
+    parser.add_argument(
+        "--scale",
+        type=int,
+        default=1,
+        metavar="N",
+        help="how many screen pixels per game pixel on the second front end (default 1)",
+    )
     args = parser.parse_args(argv)
 
     if args.sound_log is not None:
@@ -52,6 +67,21 @@ def main(argv: list[str] | None = None) -> int:
             tempfile.gettempdir(), "ndr2-sound.log"
         )
         os.environ["NEVERDEADS_REVENGE_SOUND_LOG"] = path
+
+    if args.sdl:
+        # Before anything touches Qt, and that is the point of this door: the
+        # second front end runs on a machine where PySide6 is not installed at
+        # all, so the flag has to be answered before the import below.
+        from .sdl_front.app import SdlApp
+
+        window = SdlApp(
+            seed=args.seed,
+            scale=args.scale,
+            no_sound=args.no_sound,
+            battle_scene=args.battle_scene,
+        )
+        window.open_window()
+        return 0
 
     # Wayland's input-method plumbing logs a protest at every surface change
     # ("trying to disable a surface nothing is focused on") -- a known Qt

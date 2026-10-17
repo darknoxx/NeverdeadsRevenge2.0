@@ -959,3 +959,61 @@ def test_the_heros_own_wounds_are_worn_on_his_plate():
         (y + height) * app.font.cell_h,
     )
     assert _changed(clean, app._surface, box) > 20, "the hero's wounds were not shown"
+
+
+def test_the_command_line_can_start_the_second_front_end():
+    """The door: ``ndr2 --sdl``, answered before anything touches Qt.
+
+    A front end that runs without Qt is only a claim until something starts it
+    on a machine that has none. So: block the import, in a process of its own,
+    and call the command line -- and let the window open with a stand-in for the
+    loop, because the loop is the part that never returns. What is checked is
+    what matters: the flag was answered *before* the Qt import below it, the app
+    was built, and ``--battle-scene`` put the arena on top of the stack.
+    """
+    code = textwrap.dedent(
+        """
+        import sys
+
+
+        class NoQt:
+            def find_spec(self, name, path=None, target=None):
+                if name.split(".")[0] == "PySide6":
+                    raise ImportError(f"no Qt here: {name}")
+
+
+        sys.meta_path.insert(0, NoQt())
+
+        from neverdeads_revenge.sdl_front import app as sdl_app
+
+        opened = {}
+
+
+        def look_instead_of_loop(self, **rest):
+            opened["top"] = type(self.screens[-1]).__name__
+            opened["fighting"] = getattr(self.screens[-1], "battle", None) is not None
+
+
+        sdl_app.SdlApp.open_window = look_instead_of_loop
+
+        from neverdeads_revenge.__main__ import main
+
+        code_back = main(["--sdl", "--battle-scene", "--seed", "3"])
+        assert code_back == 0, "the command line did not finish cleanly"
+        assert opened["top"] == "SdlArena", opened
+        assert opened["fighting"], "the arena opened with nothing in it"
+        print("CLI-OK")
+        """
+    )
+    env = dict(os.environ)
+    env["SDL_VIDEODRIVER"] = "dummy"
+    env["PYTHONPATH"] = str(ROOT / "src")
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "CLI-OK" in result.stdout, result.stdout
