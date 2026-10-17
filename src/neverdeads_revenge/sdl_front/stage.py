@@ -190,7 +190,13 @@ class Stage:
                     )
                     if stone is not None:
                         _shear_into(
-                            wall, stone, ux, edge_y, ax - tw // 2, ay - (course + 1) * th
+                            wall,
+                            stone,
+                            ux,
+                            edge_y,
+                            ax,
+                            ay,
+                            float(-(course + 1) * th),
                         )
 
         # The clip: courses climb, and a wall does not have to cover the sky.
@@ -319,19 +325,25 @@ def _blank(size):
     return pygame.Surface(size, pygame.SRCALPHA)
 
 
-def _shear_into(target, stone, ux: float, uy: float, ax: float, ay: float) -> None:
+def _shear_into(target, stone, ux: float, uy: float, ax: float, ay: float, top: float) -> None:
     """Blit a tile as its *plane*: every column shifted up and along.
 
     Which is what a shear is, done the only way a blitter can do it without a
-    matrix: one column at a time, at a walking offset. Done once per window and
-    never again, which is the whole reason it is affordable.
+    matrix: one column at a time, at a walking offset. ``(ax, ay)`` is the point
+    on the wall's own edge that the tile is *centred* on and ``top`` where the
+    tile sits above it -- both in tile space, which is the whole subtlety: a
+    column's offset is measured from the tile's middle and not from its left
+    edge, and a wall drawn from its left edge is a wall shifted half a stone
+    along its own plane. (It was, for a while: half a tile left and the same up,
+    which is exactly the gap that showed against the far wall.)
     """
     import pygame
 
     width, height = stone.get_size()
     for column in range(width):
+        along = column - width / 2.0
         strip = stone.subsurface(pygame.Rect(column, 0, 1, height))
-        target.blit(strip, (round(ax + ux * column), round(ay + uy * column)))
+        target.blit(strip, (round(ax + ux * along), round(ay + uy * along + top)))
 
 
 def _bar_colour(ratio: float) -> str:

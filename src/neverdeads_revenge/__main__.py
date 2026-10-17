@@ -52,6 +52,11 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--fps",
+        action="store_true",
+        help="show a frame counter in the corner (second front end)",
+    )
+    parser.add_argument(
         "--scale",
         type=int,
         default=1,
@@ -79,6 +84,7 @@ def main(argv: list[str] | None = None) -> int:
             scale=args.scale,
             no_sound=args.no_sound,
             battle_scene=args.battle_scene,
+            fps=args.fps,
         )
         window.open_window()
         return 0

@@ -29,6 +29,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--no-sound", action="store_true", help="start with the sound off"
     )
+    parser.add_argument(
+        "--fps", action="store_true", help="show a frame counter in the corner"
+    )
     args = parser.parse_args(argv)
 
     from .app import SdlApp
@@ -38,6 +41,7 @@ def main(argv: list[str] | None = None) -> int:
         scale=args.scale,
         no_sound=args.no_sound,
         battle_scene=args.battle_scene,
+        fps=args.fps,
     )
     window.open_window()
     return 0

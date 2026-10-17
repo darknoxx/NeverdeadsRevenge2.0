@@ -1023,16 +1023,18 @@ def test_the_command_line_can_start_the_second_front_end():
         def look_instead_of_loop(self, **rest):
             opened["top"] = type(self.screens[-1]).__name__
             opened["fighting"] = getattr(self.screens[-1], "battle", None) is not None
+            opened["fps"] = self.show_fps
 
 
         sdl_app.SdlApp.open_window = look_instead_of_loop
 
         from neverdeads_revenge.__main__ import main
 
-        code_back = main(["--sdl", "--battle-scene", "--seed", "3"])
+        code_back = main(["--sdl", "--battle-scene", "--seed", "3", "--fps"])
         assert code_back == 0, "the command line did not finish cleanly"
         assert opened["top"] == "SdlArena", opened
         assert opened["fighting"], "the arena opened with nothing in it"
+        assert opened["fps"], "the frame counter flag was dropped on the way in"
         print("CLI-OK")
         """
     )
@@ -1547,3 +1549,123 @@ def test_a_save_from_another_version_is_an_empty_slot_not_a_crash():
     assert type(app.screens[-1]).__name__ == "TitleScreen", "a bad save was opened"
     assert load_run() is None, "a bad save was left lying there"
 
+
+
+def test_a_held_key_repeats_at_the_pace_the_game_asks_for():
+    """SDL has to be *told* to repeat, and the screens have their own rules.
+
+    Two halves, and both were missing. SDL makes no repeat events at all unless
+    asked, so holding a direction did nothing and every step cost a press. And
+    once it does repeat, the floor walks on it -- "a held direction is one
+    gesture" -- but no faster than the hero's own pace, which is the rule this
+    asks for directly rather than by walking him into a wall.
+    """
+    import time
+
+    import pygame
+
+    from neverdeads_revenge.game.pace import action_gap
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    assert pygame.key.get_repeat() != (0, 0), "SDL was never asked to repeat a key"
+
+    app = SdlApp(seed=3)
+    app.key("enter")
+    app.key("enter")
+    screen = app.screens[-1]
+
+    screen._last_move.clear()
+    app.feed(_pressed(pygame.K_RIGHT, repeat=True))
+    assert "right" in screen._last_move, "a held direction was refused outright"
+    first = screen._last_move["right"]
+
+    app.feed(_pressed(pygame.K_RIGHT, repeat=True))
+    assert screen._last_move["right"] == first, "the repeat outran the hero's pace"
+
+    time.sleep(action_gap(app.run.player.speed) + 0.02)
+    app.feed(_pressed(pygame.K_RIGHT, repeat=True))
+    assert screen._last_move["right"] > first, "a held direction never arrives again"
+
+
+def test_a_cell_becomes_the_pixel_the_camera_puts_it_at():
+    """Where a coin's sparks go: the game's own translation, not a multiplication.
+
+    The grid is the *camera*, so a square at ``(38, 9)`` is somewhere else on the
+    screen. Multiplying by the cell size -- which is what this did -- puts every
+    spray half a cell up and to the left of the thing it belongs to, and further
+    out the further the hero has walked, which is what the coins did.
+    """
+    from neverdeads_revenge.desktop.render import screen_point
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3)
+    app.key("enter")
+    app.key("enter")
+    here = app.run.player.position
+
+    theirs = screen_point(
+        app.run, here, app.cols, app.rows, app.font.cell_w, app.font.cell_h
+    )
+    ours = app.screen_point(here)
+    assert ours == theirs, "the cell was not translated the way the game translates it"
+    assert ours != (here[0] * app.font.cell_w, here[1] * app.font.cell_h), (
+        "the camera was ignored"
+    )
+
+
+def test_a_side_wall_is_sheared_from_its_own_middle():
+    """The shear, as arithmetic: a column's offset is measured from the tile's centre.
+
+    A wall is the floor's own edge standing up, and the stone on it is *centred*
+    on that edge. Measuring the shift from the tile's left edge instead -- which
+    is what this did -- moves the whole plane half a stone along its own axis:
+    half a tile to the left and half up, which is exactly the gap that showed
+    between the side walls and the far one.
+    """
+    import pygame
+
+    from neverdeads_revenge.sdl_front.stage import _shear_into
+
+    tile = pygame.Surface((6, 4), pygame.SRCALPHA)
+    tile.fill((200, 30, 30, 255))
+    canvas = pygame.Surface((40, 40), pygame.SRCALPHA)
+    # ux, uy = (0.5, 1.0): a plane leaning to the right, like the left-hand wall.
+    _shear_into(canvas, tile, 0.5, 1.0, 20.0, 20.0, -4.0)
+    inked = [
+        (x, y)
+        for x in range(40)
+        for y in range(40)
+        if canvas.get_at((x, y))[:3] == (200, 30, 30)
+    ]
+    left = min(x for x, _ in inked)
+    right = max(x for x, _ in inked)
+    top = min(y for _, y in inked)
+    bottom = max(y for _, y in inked)
+    assert (left, top, right, bottom) == (18, 13, 21, 21), (left, top, right, bottom)
+
+
+def test_the_frame_counter_is_there_when_it_is_asked_for():
+    """``--fps``: a number in the corner, and nothing in the corner without it.
+
+    Measured against the same frame drawn without it, because the corner is not
+    empty anyway -- the sidebar's last rows are right there.
+    """
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    counted = SdlApp(seed=3, battle_scene=True, fps=True)
+    for _ in range(4):
+        counted.tick(1 / 30.0)
+    assert counted.frames > 1.0, f"no frames were counted: {counted.frames}"
+
+    quiet = SdlApp(seed=3, battle_scene=True, fps=False)
+    for _ in range(4):
+        quiet.tick(1 / 30.0)
+
+    corner = (
+        counted._surface.get_width() - 90,
+        counted._surface.get_height() - 30,
+        counted._surface.get_width(),
+        counted._surface.get_height(),
+    )
+    ink = _changed(quiet._surface, counted._surface, corner)
+    assert ink > 30, f"the counter was not drawn: {ink} pixels"

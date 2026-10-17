@@ -20,9 +20,11 @@ Two things are honestly missing, and named rather than hidden:
 from __future__ import annotations
 
 import random
+import time
 from pathlib import Path
 
 from ..persistence import load_meta
+from ..desktop.theme import Colour
 from .font import SdlFont
 from .effects import SdlEffects
 from .keys import name_of, typed
@@ -77,10 +79,17 @@ class SdlApp:
         headline: bool = True,
         no_sound: bool = True,
         battle_scene: bool = False,
+        fps: bool = False,
     ) -> None:
         import pygame
 
         pygame.init()
+        # The screens decide what a *held* key means -- the floor walks on one, a
+        # shelf scrolls on one, and everything else refuses the repeats -- but SDL
+        # does not make any unless it is asked, so holding a direction did nothing
+        # at all. Delay and interval are the terminal's own feel: a pause long
+        # enough that a tap is a tap, then the key's own pace.
+        pygame.key.set_repeat(400, 60)
         self.font = SdlFont(str(FONT))
         #: The same smaller face the Qt build uses for the sidebar and the log:
         #: one size down, which is the one place a mixed size pays for itself.
@@ -99,6 +108,10 @@ class SdlApp:
             geometry=bool(saved.get("geometry", False)),
         )
         self.glass = None
+        #: A frame counter, for the flag that asks for one. Smoothed, because a
+        #: number that jitters by ten a frame tells you nothing.
+        self.show_fps = fps
+        self.frames = 0.0
         self.seed = seed
         self.run = None
         #: The premise, told once in the Qt build between the choice and the
@@ -136,6 +149,7 @@ class SdlApp:
         self.headline = headline
         self._window = None
         self._surface = None
+        self._last_frame: float | None = None
         #: Whether the window loop should keep going. Only ``quit`` clears it --
         #: there is no window object to ask on this front end.
         self._running = True
@@ -253,12 +267,27 @@ class SdlApp:
                 catch_up(self)
 
     def screen_point(self, position):
-        """Where a cell is, in the frame's own pixels.
+        """Where a cell is, in the frame's own pixels -- or ``None``.
 
-        Sparks are thrown in buffer pixels in both builds, and a cell is a
-        rectangle of them: the corner is where a spray comes from.
+        The grid is the *camera* and not the dungeon, so this is the game's own
+        translation and not a multiplication: a square at ``(38, 9)`` is somewhere
+        else on the screen unless the camera happens to say so. Everything that
+        skipped it drew in the wrong place, which is exactly what happened to the
+        coins here -- sprayed over a wall while the hero picked them up on the
+        other side of it.
         """
-        return (position[0] * self.font.cell_w, position[1] * self.font.cell_h)
+        from ..desktop.render import screen_point
+
+        if self.run is None:
+            return None
+        return screen_point(
+            self.run,
+            position,
+            self.cols,
+            self.rows,
+            self.font.cell_w,
+            self.font.cell_h,
+        )
 
     def open_battle_scene(self) -> None:
         """The dev door: a fight against the first monsters of a fresh floor.
@@ -496,6 +525,14 @@ class SdlApp:
         is talking, and this is the only clock the second front end has -- and one
         that is busy is asked until it is done.
         """
+        now = time.monotonic()
+        if self._last_frame is not None:
+            # Measured here and not from ``dt``: the loop clamps its step to a
+            # thirtieth of a second so the *game* keeps its pace, and a counter
+            # reading that would report thirty forever.
+            gap = max(1e-4, now - self._last_frame)
+            self.frames = (self.frames * 9.0 + (1.0 / gap)) / 10.0
+        self._last_frame = now
         screen = self.screens[-1]
         if getattr(screen, "busy", False) or getattr(screen, "animating", False):
             screen.step(dt, self)
@@ -531,6 +568,8 @@ class SdlApp:
         # And the pixels that are not the room: sparks thrown by whatever just
         # happened, drawn last so they land on top of everything.
         self.effects.draw(self._surface)
+        if self.show_fps:
+            self._draw_fps()
         self._present()
 
     def _small_face(self) -> None:
@@ -594,6 +633,31 @@ class SdlApp:
             glyph = face.glyph(char, colour)
             if glyph is not None:
                 surface.blit(glyph, (ink.x + index * face.cell_w, ink.y))
+
+    def _draw_fps(self) -> None:
+        """How fast this is going, in the corner, when ``--fps`` asked for it.
+
+        Bottom right, on its own dark patch so it can be read over a sidebar: it
+        is a developer's number and not part of the fiction, so it is allowed to
+        sit on top of one.
+        """
+        import pygame
+
+        from ..desktop.theme import BACKGROUND
+
+        text = f"{self.frames:4.1f} fps"
+        face = self.font_small
+        width = len(text) * face.cell_w + 6
+        height = face.cell_h + 4
+        left = max(0, self._surface.get_width() - width)
+        top = max(0, self._surface.get_height() - height)
+        self._surface.fill(tuple(BACKGROUND), pygame.Rect(left, top, width, height))
+        for index, char in enumerate(text):
+            glyph = face.glyph(char, Colour(0xC8, 0xC8, 0xC8))
+            if glyph is not None:
+                self._surface.blit(
+                    glyph, (left + 3 + index * face.cell_w, top + 2)
+                )
 
     def _blit_art(self) -> None:
         """The pictures a screen asked for, put where it asked for them.
