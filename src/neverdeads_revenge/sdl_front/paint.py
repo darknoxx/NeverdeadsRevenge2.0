@@ -12,7 +12,7 @@ per-character work in this file beyond the loop the grid already needed.
 
 from __future__ import annotations
 
-from pygame import Rect, Surface
+from pygame import SRCALPHA, Rect, Surface
 
 from ..desktop import art
 from ..desktop.pattern import PatternBuffer
@@ -68,14 +68,22 @@ def paint(grid: PatternBuffer, font: SdlFont, background=BACKGROUND, rows=None) 
 
     ``rows`` is ``(first, last)`` in cells and paints *that band only*, as tall as
     the band, for a painter that already has the grid down and needs one part of it
-    again on top of the art drawn there since. The painting comes with it, shifted
-    by the same amount, so the band is the same band.
+    again on top of the art drawn there since. That is how a fight's menu ends up
+    over the figure standing in front of it, and it is why a band can be told to
+    have no paper at all: ``background=None`` leaves the cells to speak for
+    themselves. A panel's box fills its cells, and a cell a panel does not want
+    stays *transparent* -- the room between the boxes is still the room, and the
+    hero behind it is still the hero. Given a colour or a picture the band carries
+    it like the frame does, shifted by the same amount, so the band is the band.
     """
     first, last = rows if rows is not None else (0, grid.rows)
-    surface = Surface((grid.cols * font.cell_w, (last - first) * font.cell_h))
+    surface = Surface(
+        (grid.cols * font.cell_w, (last - first) * font.cell_h),
+        SRCALPHA if background is None else 0,
+    )
     if isinstance(background, Surface):
         surface.blit(background, (0, -first * font.cell_h))
-    else:
+    elif background is not None:
         surface.fill(background)
 
     for x, y, run in grid.runs():

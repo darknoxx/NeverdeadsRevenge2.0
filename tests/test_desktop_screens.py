@@ -4007,3 +4007,45 @@ def test_the_panels_come_out_over_the_hero_on_the_qt_build(app, font):
     room = (0, 0, with_him.width(), first * cell_h)
     assert differs(band) == 0, "the hero showed through the panels"
     assert differs(room) > 200, "the hero was not drawn at all"
+
+
+def test_the_menu_covers_the_hero_where_it_is_and_nowhere_else_on_qt(app, font):
+    """The same rule on the other painter: a band is cells, not a rectangle.
+
+    Asked of the hero's shadow, which is the lower half of what the band reaches:
+    every pixel of it that the panels let show must be in a cell no panel wants.
+    Where a box is, the box wins -- and where it is not, the figure behind it is
+    nobody's business but the fight's.
+    """
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+
+    battle = arena(count=3)
+    screen = BattleScreen(battle)
+    _, with_shadow = drawn(screen, app, font)
+
+    kept = BattleScreen._paste_shadow
+    BattleScreen._paste_shadow = lambda *args, **kwargs: None
+    try:
+        buffer, without = drawn(screen, app, font)
+    finally:
+        BattleScreen._paste_shadow = kept
+
+    first, last = screen.panel_band(96, 27)
+    cell_w, cell_h = font.cell_w, font.cell_h
+    touched: dict[tuple[int, int], object] = {}
+    for y in range(first, last):
+        for x in range(96):
+            moved = any(
+                with_shadow.pixelColor(px, py) != without.pixelColor(px, py)
+                for py in range(y * cell_h, (y + 1) * cell_h)
+                for px in range(x * cell_w, (x + 1) * cell_w)
+            )
+            if moved:
+                touched[(x, y)] = buffer.cells[y][x].style.bg
+
+    assert len(touched) > 2, "the hero's shadow was cut off at the menu's edge"
+    for cell, background in touched.items():
+        assert background is None, (
+            f"a shadow shows through the panel at {cell}: the band is painting "
+            "over what is behind it"
+        )

@@ -840,11 +840,13 @@ class BattleScreen(Screen):
         # The panels again, over whoever is standing in front of them: the plate
         # the hero's feet are in, and the list of the five when it is open. Drawn
         # from the *grid*, which was painted before the art -- so this is the one
-        # part of the cells that is allowed to land on top of a sprite.
+        # part of the cells that is allowed to land on top of a sprite. Transparent
+        # where the grid says nothing: a box covers a figure, the room between two
+        # boxes does not.
         first, last = self.panel_band(cols, rows)
         grid = self._grid if self._grid is not None else getattr(app, "_buffer", None)
         if grid is not None:
-            band = render_grid(grid, (first, last))
+            band = render_grid(grid, (first, last), None)
             painter.drawImage(
                 QRectF(
                     0.0,

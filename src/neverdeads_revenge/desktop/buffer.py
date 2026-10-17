@@ -12,7 +12,7 @@ without dragging this in behind it.
 
 from __future__ import annotations
 
-from PySide6.QtCore import QRect
+from PySide6.QtCore import QRect, Qt
 from PySide6.QtGui import QColor, QImage, QPainter
 
 from .font import BitmapFont
@@ -49,7 +49,11 @@ class PatternBuffer(Grid):
         """Paint the whole grid into an image at one pixel per font pixel."""
         return render_grid(self)
 
-def render_grid(grid: PatternBuffer, rows: tuple[int, int] | None = None) -> QImage:
+def render_grid(
+    grid: PatternBuffer,
+    rows: tuple[int, int] | None = None,
+    background=BACKGROUND,
+) -> QImage:
     """Any grid, as an image at one pixel per font pixel.
 
     A function and not only a method, because the grid it paints need not be this
@@ -63,6 +67,11 @@ def render_grid(grid: PatternBuffer, rows: tuple[int, int] | None = None) -> QIm
     the band: a painter that already has the grid on its frame and needs one part
     of it again, on top of the art it has drawn there since. The band starts at the
     top of what was asked for, so the caller puts it back where the band is.
+
+    And ``background=None`` is a *transparent* band -- the cells and nothing else,
+    which is what a menu drawn over a fight wants: a panel's box fills its own
+    cells, and a cell no panel wants stays clear, so the room between the boxes is
+    still the room and the figure behind it is still the figure.
     """
     first, last = rows if rows is not None else (0, grid.rows)
     font = grid.font or BitmapFont()
@@ -71,7 +80,10 @@ def render_grid(grid: PatternBuffer, rows: tuple[int, int] | None = None) -> QIm
         (last - first) * font.cell_h,
         QImage.Format.Format_ARGB32_Premultiplied,
     )
-    image.fill(qcolour(BACKGROUND))
+    if background is None:
+        image.fill(Qt.GlobalColor.transparent)
+    else:
+        image.fill(qcolour(background))
 
     painter = QPainter(image)
     painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, False)

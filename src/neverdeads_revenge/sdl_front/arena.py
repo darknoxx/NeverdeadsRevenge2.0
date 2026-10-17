@@ -51,7 +51,7 @@ from ..desktop.screens.battle import (
     BattleScreen,
     Popup,
 )
-from ..desktop.theme import BACKGROUND, Colour, parse_style
+from ..desktop.theme import Colour, parse_style
 from .paint import load, paint
 from .stage import Stage, bar_box
 
@@ -176,8 +176,11 @@ class SdlArena(Screen):
         # of a sprite. The numbers come after it, because a hit that says "8" over
         # the plate is still a hit and the number has to be read.
         first, last = self.arena.panel_band(cols, rows)
-        paper = self.paper(cols, rows, app.font) or BACKGROUND
-        band = paint(app.grid, app.font, paper, (first, last))
+        # No paper under the band: a band is *cells*. The boxes fill their own
+        # squares, the frame and the letters are glyphs, and every other cell in
+        # these rows stays clear -- so the hero is covered by the menu where the
+        # menu is, and stands in front of the panel's empty room where it is not.
+        band = paint(app.grid, app.font, None, (first, last))
         surface.blit(band, (0, first * app.font.cell_h))
         # The hero's own row of wounds, and only now: it is painted on the plate,
         # and the plate is the panel this band has just put down. Drawn before the

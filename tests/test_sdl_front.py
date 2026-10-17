@@ -2583,3 +2583,49 @@ def test_the_panels_are_painted_over_the_hero_and_not_under_him():
     room = (0, 0, width, first * app.font.cell_h)
     assert _changed(with_him, without, band) == 0, "the hero showed through the panels"
     assert _changed(with_him, without, room) > 200, "the hero was not drawn at all"
+
+
+def test_the_menu_covers_the_hero_where_it_is_and_nowhere_else():
+    """A band is *cells*, not a rectangle: where a box is it covers, where it is
+    not, nothing is covered at all.
+
+    Asked of the hero's shadow, because that is what showed it: the lower half of it
+    is inside the rows the panels own, and those rows were painted over with the
+    room -- a straight, invisible edge across the figure's feet at the top of the
+    menu. The frame, the box and the letters of a panel cover; a cell no panel wants
+    stays clear, and the hero's own shadow is not the menu's business.
+    """
+    import pygame  # noqa: F401  (the frame is a surface; this keeps it honest)
+
+    from neverdeads_revenge.sdl_front import stage as art
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3, battle_scene=True, no_sound=True)
+    arena = app.screens[-1]
+    app.redraw()
+    with_shadow = app._surface.copy()
+
+    kept = art.Stage.shadow
+    art.Stage.shadow = lambda *args, **kwargs: None
+    try:
+        app.redraw()
+    finally:
+        art.Stage.shadow = kept
+    without = app._surface.copy()
+
+    first, last = arena.arena.panel_band(app.cols, app.rows)
+    cell_w, cell_h = app.font.cell_w, app.font.cell_h
+    grid = app.grid
+    touched: dict[tuple[int, int], object] = {}
+    for y in range(first, last):
+        for x in range(app.cols):
+            box = (x * cell_w, y * cell_h, (x + 1) * cell_w, (y + 1) * cell_h)
+            if _changed(with_shadow, without, box):
+                touched[(x, y)] = grid.cells[y][x].style.bg
+
+    assert len(touched) > 2, "the hero's shadow was cut off at the menu's edge"
+    for cell, background in touched.items():
+        assert background is None, (
+            f"a shadow shows through the panel at {cell}: the band is painting "
+            "over what is behind it"
+        )
