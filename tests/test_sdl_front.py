@@ -2211,3 +2211,169 @@ def test_the_arena_can_be_one_painting_instead_of_tiles():
         if grid.cells[row][column].style.bg is not None
     )
     assert left == 0, f"{left} cells of cell floor are still under the painting"
+
+
+def test_the_whole_stage_can_be_lifted_by_a_row_at_a_time():
+    """A quarter of a Noxx, asked of the staging and not of the pixels.
+
+    Everything the stage puts down is placed *from* the figure's row -- the sprite,
+    the stripe over its head, the wound symbols at the end of the stripe, the aim
+    arrow over both -- so one lift moves all of them and none of them can be left
+    behind. That is the fact worth holding: not that the figures are twenty pixels
+    higher, but that they are higher *together*.
+    """
+    from neverdeads_revenge.desktop.screens import battle as rules
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3, battle_scene=True, no_sound=True)
+    arena = app.screens[-1]
+    here = arena.arena._figures(app.grid.cols, app.grid.rows, app.font)
+    assert rules.STAGE_LIFT >= 1, "the stage was asked to move and did not"
+
+    was = rules.STAGE_LIFT
+    rules.STAGE_LIFT = 0
+    try:
+        floor = arena.arena._figures(app.grid.cols, app.grid.rows, app.font)
+    finally:
+        rules.STAGE_LIFT = was
+    assert len(here) == len(floor)
+    for lifted, sat in zip(here, floor):
+        assert lifted.actor is sat.actor
+        assert sat.row - lifted.row == was, (
+            f"{lifted.actor.name} did not move with the stage: {sat.row} -> {lifted.row}"
+        )
+
+
+def test_a_shadow_lies_under_a_figure_and_fades_towards_its_rim():
+    """The pool of ground, asked of the frame -- twice over.
+
+    It has to be a shadow *under* a figure, which is two claims: that taking it
+    away changes the frame at all on a floor this dark, and that what it changes is
+    below the sprite and not across it. And it has to be a gradient, which is the
+    reason it is drawn and not written into the cells: the rim must be less than the
+    core, or it is a rectangle of black under a painter's figure.
+    """
+    from neverdeads_revenge.sdl_front.app import SdlApp
+    from neverdeads_revenge.sdl_front import stage as art
+
+    app = SdlApp(seed=3, battle_scene=True, no_sound=True)
+    arena = app.screens[-1]
+    app.redraw()
+    with_pool = app._surface.copy()
+
+    kept = art.Stage.shadow
+    art.Stage.shadow = lambda *args, **kwargs: None
+    try:
+        app.redraw()
+    finally:
+        art.Stage.shadow = kept
+    without = app._surface.copy()
+
+    figure = next(
+        one
+        for one in arena.arena._figures(app.grid.cols, app.grid.rows, app.font)
+        if one.art is not None
+    )
+    feet = figure.row * app.font.cell_h - 5
+    box = (figure.cx - 60, feet, figure.cx + 60, feet + 20)
+    assert _changed(without, with_pool, box) > 40, "the shadow is not there at all"
+    # Over the sprite's own band nothing of it shows: it is drawn first, so a
+    # figure stands *on* its shadow instead of wearing it.
+    body = (figure.cx - 20, feet - 60, figure.cx + 20, feet - 6)
+    assert _changed(without, with_pool, body) == 0, "the shadow was drawn over a figure"
+
+    # The gradient: the darkest ring is the middle and the edge is nearly nothing.
+    assert sum(with_pool.get_at((figure.cx, feet + 4))[:3]) < sum(
+        without.get_at((figure.cx, feet + 4))[:3]
+    ), "the shadow did not darken the floor"
+    core = sum(with_pool.get_at((figure.cx, feet + 4))[:3])
+    rim = sum(with_pool.get_at((figure.cx + 55, feet + 4))[:3])
+    assert core < rim, f"the shadow has no rim to fade to: core {core}, rim {rim}"
+
+
+def test_the_paintings_torches_are_lit_and_the_light_breathes():
+    """The two flames in the painting, asked of the frame and of the clock.
+
+    A painted torch is a *picture* of a torch: it cannot flicker, which is the one
+    thing a torch does. So the light over it is drawn, additively, and it is asked
+    for at two moments of its own clock -- if the two frames agree, there is no
+    breath.
+
+    Asked of the light *alone*, by laying it over one frame twice: the room also
+    breathes (the figures move on the same clock), so two redraws a clock apart
+    would answer about the figures. And asked once with the room made of the game's
+    own stones: the torches are the painting's, so a tiled room must not be lit by
+    them, which here means the frame comes back untouched.
+    """
+    from neverdeads_revenge.sdl_front.app import SdlApp
+    from neverdeads_revenge.sdl_front.paint import load
+    from neverdeads_revenge.sdl_front.stage import TORCHES
+
+    painting = load("backdrops/arena.png")
+    assert painting is not None, "this front end has no painting to light"
+    own_w, own_h = painting.get_size()
+
+    def where(width: int, height: int, fx: float, fy: float) -> tuple[int, int]:
+        factor = max(width / own_w, height / own_h)
+        span_w, span_h = own_w * factor, own_h * factor
+        return (
+            round(fx * span_w - (span_w - width) / 2),
+            round(fy * span_h - (span_h - height) / 2),
+        )
+
+    app = SdlApp(seed=3, battle_scene=True, no_sound=True)
+    arena = app.screens[-1]
+    app.redraw()
+    width, height = app._surface.get_size()
+    stage = arena._stage
+
+    def lit(clock: float):
+        frame = app._surface.copy()
+        stage.glow(frame, width, height, clock)
+        return frame
+
+    early, late = lit(0.0), lit(0.75)
+    for fx, fy in TORCHES:
+        cx, cy = where(width, height, fx, fy)
+        box = (max(0, cx - 90), max(0, cy - 90), min(width, cx + 90), min(height, cy + 90))
+        assert _changed(early, late, box) > 500, (
+            f"the light on the torch at {fx:.3f} never moved"
+        )
+    # Somewhere far from both torches the room is steady: the light is theirs.
+    quiet = (width // 2 - 60, height - 90, width // 2 + 60, height - 60)
+    assert _changed(early, late, quiet) == 0, "the whole room breathed"
+
+    # And it is light and not paint: laid additively, every pixel it touches comes
+    # out brighter and none comes out darker.
+    for x in range(0, width, 7):
+        for y in range(0, height, 7):
+            was, now = early.get_at((x, y))[:3], late.get_at((x, y))[:3]
+            assert all(a >= b for a, b in zip(now, was)), (
+                f"the light darkened ({x}, {y}): {was} -> {now}"
+            )
+
+    # A room of the game's own stones: the light is not laid on it at all. Asked
+    # of the *call* and not of the frame, because this room breathes too -- the
+    # figures move on the same clock, and two frames would answer about them.
+    from neverdeads_revenge.sdl_front import stage as art
+
+    lit_calls: list = []
+    kept = art.Stage.glow
+
+    def note(self, *args, **kwargs):
+        lit_calls.append(args)
+
+    art.Stage.glow = note
+    try:
+        tiled = SdlApp(seed=3, battle_scene=True, no_sound=True, backdrop=False)
+        tiled.redraw()
+        assert lit_calls == [], "a tiled room was lit by the painting's torches"
+        tiled.screens[-1].arena._clock = 0.75
+        tiled.redraw()
+        assert lit_calls == [], "a tiled room was lit by the painting's torches"
+        # And with the painting it is asked for, once a frame: the dial is the
+        # painting and there is no second dial for the light.
+        app.redraw()
+    finally:
+        art.Stage.glow = kept
+    assert len(lit_calls) == 1, f"the light was asked for {len(lit_calls)} times"

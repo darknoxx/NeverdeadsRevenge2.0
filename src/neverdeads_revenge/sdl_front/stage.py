@@ -44,6 +44,10 @@ __all__ = ["Stage"]
 FADE_ALPHA = 140
 FADE_COLOUR = (6, 6, 10)
 
+#: Where the painting's two torches are, as shares of the painting itself.
+#: Measured off the picture: the bright pixels of the flames, left and right.
+TORCHES = ((0.110, 0.250), (0.890, 0.267))
+
 
 class Stage:
     """The painted room: the floor, the bars, the shadows and the figures.
@@ -64,6 +68,7 @@ class Stage:
         #: The backdrop, fitted to the room once and blitted after: the painting
         #: is four megapixels and scaling that per frame is a crawl.
         self._fitted: dict[tuple[int, int], object] = {}
+        self._lamp: object | None = None
 
     # -- the art ------------------------------------------------------------
     def tile(self, name: str):
@@ -321,12 +326,17 @@ class Stage:
         Drawn rather than written into the grid, because a shadow is the one thing
         here that has to have soft edges: a rectangle of black cells under a
         painted sprite reads as a hole in the floor.
+
+        It was always here and always under the sprite -- and nobody could see it:
+        black at three quarters of nothing over a floor that is already dark stone
+        is a shadow in the arithmetic and not on the screen. Deeper, and wider at
+        the rim, so that the pool *reads* as ground under a figure.
         """
         if fade <= 0.0:
             return
         import pygame
 
-        width = max(20.0, float(figure.cells * font.cell_w) * 1.05)
+        width = max(24.0, float(figure.cells * font.cell_w) * 1.25)
         height = max(6.0, width * 0.24)
         pool = self._pool()
         scaled = pygame.transform.smoothscale(pool, (round(width), round(height)))
@@ -336,6 +346,72 @@ class Stage:
             scaled,
             (round(figure.cx - width / 2.0), round(centre_y - height / 2.0)),
         )
+
+    def glow(self, surface, width: int, height: int, clock: float) -> None:
+        """Light on the two torches in the painting, breathing.
+
+        The painting brought its own flames and they are, of course, painted: they
+        do not move. A light that grows and shrinks over each of them is the whole
+        difference between a *picture* of a lit room and a room that is lit -- and
+        it costs two additive blits a frame.
+
+        A radial ramp in *colour* and not in alpha, because the blend is additive:
+        what it adds is the light, and adding nothing is what the rim does.
+
+        The torches' places are *the painting's*, so they are mapped the way the
+        painting was fitted and not as shares of the frame: the two agree at
+        sixteen by nine, where the fit crops nothing, and stop agreeing in a
+        fullscreen of another shape, where the fit does.
+        """
+        if not TORCHES:
+            return
+        image = load("backdrops/arena.png")
+        if image is None:
+            return
+        import pygame
+
+        own_w, own_h = image.get_size()
+        factor = max(width / own_w, height / own_h)
+        span_w, span_h = own_w * factor, own_h * factor
+        off_x, off_y = (span_w - width) / 2.0, (span_h - height) / 2.0
+        pool = self._light()
+        breath = 0.5 + 0.5 * math.sin(clock * 2.1)
+        wobble = 0.5 + 0.5 * math.sin(clock * 3.7 + 1.0)
+        for fx, fy in TORCHES:
+            scale = 0.86 + 0.24 * breath + 0.06 * wobble
+            side = max(8, round(220 * scale))
+            lit = pygame.transform.smoothscale(pool, (side, side))
+            surface.blit(
+                lit,
+                (
+                    round(fx * span_w - off_x - side / 2),
+                    round(fy * span_h - off_y - side / 2),
+                ),
+                special_flags=pygame.BLEND_RGB_ADD,
+            )
+
+    def _light(self):
+        """The ramp a torch's light is made of, drawn once: warm, and to nothing."""
+        if self._lamp is None:
+            import pygame
+
+            size = 220
+            lamp = pygame.Surface((size, size))
+            half = size // 2
+            for step in range(half, 0, -1):
+                share = 1.0 - step / half
+                level = share**2.2
+                pygame.draw.ellipse(
+                    lamp,
+                    (
+                        round(150 * level),
+                        round(96 * level),
+                        round(44 * level),
+                    ),
+                    pygame.Rect(half - step, half - step, step * 2, step * 2),
+                )
+            self._lamp = lamp
+        return self._lamp
 
     def _pool(self):
         """The gradient a shadow is made of, drawn once and stretched per figure.
@@ -350,7 +426,7 @@ class Stage:
             pool = pygame.Surface((size, size), pygame.SRCALPHA)
             half = size // 2
             for step in range(half, 0, -1):
-                alpha = round(120 * (1.0 - step / half) ** 1.4)
+                alpha = round(190 * (1.0 - step / half) ** 1.2)
                 pygame.draw.ellipse(
                     pool,
                     (0, 0, 0, alpha),

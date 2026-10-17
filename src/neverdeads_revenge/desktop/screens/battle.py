@@ -190,6 +190,15 @@ ROWS: dict[int, tuple[tuple[float, float], ...]] = {
 #: of the band (which is what a depth is) would not.
 HERO_DROP = 7
 
+#: How far up the whole stage stands, in rows, from the row it was laid out on.
+#:
+#: A quarter of a Noxx, near enough: twenty pixels, which is one row. The figures,
+#: their stripes, their wound symbols and the aim arrow are all placed *from* the
+#: row, so lifting the row lifts every one of them together -- which is the only
+#: way they stay in step. The floor band does not move: the room is where it was
+#: and the fight stands a little higher in it.
+STAGE_LIFT = 1
+
 #: How big a letter stands, in font pixels. The hero is nearest and largest; the
 #: monsters scale with their depth.
 MONSTER_SIZES = (62, 52, 46)
@@ -2566,7 +2575,7 @@ class BattleScreen(Screen):
                     colour=enemy.color,
                     size=size,
                     cx=(centre + round(lane * width) + 1) * cell_w,
-                    row=y0 + max(1, round(depth * height)),
+                    row=y0 + max(1, round(depth * height)) - STAGE_LIFT,
                     cells=self._span(art, cell_w),
                     chosen=enemy is marked,
                     art=art,
@@ -2583,7 +2592,7 @@ class BattleScreen(Screen):
                 colour=hero.color,
                 size=size,
                 cx=(centre + 1) * cell_w,
-                row=y0 + height - 1 + HERO_DROP,
+                row=y0 + height - 1 + HERO_DROP - STAGE_LIFT,
                 cells=self._span(art, cell_w),
                 art=art,
                 # In front of the row and out of step with it: the hero breathes

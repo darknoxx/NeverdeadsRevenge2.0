@@ -150,6 +150,13 @@ class SdlArena(Screen):
             self._stage.floor(surface, field)
             if not self._stage.wall(surface, field):
                 self._hash_walls(surface, app, field)
+        # The light on the painting's torches, over the room and under the fight.
+        # Only with a painting: the torches are the painting's, and a room made of
+        # the game's own stones has no flames to be lit by.
+        if self.backdrop:
+            self._stage.glow(
+                surface, surface.get_width(), surface.get_height(), self.arena._clock
+            )
         self._stage.health(
             surface, figures, font, self.arena._shown, self.battle.hero, fades
         )
