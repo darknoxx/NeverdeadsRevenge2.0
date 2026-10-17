@@ -9,6 +9,7 @@ how many screen pixels to a game pixel.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
 
@@ -30,9 +31,33 @@ def main(argv: list[str] | None = None) -> int:
         "--no-sound", action="store_true", help="start with the sound off"
     )
     parser.add_argument(
+        "--testrun",
+        action="store_true",
+        help="unlock the chronicle and fill the purse, then play (a test save)",
+    )
+    parser.add_argument(
+        "--sound-log",
+        nargs="?",
+        const="",
+        metavar="PATH",
+        help="write every sound decision to PATH (default: in the temp dir)",
+    )
+    parser.add_argument(
         "--fps", action="store_true", help="show a frame counter in the corner"
     )
     args = parser.parse_args(argv)
+
+    if args.sound_log is not None:
+        import tempfile
+
+        path = args.sound_log or os.path.join(
+            tempfile.gettempdir(), "ndr2-sound.log"
+        )
+        os.environ["NEVERDEADS_REVENGE_SOUND_LOG"] = path
+    if args.testrun:
+        from ..persistence import grant_test_save
+
+        grant_test_save()
 
     from .app import SdlApp
 

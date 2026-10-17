@@ -211,6 +211,7 @@ def test_a_run_starts_and_the_hero_walks_with_no_qt_in_the_room():
     )
 
     app.key("enter")  # pick the first hero
+    app.key("escape")  # the prologue, skipped
     assert type(app.screens[-1]).__name__ == "GameScreen", "the floor did not open"
     assert app.run is not None, "there is no run behind the screen"
 
@@ -259,6 +260,7 @@ def test_a_monster_is_walked_into_fought_and_the_floor_comes_back():
     app = SdlApp(seed=3)
     app.key("enter")  # NEW RUN
     app.key("enter")  # the first hero
+    app.key("escape")  # the prologue, skipped
 
     state = app.run
     here = state.player.position
@@ -341,6 +343,7 @@ def test_the_arena_writes_its_panels_and_leaves_the_figures_to_the_art():
     app = SdlApp(seed=3)
     app.key("enter")  # NEW RUN
     app.key("enter")  # the first hero
+    app.key("escape")  # the prologue, skipped
 
     state = app.run
     here = state.player.position
@@ -411,6 +414,7 @@ def test_the_arena_paints_the_flagstones_and_the_monsters_on_them():
     app = SdlApp(seed=3)
     app.key("enter")  # NEW RUN
     app.key("enter")  # the first hero
+    app.key("escape")  # the prologue, skipped
 
     state = app.run
     here = state.player.position
@@ -515,6 +519,8 @@ def test_a_run_starts_in_a_process_where_qt_does_not_exist():
         app.key("enter")
         assert type(app.screens[-1]).__name__ == "HeroSelectScreen", "no roster"
         app.key("enter")
+        assert type(app.screens[-1]).__name__ == "PrologueScreen", "no premise"
+        app.key("escape")  # the premise, skipped
         assert type(app.screens[-1]).__name__ == "GameScreen", "no floor"
 
         here = app.run.player.position
@@ -651,6 +657,7 @@ def test_the_animation_comes_first_and_the_displays_after_it():
     app = SdlApp(seed=3)
     app.key("enter")  # NEW RUN
     app.key("enter")  # the first hero
+    app.key("escape")  # the prologue, skipped
 
     state = app.run
     here = state.player.position
@@ -713,6 +720,7 @@ def test_a_damage_number_is_painted_over_the_monster_that_took_it():
     app = SdlApp(seed=3)
     app.key("enter")
     app.key("enter")
+    app.key("escape")  # the prologue, skipped
 
     state = app.run
     beside = (state.player.position[0] + 1, state.player.position[1])
@@ -787,6 +795,7 @@ def test_the_floor_shows_the_log_and_the_sidebar_on_the_second_front_end():
     app = SdlApp(seed=3)
     app.key("enter")  # NEW RUN
     app.key("enter")  # the first hero
+    app.key("escape")  # the prologue, skipped
 
     surface = app._surface
     face = app.font_small
@@ -856,6 +865,7 @@ def _fight_with_a_monster(seed: int = 3):
     app = SdlApp(seed=seed)
     app.key("enter")
     app.key("enter")
+    app.key("escape")  # the prologue, skipped
     state = app.run
     beside = (state.player.position[0] + 1, state.player.position[1])
     state.dungeon_map.set_tile(beside, Tile.FLOOR)
@@ -1078,6 +1088,7 @@ def test_the_menu_keys_open_the_shared_screens_on_the_second_front_end():
 
     app.key("enter")  # NEW RUN
     app.key("enter")  # the first hero
+    app.key("escape")  # the prologue, skipped
     assert type(app.screens[-1]).__name__ == "GameScreen"
     for key, opened in (
         ("escape", "PauseScreen"),
@@ -1196,6 +1207,7 @@ def test_the_floor_turns_into_the_fight_on_the_second_front_end():
     app = SdlApp(seed=3)
     app.key("enter")
     app.key("enter")
+    app.key("escape")  # the prologue, skipped
     state = app.run
     beside = (state.player.position[0] + 1, state.player.position[1])
 
@@ -1315,6 +1327,8 @@ def test_a_real_key_press_reaches_the_screen_it_is_meant_for():
     )
 
     app.feed(_pressed(pygame.K_RETURN))
+    assert type(app.screens[-1]).__name__ == "PrologueScreen", "the premise did not open"
+    app.feed(_pressed(pygame.K_ESCAPE))
     assert type(app.screens[-1]).__name__ == "GameScreen", "the run did not begin"
 
     here = app.run.player.position
@@ -1420,16 +1434,16 @@ def test_a_pinned_seed_is_the_same_dungeon_and_seed_zero_counts():
         )
 
     first = SdlApp(seed=7)
-    first.begin_run("noxx")
+    _begin_the_run(first)
     same = SdlApp(seed=7)
-    same.begin_run("noxx")
+    _begin_the_run(same)
     assert floor_of(first) == floor_of(same), "the same seed gave two dungeons"
 
-    first.begin_run("noxx")  # a second run in the same session
+    _begin_the_run(first)  # a second run in the same session
     assert floor_of(first) == floor_of(same), "a pinned seed was re-rolled"
 
     zero = SdlApp(seed=0)
-    zero.begin_run("noxx")
+    _begin_the_run(zero)
     assert zero.run.seed == 0, "seed 0 was thrown away as if it were nothing"
 
 
@@ -1465,6 +1479,8 @@ def test_a_real_key_press_reaches_the_screen_it_is_meant_for():
     )
 
     app.feed(_pressed(pygame.K_RETURN))
+    assert type(app.screens[-1]).__name__ == "PrologueScreen", "the premise did not open"
+    app.feed(_pressed(pygame.K_ESCAPE))
     assert type(app.screens[-1]).__name__ == "GameScreen", "the run did not begin"
 
     here = app.run.player.position
@@ -1572,6 +1588,7 @@ def test_a_held_key_repeats_at_the_pace_the_game_asks_for():
     app = SdlApp(seed=3)
     app.key("enter")
     app.key("enter")
+    app.key("escape")  # the prologue, skipped
     screen = app.screens[-1]
 
     screen._last_move.clear()
@@ -1601,6 +1618,7 @@ def test_a_cell_becomes_the_pixel_the_camera_puts_it_at():
     app = SdlApp(seed=3)
     app.key("enter")
     app.key("enter")
+    app.key("escape")  # the prologue, skipped
     here = app.run.player.position
 
     theirs = screen_point(
@@ -1784,12 +1802,28 @@ def test_full_screen_re_fits_the_picture_to_the_screen(monkeypatch):
     assert app._shown == base, "the picture did not shrink back"
 
 
+def _begin_the_run(app, hero: str = "noxx") -> None:
+    """Begin a run the way a player does, premise and all.
+
+    The prologue is the game's first screen between the choice and the floor: it
+    waits for a *held* enter and escape skips it. Every test that wants a floor
+    has to get past it, and doing it through the app's own key handling means the
+    prologue is exercised every time.
+    """
+    app.begin_run(hero)
+    # Once per session, which is the point of it: a second run in the same
+    # session goes straight to the floor, and that is the game's own rule.
+    if type(app.screens[-1]).__name__ == "PrologueScreen":
+        app.key("escape")
+    assert type(app.screens[-1]).__name__ == "GameScreen", "no floor"
+
+
 def _app_with_a_run(seed: int = 3):
     """An SDL app with a real run behind it: what the menus need to be asked."""
     from neverdeads_revenge.sdl_front.app import SdlApp
 
     app = SdlApp(seed=seed, no_sound=True)
-    app.begin_run("noxx")
+    _begin_the_run(app)
     return app
 
 
@@ -1884,13 +1918,13 @@ def test_a_second_run_in_one_session_is_a_second_dungeon():
         )
 
     loose = SdlApp(seed=None)
-    loose.begin_run("noxx")
+    _begin_the_run(loose)
     first = floor_of(loose)
     loose.begin_run("noxx")
     assert floor_of(loose) != first, "the second run was the same dungeon"
 
     pinned = SdlApp(seed=7)
-    pinned.begin_run("noxx")
+    _begin_the_run(pinned)
     kept = floor_of(pinned)
     pinned.begin_run("noxx")
     assert floor_of(pinned) == kept, "a pinned seed stopped pinning"
@@ -1908,3 +1942,102 @@ def test_the_arena_door_works_without_a_seed():
     assert app.run is not None, "the arena opened with no run behind it"
     assert isinstance(app.run.seed, int), f"a seed of {app.run.seed!r}"
     assert type(app.screens[-1]).__name__ == "SdlArena"
+
+
+def _released(code):
+    """A real SDL key release, the way the window loop makes one."""
+    import pygame
+
+    return pygame.event.Event(pygame.KEYUP, key=code, unicode="")
+
+
+def test_the_prologue_waits_for_a_held_key_and_a_tap_banks_nothing():
+    """A hold bar is not a keypress: a tap goes nowhere, a hold goes on.
+
+    Which needs two things this front end only got today: SDL actually *making*
+    repeats, and the key coming *up* being handed to the screen. Without the
+    second, a single tap fills the bar by itself -- the fill is wall-clock time
+    from the first press -- and the prologue walks through on a press nobody held.
+    """
+    import time
+
+    import pygame
+
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3, no_sound=True)
+    app.feed(_pressed(pygame.K_n))
+    app.feed(_pressed(pygame.K_RETURN))
+    assert type(app.screens[-1]).__name__ == "PrologueScreen", "no premise to skip"
+
+    # A tap: down and up again, with no repeat in between.
+    app.feed(_pressed(pygame.K_RETURN))
+    app.feed(_released(pygame.K_RETURN))
+    time.sleep(1.2)  # the fill is wall-clock, so it gets the time it wants
+    assert type(app.screens[-1]).__name__ == "PrologueScreen", "a tap walked through"
+
+    # A hold: down, and then repeating at the pace a held key actually repeats
+    # (SDL's own, every sixty-odd milliseconds). The pace matters -- a gap longer
+    # than the hold itself means nothing can still be down, and the fill goes
+    # cold -- so a test that pressed twice a second apart would be testing the
+    # focus-loss rule instead of the hold.
+    app.feed(_pressed(pygame.K_RETURN))
+    for _ in range(16):
+        time.sleep(0.09)
+        app.feed(_pressed(pygame.K_RETURN, repeat=True))
+        if type(app.screens[-1]).__name__ == "GameScreen":
+            break
+    assert type(app.screens[-1]).__name__ == "GameScreen", "a held key did not get through"
+
+
+def test_the_premise_is_told_once_per_session():
+    """The prologue is between the choice and the floor -- the first time.
+
+    A second run in the same session starts on the floor, which is the Qt build's
+    rule ("told once"), and the reason `prologue_seen` is a session flag and not a
+    setting.
+    """
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    from neverdeads_revenge.sdl_front.app import SdlApp as _Same
+
+    assert SdlApp is _Same
+
+    app = SdlApp(seed=3, no_sound=True)
+    app.begin_run("noxx")
+    assert type(app.screens[-1]).__name__ == "PrologueScreen"
+    app.key("escape")
+
+    app.begin_run("noxx")  # the session has already been told
+    assert type(app.screens[-1]).__name__ == "GameScreen", "the premise was told twice"
+
+
+def test_a_glass_key_says_what_it_did():
+    """F2 and friends: the setting changes and the frame says so.
+
+    The Qt build writes the note *into* the pattern buffer; this front end has a
+    picture already, so it goes on the picture -- same words, same two seconds,
+    same row. Either way it matters: a CRT setting that changed with no
+    acknowledgement is a key that might not have worked.
+    """
+    import time
+
+    import pygame
+
+    from neverdeads_revenge.desktop.theme import BACKGROUND
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3, battle_scene=True, no_sound=True)
+    app.feed(_pressed(pygame.K_F2))
+    assert app.glass_note is not None, "the key said nothing"
+    note, _until = app.glass_note
+    assert note.startswith("SCANLINES"), note
+
+    surface = app._surface
+    ink = sum(
+        1
+        for x in range(0, surface.get_width(), 3)
+        for y in range(surface.get_height() // 2 - app.font.cell_h, surface.get_height() // 2)
+        if surface.get_at((x, y))[:3] != tuple(BACKGROUND)
+    )
+    assert ink > 20, "the note is not on the frame"

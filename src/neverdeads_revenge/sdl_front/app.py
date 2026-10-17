@@ -114,10 +114,13 @@ class SdlApp:
         self.frames = 0.0
         self.seed = seed
         self.run = None
-        #: The premise, told once in the Qt build between the choice and the
-        #: floor. Ported screens come next; until then a run starts on the floor,
-        #: and this says so rather than pretending the prologue happened.
-        self.prologue_seen = True
+        #: The premise, told once between the choice and the floor -- the same
+        #: once-per-session the Qt build means, and the same screen. It needs a
+        #: key *release* to tell a tap from a hold, which is why this waited for
+        #: one: see ``feed``.
+        self.prologue_seen = False
+        #: What a glass key just did, for as long as it takes to read.
+        self.glass_note: tuple[str, float] | None = None
         self.scale = max(1, scale)
         if screen is not None:
             self.screens = [screen]
@@ -474,6 +477,16 @@ class SdlApp:
 
     def begin_run(self, hero_key: str) -> None:
         from ..desktop.screens.game import GameScreen
+
+        if not self.prologue_seen:
+            # The premise, told once, between the choice and the floor. A held
+            # enter lets it go; escape skips it; and every run after the first
+            # starts without it being repeated.
+            self.prologue_seen = True
+            from ..desktop.screens.prologue import PrologueScreen
+
+            self.push(PrologueScreen(on_done=lambda: self.begin_run(hero_key)))
+            return
         from ..game.actors import HEROES
         from ..game.lore import PAGE_COUNT
         from ..game.shop import loadout_from
@@ -549,6 +562,15 @@ class SdlApp:
                 KeyPress(bool(getattr(event, "repeat", False)), text),
                 text,
             )
+        elif event.type == pygame.KEYUP:
+            # Which half of a hold: a screen that runs a hold bar has to be told
+            # when the key comes *up*, or a tap banks itself and a screen walked
+            # through on a press nobody held. Not every platform pairs its
+            # repeats with a release; this one does, so it is passed on.
+            name = name_of(event)
+            screen = self.screens[-1]
+            if name and screen.key_up(name, KeyPress(False, typed(event)), self):
+                self.redraw()
         elif event.type == pygame.VIDEORESIZE:
             # The window manager's answer, not ours: the picture is fitted to
             # whatever it says, and the glass hears about it.
@@ -606,6 +628,7 @@ class SdlApp:
         # And the pixels that are not the room: sparks thrown by whatever just
         # happened, drawn last so they land on top of everything.
         self.effects.draw(self._surface)
+        self._draw_note()
         if self.show_fps:
             self._draw_fps()
         self._present()
@@ -908,7 +931,47 @@ class SdlApp:
             return False
         setattr(self.crt, turned, not getattr(self.crt, turned))
         self._remember_glass()
+        self._note_glass(
+            {
+                "scanlines": "SCANLINES",
+                "bloom": "BLOOM",
+                "geometry": "CRT CURVE",
+            }[turned]
+            + (" ON" if getattr(self.crt, turned) else " OFF")
+        )
         return True
+
+    def _note_glass(self, note: str) -> None:
+        """Say what a glass key just did, for as long as it takes to read.
+
+        The Qt build writes its note *into* the pattern buffer before the frame
+        is rendered; this one has a picture already, so it goes on the picture --
+        same words, same two seconds, same place at the top. A CRT setting that
+        changed with no acknowledgement is a key that might not have worked.
+        """
+        self.glass_note = (note, time.monotonic() + 2.0)
+
+    def _draw_note(self) -> None:
+        import pygame
+
+        if self.glass_note is None:
+            return
+        note, until = self.glass_note
+        if time.monotonic() > until:
+            self.glass_note = None
+            return
+        from ..desktop.chrome import BONE
+        from ..desktop.theme import parse_style
+
+        face = self.font
+        left = max(0, (self._surface.get_width() - len(note) * face.cell_w) // 2)
+        band = pygame.Rect(0, 0, self._surface.get_width(), face.cell_h)
+        self._surface.fill((0, 0, 0), band)
+        colour = parse_style(f"bold {BONE}").fg
+        for index, char in enumerate(note):
+            glyph = face.glyph(char, colour, bold=True)
+            if glyph is not None:
+                self._surface.blit(glyph, (left + index * face.cell_w, 0))
 
     def _remember_glass(self) -> None:
         from ..desktop.settings import save_settings
