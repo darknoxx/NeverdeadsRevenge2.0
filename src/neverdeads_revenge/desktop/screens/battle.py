@@ -180,8 +180,8 @@ AIMED: tuple[str, ...] = (ATTACK, SPECIAL)
 #: instead of as wide as a row. The arc is the same shape, pulled in.
 ROWS: dict[int, tuple[tuple[float, float], ...]] = {
     1: ((0.0, 0.18),),
-    2: ((-0.20, 0.30), (0.20, 0.30)),
-    3: ((-0.30, 0.30), (-0.02, 0.10), (0.30, 0.46)),
+    2: ((-0.14, 0.30), (0.14, 0.30)),
+    3: ((-0.19, 0.30), (-0.02, 0.10), (0.19, 0.46)),
 }
 
 #: How big a letter stands, in font pixels. The hero is nearest and largest; the
