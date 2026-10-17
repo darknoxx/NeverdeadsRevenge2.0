@@ -186,16 +186,16 @@ AIMED: tuple[str, ...] = (ATTACK, SPECIAL)
 ROWS: dict[int, tuple[tuple[float, float, float], ...]] = {
     1: ((0.0, 0.88, 0.0),),
     2: ((-0.20, 1.00, 0.0), (0.20, 1.00, 0.0)),
-    3: ((-0.30, 1.00, 0.0), (-0.02, 0.88, 0.5), (0.30, 1.13, 0.0)),
+    3: ((-0.30, 1.00, 0.0), (-0.02, 0.88, 1.5), (0.30, 1.13, 0.0)),
 }
 
 #: How far below the foot of the floor band the hero stands, in rows. He is the
 #: room's front: on the plate, which is four or five rows under the band whatever
 #: grid the window was derived for -- so a row count keeps him there, and a share
 #: of the band (which is what a depth is) would not. The quarter is the fifteen
-#: pixels he was asked to come up by: a row is twenty, and he stands in the panel
-#: he is in front of rather than on top of it.
-HERO_DROP = 6.25
+#: pixels he was asked to come up by: a row is twenty, and he stands at the very
+#: top of the panel he is in front of rather than in the middle of it.
+HERO_DROP = 5.25
 
 #: How far up the whole stage stands, in rows, from the row it was laid out on.
 #:
