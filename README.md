@@ -13,7 +13,7 @@ This is the desktop build of the **terminal roguelite Neverdead's Revenge**. The
 dungeon, the monsters, the items, the curses, the gifts, the shop, the save
 format and the balance are the same systems as the terminal game -- forked
 wholesale and never changed to know a terminal stopped existing. What is new is
-everything above them: a PySide6 window, a pattern buffer, and a shader that
+everything above them: an SDL window, a pattern buffer, and a shader that
 puts scanlines, bloom and a toggleable barrel over the picture.
 
 | | |
@@ -285,7 +285,7 @@ thing that eats it.
 ```
 
 The installer creates a `.venv` in this directory, installs the game and its
-dependencies into it, checks that PySide6 and miniaudio import, and on Linux
+dependencies into it, checks that pygame and miniaudio import, and on Linux
 adds the game to the applications menu with a real icon -- no sudo, nothing
 outside `$HOME`. Run it again any time; it reuses what is already there.
 `--dry-run`, `--no-desktop`, `--python PATH` and `--uninstall` are supported.
@@ -308,24 +308,25 @@ python3 -m venv .venv
 ./ndr2 --battle-scene  # straight into a fight
 ```
 
-### The second front end
+### The window
 
-The same game, drawn by SDL and pygame instead of Qt -- and it runs on a machine
-where PySide6 is not installed at all. It is where the handheld port is going, so
-it is worth playing on a desktop to find what is wrong with it.
+The game is drawn by SDL and pygame. It was built twice for a while -- once on Qt
+and once on SDL -- and the SDL one won: it plays the same run, draws the same
+room, and builds for Windows and (in time) for Android, which Qt did not. So
+there is one front end now, and `./ndr2` starts it.
 
-It needs two packages the game deliberately does not ship with, because the game
-still ships the Qt one. Ask the installer for them, or say it by hand:
+`./ndr2-sdl` is the same door under the name the split gave it, for a keyboard
+that remembers it.
 
 ```sh
-./install.sh --sdl                          # or: ./.venv/bin/pip install pygame-ce moderngl
-./ndr2-sdl --seed 3 --fps                   # the frame counter, bottom right
-./ndr2-sdl --battle-scene --fps             # straight into a fight
+./ndr2 --seed 3 --fps                       # the frame counter, bottom right
+./ndr2 --battle-scene --fps                 # straight into a fight
+./ndr2 --timings                            # what each stage of the frame costs
 ```
 
-Same keys, same saves, same settings as the Qt build. `F2`, `F3` and `F4` toggle
-the scanlines, the phosphor glow and the CRT curve; `F11` is fullscreen. A machine
-that cannot make a GL context gets a plain window instead of a refusal to start.
+Same keys, same saves, same settings. `F2`, `F3` and `F4` toggle the scanlines,
+the phosphor glow and the CRT curve; `F11` is fullscreen. A machine that cannot
+make a GL context gets a plain window instead of a refusal to start.
 
 The game needs a display: the design is the screen. Headless environments run
 the test suite instead, offscreen:
@@ -339,10 +340,11 @@ the test suite instead, offscreen:
 ```text
 src/neverdeads_revenge/
   core/ world/ game/ persistence.py   the game itself -- no screen anywhere
-  desktop/                            the PySide6 presentation layer
+  desktop/                            the game's own shapes: cells, chrome, art
     theme.py    the palette, and Rich styles translated
-    font.py     a monospaced cell, drawn without antialiasing
-    buffer.py   the grid of characters -> an image
+    pattern.py  the grid of characters, and how it is read
+    render.py   where the sidebar, the log and the plate go
+  sdl_front/                          the window, and the pixels
     crt.py      the shader: integer scaling, scanlines, bloom, geometry
     render.py   the map, the sidebar and the log strip, as cells
     effects.py  the moving pixels: blood, coins, sparks, and the shake

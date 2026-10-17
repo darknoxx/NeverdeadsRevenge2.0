@@ -1,15 +1,21 @@
-"""Entry point: ``python -m neverdeads_revenge``, or the ``ndr2`` script."""
+"""Entry point: ``python -m neverdeads_revenge``, or the ``ndr2`` script.
+
+There is one door now. The game was built twice for a while -- once on Qt and
+once on SDL -- and the SDL one is the game: it plays the same run, draws the same
+room, and does it with a window that also builds for Windows and, in time, for
+Android. So this file no longer asks *which* front end to start; it starts the
+one that is left.
+"""
 
 from __future__ import annotations
 
 import argparse
 import os
-import sys
 import tempfile
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the desktop game."""
+    """Run the game."""
     parser = argparse.ArgumentParser(
         prog="ndr2",
         description="Neverdead's Revenge 2.0 -- the same dungeon, on a CRT.",
@@ -46,10 +52,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--sdl",
         action="store_true",
-        help=(
-            "run the second front end instead: the same game, drawn by SDL and "
-            "pygame, with no Qt anywhere in it"
-        ),
+        help="ignored: kept so that an old shortcut still starts the game",
     )
     parser.add_argument(
         "--no-backdrop",
@@ -59,22 +62,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--fps",
         action="store_true",
-        help="show a frame counter in the corner (second front end)",
+        help="show a frame counter in the corner",
     )
     parser.add_argument(
         "--timings",
         action="store_true",
-        help=(
-            "print what each stage of the frame costs, once a second "
-            "(second front end)"
-        ),
+        help="print what each stage of the frame costs, once a second",
     )
     parser.add_argument(
         "--scale",
         type=int,
         default=1,
         metavar="N",
-        help="how many screen pixels per game pixel on the second front end (default 1)",
+        help="how many screen pixels per game pixel (default 1)",
     )
     args = parser.parse_args(argv)
 
@@ -86,51 +86,24 @@ def main(argv: list[str] | None = None) -> int:
         )
         os.environ["NEVERDEADS_REVENGE_SOUND_LOG"] = path
 
-    if args.sdl:
-        # Before anything touches Qt, and that is the point of this door: the
-        # second front end runs on a machine where PySide6 is not installed at
-        # all, so the flag has to be answered before the import below.
-        from .sdl_front.app import SdlApp
-
-        window = SdlApp(
-            seed=args.seed,
-            scale=args.scale,
-            no_sound=args.no_sound,
-            battle_scene=args.battle_scene,
-            fps=args.fps,
-            timings=args.timings,
-            backdrop=not args.no_backdrop,
-        )
-        window.open_window()
-        return 0
-
-    # Wayland's input-method plumbing logs a protest at every surface change
-    # ("trying to disable a surface nothing is focused on") -- a known Qt
-    # quirk, and pure noise for a game that does all of its own input
-    # handling. Silenced before Qt starts; nothing else in qt.qpa is muted.
-    from PySide6.QtCore import QLoggingCategory
-
-    QLoggingCategory.setFilterRules("qt.qpa.wayland.textinput=false\n")
-
     if args.testrun:
         from .persistence import grant_test_save
 
         grant_test_save()
 
-    from PySide6.QtWidgets import QApplication
+    from .sdl_front.app import SdlApp
 
-    from .desktop.app import DesktopApp
-
-    app = QApplication(sys.argv[:1])
-    window = DesktopApp(
+    window = SdlApp(
         seed=args.seed,
+        scale=args.scale,
         no_sound=args.no_sound,
-        testrun=args.testrun,
         battle_scene=args.battle_scene,
+        fps=args.fps,
+        timings=args.timings,
+        backdrop=not args.no_backdrop,
     )
-    window.resize(1280, 800)
-    window.show()
-    return app.exec()
+    window.open_window()
+    return 0
 
 
 if __name__ == "__main__":

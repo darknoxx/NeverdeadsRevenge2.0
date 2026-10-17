@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The probe: a real screen, drawn by SDL instead of Qt.
+"""The probe: a real screen, drawn by SDL.
 
 Not a test and not a build -- a *question*, asked once and answered in a picture:
 can the game's own panels be painted by something that is not Qt, with the same
@@ -12,10 +12,9 @@ standing in for the app is the two attributes that screen actually reads, which
 is the measurement worth having: a screen whose whole interface is a buffer, a
 key name and two questions about the run is a screen that can be shown anywhere.
 
-Run it beside ``tools/qt_probe.py`` and look at the two images:
+Run it and look at what it writes:
 
-    python tools/sdl_probe.py /tmp/sdl_title.png
-    python tools/qt_probe.py /tmp/qt_title.png
+    SDL_VIDEODRIVER=dummy python tools/sdl_probe.py /tmp/sdl_title.png /tmp/sdl_arena.png
 
 It also writes the *arena*, which is the harder question and the one the port
 turned on for a whole session. A fight is the one screen that is not just a grid:

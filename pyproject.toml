@@ -4,33 +4,26 @@ build-backend = "hatchling.build"
 
 [project]
 name = "neverdeads-revenge2"
-version = "0.4.0"
+version = "0.5.0"
 description = "Neverdead's Revenge 2.0 -- the same dungeon, rendered as a CRT."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "AGPL-3.0-or-later" }
 license-files = ["LICENSE"]
 authors = [{ name = "darknoxx" }]
-keywords = ["roguelite", "desktop", "pyside6", "qt", "crt", "game"]
+keywords = ["roguelite", "desktop", "sdl", "pygame", "crt", "game"]
 classifiers = [
-    "Environment :: X11 Applications :: Qt",
     "Intended Audience :: End Users/Desktop",
     "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
     "Programming Language :: Python :: 3",
     "Topic :: Games/Entertainment :: Role-Playing",
 ]
 
-dependencies = ["PySide6-Essentials>=6.12", "miniaudio>=1.71"]
+dependencies = ["pygame-ce>=2.5", "moderngl>=5.13", "miniaudio>=1.71"]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=9.0",
-    "pytest-qt>=4.4",
-    # The second front end: an SDL2 window and a GL shader. Development-only for
-    # now -- the game still ships the Qt one -- and deliberately *not* a runtime
-    # dependency of it.
-    "pygame-ce>=2.5",
-    "moderngl>=5.13",
 ]
 
 [project.scripts]
@@ -42,9 +35,16 @@ packages = ["src/neverdeads_revenge"]
 # The sound effects and the font are read at runtime, so they travel with the
 # code rather than sitting in assets/ with the desktop file. Named explicitly so
 # a future packaging change cannot quietly drop them.
+# Everything the game *reads*: the sound effects, the face the screens are written
+# in, and the art -- the sprites, the flagstones and the painting the arena stands
+# in. Named explicitly so a packaging change cannot quietly drop one of them and
+# leave a game that starts and then has no face.
 include = [
     "src/neverdeads_revenge/sounds/*.wav",
     "src/neverdeads_revenge/desktop/fonts/*",
+    "src/neverdeads_revenge/desktop/sprites/**/*.png",
+    "src/neverdeads_revenge/desktop/tiles/*.png",
+    "src/neverdeads_revenge/desktop/backdrops/*.png",
 ]
 
 [tool.pytest.ini_options]

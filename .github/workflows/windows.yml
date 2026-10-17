@@ -23,8 +23,8 @@ jobs:
   build:
     runs-on: windows-latest
     env:
-      # The desktop tests drive Qt; offscreen means no window and no display.
-      QT_QPA_PLATFORM: offscreen
+      # The tests drive a real window loop; the dummy driver means no display.
+      SDL_VIDEODRIVER: dummy
       NEVERDEADS_REVENGE_MUTE: "1"
 
     steps:

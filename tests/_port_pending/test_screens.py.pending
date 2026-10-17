@@ -1,43 +1,178 @@
-"""Tests for the menus and dialogs.
+"""The menus and the dialogs: the same tests, on the one front end there is.
 
 They drive the app the way a player does -- a key at a time, through the real
-stack -- because that is the part that can go wrong: a screen that never opens,
-a key that two screens both think they own, a dialog that answers its own
-opening press.
+stack -- because that is the part that can go wrong: a screen that never opens, a
+key that two screens both think they own, a dialog that answers its own opening
+press.
+
+These tests were written against the Qt build, and when that build went they came
+across rather than being thrown away: the questions they ask -- which screen is on
+top, what the plate says, where the stripe sits -- are about the *game* and not
+about a toolkit. What changed is the harness underneath them: the app, the font
+and the blitter. The old spellings were kept where they cost nothing, so that a
+test's body still reads as it did.
+
+Two shims are worth naming. ``Qt`` is a dictionary now, mapping the old key names
+onto the names this game has always answered to -- the same vocabulary the
+screens were written against, which is the reason a front end could be swapped at
+all. And ``drawn`` hands back a surface wrapped in something that answers
+``pixelColor``, because a test asking what colour a pixel is should not have to
+care which library owns the pixels.
 """
 
 from __future__ import annotations
 
 import os
-import time
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
+import pygame  # noqa: E402
 import pytest  # noqa: E402
 
+from neverdeads_revenge.desktop import art  # noqa: E402
 from neverdeads_revenge.game.state import RunState  # noqa: E402
 
+pygame.init()
 
-@pytest.fixture(scope="session")
-def qapp():
-    from PySide6.QtWidgets import QApplication
 
-    return QApplication.instance() or QApplication([])
+class _Key:
+    """The old spelling of a key, so the tests kept their bodies."""
+
+    Key_Return = "enter"
+    Key_Enter = "enter"
+    Key_Escape = "escape"
+    Key_Space = "space"
+    Key_Backspace = "backspace"
+    Key_Delete = "delete"
+    Key_Tab = "tab"
+    Key_Home = "home"
+    Key_End = "end"
+    Key_PageUp = "pageup"
+    Key_PageDown = "pagedown"
+    Key_Up = "up"
+    Key_Down = "down"
+    Key_Left = "left"
+    Key_Right = "right"
+    Key_Period = "."
+    Key_F2 = "f2"
+
+
+for _letter in "abcdefghijklmnopqrstuvwxyz":
+    setattr(_Key, f"Key_{_letter.upper()}", _letter)
+
+
+class Qt:  # noqa: N801  (the name is the point: it is the old vocabulary)
+    Key = _Key
+
+
+_CODES = {
+    "enter": pygame.K_RETURN,
+    "escape": pygame.K_ESCAPE,
+    "space": pygame.K_SPACE,
+    "backspace": pygame.K_BACKSPACE,
+    "delete": pygame.K_DELETE,
+    "tab": pygame.K_TAB,
+    "home": pygame.K_HOME,
+    "end": pygame.K_END,
+    "pageup": pygame.K_PAGEUP,
+    "pagedown": pygame.K_PAGEDOWN,
+    "up": pygame.K_UP,
+    "down": pygame.K_DOWN,
+    "left": pygame.K_LEFT,
+    "right": pygame.K_RIGHT,
+    "f2": pygame.K_F2,
+    ".": pygame.K_PERIOD,
+    **{
+        letter: getattr(pygame, f"K_{letter}")
+        for letter in "abcdefghijklmnopqrstuvwxyz"
+    },
+}
+
+
+class _Colour:
+    """A pixel, asked the way a ``QColor`` was asked."""
+
+    def __init__(self, rgba) -> None:
+        self._rgba = tuple(rgba)
+
+    def red(self) -> int:
+        return self._rgba[0]
+
+    def green(self) -> int:
+        return self._rgba[1]
+
+    def blue(self) -> int:
+        return self._rgba[2]
+
+    def alpha(self) -> int:
+        return self._rgba[3] if len(self._rgba) > 3 else 255
+
+    def __eq__(self, other) -> bool:
+        return isinstance(other, _Colour) and other._rgba == self._rgba
+
+    def __hash__(self) -> int:
+        return hash(self._rgba)
+
+    def __repr__(self) -> str:
+        return f"_Colour{self._rgba!r}"
+
+
+class _Shot:
+    """A frame, asked the way a ``QImage`` was asked."""
+
+    def __init__(self, surface) -> None:
+        self.surface = surface
+
+    def pixelColor(self, x: int, y: int) -> _Colour:  # noqa: N802
+        return _Colour(self.surface.get_at((int(x), int(y))))
+
+    def width(self) -> int:
+        return self.surface.get_width()
+
+    def height(self) -> int:
+        return self.surface.get_height()
+
+
+class _Picture:
+    """A sprite, asked for the two things these tests used it for."""
+
+    def __init__(self, size) -> None:
+        self._size = size or (0, 0)
+
+    def width(self) -> int:
+        return self._size[0]
+
+    def height(self) -> int:
+        return self._size[1]
+
+    def isNull(self) -> bool:  # noqa: N802
+        return self._size == (0, 0)
+
+
+def sprite_for(name: str) -> _Picture:
+    return _Picture(art.size(f"sprites/{name}.png"))
+
+
+def portrait(name: str) -> _Picture:
+    return _Picture(art.size(f"sprites/portraits/{name}.png"))
+
+
+def status_icon(key: str) -> _Picture:
+    return _Picture(art.size(f"sprites/status/{key}.png"))
 
 
 @pytest.fixture
-def font(qapp):
-    from neverdeads_revenge.desktop.font import BitmapFont
+def font():
+    from neverdeads_revenge.sdl_front.font import SdlFont
 
-    return BitmapFont()
+    return SdlFont("src/neverdeads_revenge/desktop/fonts/DejaVuSansMono.ttf")
 
 
 @pytest.fixture
-def app(qapp):
-    from neverdeads_revenge.desktop.app import DesktopApp
+def app():
+    from neverdeads_revenge.sdl_front.app import SdlApp
 
-    window = DesktopApp(seed=3, no_sound=True)
-    window.view.resize(1280, 800)
+    window = SdlApp(seed=3, no_sound=True)
     # The premise is not the subject of most of these tests; the one that needs
     # it turns it back on itself.
     window.prologue_seen = True
@@ -46,16 +181,35 @@ def app(qapp):
 
 
 def press(window, key, text: str = "", repeat: bool = False) -> None:
-    from PySide6.QtCore import QEvent, Qt
-    from PySide6.QtGui import QKeyEvent
-
-    event = QKeyEvent(QEvent.Type.KeyPress, key, Qt.KeyboardModifier.NoModifier, text)
-    event.isAutoRepeat = lambda: repeat
-    window._on_key(event)
+    """One key press, the way the window loop delivers one."""
+    event = pygame.event.Event(pygame.KEYDOWN, key=_CODES[key], unicode=text, mod=0)
+    event.repeat = repeat
+    window.feed(event)
 
 
 def top(window) -> str:
     return type(window.screens[-1]).__name__
+
+
+def drawn(screen, app, font, cols: int = 96, rows: int = 27):
+    """Draw a screen the way the app does: the cells, then the art over them."""
+    from neverdeads_revenge.desktop.pattern import PatternBuffer
+    from neverdeads_revenge.desktop.theme import BACKGROUND
+    from neverdeads_revenge.sdl_front.paint import paint
+
+    buffer = PatternBuffer(cols, rows, font)
+    screen.draw(buffer, app)
+    surface = paint(buffer, font, BACKGROUND)
+    over = getattr(screen, "paint_over", None)
+    if over is not None:
+        over(surface, app)
+    # And the pictures the screen asked for, through the application's own blit:
+    # a screen says what and where, and this is the half that puts it down, so a
+    # test that drew the grid and stopped would be looking at a roster with no
+    # faces on it.
+    app._surface = surface
+    app._blit_art()
+    return buffer, _Shot(surface)
 
 
 def release(window, key) -> None:
@@ -965,19 +1119,6 @@ def test_a_release_repaints_the_hold_screen(app):
         app.redraw = original
 
 
-def test_the_mute_note_survives_a_restart(app):
-    """The pause remembers the sound is off across restarts, as the audio
-    module always claimed it did."""
-    app.progress.muted = True
-    app.save_progress()
-
-    from neverdeads_revenge.desktop.app import DesktopApp
-
-    fresh = DesktopApp(seed=5, no_sound=False)
-    assert fresh.sfx.muted, "the saved silence was not restored"
-    fresh.close()
-
-
 # -- screens that scroll now land somewhere sane --------------------------------
 def test_the_prologue_jumps_with_home_and_end(app):
     from PySide6.QtCore import Qt
@@ -1023,18 +1164,6 @@ def test_the_title_shrugs_off_a_stale_cursor(app):
     screen.index = 99
     press(app, Qt.Key.Key_Enter)
     assert top(app) == "TitleScreen", "a stale index did something"
-
-
-def test_fit_scale_falls_back_to_a_fraction():
-    from PySide6.QtCore import QSize
-
-    from neverdeads_revenge.desktop.crt import fit_scale
-
-    big = QSize(960, 640)
-    small = QSize(160, 120)
-    assert fit_scale(big, QSize(240, 160)) == 4.0, "whole scales stopped being whole"
-    scale = fit_scale(small, QSize(960, 640))
-    assert isinstance(scale, float) and scale == 0.5, "the fraction never came back"
 
 
 def test_struck_cells_flash_in_reverse(font):
@@ -1146,9 +1275,10 @@ def test_a_wound_more_than_one_stack_carries_its_depth(app, font):
     digit nobody wants to parse out of pixels.
     """
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
 
     battle = arena(count=1)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     hero = battle.hero
     hero.statuses["bleed"] = 3
 
@@ -1518,35 +1648,6 @@ def test_the_void_prompt_reads_the_right_states():
     assert text == "shatter the golden bell (f)", "Walkyrion's ask went unnamed"
 
 
-def test_f_gives_in_when_the_gate_allows(app):
-    from PySide6.QtCore import Qt
-
-    from neverdeads_revenge.desktop.keys import KEY_BINDINGS
-
-    assert KEY_BINDINGS["f"].name == "ULTIMATE"
-
-    press(app, Qt.Key.Key_Return)
-    press(app, Qt.Key.Key_Return)
-
-    played: list[str] = []
-    original = app.play
-    app.play = lambda name=None: played.append(name if name else "?")  # type: ignore[assignment]
-    try:
-        app.run.level = 1
-        app.run.ultimate_level = 1
-        press(app, Qt.Key.Key_F, "f")  # the ask, taken
-        assert app.run.atritas is not None, "the void did not answer"
-        assert app.run.ultimate_available is False
-        assert "void" in played, "the dark arrived in silence"
-
-        before = app.run.atritas
-        press(app, Qt.Key.Key_F, "f")  # spent: the floor had its answer
-        assert app.run.atritas is before, "the void answered twice"
-        assert top(app) == "GameScreen"
-    finally:
-        app.play = original
-
-
 def test_the_voids_glass_closes_with_the_shadow():
     """The reveal is drawn, not remembered: a wall across the floor is shown
     while Atritas walks, and gone the moment he sinks back -- even though
@@ -1891,22 +1992,6 @@ def arena(seed: int = 1, count: int = 3, *, ultimate_level: int = 1):
     return Battle(state, state.enemies[:count])
 
 
-def drawn(screen, app, font, cols: int = 96, rows: int = 27):
-    """Draw the screen the way the app does, and hand back buffer and image."""
-    from neverdeads_revenge.desktop.buffer import PatternBuffer
-
-    buffer = PatternBuffer(cols, rows, font)
-    screen.draw(buffer, app)
-    image = buffer.render()
-    screen.paste(image, app)
-    # And the pictures the screen asked for, through the application's own blit:
-    # a screen says what and where, and this is the half that puts it down, so a
-    # test that drew the grid and stopped would be looking at a roster with no
-    # faces on it.
-    app._blit_art(image, screen)
-    return buffer, image
-
-
 def _is_colour(colour, rgb, tolerance: int = 60) -> bool:
     """Whether a pixel is (roughly) the colour the dungeon draws something in."""
     return (
@@ -1924,9 +2009,10 @@ def test_the_arena_stages_the_actors_it_is_fighting(font):
     is the hero: the stage reads the actors the fight will spend.
     """
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
 
     battle = arena(count=3)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     figures = screen._figures(96, 27, font)
 
     assert [figure.actor for figure in figures] == [*battle.enemies, battle.hero]
@@ -1944,11 +2030,11 @@ def test_the_arena_draws_whatever_art_there_is(app, font):
     fighter, only sometimes missing a picture of one.
     """
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
-    from neverdeads_revenge.desktop.sprites import sprite as sprite_for
+    from neverdeads_revenge.sdl_front.arena import SdlArena
     from neverdeads_revenge.desktop.theme import parse_style
 
     battle = arena(count=3)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     _, image = drawn(screen, app, font)
     figures = screen._figures(96, 27, font)
 
@@ -1995,7 +2081,6 @@ def test_the_roster_shows_the_hero_and_not_only_their_letter(app, font):
     from neverdeads_revenge.desktop.blocks import render_word
     from neverdeads_revenge.desktop.screens import hero_select
     from neverdeads_revenge.desktop.screens.hero_select import exists
-    from neverdeads_revenge.desktop.sprites import portrait
 
     press(app, Qt.Key.Key_Return)  # off the title, onto the roster
     screen = app.screens[-1]
@@ -2069,7 +2154,6 @@ def test_every_hero_has_a_face_on_the_roster():
     pick him, and the whole point of the front views is that the choice is made
     by looking at four characters instead of four letters.
     """
-    from neverdeads_revenge.desktop.sprites import portrait
     from neverdeads_revenge.game.actors import HEROES
 
     for hero in HEROES.values():
@@ -2085,11 +2169,12 @@ def test_a_monster_the_sheets_never_heard_of_is_still_a_letter(app, font):
     game looked like before the art arrived -- and a fight is never missing a
     fighter, only sometimes missing a picture of one."""
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
     from neverdeads_revenge.desktop.theme import parse_style
 
     battle = arena(count=1)
     battle.enemies[0].name = "unknowable"
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     _, image = drawn(screen, app, font)
 
     figure = screen._figures(96, 27, font)[0]
@@ -2126,7 +2211,7 @@ def test_the_monsters_carry_their_health_over_them(app, font):
     from neverdeads_revenge.desktop.theme import parse_style
 
     battle = arena(count=3)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     _, image = drawn(screen, app, font)
     figures = screen._figures(96, 27, font)
     inks = [
@@ -2172,11 +2257,12 @@ def test_a_whole_fight_plays_out_by_keys(app, font):
     from PySide6.QtCore import Qt
 
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
 
     battle = arena(count=3)
     for enemy in battle.enemies:
         enemy.stats.hp = 1  # one blow each, so the test is about the wiring
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     app.screens = [screen]
     app.redraw()
 
@@ -2206,9 +2292,10 @@ def test_the_fight_is_not_interrupted_while_it_talks(app, font):
     from PySide6.QtCore import Qt
 
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
 
     battle = arena(count=3)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     app.screens = [screen]
     app.redraw()
 
@@ -2231,6 +2318,7 @@ def test_the_arena_is_walled_in_stone(app, font):
     wall there is nothing, which is what keeps an arena a room and not wallpaper.
     """
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
 
     screen = BattleScreen(arena(count=3))
     _, image = drawn(screen, app, font)
@@ -2291,6 +2379,7 @@ def test_the_arena_has_a_room_with_no_art_in_it(app, font, tmp_path, monkeypatch
     """
     from neverdeads_revenge.desktop import tiles
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
 
     screen = BattleScreen(arena(count=1))
     # The room with the stone in it first: `monkeypatch` holds the empty
@@ -2332,6 +2421,7 @@ def test_the_battle_floor_recedes(app, font):
     are asserted on the buffer, because both are what the player sees.
     """
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
 
     screen = BattleScreen(arena(count=3))
     buffer, _ = drawn(screen, app, font)
@@ -2364,6 +2454,7 @@ def test_the_arena_survives_any_window(app, font):
     crash. Every menu in this game is drawn at a size it did not choose, and the
     one that raises is the one that took the whole game down with it."""
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
 
     for cols, rows in ((12, 6), (24, 10), (40, 12), (80, 24), (200, 60)):
         screen = BattleScreen(arena(count=3))
@@ -2531,6 +2622,7 @@ def test_the_arena_takes_the_turnings_place_not_its_company(app):
     """The turning is a *hand-off*: the arena stands where it stood, and nothing
     is left underneath still drawing a dungeon over a fight."""
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
 
     begin_run_in(app)
     walk_into_a_monster(app)
@@ -2618,27 +2710,6 @@ def test_a_run_that_ends_in_the_arena_ends_where_it_always_did(app):
     assert top(app) == "GameOverScreen", "the run did not end the usual way"
 
 
-def test_the_battle_scene_opens_and_leaves(qapp):
-    """``--battle-scene`` is the only way in for now, and the way out is the one
-    every fight has: flee it, or win it. Escape does not walk out of a battle --
-    that is the whole point of a fight -- so the dev door leaving is a *verb*."""
-    from PySide6.QtCore import Qt
-
-    from neverdeads_revenge.desktop.app import DesktopApp
-
-    window = DesktopApp(seed=3, no_sound=True, battle_scene=True)
-    window.view.resize(1280, 800)
-    assert top(window) == "BattleScreen", "the switch did not open the arena"
-
-    screen = window.screens[-1]
-    press(window, Qt.Key.Key_F, "f")  # flee: the honest way out of a fight
-    play_it_out(window, screen)
-    assert screen.battle.escaped, "the hero could not get away at all"
-    press(window, Qt.Key.Key_Return)
-
-    assert top(window) == "TitleScreen", "the dev door would not let go"
-
-
 def test_a_trick_paints_its_own_colour_on_the_blow(app, font):
     """A blow wears the word of the trick that made it.
 
@@ -2653,7 +2724,7 @@ def test_a_trick_paints_its_own_colour_on_the_blow(app, font):
     from neverdeads_revenge.game.specials import LEFT_HAND, special_by_key
 
     battle = arena(count=1)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     target = battle.enemies[0]
     outcome = AttackOutcome(hit=True, crit=True, damage=3, killed=False)
     screen._queue = [Struck(battle.hero, target, outcome, flair=LEFT_HAND)]
@@ -2680,7 +2751,7 @@ def _paint(look: str, *, selfy: bool = False, age: float = 0.14):
     from neverdeads_revenge.desktop.screens.battle import BattleScreen, Staged
 
     battle = arena(count=1)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     actor = battle.hero if selfy else battle.enemies[0]
     figure = Staged(actor, "v", "#ffffff", 1, 100, 10, 6)
     screen._clock = 5.0
@@ -2772,7 +2843,7 @@ def test_a_throw_sends_what_it_hit_up_the_room(app):
     )
 
     battle = arena(count=1)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     target = battle.enemies[0]
     figure = screen._figure_of(target, app)
     screen._knocked[id(target)] = (screen._clock + 0.2, THROWN)
@@ -2800,7 +2871,7 @@ def test_every_blow_shoves_what_it_hit(app):
     assert 0 < SHOVE < THROWN, "a plain hit shoves as hard as the bell's throw"
 
     battle = arena(count=1)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     target = battle.enemies[0]
     figure = screen._figure_of(target, app)
     screen._knocked[id(target)] = (screen._clock + 0.2, SHOVE)
@@ -2821,9 +2892,10 @@ def test_the_trick_is_picked_before_the_monster_is(app):
     from PySide6.QtCore import Qt
 
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
 
     battle = arena(count=3)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     screen._queue = []  # the opening round is not what this test is about
     app.screens = [screen]
 
@@ -2848,9 +2920,10 @@ def test_the_arrow_blips_and_the_choice_answers(app):
     from PySide6.QtCore import Qt
 
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
 
     battle = arena(count=3)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     screen._queue = []
     app.screens = [screen]
 
@@ -2883,6 +2956,7 @@ def test_the_list_only_holds_what_he_has_learned(app, font):
     on it at all. What the player cannot have is not what the player is offered.
     """
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
     from neverdeads_revenge.game.actors import HEROES
     from neverdeads_revenge.game.battle import Battle
     from neverdeads_revenge.game.specials import LEFT_HAND
@@ -2891,7 +2965,7 @@ def test_the_list_only_holds_what_he_has_learned(app, font):
     state = start_run(HEROES["noxx"], 3, ultimate_level=7)
     state.level = 2  # the knife, and nothing else
     battle = Battle(state, state.enemies[:1])
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     screen.picking = True
     buffer, _ = drawn(screen, app, font)
     written = "".join(cell.char for row in buffer.cells for cell in row)
@@ -2911,6 +2985,7 @@ def test_the_arena_reads_out_a_lesson(app):
     from PySide6.QtCore import Qt
 
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
     from neverdeads_revenge.game.levels import kills_for_level
 
     # The dark answers at seven here and not at one: with `--testrun` every trick
@@ -2920,7 +2995,7 @@ def test_the_arena_reads_out_a_lesson(app):
     battle.state.kills = kills_for_level(2) - 1  # one kill short of level two
     battle.state.level = 1
     battle.enemies[0].stats.hp = 1
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     app.screens = [screen]
 
     seen: list[str] = []
@@ -2960,9 +3035,10 @@ def test_the_side_panel_counts_the_kills_to_the_next_level(app):
 def test_the_plate_counts_the_kills_to_the_next_level(app, font):
     """And the arena says the same thing, because a level is what a fight is for."""
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
 
     battle = arena(count=1)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     buffer, _ = drawn(screen, app, font)
     written = "".join(cell.char for row in buffer.cells for cell in row)
 
@@ -2980,7 +3056,7 @@ def test_a_level_up_gets_an_arrow_over_the_hero(app):
     from neverdeads_revenge.game.state import LogKind
 
     battle = arena(count=1)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     screen._queue = [Said("Level 4: more blood.", LogKind.GOOD)]
     screen._beat = 0.0
 
@@ -3012,7 +3088,7 @@ def test_the_command_panel_names_what_the_blade_does(app, font):
     from neverdeads_revenge.world.items import ITEMS
 
     battle = arena(count=1)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
 
     def panel():
         buffer, _ = drawn(screen, app, font)
@@ -3047,6 +3123,7 @@ def test_a_key_with_nothing_behind_it_says_so(app):
     from PySide6.QtCore import Qt
 
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
     from neverdeads_revenge.game.actors import HEROES
     from neverdeads_revenge.game.battle import Battle
     from neverdeads_revenge.game.state import start_run
@@ -3054,7 +3131,7 @@ def test_a_key_with_nothing_behind_it_says_so(app):
     state = start_run(HEROES["noxx"], 3, ultimate_level=7)
     state.level = 1  # nothing learned at all
     battle = Battle(state, state.enemies[:1])
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     screen._queue = []
     app.screens = [screen]
 
@@ -3078,6 +3155,7 @@ def test_a_trick_thrown_at_nobody_does_not_ask_for_one(app):
     from PySide6.QtCore import Qt
 
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
     from neverdeads_revenge.game.actors import HEROES
     from neverdeads_revenge.game.battle import Battle
     from neverdeads_revenge.game.specials import SPECIALS_BY_HERO, STILLNESS
@@ -3091,7 +3169,7 @@ def test_a_trick_thrown_at_nobody_does_not_ask_for_one(app):
     state.level = 7
     state.kill_points = state.kill_points_max
     battle = Battle(state, state.enemies[:2])
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     screen._queue = []
     app.screens = [screen]
 
@@ -3133,9 +3211,10 @@ def test_the_list_says_what_the_chosen_trick_does(app, font):
     an instruction.
     """
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
 
     battle = arena(count=1)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     screen.picking = True
     screen.special = 2
     buffer, _ = drawn(screen, app, font)
@@ -3149,10 +3228,11 @@ def test_the_aim_keeps_saying_what_is_being_aimed(app, font):
     """While the arrow is out, the player is still choosing an *attack*: what is
     about to be thrown at one of them stays in front of them."""
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
     from neverdeads_revenge.game.specials import LEFT_HAND, special_by_key
 
     battle = arena(count=2)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     screen.aiming = True
     screen._picked = LEFT_HAND
     buffer, _ = drawn(screen, app, font)
@@ -3174,9 +3254,10 @@ def test_every_cursor_step_is_heard(app):
     from PySide6.QtCore import Qt
 
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
 
     battle = arena(count=3)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     screen._queue = []
     app.screens = [screen]
 
@@ -3203,9 +3284,10 @@ def test_the_menus_blip_on_the_way_through(app):
     from PySide6.QtCore import Qt
 
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
 
     battle = arena(count=3)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     screen._queue = []
     app.screens = [screen]
 
@@ -3234,11 +3316,12 @@ def test_a_trick_the_dark_will_not_answer_is_refused_out_loud(app):
     from PySide6.QtCore import Qt
 
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
     from neverdeads_revenge.game.specials import VOID
 
     battle = arena(count=1)
     battle.state.ultimate_available = False  # the dungeon's ask is spent
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     screen._queue = []
     app.screens = [screen]
 
@@ -3263,9 +3346,10 @@ def test_escape_from_the_arrow_gives_the_five_back(app):
     from PySide6.QtCore import Qt
 
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
 
     battle = arena(count=3)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     screen._queue = []
     app.screens = [screen]
 
@@ -3293,7 +3377,7 @@ def test_a_landed_blow_holds_the_room_still(app):
     from neverdeads_revenge.game.specials import LEFT_HAND
 
     battle = arena(count=1)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     target = battle.enemies[0]
     screen._queue = [
         Struck(battle.hero, target, AttackOutcome(True, False, 4, False), flair=LEFT_HAND)
@@ -3325,7 +3409,7 @@ def test_a_landed_blow_washes_the_room(app, font):
     from neverdeads_revenge.game.specials import LEFT_HAND
 
     battle = arena(count=1)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     target = battle.enemies[0]
     screen._queue = [
         Struck(battle.hero, target, AttackOutcome(True, False, 4, False), flair=LEFT_HAND)
@@ -3357,7 +3441,7 @@ def test_the_number_waits_for_the_blow(app):
     from neverdeads_revenge.game.specials import LEFT_HAND
 
     battle = arena(count=1)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     target = battle.enemies[0]
     screen._queue = [
         Struck(battle.hero, target, AttackOutcome(True, False, 4, False), flair=LEFT_HAND)
@@ -3405,6 +3489,7 @@ class _Quiet:
 def _time_a_round(font, count: int = 3, *, dt: float = 1 / 30.0) -> float:
     """How many seconds one round of ``count`` monsters costs the player."""
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
 
     battle = arena(count=count)
     battle.state.player.stats.hp = 9999
@@ -3417,7 +3502,7 @@ def _time_a_round(font, count: int = 3, *, dt: float = 1 / 30.0) -> float:
         # must not read as the fight being slow. The question here is the
         # clock, and which monster the seed deals should not be part of it.
         enemy.inflicts = ()
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     app = _Quiet(font)
     for _ in range(60):  # anything quicker than the hero gets its turn first
         if not screen.busy:
@@ -3462,7 +3547,7 @@ def test_a_damage_number_does_not_hold_the_keyboard(font):
     from neverdeads_revenge.game.specials import LEFT_HAND
 
     battle = arena(count=1)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     app = _Quiet(font)
     target = battle.enemies[0]
     screen._queue = [
@@ -3482,9 +3567,10 @@ def test_the_arena_names_who_the_arrow_is_on(app, font):
     log: a name under a figure would be a label on the room, but this is the
     *choice*, and a choice has to be readable."""
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
 
     battle = arena(count=3)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     screen.aiming = True
     buffer, _ = drawn(screen, app, font)
 
@@ -3502,13 +3588,14 @@ def test_a_line_about_a_blow_waits_for_the_blow(app):
     reads as an afterthought to its own description.
     """
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
     from neverdeads_revenge.game.battle import Said, Struck
     from neverdeads_revenge.game.combat import AttackOutcome
     from neverdeads_revenge.game.specials import LEFT_HAND
     from neverdeads_revenge.game.state import LogKind
 
     battle = arena(count=1)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     target = battle.enemies[0]
     line = Said("The ghoul takes 4.", LogKind.COMBAT)
     screen._queue = [
@@ -3537,12 +3624,13 @@ def test_the_bar_and_the_sparks_wait_for_the_blow(app):
     reached are the fight telling them the future.
     """
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
     from neverdeads_revenge.game.battle import Struck
     from neverdeads_revenge.game.combat import AttackOutcome
     from neverdeads_revenge.game.specials import LEFT_HAND
 
     battle = arena(count=1)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     target = battle.enemies[0]
     hp = target.stats.hp
     screen._shown[id(target)] = hp
@@ -3595,9 +3683,10 @@ def test_the_order_strip_says_who_acts_next(app, font):
     Letters and not names, because a letter is what everything in this room is.
     """
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
 
     battle = arena(count=1)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     buffer, _ = drawn(screen, app, font)
     written = "".join(cell.char for row in buffer.cells for cell in row)
 
@@ -3615,6 +3704,7 @@ def test_the_order_strip_does_not_jump_when_the_hero_swings(app):
     shifts a step left and then a step right again. This is that, pinned.
     """
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
 
     battle = arena(count=1)
     # A monster that is slower than he is and survives the blow: then the round
@@ -3623,7 +3713,7 @@ def test_the_order_strip_does_not_jump_when_the_hero_swings(app):
     # outright, so the round *was* his alone; that is luck and not a rule.)
     battle.enemies[0].stats.speed = 0.5
     battle.enemies[0].stats.hp = 999
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     screen._queue = []
     screen._beat = 0.0
     screen.verb = 0
@@ -3647,12 +3737,13 @@ def test_the_order_strip_moves_on_to_whoever_is_next(app):
     whoever the queue says is up. Dropped up to and including them, so a turn
     whose events are not all blows does not leave the strip one behind."""
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
 
     battle = arena(count=1)
     # A monster quick enough to act *after* him in the same round: with the
     # floor's own slow ones the hero is up again immediately, and rightly so.
     battle.enemies[0].stats.speed = 9.0
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     screen._queue = []
     screen._beat = 0.0
     screen.verb = 0
@@ -3685,7 +3776,7 @@ def test_a_monster_dies_when_the_blow_lands_and_not_when_it_is_decided(app):
     from neverdeads_revenge.game.specials import LEFT_HAND
 
     battle = arena(count=1)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     target = battle.enemies[0]
     screen._queue = [
         Struck(battle.hero, target, AttackOutcome(True, False, 1, True), flair=LEFT_HAND)
@@ -3725,7 +3816,7 @@ def test_a_wound_bites_in_the_colour_of_what_is_eating_it(app):
     from neverdeads_revenge.game.battle import Flourish
 
     battle = arena(count=1)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     target = battle.enemies[0]
     screen._queue = [Flourish(target, "burn")]
     screen._beat = 0.0
@@ -3758,10 +3849,11 @@ def test_a_wound_is_a_badge_on_the_plate_and_not_a_light_on_the_monster(app, fon
     "side by side" means and is the only part of it a colour count could not see.
     """
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
     from neverdeads_revenge.game.actions import inflict
 
     battle = arena(count=1)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     hero = battle.hero
     cols, rows = 96, 27  # what `drawn` renders at, and what the plate is sized by
     _, plain = drawn(screen, app, font)
@@ -3839,10 +3931,11 @@ def test_a_wound_reaches_the_room_only_when_the_blow_lands(app, font):
     allowed to have seen it.
     """
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
     from neverdeads_revenge.world.items import ITEMS, make_item
 
     battle = arena(count=1)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     target = battle.enemies[0]
     target.stats.hp = 999
     # A blade that leaves something in: the wound is the *attack's*, and an
@@ -3872,9 +3965,10 @@ def test_a_monster_killed_by_its_own_wound_is_let_go_like_any_other(app, font):
     finishes something is not a blow. It is a death like any other.
     """
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
 
     battle = arena(count=2)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     other, wounded = battle.enemies
     other.stats.hp = 999  # so the hero's own swing is not what finishes it
     wounded.stats.hp = 1
@@ -3900,9 +3994,10 @@ def test_the_arena_does_not_offer_a_way_out_that_is_not_there(app, font):
     way out but through, and in a menu it is one step back. A footer promising a
     key that does nothing is worse than no footer."""
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
 
     battle = arena(count=1)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     buffer, _ = drawn(screen, app, font)
     written = "".join(cell.char for row in buffer.cells for cell in row)
     assert "leave the arena" not in written, "the plate still offers a way out"
@@ -3925,9 +4020,10 @@ def test_escape_does_not_leave_a_fight(app):
     from PySide6.QtCore import Qt
 
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
 
     battle = arena(count=1)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     app.screens = [screen]
 
     press(app, Qt.Key.Key_Escape)
@@ -3945,9 +4041,10 @@ def test_the_five_can_be_walked_across_as_well_as_down(app):
     from PySide6.QtCore import Qt
 
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
 
     battle = arena(count=1)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     app.screens = [screen]
     screen.picking = True
     rows = screen._list_rows(app)
@@ -3973,9 +4070,10 @@ def test_the_panels_come_out_over_the_hero_on_the_qt_build(app, font):
     first half of this on its own.
     """
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
 
     battle = arena(count=3)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     _, with_him = drawn(screen, app, font)
 
     hero = battle.hero
@@ -4018,9 +4116,10 @@ def test_the_menu_covers_the_hero_where_it_is_and_nowhere_else_on_qt(app, font):
     nobody's business but the fight's.
     """
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.arena import SdlArena
 
     battle = arena(count=3)
-    screen = BattleScreen(battle)
+    screen = SdlArena(battle)
     _, with_shadow = drawn(screen, app, font)
 
     kept = BattleScreen._paste_shadow

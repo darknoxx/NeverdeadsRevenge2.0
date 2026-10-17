@@ -444,36 +444,6 @@ def log_text(
         y += small_cell_h
     return rect, out
 
-def paste_sidebar(image, state, cols, rows, cell_w, cell_h, small, now: float | None = None) -> None:
-    """The sidebar's rows, drawn in the small face Qt has.
-
-    The rows themselves come from :func:`sidebar_text`, which is where the layout
-    lives: this is the painter and nothing else, which is what lets the front end
-    without a QPainter draw the same rows in its own face.
-    """
-    from PySide6.QtCore import QRect
-    from PySide6.QtGui import QPainter
-
-    from .buffer import qcolour
-
-    out, rule = sidebar_text(
-        state, cols, rows, cell_w, cell_h, small.cell_w, small.cell_h, now
-    )
-    painter = QPainter(image)
-    painter.setFont(small.normal)
-    for ink in out:
-        painter.setPen(qcolour(parse_style(ink.colour).fg))
-        # As wide as what is left of the frame: the row was already cut to the
-        # sidebar in the spec, and a rect that clamps a second time would be a
-        # second opinion about where the sidebar ends.
-        painter.drawText(
-            QRect(ink.x, ink.y, image.width() - ink.x, small.cell_h + 4), 0, ink.text
-        )
-    if rule is not None:
-        painter.setPen(qcolour(parse_style("grey30").fg))
-        painter.drawLine(rule[0], rule[2], rule[1], rule[2])
-    painter.end()
-
 
 def _legend_colour(glyph: str) -> str:
     """The colour a legend row's glyph is drawn in.
@@ -602,31 +572,6 @@ def log_style(kind: LogKind) -> str:
     """The style a log line is drawn in, by what kind of line it is."""
     return _KIND_STYLES.get(kind, "white")
 
-
-def paste_log(
-    image, state: GameState, cols: int, rows: int, cell_w: int, cell_h: int, small
-) -> None:
-    """The combat log, drawn in the small face Qt has.
-
-    The panel and the rows come from :func:`log_text`; this fills the panel and
-    puts the words in it.
-    """
-    from PySide6.QtCore import QRect
-    from PySide6.QtGui import QPainter
-
-    from .buffer import qcolour
-
-    rect, out = log_text(state, cols, rows, cell_w, cell_h, small.cell_w, small.cell_h)
-    painter = QPainter(image)
-    painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, False)
-    # The log's own panel: drawn solid rather than left to whatever the frame had
-    # underneath, which is nothing at all now that the cells are clear.
-    painter.fillRect(QRect(*rect), qcolour(BACKGROUND))
-    painter.setFont(small.normal)
-    for ink in out:
-        painter.setPen(qcolour(parse_style(ink.colour).fg))
-        painter.drawText(QRect(ink.x, ink.y, rect[2], small.cell_h + 4), 0, ink.text)
-    painter.end()
 
 
 

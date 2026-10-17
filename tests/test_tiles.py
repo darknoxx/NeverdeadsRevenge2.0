@@ -16,21 +16,41 @@ import subprocess
 import sys
 from pathlib import Path
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
 import pytest  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 MAKE_TILES = ROOT / "tools" / "make_tiles.py"
 
-from neverdeads_revenge.desktop import tiles  # noqa: E402
+import pygame  # noqa: E402
+
+from neverdeads_revenge.desktop import art  # noqa: E402
+from neverdeads_revenge.sdl_front.paint import clear as clear_art  # noqa: E402
+from neverdeads_revenge.sdl_front.paint import load as load_art  # noqa: E402
+
+pygame.init()
+
+TILES_DIR = art.TILES_DIR
 
 
-@pytest.fixture(scope="session")
-def qapp():
-    from PySide6.QtWidgets import QApplication
+class _Stone:
+    """A stone, asked for the two things these tests ask one for."""
 
-    return QApplication.instance() or QApplication([])
+    def __init__(self, surface) -> None:
+        self.surface = surface
+
+    def width(self) -> int:
+        return self.surface.get_width()
+
+    def height(self) -> int:
+        return self.surface.get_height()
+
+
+def tile(name: str):
+    """The stone called ``name``, or ``None`` if there is none."""
+    surface = load_art(f"tiles/{name}.png")
+    return None if surface is None else _Stone(surface)
 
 
 #: Every tile the arena asks for. If the screen asks for a name that is not here,
@@ -40,13 +60,13 @@ NAMES = ("wall", "wall_vines", "floor_a", "floor_b", "floor_a_bones", "floor_b_b
 
 
 # -- the files -----------------------------------------------------------------
-def test_every_tile_the_room_is_made_of_exists(qapp):
+def test_every_tile_the_room_is_made_of_exists():
     for name in NAMES:
-        assert (tiles.TILES_DIR / f"{name}.png").exists(), name
-        assert tiles.tile(name) is not None, f"{name} would not load"
+        assert (TILES_DIR / f"{name}.png").exists(), name
+        assert tile(name) is not None, f"{name} would not load"
 
 
-def test_the_stone_is_the_size_the_floor_is_laid_out_in(qapp):
+def test_the_stone_is_the_size_the_floor_is_laid_out_in():
     """Two cells to a flagstone, one cell tall, and two flagstones to a course.
 
     The art and the geometry agree by *construction*: the generator imports these
@@ -57,8 +77,8 @@ def test_the_stone_is_the_size_the_floor_is_laid_out_in(qapp):
     sys.path.insert(0, str(ROOT / "tools"))
     import make_tiles
 
-    floor = tiles.tile("floor_a")
-    wall = tiles.tile("wall")
+    floor = tile("floor_a")
+    wall = tile("wall")
     assert floor is not None and wall is not None
     assert floor.width() == make_tiles.TILE_W and floor.height() == make_tiles.TILE_H
     for name, plain in (
@@ -66,7 +86,7 @@ def test_the_stone_is_the_size_the_floor_is_laid_out_in(qapp):
         ("floor_a_bones", floor),
         ("floor_b_bones", floor),
     ):
-        decorated = tiles.tile(name)
+        decorated = tile(name)
         assert decorated is not None, name
         assert (decorated.width(), decorated.height()) == (plain.width(), plain.height()), (
             f"{name} is a different size from the stone it is laid among"
@@ -78,11 +98,11 @@ def test_the_stone_is_the_size_the_floor_is_laid_out_in(qapp):
 
 
 def test_the_stone_is_small_enough_to_ship():
-    total = sum(path.stat().st_size for path in tiles.TILES_DIR.glob("*.png"))
+    total = sum(path.stat().st_size for path in TILES_DIR.glob("*.png"))
     assert total < 40_000, f"the tiles are {total / 1024:.0f} kB"
 
 
-def test_the_dungeon_is_scattered_and_not_tiled(qapp):
+def test_the_dungeon_is_scattered_and_not_tiled():
     """A vine here, a bone there, and the scatter is *placed*.
 
     A room where every stone is dressed is a room with a pattern in it, and a
@@ -147,7 +167,7 @@ def test_the_committed_tiles_are_what_the_generator_produces(tmp_path):
     assert result.returncode == 0, result.stderr
 
     generated = {path.name: path.read_bytes() for path in tmp_path.glob("*.png")}
-    committed = sorted(tiles.TILES_DIR.glob("*.png"))
+    committed = sorted(TILES_DIR.glob("*.png"))
     assert committed, "no tiles are committed at all"
     for path in committed:
         assert path.name in generated, f"a generated tile vanished: {path.name}"
@@ -155,7 +175,7 @@ def test_the_committed_tiles_are_what_the_generator_produces(tmp_path):
 
 
 # -- and what happens without it -----------------------------------------------
-def test_a_machine_with_no_tiles_gets_the_room_it_always_had(qapp, tmp_path, monkeypatch):
+def test_a_machine_with_no_tiles_gets_the_room_it_always_had(tmp_path, monkeypatch):
     """No art is not a failure, it is the older room.
 
     The whole reason the arena can be painted is that nothing depends on the paint
@@ -163,10 +183,10 @@ def test_a_machine_with_no_tiles_gets_the_room_it_always_had(qapp, tmp_path, mon
     file. This asks the loader half of it; the screen half is
     ``test_the_arena_has_a_room_with_no_art_in_it``.
     """
-    tiles.clear()
-    monkeypatch.setattr(tiles, "TILES_DIR", tmp_path)  # an empty directory
+    clear_art()
+    monkeypatch.setattr(art, "ART_ROOT", tmp_path)  # a directory with no art in it
     try:
         for name in NAMES:
-            assert tiles.tile(name) is None, f"{name} came from somewhere"
+            assert tile(name) is None, f"{name} came from somewhere"
     finally:
-        tiles.clear()
+        clear_art()

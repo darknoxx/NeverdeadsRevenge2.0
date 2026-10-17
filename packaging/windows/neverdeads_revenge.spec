@@ -4,10 +4,10 @@
 Build it **on Windows** -- PyInstaller does not cross-compile -- which is why the
 CI workflow does it on a ``windows-latest`` runner rather than here.
 
-The game's only runtime data is its sound effects: the font is a system face
-(Consolas or Courier New on Windows, DejaVu on Linux) and everything else is
-code. So the spec carries ``sounds/`` at the path ``audio.py`` expects to find it
-beside the package, and nothing else.
+The game's runtime data is everything it *reads*: the sound effects, the face the
+screens are written in, and the art -- the sprites, the flagstones and the painting
+the arena stands in. All of it travels at the paths the code looks for it, which is
+inside the package.
 
 Run from the repository root:
 
@@ -25,6 +25,7 @@ sounds = os.path.join(SRC, "neverdeads_revenge", "sounds")
 fonts = os.path.join(SRC, "neverdeads_revenge", "desktop", "fonts")
 sprites = os.path.join(SRC, "neverdeads_revenge", "desktop", "sprites")
 tiles = os.path.join(SRC, "neverdeads_revenge", "desktop", "tiles")
+backdrops = os.path.join(SRC, "neverdeads_revenge", "desktop", "backdrops")
 
 a = Analysis(
     [os.path.join(HERE, "run.py")],
@@ -38,6 +39,7 @@ a = Analysis(
         (fonts, os.path.join("neverdeads_revenge", "desktop", "fonts")),
         (sprites, os.path.join("neverdeads_revenge", "desktop", "sprites")),
         (tiles, os.path.join("neverdeads_revenge", "desktop", "tiles")),
+        (backdrops, os.path.join("neverdeads_revenge", "desktop", "backdrops")),
     ],
     hiddenimports=[
         # Imported lazily by the audio layer, so static analysis misses it --
@@ -49,22 +51,24 @@ a = Analysis(
         "miniaudio",
         "cffi",
         "_cffi_backend",
+        # The CRT is a shader and is imported where it is used, so static
+        # analysis misses it. The game falls back to a plain window without it,
+        # which is the right behaviour and the wrong default for a *build*: a
+        # player who was promised a CRT should get one.
+        "moderngl",
     ],
     hookspath=[],
     runtime_hooks=[],
-    # Qt is huge; none of this is used and leaving it out is most of the saving.
+    # Nothing here is used and some of it is enormous. PySide6 is named too, and
+    # not only because it is not a dependency any more: a stray import of it
+    # should fail the build loudly rather than double the size of it.
     excludes=[
         "tkinter",
         "unittest",
         "pydoc_data",
-        "PySide6.QtWebEngineCore",
-        "PySide6.QtWebEngineWidgets",
-        "PySide6.QtQuick",
-        "PySide6.QtQml",
-        "PySide6.Qt3DCore",
-        "PySide6.QtMultimedia",
-        "PySide6.QtCharts",
-        "PySide6.QtDataVisualization",
+        "PySide6",
+        "PyQt5",
+        "PyQt6",
     ],
     noarchive=False,
 )
