@@ -26,6 +26,7 @@ __all__ = [
     "Placed",
     "exists",
     "path",
+    "size",
 ]
 
 #: The art that travels with the game, beside the fonts and the sounds.
@@ -60,7 +61,7 @@ class Placed:
 
 
 def path(name: str) -> Path:
-    """A piece of art by its path inside the art, e.g. ``sprites/portraits/Noxx.png``."""
+    """A piece of art by its path inside the art, e.g. ``sprites/ghoul.png``."""
     return ART_ROOT / name
 
 
@@ -72,3 +73,25 @@ def exists(name: str) -> bool:
     that lied, and the alphabet is what is underneath every picture in this game.
     """
     return path(name).exists()
+
+
+def size(name: str) -> tuple[int, int] | None:
+    """How big that piece of art is in pixels, or ``None`` if it cannot be read.
+
+    Read out of the file's own header instead of through a toolkit, because it is
+    the *game* that asks: a figure's shadow is as wide as the figure is, and how
+    wide a picture is is a fact about the picture. Eight bytes of PNG -- the
+    signature, the chunk header, then width and height, big-endian -- and both
+    front ends get the same answer without either of them being involved.
+    """
+    address = path(name)
+    try:
+        header = address.read_bytes()[:24]
+    except OSError:
+        return None
+    if len(header) < 24 or header[:8] != b"\x89PNG\r\n\x1a\n":
+        return None
+    return (
+        int.from_bytes(header[16:20], "big"),
+        int.from_bytes(header[20:24], "big"),
+    )

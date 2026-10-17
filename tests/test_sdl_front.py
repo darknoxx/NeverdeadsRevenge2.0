@@ -351,7 +351,7 @@ def test_the_arena_writes_its_panels_and_leaves_the_figures_to_the_art():
         for one in arena.arena._figures(app.grid.cols, app.grid.rows, app.font)
         if one.actor is vipers
     )
-    assert figure.sprite is not None, "the sheets have no picture for the viper"
+    assert figure.art is not None, "the sheets have no picture for the viper"
     cell = app.grid.cells[figure.row][figure.cx // app.font.cell_w]
     assert cell.char != vipers.glyph, "a letter is standing under the sprite"
 
@@ -379,6 +379,7 @@ def test_the_arena_paints_the_flagstones_and_the_monsters_on_them():
     from neverdeads_revenge.desktop.screens.battle import THICKNESS
     from neverdeads_revenge.game.actors import ENEMIES, make_enemy
     from neverdeads_revenge.sdl_front.app import SdlApp
+    from neverdeads_revenge.sdl_front.paint import load
     from neverdeads_revenge.world.tiles import Tile
 
     app = SdlApp(seed=3)
@@ -426,7 +427,7 @@ def test_the_arena_paints_the_flagstones_and_the_monsters_on_them():
         for one in arena.arena._figures(cols, rows, app.font)
         if one.actor is ghoul
     )
-    art = arena._stage.sprite(ghoul.name)
+    art = load(figure.art)
     assert art is not None, "the sheets have no picture for the ghoul"
     baseline = figure.row * font.cell_h - THICKNESS
     box = (
@@ -457,10 +458,10 @@ def test_a_run_starts_in_a_process_where_qt_does_not_exist():
     path reaches for Qt, the process dies with an ImportError that says where,
     instead of the segfault two toolkits in one process would give.
 
-    It covers the way a run *starts*, which is as far as the no-Qt path reaches
-    today. The arena still imports the Qt screen for its panels and its staging,
-    and the turning between a floor and a fight is still painted in Qt; when those
-    come across, this test grows with them rather than being rewritten.
+    It covers a whole run of the *room*: the title, the roster, the floor, a walk
+    -- and now a fight, which was the half of the game that needed Qt for its
+    panels a session ago. What is still painted in Qt is the *turning* between a
+    floor and a fight, and that is the next one to come across.
 
     The imports inside the child are deliberate and are the whole point: a test
     that imported the app *here* would have Qt in the process already.
@@ -496,6 +497,30 @@ def test_a_run_starts_in_a_process_where_qt_does_not_exist():
                 break
         assert app.run.player.position != here, "the hero could not take a step"
         assert app._surface is not None, "the floor was never painted"
+
+        # And into a fight: the arena draws its plate, its log, its verbs and its
+        # monsters -- the same panels the Qt build draws -- with no Qt in the
+        # process at all. A kill, and the floor underneath is still there.
+        from neverdeads_revenge.game.actors import ENEMIES, make_enemy
+        from neverdeads_revenge.world.tiles import Tile
+
+        state = app.run
+        beside = (state.player.position[0] + 1, state.player.position[1])
+        state.dungeon_map.set_tile(beside, Tile.FLOOR)
+        ghoul = make_enemy(ENEMIES["ghoul"], beside)
+        ghoul.stats.hp = 1  # one blow and it is over
+        state.enemies.append(ghoul)
+        state.turn_queue.add(ghoul)
+        state.refresh_vision()
+
+        app.key("right")
+        assert type(app.screens[-1]).__name__ == "SdlArena", "the fight did not open"
+        app.key("a")      # pick ATTACK
+        app.key("enter")  # and swing it
+        assert not ghoul.alive, "the blow did not land"
+        assert state.kills == 1, "the kill did not count"
+        app.key("enter")  # leave the verdict
+        assert type(app.screens[-1]).__name__ == "GameScreen", "the floor did not return"
         print("NOQT-OK")
         """
     )

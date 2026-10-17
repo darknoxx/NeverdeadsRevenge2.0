@@ -74,7 +74,7 @@ class SdlArena(Screen):
         self.arena.draw(buffer, app)
         cell_w = max(1, buffer.font.cell_w)
         for figure in self.arena._figures(buffer.cols, buffer.rows, buffer.font):
-            if figure.sprite is not None:
+            if figure.art is not None:
                 continue
             x = int(figure.cx) // cell_w
             row = int(figure.row)

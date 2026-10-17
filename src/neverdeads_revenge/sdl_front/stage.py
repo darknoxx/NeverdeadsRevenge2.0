@@ -50,10 +50,6 @@ class Stage:
         self._shadow: object | None = None
 
     # -- the art ------------------------------------------------------------
-    def sprite(self, name: str):
-        """The painted figure called ``name``, or ``None`` if there is none."""
-        return load(f"sprites/{name}.png")
-
     def tile(self, name: str):
         """The stone called ``name``, or ``None`` if there is none."""
         return load(f"tiles/{name}.png")
@@ -206,9 +202,9 @@ class Stage:
         Returns whether anything was drawn, which is the arena's cue to leave the
         grid's letter in place when the sheets have no picture for this one.
         """
-        if figure.sprite is None:
+        if figure.art is None:
             return False
-        image = self.sprite(figure.actor.name)
+        image = load(figure.art)
         if image is None:
             return False
         raise_px = 0

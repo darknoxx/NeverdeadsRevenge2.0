@@ -1944,6 +1944,7 @@ def test_the_arena_draws_whatever_art_there_is(app, font):
     fighter, only sometimes missing a picture of one.
     """
     from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.desktop.sprites import sprite as sprite_for
     from neverdeads_revenge.desktop.theme import parse_style
 
     battle = arena(count=3)
@@ -1952,13 +1953,16 @@ def test_the_arena_draws_whatever_art_there_is(app, font):
     figures = screen._figures(96, 27, font)
 
     for figure in figures:
-        if figure.sprite is not None:
-            left = figure.cx - figure.sprite.width() // 2
-            top = figure_baseline(figure, font) - figure.sprite.height()
+        if figure.art is not None:
+            # The staging carries the art's *name*; the picture is loaded here,
+            # the way a painter loads it.
+            art = sprite_for(figure.actor.name)
+            left = figure.cx - art.width() // 2
+            top = figure_baseline(figure, font) - art.height()
             inked = sum(
                 1
-                for y in range(top, top + figure.sprite.height(), 3)
-                for x in range(left, left + figure.sprite.width(), 3)
+                for y in range(top, top + art.height(), 3)
+                for x in range(left, left + art.width(), 3)
                 if image.pixelColor(x, y).alpha() > 0
             )
             assert inked > 40, f"the picture of {figure.actor.name} was not drawn"
@@ -2089,7 +2093,7 @@ def test_a_monster_the_sheets_never_heard_of_is_still_a_letter(app, font):
     _, image = drawn(screen, app, font)
 
     figure = screen._figures(96, 27, font)[0]
-    assert figure.sprite is None, "the sheets have a picture of the unknowable"
+    assert figure.art is None, "the sheets have a picture of the unknowable"
     ink = parse_style(figure.colour).fg
     rows = [
         y

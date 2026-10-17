@@ -25,18 +25,6 @@ from typing import Any
 import math
 from dataclasses import dataclass
 
-from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import (
-    QColor,
-    QFontMetrics,
-    QImage,
-    QPainter,
-    QPen,
-    QPolygonF,
-    QRadialGradient,
-    QTransform,
-)
-
 from ...game.battle import (
     ATTACK,
     FLEE,
@@ -52,32 +40,85 @@ from ...game.battle import (
 )
 from ...game.specials import SPECIALS, Special, special_by_key
 from ...game.statuses import status_by_key
-from ..buffer import qcolour
 from ...game.state import LogKind
-from ..buffer import PatternBuffer
+from ..art import exists as art_exists
+from ..art import size as art_size
 from ..chrome import ASH, BLOOD, BONE, box, rule
-from ..font import BitmapFont
+from ..pattern import PatternBuffer
 from ..render import log_style
-from ..sprites import sprite as sprite_for
-from ..sprites import status_icon
-from ..tiles import tile
-from ..theme import Style, parse_style
+from ..theme import Colour, Style, parse_style
 from .base import Screen
 
 __all__ = ["BattleScreen", "Popup", "Staged"]
 
+#: The painting's toolkit, and the loaders that need it, named here and fetched
+#: when they are first asked for.
+#:
+#: The arena is two things: a *room*, which is cells and works anywhere, and a
+#: *painting*, which is Qt and works where Qt does. A top-level import would make
+#: the whole file need Qt, and the second front end reuses the room -- it draws
+#: the same panels into the same grid, with the same staging -- so the painting
+#: must not be able to stop the room from loading. This list is the honest
+#: inventory of everything that paints, and it is the only place in this game
+#: where a toolkit is optional.
+_LAZY: dict[str, tuple[str, str]] = {
+    "QPointF": ("PySide6.QtCore", "QPointF"),
+    "QRectF": ("PySide6.QtCore", "QRectF"),
+    "Qt": ("PySide6.QtCore", "Qt"),
+    "QColor": ("PySide6.QtGui", "QColor"),
+    "QFontMetrics": ("PySide6.QtGui", "QFontMetrics"),
+    "QImage": ("PySide6.QtGui", "QImage"),
+    "QPainter": ("PySide6.QtGui", "QPainter"),
+    "QPen": ("PySide6.QtGui", "QPen"),
+    "QPolygonF": ("PySide6.QtGui", "QPolygonF"),
+    "QRadialGradient": ("PySide6.QtGui", "QRadialGradient"),
+    "QTransform": ("PySide6.QtGui", "QTransform"),
+    "BitmapFont": ("neverdeads_revenge.desktop.font", "BitmapFont"),
+    "qcolour": ("neverdeads_revenge.desktop.buffer", "qcolour"),
+    "render_grid": ("neverdeads_revenge.desktop.buffer", "render_grid"),
+    "sprite_for": ("neverdeads_revenge.desktop.sprites", "sprite"),
+    "status_icon": ("neverdeads_revenge.desktop.sprites", "status_icon"),
+    "tile": ("neverdeads_revenge.desktop.tiles", "tile"),
+}
+
+
+def _use_qt() -> None:
+    """Fetch the painting's toolkit into the module, the first time it is needed.
+
+    Called by the three doors into the painting -- ``paste``, ``step`` and
+    ``letter_font``, which a painter can reach for before either of the others --
+    and by nothing the *room* does. That is the whole of it, and it has to be a
+    call at the door: a name used inside a function is looked up in the module's
+    own namespace, and Python does not route that through a module ``__getattr__``.
+    (Tried it. It is a documented-sounding idea that quietly does not work, which
+    is the sort of thing worth writing down where the next person will read it.)
+    """
+    if "QPainter" in globals():
+        return
+    import importlib
+
+    for name, (module, attribute) in _LAZY.items():
+        globals()[name] = getattr(importlib.import_module(module), attribute)
+
+
+def _picture(name: str) -> str | None:
+    """The art for an actor, by name, or ``None`` if the sheets have none.
+
+    Asked of the *sheets* and not of a toolkit: whether a figure has a picture is
+    a fact about the art, and the room has to know it -- a sprite is drawn over
+    its cell and a letter is not. The painting loads the file; the room only ever
+    needs the name.
+    """
+    where = f"sprites/{name}.png"
+    return where if art_exists(where) else None
+
 #: The floor's two tile tones at the hero's feet, and the same two at the far
 #: edge. Distance is shade here, not size: the far rows fade into the dark the
 #: way a remembered wall does, because the phosphor fades rather than switches.
-FLOOR_NEAR = QColor("#2c2c36")
-FLOOR_NEAR_ALT = QColor("#202028")
-FLOOR_FAR = QColor("#16161c")
-FLOOR_FAR_ALT = QColor("#101014")
-#: Where something is standing: the tiles in front of it go nearly black, and
-#: the ends of the pool fade rather than stop, so a shadow reads as a shape
-#: under a figure instead of as a stripe across the floor.
-SHADOW = QColor("#07070a")
-SHADOW_EDGE = QColor("#131318")
+FLOOR_NEAR = Colour(0x2C, 0x2C, 0x36)
+FLOOR_NEAR_ALT = Colour(0x20, 0x20, 0x28)
+FLOOR_FAR = Colour(0x16, 0x16, 0x1C)
+FLOOR_FAR_ALT = Colour(0x10, 0x10, 0x14)
 #: The wall: the dungeon's remembered greys. The far wall is darkest, the near
 #: end of the side walls lightest, and the fade between them is the depth.
 WALL_NEAR = "grey30"
@@ -455,6 +496,7 @@ def letter_font(size: int) -> BitmapFont:
     metrics, so the sizes are kept: there are a handful of them, and they are
     the same handful for the whole game.
     """
+    _use_qt()
     font = _LETTERS.get(size)
     if font is None:
         font = BitmapFont(pixel_size=size)
@@ -530,7 +572,7 @@ class Staged:
         "row",
         "cells",
         "chosen",
-        "sprite",
+        "art",
         "phase",
     )
 
@@ -544,16 +586,18 @@ class Staged:
         row: int,
         cells: int,
         chosen: bool = False,
-        sprite=None,
+        art: str | None = None,
         phase: float = 0.0,
     ) -> None:
         self.actor = actor
         #: Where this figure is in its own breath. Different for every figure, or
         #: a row of them would rise and fall like a wave.
         self.phase = phase
-        #: The painted sprite for this actor, if the sheets have one. ``None``
-        #: means draw the letter, which is a fallback and not a failure.
-        self.sprite = sprite
+        #: The art for this actor, *by name* -- ``sprites/ghoul.png`` -- or
+        #: ``None`` if the sheets have nothing, which means draw the letter. A
+        #: name and not an image, because the staging is what both front ends
+        #: read and a picture is the painter's to hold.
+        self.art = art
         self.glyph = glyph
         self.colour = colour
         self.size = size
@@ -691,6 +735,7 @@ class BattleScreen(Screen):
         lands *in front of* what it is hitting: everybody stands first, and the
         one mid-blow is painted over the top of them.
         """
+        _use_qt()
         cols, rows = self._dims(app)
         figures = self._figures(cols, rows, app.font)
         field = self._field(cols, rows, app.font.cell_w, app.font.cell_h)
@@ -1013,12 +1058,12 @@ class BattleScreen(Screen):
         sprite he already has -- there is no second set of art for a shadow.
         """
         strike = self._strikes.get(id(figure.actor))
-        if strike is None or figure.sprite is None:
+        if strike is None or figure.art is None:
             return
         target_id, began, flair = strike
         look = self._look(flair)
         progress = (self._clock - began) / STRIKE
-        image = figure.sprite
+        image = sprite_for(figure.actor.name)
         if look == "shadow":
             if not 0.20 < progress < 0.88:
                 return
@@ -1269,9 +1314,9 @@ class BattleScreen(Screen):
         silhouette in his own place would be a silhouette nobody ever saw: what
         makes the shadow visible is the *room* behind it lighting up.
         """
-        if age > SHADOW_LIFE or figure.sprite is None:
+        if age > SHADOW_LIFE or figure.art is None:
             return
-        image = figure.sprite
+        image = sprite_for(figure.actor.name)
         # In fast, out slow: he is *there* for most of it and gone at the end.
         rise = min(1.0, age / 0.12)
         fall = max(0.0, (age - SHADOW_LIFE * 0.6) / (SHADOW_LIFE * 0.4))
@@ -1702,7 +1747,12 @@ class BattleScreen(Screen):
         standing through the middle of it.
         """
         panel, x, y = self._verdict_panel(cols, rows, app.font)
-        painter.drawImage(x * app.font.cell_w, y * app.font.cell_h, panel.render())
+        # Any grid can be rendered by the painter, which is what lets this
+        # panel be built out of plain cells: the *same* cells a front end
+        # with no Qt copies straight onto its own frame.
+        painter.drawImage(
+            x * app.font.cell_w, y * app.font.cell_h, render_grid(panel)
+        )
 
     def _dims(self, app) -> tuple[int, int]:
         """The grid this screen is drawn into: its own record, or the app's."""
@@ -1945,6 +1995,7 @@ class BattleScreen(Screen):
         the life of a damage number -- because a screen that kept a timer of its
         own would keep running after the window it is drawn in has gone.
         """
+        _use_qt()
         if self._hitstop > 0:
             # The room holds still on a landed blow: no clock, no breath, no
             # beat. Three frames in which nothing moves is the difference between
@@ -2479,7 +2530,7 @@ class BattleScreen(Screen):
         for index, enemy in enumerate(monsters):
             lane, depth = places[min(index, len(places) - 1)]
             size = round(MONSTER_SIZES[min(index, len(MONSTER_SIZES) - 1)] * scale)
-            art = sprite_for(enemy.name)
+            art = _picture(enemy.name)
             staged.append(
                 Staged(
                     actor=enemy,
@@ -2488,15 +2539,15 @@ class BattleScreen(Screen):
                     size=size,
                     cx=(centre + round(lane * width) + 1) * cell_w,
                     row=y0 + max(1, round(depth * height)),
-                    cells=self._span(enemy.glyph, size, cell_w, art),
+                    cells=self._span(art, cell_w),
                     chosen=enemy is marked,
-                    sprite=art,
+                    art=art,
                     phase=index * 1.9,
                 )
             )
         hero = self.battle.hero
         size = round(HERO_SIZE * scale)
-        art = sprite_for(hero.name)
+        art = _picture(hero.name)
         staged.append(
             Staged(
                 actor=hero,
@@ -2505,8 +2556,8 @@ class BattleScreen(Screen):
                 size=size,
                 cx=(centre + 1) * cell_w,
                 row=y0 + height - 1,
-                cells=self._span(hero.glyph, size, cell_w, art),
-                sprite=art,
+                cells=self._span(art, cell_w),
+                art=art,
                 # In front of the row and out of step with it: the hero breathes
                 # on his own, as somebody standing still in front of a crowd does.
                 phase=len(monsters) * 1.9 + 0.9,
@@ -2515,18 +2566,19 @@ class BattleScreen(Screen):
         return staged
 
     @staticmethod
-    def _span(glyph: str, size: int, cell_w: int, art=None) -> int:
+    def _span(art: str | None, cell_w: int) -> int:
         """How many cells wide the pool of shadow under a figure has to be.
 
-        A sprite's own width when there is one, and the letter's advance when
-        there is not: the shadow is the figure's footprint, and it should be the
-        footprint of what is standing there.
+        The picture's own width when there is one -- read off the file, because
+        how wide a picture is is a fact about the picture -- and two cells when
+        there is not: the letter that stands in for it is one cell of the grid,
+        and the grid is what this is measured against. Nothing here needs a font,
+        which is the point: a shadow belongs to the room and not to the painting.
         """
-        if art is not None:
-            return max(2, round(art.width() / cell_w))
-        font = letter_font(size)
-        advance = QFontMetrics(font.bold).horizontalAdvance(glyph)
-        return max(2, round(advance / cell_w))
+        measured = art_size(art) if art is not None else None
+        if measured is None:
+            return 2
+        return max(2, round(measured[0] / cell_w))
 
     def _figure_of(self, actor, app) -> Staged | None:
         cols, rows = self._dims(app)
@@ -2787,8 +2839,10 @@ class BattleScreen(Screen):
         else:
             flash_age = None
 
-        if figure.sprite is not None:
-            image = figure.sprite
+        if figure.art is not None:
+            # Loaded here and not carried in the staging: a figure says *which*
+            # picture it is, and a picture is the painter's to hold.
+            image = sprite_for(figure.actor.name)
             left = cx - image.width() // 2
             top = baseline - image.height()
             painter.setOpacity(opacity)
@@ -2831,8 +2885,8 @@ class BattleScreen(Screen):
         painter.setFont(font.bold)
         metrics = QFontMetrics(font.bold)
         ink = qcolour(parse_style(figure.colour).fg)
-        if figure.sprite is not None:
-            top = figure.sprite.height()
+        if figure.art is not None:
+            top = (art_size(figure.art) or (0, 0))[1]
         else:
             top = QFontMetrics(letter_font(figure.size).bold).capHeight()
         baseline = figure.row * cell_h - THICKNESS - top - metrics.height() // 3
@@ -2893,13 +2947,18 @@ class BattleScreen(Screen):
                 buffer.put(x0 + x, y0 + i, " ", Style(bg=self._tile(depth, alt)))
 
     @staticmethod
-    def _tile(depth: float, alt: bool) -> QColor:
-        """The floor's colour at ``depth``: 0 at the far edge, 1 at the hero."""
+    def _tile(depth: float, alt: bool) -> Colour:
+        """The floor's colour at ``depth``: 0 at the far edge, 1 at the hero.
+
+        Mixed on the three channels and not through a toolkit: two palette colours
+        and a tone between them is arithmetic, and the *grid* floor that wears it
+        is the half of this screen that has to work without one.
+        """
         near, far = (FLOOR_NEAR, FLOOR_FAR) if alt else (FLOOR_NEAR_ALT, FLOOR_FAR_ALT)
-        return QColor(
-            int(far.red() + (near.red() - far.red()) * depth),
-            int(far.green() + (near.green() - far.green()) * depth),
-            int(far.blue() + (near.blue() - far.blue()) * depth),
+        return Colour(
+            int(far.r + (near.r - far.r) * depth),
+            int(far.g + (near.g - far.g) * depth),
+            int(far.b + (near.b - far.b) * depth),
         )
 
     def _draw_health(

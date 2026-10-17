@@ -19,7 +19,7 @@ from .font import BitmapFont
 from .pattern import Cell, PatternBuffer as Grid
 from .theme import BACKGROUND, Colour, Style
 
-__all__ = ["Cell", "PatternBuffer", "qcolour"]
+__all__ = ["Cell", "PatternBuffer", "qcolour", "render_grid"]
 
 
 def qcolour(colour) -> QColor:
@@ -47,58 +47,72 @@ class PatternBuffer(Grid):
 
     def render(self) -> QImage:
         """Paint the whole grid into an image at one pixel per font pixel."""
-        font = self.font or BitmapFont()
-        image = QImage(
-            self.cols * font.cell_w,
-            self.rows * font.cell_h,
-            QImage.Format.Format_ARGB32_Premultiplied,
+        return render_grid(self)
+
+def render_grid(grid: PatternBuffer) -> QImage:
+    """Any grid, as an image at one pixel per font pixel.
+
+    A function and not only a method, because the grid it paints need not be this
+    class: the arena builds its verdict panel out of plain cells -- the very same
+    ``pattern.PatternBuffer`` a front end with no Qt draws into -- and a painter
+    still has to be able to put that panel on a frame. Taking the grid as an
+    argument is what lets one screen's cells be rendered by whichever toolkit is
+    doing the drawing.
+    """
+    font = grid.font or BitmapFont()
+    image = QImage(
+        grid.cols * font.cell_w,
+        grid.rows * font.cell_h,
+        QImage.Format.Format_ARGB32_Premultiplied,
+    )
+    image.fill(qcolour(BACKGROUND))
+
+    painter = QPainter(image)
+    painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, False)
+    for x, y, run in grid.runs():
+        _paint_run(painter, grid, x, y, run)
+    painter.end()
+    return image
+
+
+def _paint_run(painter: QPainter, grid: Grid, x: int, y: int, run: list[Cell]) -> None:
+    """One run of same-styled cells, as one font face and one string."""
+    font = grid.font or BitmapFont()
+    style = run[0].style
+    left = x * font.cell_w
+    top = y * font.cell_h
+    width = len(run) * font.cell_w
+
+    # A cell's own background, if it has one. This is how a menu panel is opaque:
+    # the box fills its inside with a colour before anything is written on it, so
+    # the dungeon cannot show through.
+    if style.bg is not None:
+        painter.fillRect(QRect(left, top, width, font.cell_h), qcolour(style.bg))
+
+    if style.reverse:
+        painter.fillRect(QRect(left, top, width, font.cell_h), qcolour(style.fg))
+        painter.setPen(
+            qcolour(style.bg) if style.bg is not None else qcolour(BACKGROUND)
         )
-        image.fill(qcolour(BACKGROUND))
+    else:
+        painter.setPen(_ink(style))
 
-        painter = QPainter(image)
-        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, False)
-        for x, y, run in self.runs():
-            self._draw_run(painter, x, y, run)
-        painter.end()
-        return image
+    if style.italic:
+        painter.setFont(font.bold_italic if style.bold else font.italic)
+    else:
+        painter.setFont(font.bold if style.bold else font.normal)
+    text = "".join(cell.char for cell in run)
+    # ``TextDontClip`` off, and a rect one row taller than the cell: a glyph with
+    # a descender hangs below the baseline, and clipping it to the cell shaves the
+    # tail off a ``g`` on the one line the player is reading.
+    painter.drawText(QRect(left, top, width, font.cell_h + 4), 0, text)
 
-    def _draw_run(self, painter: QPainter, x: int, y: int, run: list[Cell]) -> None:
-        font = self.font or BitmapFont()
-        style = run[0].style
-        left = x * font.cell_w
-        top = y * font.cell_h
-        width = len(run) * font.cell_w
 
-        # A cell's own background, if it has one. This is how a menu panel is
-        # opaque: the box fills its inside with a colour before anything is
-        # written on it, so the dungeon cannot show through.
-        if style.bg is not None:
-            painter.fillRect(QRect(left, top, width, font.cell_h), qcolour(style.bg))
+def _ink(style: Style) -> QColor:
+    """The colour a glyph is drawn in, with ``dim`` folded in.
 
-        if style.reverse:
-            painter.fillRect(QRect(left, top, width, font.cell_h), qcolour(style.fg))
-            painter.setPen(
-                qcolour(style.bg) if style.bg is not None else qcolour(BACKGROUND)
-            )
-        else:
-            painter.setPen(self._ink(style))
-
-        if style.italic:
-            painter.setFont(font.bold_italic if style.bold else font.italic)
-        else:
-            painter.setFont(font.bold if style.bold else font.normal)
-        text = "".join(cell.char for cell in run)
-        # ``TextDontClip`` off, and a rect one row taller than the cell: a glyph
-        # with a descender hangs below the baseline, and clipping it to the cell
-        # shaves the tail off a ``g`` on the one line the player is reading.
-        painter.drawText(QRect(left, top, width, font.cell_h + 4), 0, text)
-
-    @staticmethod
-    def _ink(style: Style) -> QColor:
-        """The colour a glyph is drawn in, with ``dim`` folded in.
-
-        The dimming itself is the colour's own business now (see
-        ``Colour.dimmed``), because it is a fact about the style rather than
-        about Qt -- and the front end that is not Qt needs it just as much.
-        """
-        return qcolour(style.fg.dimmed() if style.dim else style.fg)
+    The dimming itself is the colour's own business now (see ``Colour.dimmed``),
+    because it is a fact about the style rather than about Qt -- and the front end
+    that is not Qt needs it just as much.
+    """
+    return qcolour(style.fg.dimmed() if style.dim else style.fg)
