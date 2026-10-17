@@ -23,9 +23,7 @@ this one.
 
 from __future__ import annotations
 
-import math
-
-from ..desktop.screens.battle import BOB_HEIGHT, BOB_SPEED, THICKNESS, BattleScreen
+from ..desktop.screens.battle import BattleScreen
 from ..desktop.theme import parse_style
 from .paint import load
 
@@ -194,33 +192,19 @@ class Stage:
             self._shadow = pool
         return self._shadow
 
-    def figure(self, surface, figure, font, clock: float, fade: float) -> bool:
-        """One figure on the floor: its picture, at its own size, breathing.
+    def figure(self, figure):
+        """A figure's picture, loaded -- and nothing else.
 
-        Drawn at its own size and never scaled -- these are painted figures, and a
-        painted figure put through a nearest-neighbour resize looks like a mistake.
-        Returns whether anything was drawn, which is the arena's cue to leave the
-        grid's letter in place when the sheets have no picture for this one.
+        Deliberately dumb: *where* a figure stands is the arena's arithmetic and
+        moves every frame (it breathes, it is shoved, it lunges), so this hands
+        back the picture and lets the screen put it down. A painted figure is
+        never scaled -- a painter's figure through a nearest-neighbour resize looks
+        like a mistake -- and ``None`` means the sheets have nothing, which is the
+        arena's cue to leave the grid's own letter standing.
         """
         if figure.art is None:
-            return False
-        image = load(figure.art)
-        if image is None:
-            return False
-        raise_px = 0
-        if figure.actor.stats.alive:
-            # Off its own phase, taken from its place in the row: side by side,
-            # rising and falling together, they would read as one wave.
-            raise_px = round(math.sin(clock * BOB_SPEED + figure.phase) * BOB_HEIGHT)
-        baseline = figure.row * font.cell_h - THICKNESS - raise_px
-        if fade < 1.0:
-            image = image.copy()
-            image.set_alpha(round(255 * fade))
-        surface.blit(
-            image,
-            (round(figure.cx - image.get_width() / 2), baseline - image.get_height()),
-        )
-        return True
+            return None
+        return load(figure.art)
 
 
 def _bar_colour(ratio: float) -> str:
@@ -235,3 +219,4 @@ def _bar_colour(ratio: float) -> str:
 def _rgb(name: str) -> tuple[int, int, int]:
     """A style name as a colour: the same palette both front ends read."""
     return tuple(parse_style(name).fg)
+

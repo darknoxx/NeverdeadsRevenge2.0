@@ -24,6 +24,7 @@ from pathlib import Path
 
 from ..persistence import load_meta
 from .font import SdlFont
+from .effects import SdlEffects
 from .keys import name_of, typed
 from .paint import paint
 
@@ -55,28 +56,6 @@ class KeyPress:
 
     def text(self) -> str:
         return self._text
-
-
-class _NoEffects:
-    """The sparkle, for a session that has not ported it yet."""
-
-    active = False
-
-    def clear(self) -> None:
-        return None
-
-    def spark(self, *args, **kwargs) -> None:
-        return None
-
-
-class _NoView:
-    """The glass, for a session whose glass is a plain window."""
-
-    def shake(self, **kwargs) -> None:
-        return None
-
-    def is_shaking(self) -> bool:
-        return False
 
 
 class SdlApp:
@@ -113,8 +92,12 @@ class SdlApp:
             self.screens = [TitleScreen()]
         self.cols = max(MIN_COLS, cols)
         self.rows = max(MIN_ROWS, rows)
-        self.effects = _NoEffects()
-        self.view = _NoView()
+        self.effects = SdlEffects()
+        #: The glass, which is the same object: a landed blow shakes the *frame*,
+        #: and the frame is this application's own. The arena asks ``view.shake``
+        #: exactly as it does under Qt, and what it gets is a surface drawn a few
+        #: pixels off centre -- which is what a shaken glass is.
+        self.view = self.effects
         #: The same sound system the Qt build plays through, or nothing when the
         #: machine has no audio -- which is its own kind of honest.
         try:
@@ -235,8 +218,12 @@ class SdlApp:
                 catch_up(self)
 
     def screen_point(self, position):
-        """Where a cell is in pixels. ``None`` until the effects layer exists."""
-        return None
+        """Where a cell is, in the frame's own pixels.
+
+        Sparks are thrown in buffer pixels in both builds, and a cell is a
+        rectangle of them: the corner is where a spray comes from.
+        """
+        return (position[0] * self.font.cell_w, position[1] * self.font.cell_h)
 
     def open_shop(self) -> None:
         self.play("deny")
@@ -281,6 +268,20 @@ class SdlApp:
         self.redraw()
 
     # -- the picture --------------------------------------------------------
+    def tick(self, dt: float) -> None:
+        """A frame went by: let the screen play, let the pixels move, repaint.
+
+        Called by the window loop and by anything driving this headless. A screen
+        that is *moving* is asked every frame -- a fight breathes whether or not it
+        is talking, and this is the only clock the second front end has -- and one
+        that is busy is asked until it is done.
+        """
+        screen = self.screens[-1]
+        if getattr(screen, "busy", False) or getattr(screen, "animating", False):
+            screen.step(dt, self)
+        self.effects.step(dt)
+        self.redraw()
+
     def redraw(self) -> None:
         """Draw the stack into the grid, and the grid onto the window."""
         from ..desktop.pattern import PatternBuffer
@@ -306,6 +307,9 @@ class SdlApp:
         if paint_over is not None:
             paint_over(self._surface, self)
         self._blit_art()
+        # And the pixels that are not the room: sparks thrown by whatever just
+        # happened, drawn last so they land on top of everything.
+        self.effects.draw(self._surface)
         self._present()
 
     def _blit_art(self) -> None:
@@ -347,12 +351,13 @@ class SdlApp:
         if not pygame.display.get_init() or self._window is None:
             return
         surface = self._window
+        offset = self.effects.offset()
         surface.fill((0, 0, 0))
         scaled = pygame.transform.scale(
             self._surface,
             (self._surface.get_width() * self.scale, self._surface.get_height() * self.scale),
         )
-        surface.blit(scaled, (0, 0))
+        surface.blit(scaled, (offset[0] * self.scale, offset[1] * self.scale))
         pygame.display.flip()
 
     # -- the keys -----------------------------------------------------------
@@ -380,8 +385,13 @@ class SdlApp:
         )
         pygame.display.set_caption(title)
         self.redraw()
+        clock = pygame.time.Clock()
         running = True
         while running:
+            # Every beat in this game is written against a thirtieth of a second,
+            # so that is the frame this loop asks for: a fight that played faster
+            # on a quicker machine would be a different fight.
+            self.tick(min(clock.tick(60) / 1000.0, 1 / 30.0))
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False

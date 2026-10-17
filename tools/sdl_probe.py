@@ -25,11 +25,17 @@ the order strip and the monsters' health bars are cell work and always were --
 and stages the figures as the letters they have always been. One round is then
 fought, so the log in the picture is a real round and not an empty panel:
 
-    python tools/sdl_probe.py /tmp/sdl.png /tmp/sdl_arena.png /tmp/sdl_roster.png
+    python tools/sdl_probe.py /tmp/sdl.png /tmp/sdl_arena.png /tmp/sdl_roster.png \
+        /tmp/sdl_impact.png
 
 The third picture is the roster, and it is the first *art* on this side of the
 seam: a screen hands over ``Placed`` records -- what, and where -- and this
 application puts them down. The same records the Qt build reads.
+
+And the fourth is the one a still picture cannot fake: the arena on the frame the
+blow *lands*. The rules decide at the swing and the room waits, so there is a
+window in which a fight is decided and nothing has been shown -- a number written
+down and not yet readable. The probe runs the frames until that number arrives.
 """
 
 from __future__ import annotations
@@ -78,6 +84,7 @@ def main(argv: list[str] | None = None) -> int:
     target = Path(given[0]) if given else Path("/tmp/sdl_title.png")
     arena_target = Path(given[1]) if len(given) > 1 else None
     roster_target = Path(given[2]) if len(given) > 2 else None
+    impact_target = Path(given[3]) if len(given) > 3 else None
 
     font = SdlFont(str(FONT))
     grid = PatternBuffer(96, 27)
@@ -105,6 +112,14 @@ def main(argv: list[str] | None = None) -> int:
             f"{roster_target}  {roster.get_width()}x{roster.get_height()}"
             "  the roster, with the hero painted on it"
         )
+
+    if impact_target is not None:
+        impact = _caught_at_the_impact()
+        pygame.image.save(impact, str(impact_target))
+        print(
+            f"{impact_target}  {impact.get_width()}x{impact.get_height()}"
+            "  the arena, on the frame the blow lands"
+        )
     return 0
 
 
@@ -122,7 +137,7 @@ def _standing_on_the_roster(seed: int = 3):
     return app._surface
 
 
-def _drawn_into_a_fight(seed: int = 3):
+def _standing_in_a_fight(seed: int = 3):
     """A real fight, reached the way a player reaches one: by walking into it.
 
     Nothing is faked and nothing is skipped: the same ``open_fight`` the game
@@ -146,13 +161,42 @@ def _drawn_into_a_fight(seed: int = 3):
         if spot != here:
             state.dungeon_map.set_tile(spot, Tile.FLOOR)
         monster = make_enemy(ENEMIES[name], spot)
+        monster.stats.hp = 40  # so a fight is still going when the probe looks
         state.enemies.append(monster)
         state.turn_queue.add(monster)
     state.refresh_vision()
     app.key("right")  # into them
+    return app, state
+
+
+def _drawn_into_a_fight(seed: int = 3):
+    """A fight, one round in and played out: the log in the picture."""
+    app, _state = _standing_in_a_fight(seed)
     app.key("a")  # ATTACK
     app.key("enter")  # and swing
+    frames = 0
+    while app.screens[-1].busy and frames < 400:
+        app.tick(1 / 30.0)
+        frames += 1
     return app._surface
+
+
+def _caught_at_the_impact(seed: int = 3):
+    """The frame the blow lands on: the number arrives, and the room takes it.
+
+    The one picture the *playback* is for, and the one a single-frame render
+    cannot fake: the fight was decided at the swing, the room has waited since,
+    and this is the frame it stops waiting.
+    """
+    app, _state = _standing_in_a_fight(seed)
+    app.key("a")  # ATTACK
+    app.key("enter")  # and swing
+    for _ in range(120):
+        app.tick(1 / 30.0)
+        readable = [one for one in app.screens[-1].arena._popups if one.age >= 0]
+        if readable:
+            return app._surface
+    raise SystemExit("the blow never landed")
 
 
 if __name__ == "__main__":

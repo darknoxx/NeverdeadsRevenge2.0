@@ -60,6 +60,23 @@ def _sdl():
     return SdlFont(FONT), paint
 
 
+def _play_out(app, limit: int = 400) -> int:
+    """Let the fight play itself out, a frame at a time. Returns the frames used.
+
+    A round on the second front end is *watched* now, not read: the arena takes
+    the player's choice and queues the round at once -- which is what makes a
+    fight decidable -- and the frames after it are the playback. Every test that
+    used to read a result off the same keypress has to let those frames happen,
+    which is exactly the difference this session made.
+    """
+    frames = 0
+    while app.screens[-1].busy and frames < limit:
+        app.tick(1 / 30.0)
+        frames += 1
+    return frames
+
+
+
 def test_the_sdl_cell_is_the_cell_the_qt_build_has():
     """Ten by twenty, and the number is the whole port.
 
@@ -268,11 +285,15 @@ def test_a_monster_is_walked_into_fought_and_the_floor_comes_back():
     assert not ghoul.alive, "the blow did not land"
     assert state.kills == 1, "the kill did not count for the run"
 
-    # The round was *read*, not watched: the SDL arena has no playback, so there
-    # is never anything mid-sentence when a key comes in. That is the whole of the
-    # tempo difference between the front ends, and it is one boolean.
+    # The rules decided at the *swing* -- that is what makes a fight decidable --
+    # and the room has not caught up yet: the round is queued and being played,
+    # one beat at a time, exactly as it is under Qt.
     arena = app.screens[-1]
-    assert not arena.busy, "the arena is holding a beat it has nothing to show for"
+    assert arena.busy, "the round was over before it was played"
+    arena = app.screens[-1]
+    frames = _play_out(app)
+    assert frames > 4, f"the round was not played, it was snapped ({frames} frames)"
+    assert not arena.busy, "the fight is still talking after playing out"
 
     # And the fight says how it ended. The panel is the arena's own -- the same
     # box, rule and hint the Qt build blits -- and it is painted *over* the stage
@@ -355,10 +376,13 @@ def test_the_arena_writes_its_panels_and_leaves_the_figures_to_the_art():
     cell = app.grid.cells[figure.row][figure.cx // app.font.cell_w]
     assert cell.char != vipers.glyph, "a letter is standing under the sprite"
 
-    # Then the blow, and the fight's voice arrives with it: the line names the
-    # monster, and the picture carries it because the log is still a cell panel.
+    # Then the blow, and the fight's voice arrives with it -- a frame or two into
+    # the playback and not on the keypress, because the animation comes first and
+    # every display and calculation after it. That ordering is the game's own rule
+    # and it is why this test has to let the round play before it reads anything.
     app.key("a")
     app.key("enter")
+    _play_out(app)
     log = [line.text for line in arena.arena.lines]
     assert any(vipers.name in line for line in log), f"the log is silent: {log}"
     picture = "\n".join("".join(cell.char for cell in row) for row in app.grid.cells)
@@ -437,7 +461,7 @@ def test_the_arena_paints_the_flagstones_and_the_monsters_on_them():
         min(surface.get_height(), baseline),
     )
     painted = surface.copy()
-    arena._stage.figure = lambda *args, **rest: False
+    arena._stage.figure = lambda *args, **rest: None  # no picture, no figure
     app.redraw()
     bare = app._surface
     changed = sum(
@@ -519,6 +543,11 @@ def test_a_run_starts_in_a_process_where_qt_does_not_exist():
         app.key("enter")  # and swing it
         assert not ghoul.alive, "the blow did not land"
         assert state.kills == 1, "the kill did not count"
+        frames = 0
+        while app.screens[-1].busy and frames < 400:
+            app.tick(1 / 30.0)
+            frames += 1
+        assert frames > 4, "the fight did not play out"
         app.key("enter")  # leave the verdict
         assert type(app.screens[-1]).__name__ == "GameScreen", "the floor did not return"
         print("NOQT-OK")
@@ -591,3 +620,121 @@ def test_the_roster_paints_the_hero_on_the_second_front_end():
     finally:
         hero_select.exists = real
     assert len(lettered) < len(painted) / 4, "the fallback is not a letter"
+
+
+def test_the_animation_comes_first_and_the_displays_after_it():
+    """The game's own rule, on the second front end: the blow, *then* the reading.
+
+    On the frame the player swings, the fight is already *decided* -- the rules
+    resolve at the swing, which is what makes a fight decidable and not a lottery
+    -- and nothing of it is *shown*: the log is still empty, the bar still says
+    what the monster had, and the number over its head is written down but not
+    yet readable. A few frames later all three arrive together, at the impact.
+
+    That gap is the whole of what a playback is for, and it is the one thing a
+    front end that resolves a round at once cannot have.
+    """
+    from neverdeads_revenge.game.actors import ENEMIES, make_enemy
+    from neverdeads_revenge.sdl_front.app import SdlApp
+    from neverdeads_revenge.world.tiles import Tile
+
+    app = SdlApp(seed=3)
+    app.key("enter")  # NEW RUN
+    app.key("enter")  # the first hero
+
+    state = app.run
+    here = state.player.position
+    beside = (here[0] + 1, here[1])
+    state.dungeon_map.set_tile(beside, Tile.FLOOR)
+    ghoul = make_enemy(ENEMIES["ghoul"], beside)
+    ghoul.stats.hp = 40  # it will live through this
+    state.enemies.append(ghoul)
+    state.turn_queue.add(ghoul)
+    state.refresh_vision()
+
+    app.key("right")
+    arena = app.screens[-1]
+    assert not arena.busy, "the fight opened mid-round"
+
+    app.key("a")      # pick ATTACK
+    app.key("enter")  # and swing it
+
+    # The rules have taken the damage already -- that is what deciding at the
+    # swing means -- and the room has shown none of it.
+    assert ghoul.stats.hp < 40, "the blow was never decided"
+    assert arena.arena.lines == [], "the log spoke before the sword landed"
+    assert arena.arena._shown[id(ghoul)] == 40, "the bar dropped before the blow"
+
+    # Then the strike begins, and the number is *written down* -- and not yet
+    # readable: a number over a monster before the blow reaches it is the fight
+    # telling the player the future.
+    for _ in range(30):
+        app.tick(1 / 30.0)
+        if arena.arena._popups:
+            break
+    assert arena.arena._popups, "no number was ever written down"
+    assert arena.arena._popups[0].age < 0, "the number was readable before the blow"
+    assert arena.arena.lines == [], "the log spoke while the sword was in the air"
+
+    # And at the impact the number becomes readable, the log says what happened,
+    # and the bar drops to where the rules left the monster: three things, one
+    # moment, in this order and no other.
+    _play_out(app)
+    log = [line.text for line in arena.arena.lines]
+    assert any("ghoul" in line for line in log), f"the log never spoke: {log}"
+    assert arena.arena._shown[id(ghoul)] == ghoul.stats.hp, (
+        "the bar did not catch up with the rules"
+    )
+
+
+def test_a_damage_number_is_painted_over_the_monster_that_took_it():
+    """A number over a head, in the second front end's own pixels.
+
+    The Qt build draws it in a big face with a dark copy under it; this one draws
+    it in the same big face, one font size up from the grid, over the figure's own
+    line. What is asserted is the fact that a test can see: ink, where the number
+    is, on the frame that the fight said it was readable on.
+    """
+    from neverdeads_revenge.game.actors import ENEMIES, make_enemy
+    from neverdeads_revenge.sdl_front.app import SdlApp
+    from neverdeads_revenge.world.tiles import Tile
+
+    app = SdlApp(seed=3)
+    app.key("enter")
+    app.key("enter")
+
+    state = app.run
+    beside = (state.player.position[0] + 1, state.player.position[1])
+    state.dungeon_map.set_tile(beside, Tile.FLOOR)
+    ghoul = make_enemy(ENEMIES["ghoul"], beside)
+    ghoul.stats.hp = 40
+    state.enemies.append(ghoul)
+    state.turn_queue.add(ghoul)
+    state.refresh_vision()
+
+    app.key("right")
+    arena = app.screens[-1]
+    app.key("a")
+    app.key("enter")
+
+    # One frame past the impact: the number is readable, and it is on the frame.
+    for _ in range(60):
+        app.tick(1 / 30.0)
+        landed = [one for one in arena.arena._popups if one.age >= 0]
+        if landed:
+            break
+    assert landed, "the number never became readable"
+    number = min(landed, key=lambda one: one.age)
+    box = (
+        round(number.x - 40),
+        number.y - app.font.cell_h * 2 - 30,
+        round(number.x + 40),
+        number.y,
+    )
+    surface = app._surface
+    seen = {
+        surface.get_at((x, y))[:3]
+        for x in range(max(0, box[0]), min(surface.get_width(), box[2]))
+        for y in range(max(0, box[1]), min(surface.get_height(), box[3]))
+    }
+    assert len(seen) > 3, f"the number left no ink over the monster: {len(seen)} colours"

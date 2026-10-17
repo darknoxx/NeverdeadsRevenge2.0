@@ -105,6 +105,26 @@ class Colour(NamedTuple):
     def blue(self) -> int:
         return self.b
 
+    def lighter(self, toward_white: float = 0.5) -> Colour:
+        """A brighter version of itself: a step toward white.
+
+        The other half of ``dimmed``, and here for the same reason: a wound bites
+        in a colour *brighter* than the light it already wears, and how much
+        brighter is a fact about the colour rather than about a painter. Toward
+        white and not up the value, because the point of the mark is to be *seen*:
+        the hue survives -- a brighter red is still red -- and a colour that is
+        already as bright as its value allows still has somewhere to go. Half a
+        step by default, which is what a mark wants and what Qt's ``lighter(150)``
+        comes out at for a saturated colour; for the ones that are not, this is a
+        shade lighter still, and that is the honest difference.
+        """
+        step = max(0.0, min(1.0, toward_white))
+        return Colour(
+            round(self.r + (255 - self.r) * step),
+            round(self.g + (255 - self.g) * step),
+            round(self.b + (255 - self.b) * step),
+        )
+
     def dimmed(self) -> Colour:
         """Halfway to the dungeon's own black.
 

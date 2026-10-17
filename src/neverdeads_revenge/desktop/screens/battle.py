@@ -85,9 +85,12 @@ _LAZY: dict[str, tuple[str, str]] = {
 def _use_qt() -> None:
     """Fetch the painting's toolkit into the module, the first time it is needed.
 
-    Called by the three doors into the painting -- ``paste``, ``step`` and
-    ``letter_font``, which a painter can reach for before either of the others --
-    and by nothing the *room* does. That is the whole of it, and it has to be a
+    Called by the two doors into the painting -- ``paste`` and ``letter_font``,
+    which a painter can reach for before either of the others -- and by nothing
+    else in the file. The *playback* does not need it: a round is a sequence of
+    facts about a fight and a clock, and the only two things in it that ever
+    needed a face -- a damage number's placement and a wound's brighter colour --
+    were moved to where faces belong. That is the whole of it, and it has to be a
     call at the door: a name used inside a function is looked up in the module's
     own namespace, and Python does not route that through a module ``__getattr__``.
     (Tried it. It is a documented-sounding idea that quietly does not work, which
@@ -524,6 +527,11 @@ class Popup:
     #: are read together, a fifth of a second after the player asked for the blow.
     damage: int = 0
     target_id: int = 0
+    #: The face this number hangs over. A painter needs it to sit the number
+    #: above the *figure* -- over its arrow and not on it -- and how tall a face
+    #: is is the painter's business, which is why this is a size and not an
+    #: offset.
+    size: int = 0
     #: And whether it was the blow that finished them, and what it sounds like.
     #: The rules have known both since the swing -- they resolve at once -- and
     #: the *room* must not: a monster that goes transparent while the sword is
@@ -1995,7 +2003,6 @@ class BattleScreen(Screen):
         the life of a damage number -- because a screen that kept a timer of its
         own would keep running after the window it is drawn in has gone.
         """
-        _use_qt()
         if self._hitstop > 0:
             # The room holds still on a landed blow: no clock, no breath, no
             # beat. Three frames in which nothing moves is the difference between
@@ -2360,7 +2367,7 @@ class BattleScreen(Screen):
         # Brighter than the light the wound *wears*, and not the same colour of it:
         # a bite that is the same green as the monster already is is a bite nobody
         # sees. The mark and the moment are two different things.
-        colour = QColor(STATUS_COLOURS.get(status.key, "#ffffff")).lighter(150).name()
+        colour = parse_style(STATUS_COLOURS.get(status.key, "#ffffff")).fg.lighter().name()
         look = STATUS_LOOKS.get(status.key, "")
         figure = self._figure_of(actor, app)
         if figure is None:
@@ -2417,14 +2424,21 @@ class BattleScreen(Screen):
     def _popup(text: str, colour: str, figure: Staged, app, crit: bool) -> Popup:
         """A number placed over the head it landed on, ready to rise.
 
-        Above the *arrow* as well as above the letter: the two cannot share a
-        spot, or the number a player is reading would be standing exactly where
-        the target marker is, on the frame where both matter most.
+        Hung on the figure's own *line* and not at the height it will be read at:
+        how far above a head a number has to sit depends on the face it is drawn
+        in -- over the arrow as well as over the letter, or the number a player is
+        reading would stand exactly where the target marker is -- and that is the
+        painter's business, the same way the verdict panel's place is. The number
+        says what it is about; the painter puts it down.
         """
-        cap = QFontMetrics(letter_font(figure.size).bold).capHeight()
-        arrow = QFontMetrics(letter_font(max(16, figure.size // 2)).bold).height()
-        baseline = figure.row * app.font.cell_h - THICKNESS - cap - arrow - 4
-        return Popup(text=text, colour=colour, x=figure.cx, y=baseline, crit=crit)
+        return Popup(
+            text=text,
+            colour=colour,
+            x=figure.cx,
+            y=figure.row * app.font.cell_h - THICKNESS,
+            crit=crit,
+            size=figure.size,
+        )
 
     # -- where things are --------------------------------------------------
     def _areas(self, cols: int, rows: int) -> dict[str, tuple[int, int, int, int]]:
@@ -2594,13 +2608,6 @@ class BattleScreen(Screen):
             return None
         cell_w, cell_h = app.font.cell_w, app.font.cell_h
         return (figure.cx, figure.row * cell_h)
-
-    @staticmethod
-    def _place_popup(popup: Popup, figure: Staged, app) -> None:
-        """Hang a number over the head it landed on."""
-        cap = QFontMetrics(letter_font(figure.size).bold).capHeight()
-        baseline = figure.row * app.font.cell_h - THICKNESS
-        popup.y = baseline - cap - 6
 
     # -- what is pasted -----------------------------------------------------
     def _paste_walls(self, painter: QPainter, field: dict[str, float]) -> None:
@@ -2906,9 +2913,13 @@ class BattleScreen(Screen):
         font = letter_font(34 if popup.crit else 26)
         painter.setFont(font.bold)
         metrics = QFontMetrics(font.bold)
+        # Above the figure and above its arrow: the number's own line arrives from
+        # the fight, and the height it is drawn at is a thing about faces.
+        cap = QFontMetrics(letter_font(popup.size).bold).capHeight()
+        arrow = QFontMetrics(letter_font(max(16, popup.size // 2)).bold).height()
         rise = int(popup.age / Popup.LIFE * 26)
         left = popup.x - metrics.horizontalAdvance(popup.text) // 2
-        baseline = popup.y - rise
+        baseline = popup.y - cap - arrow - 4 - rise
         ink = QColor(popup.colour)
         # Fading toward the dark the way everything else in this game fades:
         # a number does not shrink away, the phosphor just stops holding it.
