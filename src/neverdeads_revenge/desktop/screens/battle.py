@@ -179,9 +179,9 @@ AIMED: tuple[str, ...] = (ATTACK, SPECIAL)
 #: its health bar running off the frame, and the row was as wide as the room
 #: instead of as wide as a row. The arc is the same shape, pulled in.
 ROWS: dict[int, tuple[tuple[float, float], ...]] = {
-    1: ((0.10, 0.88),),
-    2: ((0.00, 1.00), (0.26, 1.00)),
-    3: ((-0.03, 1.00), (0.10, 0.88), (0.28, 1.13)),
+    1: ((0.0, 0.88),),
+    2: ((-0.20, 1.00), (0.20, 1.00)),
+    3: ((-0.30, 1.00), (-0.02, 0.88), (0.30, 1.13)),
 }
 
 #: How far below the foot of the floor band the hero stands, in rows. He is the
