@@ -28,7 +28,6 @@ dev = [
 
 [project.scripts]
 ndr2 = "neverdeads_revenge.__main__:main"
-ndr2-sdl = "neverdeads_revenge.sdl_front.__main__:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/neverdeads_revenge"]

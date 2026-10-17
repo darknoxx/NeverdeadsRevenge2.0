@@ -313,10 +313,8 @@ python3 -m venv .venv
 The game is drawn by SDL and pygame. It was built twice for a while -- once on Qt
 and once on SDL -- and the SDL one won: it plays the same run, draws the same
 room, and builds for Windows and (in time) for Android, which Qt did not. So
-there is one front end now, and `./ndr2` starts it.
-
-`./ndr2-sdl` is the same door under the name the split gave it, for a keyboard
-that remembers it.
+there is one front end now, and `./ndr2` starts it -- one door, one name, one
+parser, and the only launcher in the directory.
 
 ```sh
 ./ndr2 --seed 3 --fps                       # the frame counter, bottom right

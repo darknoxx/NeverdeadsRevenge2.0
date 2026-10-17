@@ -181,7 +181,9 @@ say "Installing $name and its dependencies"
 # first thing the README tells you to run.
 chmod +x "$here/ndr2"
 
-chmod +x "$here/ndr2-sdl" 2>/dev/null || true
+# A virtualenv that was set up while the game had two launchers still has the
+# second one in it, pointing at a module that is gone. It is not ours to keep.
+rm -f "$venv_dir/bin/ndr2-sdl"
 note "start it with  $here/ndr2 --seed 3 --fps"
 note "or straight into a fight  $here/ndr2 --battle-scene --fps"
 
