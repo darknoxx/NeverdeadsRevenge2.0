@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Launcher for the second front end: the same game, drawn by SDL instead of Qt.
+set -euo pipefail
+
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+python="$here/.venv/bin/python"
+
+if [[ ! -x "$python" ]]; then
+    echo "No virtualenv found. Run:" >&2
+    echo "  ./install.sh --sdl" >&2
+    exit 1
+fi
+
+# The two packages this front end needs are deliberately not dependencies of the
+# game -- the game still *ships* the Qt one -- so they are missing on a plain
+# install, and a ModuleNotFoundError from three files down is a poor way to find
+# out. Say it here instead.
+if ! "$python" -c "import pygame, moderngl" 2>/dev/null; then
+    echo "The second front end needs two packages the game does not ship with:" >&2
+    echo "  ./.venv/bin/pip install pygame-ce moderngl" >&2
+    echo "or re-run the installer with  ./install.sh --sdl" >&2
+    exit 1
+fi
+
+exec "$python" -m neverdeads_revenge.sdl_front "$@"

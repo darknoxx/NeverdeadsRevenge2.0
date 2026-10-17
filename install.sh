@@ -8,6 +8,7 @@
 #
 #   ./install.sh                 set up, and add the menu entry on Linux
 #   ./install.sh --no-desktop    set up only
+#   ./install.sh --sdl           also set up the second front end (SDL + GL)
 #   ./install.sh --python PATH   use a specific interpreter, not python3
 #   ./install.sh --dry-run       say what it would do, change nothing
 #   ./install.sh --uninstall     remove the menu entry and the icon
@@ -26,6 +27,7 @@ venv_dir="$here/.venv"
 
 python_bin="python3"
 want_desktop="auto"   # auto | yes | no
+want_sdl=0            # the second front end needs two more packages
 want_uninstall=0
 dry_run=0
 
@@ -43,6 +45,7 @@ usage() {
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --desktop) want_desktop="yes" ;;
+        --sdl) want_sdl=1 ;;
         --no-desktop) want_desktop="no" ;;
         --dry-run) dry_run=1 ;;
         --uninstall) want_uninstall=1 ;;
@@ -140,6 +143,7 @@ if [[ $dry_run -eq 1 ]]; then
     note "python      $("$python_bin" -V 2>&1)  ($python_bin)"
     note "virtualenv  $venv_dir$([[ -x "$venv_dir/bin/python" ]] && echo ' (already there)' || echo ' (will be created)')"
     note "menu entry  $([[ "$want_desktop" == "yes" ]] && echo 'yes' || echo 'no')"
+    note "second front end  $([[ $want_sdl -eq 1 ]] && echo 'yes (pygame-ce, moderngl)' || echo 'no (--sdl to add it)')"
     if [[ "$want_desktop" == "yes" ]]; then
         note "            $desktop_dir/$slug.desktop"
         note "            $icon_dir/$slug.svg"
@@ -174,9 +178,26 @@ say "Installing $name and its dependencies"
 "$python" -m pip install --quiet --upgrade pip
 "$python" -m pip install --quiet --editable "$here"
 
+if [[ $want_sdl -eq 1 ]]; then
+    # The second front end: the same game on an SDL2 window with a GL shader for
+    # the CRT. Its two packages are marked development-only in pyproject, because
+    # the game still *ships* the Qt one -- so they are not dragged in by the line
+    # above, and a player who wants to run `ndr2-sdl` has to ask for them.
+    say "Adding the second front end (SDL + GL)"
+    "$python" -m pip install --quiet 'pygame-ce>=2.5' 'moderngl>=5.13'
+fi
+
 # A zip download does not reliably keep the executable bit, and ./ndr2 is the
 # first thing the README tells you to run.
 chmod +x "$here/ndr2"
+
+if [[ $want_sdl -eq 1 ]]; then
+    note "start it with  $here/ndr2-sdl --seed 3 --fps"
+    note "or straight into a fight  $here/ndr2-sdl --battle-scene --fps"
+    # The zip download does not keep the executable bit, and this one is a
+    # launcher like ./ndr2.
+    chmod +x "$here/ndr2-sdl" 2>/dev/null || true
+fi
 
 say "Checking the install"
 # The desktop build is PySide6 and miniaudio; either one missing is an install
@@ -189,6 +210,15 @@ say "Checking the install"
 "$python" -c "import miniaudio" \
     || die "miniaudio did not come along -- please report this. Manual fix:
        $venv_dir/bin/pip install 'miniaudio>=1.71'"
+
+if [[ $want_sdl -eq 1 ]]; then
+    "$python" -c "import pygame" \
+        || die "pygame-ce did not come along -- please report this. Manual fix:
+       $venv_dir/bin/pip install 'pygame-ce>=2.5'"
+    "$python" -c "import moderngl" \
+        || die "moderngl did not come along -- please report this. Manual fix:
+       $venv_dir/bin/pip install 'moderngl>=5.13'"
+fi
 
 want_desktop_ok=0
 

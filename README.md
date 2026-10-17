@@ -305,13 +305,33 @@ python3 -m venv .venv
 ./ndr2 --no-sound    # start silent
 ./ndr2 --sound-log   # every sound decision, to /tmp/ndr2-sound.log
 ./ndr2 --testrun     # the chronicle unlocked and the purse full
+./ndr2 --battle-scene  # straight into a fight
 ```
+
+### The second front end
+
+The same game, drawn by SDL and pygame instead of Qt -- and it runs on a machine
+where PySide6 is not installed at all. It is where the handheld port is going, so
+it is worth playing on a desktop to find what is wrong with it.
+
+It needs two packages the game deliberately does not ship with, because the game
+still ships the Qt one. Ask the installer for them, or say it by hand:
+
+```sh
+./install.sh --sdl                          # or: ./.venv/bin/pip install pygame-ce moderngl
+./ndr2-sdl --seed 3 --fps                   # the frame counter, bottom right
+./ndr2-sdl --battle-scene --fps             # straight into a fight
+```
+
+Same keys, same saves, same settings as the Qt build. `F2`, `F3` and `F4` toggle
+the scanlines, the phosphor glow and the CRT curve; `F11` is fullscreen. A machine
+that cannot make a GL context gets a plain window instead of a refusal to start.
 
 The game needs a display: the design is the screen. Headless environments run
 the test suite instead, offscreen:
 
 ```sh
-./.venv/bin/pytest -q      # 1,388 tests, engine and UI both
+./.venv/bin/pytest -q      # the whole suite, engine and UI both
 ```
 
 ## How it is put together
