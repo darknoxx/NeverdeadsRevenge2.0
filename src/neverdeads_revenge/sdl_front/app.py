@@ -107,20 +107,25 @@ class SdlApp:
         #: exactly as it does under Qt, and what it gets is a surface drawn a few
         #: pixels off centre -- which is what a shaken glass is.
         self.view = self.effects
-        #: The same sound system the Qt build plays through, or nothing when the
-        #: machine has no audio -- which is its own kind of honest.
-        try:
-            from ..desktop.audio import Sfx
+        #: The same sound system the Qt build plays through, and always an
+        #: object: a screen asks it whether it is muted, and a *missing* mixer is
+        #: not the same answer as a quiet one. Where a machine has no audio the
+        #: mixer gives up on its own and says so.
+        from ..desktop.audio import Sfx
 
-            self.sfx = None if no_sound else Sfx()
-        except Exception:
-            self.sfx = None
+        self.sfx = Sfx(muted=no_sound or self.progress.muted)
+        #: And when it gives up mid-session, the record has to agree -- or the
+        #: next toggle writes the give-up back down as "unmuted".
+        self.sfx.on_mute = self._sound_gave_up
         #: What the game asked to be heard. A front end with no sound is still a
         #: front end that was asked, and a test can read this.
         self.played: list[str] = []
         self.headline = headline
         self._window = None
         self._surface = None
+        #: Whether the window loop should keep going. Only ``quit`` clears it --
+        #: there is no window object to ask on this front end.
+        self._running = True
         if battle_scene:
             self.open_battle_scene()
 
@@ -150,8 +155,7 @@ class SdlApp:
         """Make the noise. The same sound system the Qt build uses, and the same
         files -- it never knew about a window either."""
         self.played.append(name)
-        if self.sfx is not None:
-            self.sfx.play(name)
+        self.sfx.play(name)
 
     def play_after(self, before: tuple[int, int, int]) -> None:
         """Make the noise the last thing that happened deserves.
@@ -254,13 +258,137 @@ class SdlApp:
         self.redraw()
 
     def open_shop(self) -> None:
-        self.play("deny")
+        """The shop: the same screen the Qt build pushes, on this stack."""
+        from ..desktop.screens.menus import ShopScreen
+
+        self.push(ShopScreen())
 
     def open_scoreboard(self) -> None:
-        self.play("deny")
+        from ..desktop.screens.menus import ScoreboardScreen
+
+        self.push(ScoreboardScreen())
 
     def open_chronicle(self) -> None:
-        self.play("deny")
+        from ..desktop.screens.menus import ChronicleScreen
+
+        self.push(ChronicleScreen())
+
+    def open_delete_progress(self) -> None:
+        """Ask for the word, then erase everything.
+
+        The dialog is the whole safety: it answers ``True`` only when DELETE was
+        typed, and anything else leaves the profile exactly where it was.
+        """
+        from ..desktop.screens.dialogs import DeleteProgressScreen
+
+        self.push(
+            DeleteProgressScreen(
+                on_done=lambda confirmed: self.delete_progress() if confirmed else None
+            )
+        )
+
+    def delete_progress(self) -> None:
+        """Wipe the profile and the saved run. Nothing is kept back."""
+        from ..persistence import clear_run
+        from ..persistence import MetaProgress
+
+        self.progress = MetaProgress()
+        self.save_progress()
+        clear_run()
+        self.run = None
+
+    def record_run(self, state, name: str = "") -> int:
+        """Put the run on the board -- the board outlives the window, so it is
+        the *progress*'s business and not this application's."""
+        from ..core.rng import Rng
+        from ..game.state import RunState
+
+        self.progress.record_run(
+            depth=state.depth,
+            score=state.score,
+            kills=state.kills,
+            gold=state.gold,
+            won=state.run_state is RunState.ESCAPED,
+            name=name,
+            hero=state.hero.key,
+        )
+        self.progress.reroll_wilds(Rng(random.SystemRandom().randrange(2**32)))
+        self.save_progress()
+        return self.progress.best_score
+
+    def after_summary(self, answer) -> None:
+        """The summary is answered: a name for the board, or the hour back.
+
+        The same two doors the Qt build has, and the same screens behind them: a
+        run that escaped may be written down, and one that ended in the dark may
+        spend the hour it borrowed to be here.
+        """
+        from ..desktop.screens.game_over import REWIND, NameEntryScreen
+        from ..game.actions import Action, perform_action
+
+        state = self.run
+        if state is None:
+            return
+        if answer != REWIND:
+
+            def done(name: str) -> None:
+                if state is not None:
+                    self.record_run(state, name or "???")
+                self.return_to_title()
+
+            self.push(
+                NameEntryScreen(state.score, self.progress.last_name, on_done=done)
+            )
+            return
+        perform_action(state, Action.REWIND)
+        self.redraw()
+
+    def save_and_quit(self) -> None:
+        """Put the run down and go back to the title, keeping it for later."""
+        from ..game.savegame import dump
+        from ..persistence import save_run
+
+        if self.run is not None:
+            save_run(dump(self.run))
+        self.return_to_title()
+
+    def quit(self) -> None:
+        """Close the window: the loop stops at the end of this frame."""
+        self._running = False
+
+    def quit_requested(self) -> None:
+        from ..desktop.screens.dialogs import ConfirmScreen
+
+        self.push(
+            ConfirmScreen(
+                "QUIT NEVERDEAD'S REVENGE?",
+                "The dungeon will still be here when you come back.",
+                on_done=lambda yes: self.quit() if yes else None,
+            )
+        )
+
+    def confirm_quit_to_title(self) -> None:
+        from ..desktop.screens.dialogs import ConfirmScreen
+
+        self.push(
+            ConfirmScreen(
+                "QUIT TO THE TITLE?",
+                "The run does not come back. It is not written down.",
+                on_done=lambda yes: self.return_to_title() if yes else None,
+            )
+        )
+
+    def _sound_gave_up(self, muted: bool) -> None:
+        """The audio session quit on its own; the record has to agree."""
+        self.progress.muted = muted
+        self.save_progress()
+
+    def toggle_sound(self) -> None:
+        """Turn the sound over, and write the answer down: a player who mutes a
+        game expects it to *stay* muted the next time they open it."""
+        self.sfx.toggle()
+        self.progress.muted = self.sfx.muted
+        self.save_progress()
 
     def open_hero_select(self) -> None:
         from ..desktop.screens.hero_select import HeroSelectScreen
@@ -477,8 +605,8 @@ class SdlApp:
         pygame.display.set_caption(title)
         self.redraw()
         clock = pygame.time.Clock()
-        running = True
-        while running:
+        self._running = True
+        while self._running:
             # Every beat in this game is written against a thirtieth of a second,
             # so that is the frame this loop asks for: a fight that played faster
             # on a quicker machine would be a different fight.

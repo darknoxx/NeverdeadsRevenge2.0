@@ -1017,3 +1017,96 @@ def test_the_command_line_can_start_the_second_front_end():
     )
     assert result.returncode == 0, result.stderr
     assert "CLI-OK" in result.stdout, result.stdout
+
+
+def test_the_menu_keys_open_the_shared_screens_on_the_second_front_end():
+    """Shop, scoreboard, chronicle, pause, pack, character, legend: all of them.
+
+    These are not screens this front end has; they are the *game's* screens, and
+    the application they are handed has to answer everything they ask for. That is
+    the whole list, and it is checked the blunt way: press the key, look at what
+    is on top.
+    """
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3)
+    assert type(app.screens[-1]).__name__ == "TitleScreen"
+    for key, opened in (
+        ("s", "ShopScreen"),
+        ("h", "ScoreboardScreen"),
+        ("l", "ChronicleScreen"),
+    ):
+        app.key(key)
+        assert type(app.screens[-1]).__name__ == opened, (
+            f"{key} did not open the {opened}"
+        )
+        app.key("escape")
+        assert type(app.screens[-1]).__name__ == "TitleScreen", "escape did not come back"
+
+    app.key("enter")  # NEW RUN
+    app.key("enter")  # the first hero
+    assert type(app.screens[-1]).__name__ == "GameScreen"
+    for key, opened in (
+        ("escape", "PauseScreen"),
+        ("c", "CharacterScreen"),
+        ("i", "PackScreen"),
+        ("l", "LegendScreen"),
+        ("?", "HelpScreen"),
+    ):
+        app.key(key)
+        assert type(app.screens[-1]).__name__ == opened, (
+            f"{key} did not open the {opened}"
+        )
+        app.key("escape")
+    assert type(app.screens[-1]).__name__ == "GameScreen", "escape did not come back"
+
+
+def test_every_menu_is_qt_free_too():
+    """The same walk as the test above, in a process where Qt does not exist.
+
+    A menu is a screen like any other, and the ones this front end borrows are the
+    game's own -- so the claim to hold is that *the whole of it* is free of Qt,
+    not just the parts that were easy. Blocked, pressed, drawn: any screen that
+    reached for a toolkit would die here with the import that did it.
+    """
+    code = textwrap.dedent(
+        """
+        import sys
+
+
+        class NoQt:
+            def find_spec(self, name, path=None, target=None):
+                if name.split(".")[0] == "PySide6":
+                    raise ImportError(f"no Qt here: {name}")
+
+
+        sys.meta_path.insert(0, NoQt())
+
+        from neverdeads_revenge.sdl_front.app import SdlApp
+
+        app = SdlApp(seed=3)
+        for key in ("s", "h", "l"):
+            app.key(key)
+            app.key("escape")
+        app.key("enter")
+        app.key("enter")
+        for key in ("escape", "c", "i", "l", "?"):
+            app.key(key)
+            app.key("escape")
+        assert type(app.screens[-1]).__name__ == "GameScreen", "not back on the floor"
+        assert app._surface is not None, "the floor was not painted"
+        print("MENUS-OK")
+        """
+    )
+    env = dict(os.environ)
+    env["SDL_VIDEODRIVER"] = "dummy"
+    env["PYTHONPATH"] = str(ROOT / "src")
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "MENUS-OK" in result.stdout, result.stdout
