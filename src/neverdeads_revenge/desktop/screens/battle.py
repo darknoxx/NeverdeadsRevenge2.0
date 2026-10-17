@@ -736,14 +736,20 @@ class BattleScreen(Screen):
         self._flourish: tuple[str, float] | None = None
 
     # -- the contract -------------------------------------------------------
-    def draw(self, buffer: PatternBuffer, app) -> None:
+    def draw(self, buffer: PatternBuffer, app, ground: bool = True) -> None:
         #: The size this screen is being drawn at, remembered: the letters are
         #: placed in pixels and the paste step has to agree with the grid pass
         #: about where the floor is, and the grid pass is the one that knows.
         self._size = (buffer.cols, buffer.rows)
         buffer.clear()
         areas = self._areas(buffer.cols, buffer.rows)
-        self._draw_ground(buffer, areas["ground"])
+        # The cell floor is a *dial*, because a front end with a painting for a
+        # room has no use for it: two thousand of the frame's cells written and
+        # then written again in the room's own black was a millisecond a frame
+        # thrown away. The painter's room is not a thing this screen knows about,
+        # so it is told.
+        if ground:
+            self._draw_ground(buffer, areas["ground"])
         self._draw_health(buffer, areas["ground"])
         # The log lives at the *top* of the frame: the room has the bottom now,
         # and a fight's account of itself belongs where the eye goes first.

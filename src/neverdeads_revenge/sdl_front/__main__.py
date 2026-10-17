@@ -50,6 +50,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--fps", action="store_true", help="show a frame counter in the corner"
     )
+    parser.add_argument(
+        "--timings",
+        action="store_true",
+        help="print what each stage of the frame costs, once a second",
+    )
     args = parser.parse_args(argv)
 
     if args.sound_log is not None:
@@ -72,6 +77,7 @@ def main(argv: list[str] | None = None) -> int:
         no_sound=args.no_sound,
         battle_scene=args.battle_scene,
         fps=args.fps,
+        timings=args.timings,
         backdrop=not args.no_backdrop,
     )
     window.open_window()

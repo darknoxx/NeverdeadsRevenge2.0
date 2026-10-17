@@ -88,6 +88,7 @@ class SdlApp:
         no_sound: bool = True,
         battle_scene: bool = False,
         fps: bool = False,
+        timings: bool = False,
         backdrop: bool = True,
     ) -> None:
         import pygame
@@ -120,6 +121,18 @@ class SdlApp:
         #: A frame counter, for the flag that asks for one. Smoothed, because a
         #: number that jitters by ten a frame tells you nothing.
         self.show_fps = fps
+        #: And where the frame's milliseconds go, for the other flag. Printed once
+        #: a second and never drawn: a breakdown is a thing to read in a terminal,
+        #: not a thing to put in the picture.
+        self.show_timings = timings
+        self._timing: dict[str, tuple[float, int]] = {}
+        self._timing_since = time.monotonic()
+        #: The grid, made once and cleared from then on. It is *this* app's, so it
+        #: is made here rather than on the first frame -- a screen is handed a
+        #: blank grid and never has to ask whose turn it is.
+        from ..desktop.pattern import PatternBuffer
+
+        self.grid = PatternBuffer(cols, rows, self.font)
         #: Whether the arena is one painted room or the game's own tiles. The
         #: reference build has no painting, so this is a dial for looking at art.
         self.backdrop = backdrop
@@ -642,12 +655,23 @@ class SdlApp:
             screen.step(dt, self)
         self.effects.step(dt)
         self.redraw()
+        self._report_timings(time.monotonic())
 
     def redraw(self) -> None:
         """Draw the stack into the grid, and the grid onto the window."""
         from ..desktop.pattern import PatternBuffer
 
-        self.grid = PatternBuffer(self.cols, self.rows, self.font)
+        # The grid is reused and cleared rather than rebuilt. A frame of this game
+        # is two thousand six hundred cells, and a fresh buffer every frame was two
+        # thousand six hundred cells and their styles made again to hold the same
+        # blanks. The *shape* can change -- the window moves, and the grid is
+        # derived from it -- so the shape is what is checked.
+        if (self.grid.cols, self.grid.rows) != (self.cols, self.rows):
+            self.grid = PatternBuffer(self.cols, self.rows, self.font)
+        else:
+            self.grid.font = self.font
+            self.grid.clear()
+        mark = time.perf_counter() if self.show_timings else 0.0
         # An opaque modal: nothing under it is drawn. A menu is a panel, not a
         # window onto the dungeon, so the topmost modal roots the stack -- the
         # same rule the Qt build keeps, and the reason a dialog is not a
@@ -658,6 +682,7 @@ class SdlApp:
                 start = index
         for screen in self.screens[start:]:
             screen.draw(self.grid, self)
+        mark = self._note("cells", mark)
         # A screen may bring its own paper: the arena's painted room goes *under*
         # the cells, so the panels, the log and the sidebar sit on it instead of
         # on a black field beside it.
@@ -668,6 +693,7 @@ class SdlApp:
             # what the frame wanted all along.
             base = paper(self.cols, self.rows, self.font) or BACKGROUND
         self._surface = paint(self.grid, self.font, base)
+        mark = self._note("paint", mark)
         self._small_face()
         # And a screen may paint straight onto the frame once the grid is drawn:
         # that is where the art lives -- sprites do not fit in a character cell.
@@ -677,6 +703,7 @@ class SdlApp:
         paint_over = getattr(self.screens[-1], "paint_over", None)
         if paint_over is not None:
             paint_over(self._surface, self)
+        mark = self._note("art", mark)
         self._blit_art()
         # And the pixels that are not the room: sparks thrown by whatever just
         # happened, drawn last so they land on top of everything.
@@ -685,6 +712,40 @@ class SdlApp:
         if self.show_fps:
             self._draw_fps()
         self._present()
+        self._note("present", mark)
+
+    def _note(self, name: str, mark: float) -> float:
+        """Book the milliseconds since ``mark`` under ``name``, and pass it on.
+
+        Nothing but two clock reads when ``--timings`` was not asked for, which is
+        why it can stand in the middle of the frame at all.
+        """
+        if not self.show_timings:
+            return mark
+        now = time.perf_counter()
+        spent, frames = self._timing.get(name, (0.0, 0))
+        self._timing[name] = (spent + (now - mark), frames + 1)
+        return now
+
+    def _report_timings(self, now: float) -> None:
+        """Once a second: what each stage of the frame cost, in milliseconds."""
+        if not self.show_timings or now - self._timing_since < 1.0:
+            return
+        self._timing_since = now
+        if not self._timing:
+            return
+        # Milliseconds per stage, from seconds spent -- and per *frame*, so a
+        # second of running and a second of standing still read the same.
+        parts = "  ".join(
+            f"{name} {spent / frames * 1000.0:.2f}"
+            for name, (spent, frames) in self._timing.items()
+            if frames
+        )
+        done = sum(
+            spent / frames * 1000.0 for spent, frames in self._timing.values() if frames
+        )
+        print(f"{self.frames:5.1f} fps   {parts}   ({done:.2f} ms drawn)")
+        self._timing.clear()
 
     def _small_face(self) -> None:
         """The sidebar's lower rows and the combat log, one size down.

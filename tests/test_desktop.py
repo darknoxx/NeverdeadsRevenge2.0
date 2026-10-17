@@ -86,6 +86,36 @@ def test_writing_past_the_edge_is_dropped_not_wrapped(font):
     assert buffer.cells[1][0].char == " ", "it wrapped onto the next row"
 
 
+def test_clearing_the_grid_remembers_nothing_and_shares_one_blank():
+    """What a clear has to be: a blank grid, and not a fresh blank per cell.
+
+    The shared style is not a hidden micro-optimisation but the fact the clear
+    rests on: a ``Style`` is frozen, so one of them can stand for two thousand six
+    hundred blank cells -- and a frame that made a style per cell was spending a
+    millisecond and a half writing the same blank again. Asked by what the *cells*
+    say, because a shared style and a copied one are indistinguishable until
+    somebody writes to a cell.
+    """
+    from neverdeads_revenge.desktop.pattern import PatternBuffer
+    from neverdeads_revenge.desktop.theme import Style, parse_style
+
+    buffer = PatternBuffer(8, 3)
+    buffer.text(1, 1, "hello", parse_style("red"))
+    buffer.clear()
+
+    for row in buffer.cells:
+        for cell in row:
+            assert cell.char == " "
+            assert cell.style == Style(), "the clear left something behind"
+    blanks = {id(cell.style) for row in buffer.cells for cell in row}
+    assert len(blanks) == 1, f"{len(blanks)} blanks for one blank grid"
+
+    # And a written cell does not write through the blank under it.
+    buffer.put(2, 2, "x", parse_style("bright_green"))
+    assert buffer.cells[2][2].style.fg == parse_style("bright_green").fg
+    assert buffer.cells[2][1].style == Style(), "the blank came along with the write"
+
+
 def test_the_frame_is_the_grid_at_one_pixel_per_cell(font):
     from neverdeads_revenge.desktop.buffer import PatternBuffer
 

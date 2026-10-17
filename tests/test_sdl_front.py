@@ -2377,3 +2377,117 @@ def test_the_paintings_torches_are_lit_and_the_light_breathes():
     finally:
         art.Stage.glow = kept
     assert len(lit_calls) == 1, f"the light was asked for {len(lit_calls)} times"
+
+
+def test_the_frame_is_drawn_into_one_grid_and_cleared_each_time():
+    """The grid is this app's, made once: two thousand cells to *hold*, not build.
+
+    And the clear before the screens is what makes that safe -- whatever the last
+    frame left in a cell must not still be standing for the next one, or a menu
+    would be drawn onto the room behind it. So both halves are asked here: the
+    same grid comes back, and it comes back blank.
+    """
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3, no_sound=True)
+    app.redraw()
+    keeper = app.grid
+    app.grid.cells[0][0].char = "Z"  # a mark no screen in this game would make
+    app.redraw()
+
+    assert app.grid is keeper, "the grid was rebuilt instead of cleared"
+    assert app.grid.cells[0][0].char != "Z", "the last frame was still in the grid"
+
+    # And a window of another shape still gets a grid of that shape: the reuse is
+    # a courtesy to the allocator and not a promise about the size.
+    wide = SdlApp(seed=3, no_sound=True, cols=110, rows=33)
+    wide.redraw()
+    assert (wide.grid.cols, wide.grid.rows) == (110, 33)
+    wide.cols, wide.rows = 80, 24
+    wide.redraw()
+    assert (wide.grid.cols, wide.grid.rows) == (80, 24), "the grid did not follow"
+
+
+def test_a_painted_arena_does_not_write_the_cell_floor_at_all():
+    """The floor a painting replaces is not drawn and then rubbed out: it is not
+    drawn.
+
+    Two thousand of the frame's cells written and then written again in the
+    dungeon's black was a millisecond a frame, every frame, for a room nobody
+    would see. The tiled room is asked too, because that is the room the game
+    ships: the dial skips it for one front end and not for the other.
+    """
+    from neverdeads_revenge.desktop.pattern import PatternBuffer
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    def floor_cells(app) -> int:
+        arena = app.screens[-1]
+        grid = PatternBuffer(app.cols, app.rows, app.font)
+        arena.draw(grid, app)
+        _x, y0, _width, ground_h = arena.arena._areas(app.cols, app.rows)["ground"]
+        return sum(
+            1
+            for row in range(y0, y0 + ground_h)
+            for cell in grid.cells[row]
+            if cell.style.bg is not None
+        )
+
+    painted = SdlApp(seed=3, battle_scene=True, no_sound=True)
+    assert floor_cells(painted) == 0, "the painting's room still wrote a cell floor"
+    tiled = SdlApp(seed=3, battle_scene=True, no_sound=True, backdrop=False)
+    assert floor_cells(tiled) > 100, "the tiled room lost its own floor"
+
+
+def test_the_timings_report_says_where_the_frame_went(capsys):
+    """``--timings``: in the terminal and not in the picture.
+
+    A frame counter says how fast. This says *what* is slow, stage by stage,
+    which is the question worth putting to a machine that is not this one: the
+    stages are named in the order they are drawn, so a reader can see where the
+    milliseconds are and not only that there are some.
+    """
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3, battle_scene=True, no_sound=True, timings=True)
+    app.tick(1 / 60)
+    app._timing_since -= 2.0  # a second has gone by, as far as the report knows
+    app.tick(1 / 60)
+
+    out = capsys.readouterr().out
+    assert "fps" in out, out
+    for stage in ("cells", "paint", "art", "present"):
+        assert stage in out, f"{stage} is not in the report: {out}"
+    assert "ms drawn" in out, out
+
+
+def test_skipping_the_cell_floor_changes_no_pixel_of_the_painting():
+    """And the strongest form of it: the same frame, byte for byte.
+
+    The cells the floor used to fill were rubbed out again *before* the picture
+    was painted, so not drawing them at all has to leave no trace on the screen --
+    the old way and the new way must be the same frame, or the millisecond was
+    bought with a grey checker showing through the painting.
+    """
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    import pygame
+
+    app = SdlApp(seed=3, battle_scene=True, no_sound=True)
+    app.redraw()
+    skipped = pygame.image.tobytes(app._surface, "RGB")
+
+    kept = BattleScreen.draw
+
+    def with_the_floor(self, buffer, app_, ground=True):
+        return kept(self, buffer, app_, ground=True)  # the way it was
+
+    BattleScreen.draw = with_the_floor
+    try:
+        app.redraw()
+    finally:
+        BattleScreen.draw = kept
+
+    assert pygame.image.tobytes(app._surface, "RGB") == skipped, (
+        "the painting moved when the cell floor was skipped"
+    )

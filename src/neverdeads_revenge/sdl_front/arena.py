@@ -108,12 +108,14 @@ class SdlArena(Screen):
         sheets *do* have a picture for is left to the second pass, because a letter
         written here would stand through the sprite pasted over it.
         """
-        self.arena.draw(buffer, app)
+        self.arena.draw(buffer, app, ground=not self.backdrop)
         if self.backdrop:
             # The painting *is* the room, so the grid's room is not drawn: the
             # arena's cell floor is a checker of opaque cells, and leaving it in
             # would be a grey patch in the middle of the picture. The wall band
             # is left alone -- it is glyphs, and they are ink either way.
+            # The ground is already skipped by the line above; this stays as the
+            # belt to that pair of braces, and it is cheap.
             self._bare_ground(buffer)
         cell_w = max(1, buffer.font.cell_w)
         for figure in self.arena._figures(buffer.cols, buffer.rows, buffer.font):
