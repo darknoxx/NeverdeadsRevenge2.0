@@ -62,6 +62,14 @@ def main(argv: list[str] | None = None) -> int:
         help="show a frame counter in the corner (second front end)",
     )
     parser.add_argument(
+        "--timings",
+        action="store_true",
+        help=(
+            "print what each stage of the frame costs, once a second "
+            "(second front end)"
+        ),
+    )
+    parser.add_argument(
         "--scale",
         type=int,
         default=1,
@@ -90,6 +98,7 @@ def main(argv: list[str] | None = None) -> int:
             no_sound=args.no_sound,
             battle_scene=args.battle_scene,
             fps=args.fps,
+            timings=args.timings,
             backdrop=not args.no_backdrop,
         )
         window.open_window()

@@ -1048,17 +1048,21 @@ def test_the_command_line_can_start_the_second_front_end():
             opened["top"] = type(self.screens[-1]).__name__
             opened["fighting"] = getattr(self.screens[-1], "battle", None) is not None
             opened["fps"] = self.show_fps
+            opened["timings"] = self.show_timings
 
 
         sdl_app.SdlApp.open_window = look_instead_of_loop
 
         from neverdeads_revenge.__main__ import main
 
-        code_back = main(["--sdl", "--battle-scene", "--seed", "3", "--fps"])
+        code_back = main(
+            ["--sdl", "--battle-scene", "--seed", "3", "--fps", "--timings"]
+        )
         assert code_back == 0, "the command line did not finish cleanly"
         assert opened["top"] == "SdlArena", opened
         assert opened["fighting"], "the arena opened with nothing in it"
         assert opened["fps"], "the frame counter flag was dropped on the way in"
+        assert opened["timings"], "the timings flag was dropped on the way in"
         print("CLI-OK")
         """
     )
