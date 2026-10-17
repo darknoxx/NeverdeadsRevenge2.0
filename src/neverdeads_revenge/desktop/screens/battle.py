@@ -179,9 +179,9 @@ AIMED: tuple[str, ...] = (ATTACK, SPECIAL)
 #: its health bar running off the frame, and the row was as wide as the room
 #: instead of as wide as a row. The arc is the same shape, pulled in.
 ROWS: dict[int, tuple[tuple[float, float], ...]] = {
-    1: ((0.0, 0.88),),
-    2: ((-0.12, 1.00), (0.12, 1.00)),
-    3: ((-0.15, 1.00), (-0.02, 0.88), (0.15, 1.13)),
+    1: ((0.10, 0.88),),
+    2: ((0.00, 1.00), (0.26, 1.00)),
+    3: ((-0.03, 1.00), (0.10, 0.88), (0.28, 1.13)),
 }
 
 #: How far below the foot of the floor band the hero stands, in rows. He is the
@@ -738,7 +738,7 @@ class BattleScreen(Screen):
         self._draw_health(buffer, areas["ground"])
         # The log lives at the *top* of the frame: the room has the bottom now,
         # and a fight's account of itself belongs where the eye goes first.
-        self._draw_log(buffer, (0, 0, buffer.cols, areas["log"][3] + 1))
+        self._draw_log(buffer, (0, 0, buffer.cols, areas["log"][3]))
         self._draw_plate(buffer, *areas["plate"])
         self._draw_commands(buffer, *areas["commands"])
         self._draw_order(buffer, *areas["order"])
@@ -868,7 +868,7 @@ class BattleScreen(Screen):
             left = float(figure.cx) - width / 2.0
             measured = art_size(figure.art) if figure.art is not None else None
             sprite_h = measured[1] if measured is not None else font.cell_h * 3
-            top = float(figure.row * font.cell_h) - THICKNESS - sprite_h - height - 2.0
+            top = float(figure.row * font.cell_h) - THICKNESS - sprite_h - height - 8.0
             colour = (
                 "bright_green"
                 if ratio > 0.5
@@ -2462,7 +2462,10 @@ class BattleScreen(Screen):
         """
         margin = max(1, min(3, cols // 24))
         panel_h = 7 if rows >= 26 else 5 if rows >= 16 else 3
-        panel_y = max(1, rows - panel_h - margin)
+        # One row of air under the panels and not the margin's three: the room has
+        # more use for those rows than the frame has for a border, and the log has
+        # moved out of the bottom anyway.
+        panel_y = max(1, rows - panel_h - 1)
         log_h = 3 if rows >= 26 else 2 if rows >= 18 else 1
         log_y = max(1, panel_y - log_h)
         wall_h = max(2, min(3, rows // 8))
@@ -2905,7 +2908,10 @@ class BattleScreen(Screen):
         metrics = QFontMetrics(font.bold)
         ink = qcolour(parse_style(figure.colour).fg)
         if figure.art is not None:
-            top = (art_size(figure.art) or (0, 0))[1]
+            # Above the *bar* and not merely above the figure: the stripe and the
+            # arrow are both facts about this monster and cannot share a line.
+            sprite = (art_size(figure.art) or (0, 0))[1]
+            top = sprite + (font.cell_h // 2) + 8
         else:
             top = QFontMetrics(letter_font(figure.size).bold).capHeight()
         baseline = figure.row * cell_h - THICKNESS - top - metrics.height() // 3
@@ -3015,8 +3021,8 @@ class BattleScreen(Screen):
 
         Behind the words is a strip of the dungeon's own black, the width of the
         frame: this is read over a *painting* now, and a line of prose on stone is
-        a line nobody reads. The strip is one row taller than the words need, which
-        is the air that keeps three lines from looking squeezed against the edge.
+        a line nobody reads. Three rows for three lines and not a row more: a row
+        of black under the words was a row of black hanging under them.
         """
         from ..theme import BACKGROUND
 
@@ -3025,13 +3031,13 @@ class BattleScreen(Screen):
             return
         for row in range(y, y + height):
             buffer.fill_row(row, " ", Style(bg=BACKGROUND))
-        shown = self.lines[-(height - 1) :]
+        shown = self.lines[-height:]
         for index, line in enumerate(shown):
             text = line.text[: max(0, width - 4)]
             style = parse_style(log_style(line.kind))
-            buffer.text(x + 2, y + 1 + index, text, style)
+            buffer.text(x + 2, y + index, text, style)
             if index == len(shown) - 1:
-                buffer.put(x, y + 1 + index, "►", style)
+                buffer.put(x, y + index, "►", style)
 
     # -- the panels ---------------------------------------------------------
     def _draw_plate(

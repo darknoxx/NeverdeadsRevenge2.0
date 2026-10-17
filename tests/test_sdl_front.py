@@ -916,12 +916,16 @@ def test_aiming_puts_a_marker_over_the_monster_that_is_being_aimed_at():
         for one in arena.arena._figures(app.grid.cols, app.grid.rows, app.font)
         if one.actor is monster
     )
-    top = figure.row * app.font.cell_h - 90
+    # The arrow hangs above the *bar*, so the box is the bar's line and the three
+    # rows over it -- which is where the marker is now.
+    from neverdeads_revenge.sdl_front.stage import bar_box
+
+    _left, bar_top, _width, _height = bar_box(figure, app.font)
     box = (
         max(0, figure.cx - 40),
-        max(0, top),
+        max(0, bar_top - 3 * app.font.cell_h),
         min(app._surface.get_width(), figure.cx + 40),
-        figure.row * app.font.cell_h,
+        bar_top,
     )
     assert _changed(plain, aimed, box) > 10, "aiming left no mark on the monster"
     # And it is *above* the monster and not over its body: the same box one line

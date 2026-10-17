@@ -253,14 +253,12 @@ class SdlArena(Screen):
         that stands as still as everything under it is a marker to hunt for.
         """
         face = self._face(app.font.path, max(16, figure.size // 2))
-        top = 0
-        if figure.art is not None:
-            top = (art_size(figure.art) or (0, 0))[1]
-        else:
-            top = app.font.cell_h * 2
+        # Above the *bar* and not merely above the figure: the stripe and the arrow
+        # are both facts about this monster and cannot share a line.
+        _left, bar_top, _width, _height = bar_box(figure, app.font)
         bob = round(math.sin(self.arena._clock * 5.0) * 2) - 1
         centre = round(figure.cx - len(ARROW) * face.cell_w / 2)
-        above = figure.row * app.font.cell_h - THICKNESS - top - face.cell_h // 3 - bob
+        above = bar_top - face.cell_h - bob
         # A dark copy under a bright one, the same two passes every letter in this
         # game gets: the edge is the game's own edge and not a drop shadow.
         for offset, colour in ((THICKNESS, Colour(0, 0, 0)), (0, parse_style(figure.colour).fg)):

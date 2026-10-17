@@ -390,7 +390,7 @@ def bar_box(figure, font) -> tuple[int, int, int, int]:
     measured = art_size(figure.art) if figure.art is not None else None
     sprite_h = measured[1] if measured is not None else font.cell_h * 3
     left = round(figure.cx - width / 2.0)
-    top = figure.row * font.cell_h - THICKNESS - sprite_h - height - 2
+    top = figure.row * font.cell_h - THICKNESS - sprite_h - height - 8
     return left, top, width, height
 
 

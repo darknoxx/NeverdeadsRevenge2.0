@@ -2139,7 +2139,7 @@ def test_the_monsters_carry_their_health_over_them(app, font):
         measured = art_size(figure.art) if figure.art is not None else None
         sprite_h = measured[1] if measured is not None else font.cell_h * 3
         height = font.cell_h // 2
-        y = figure.row * font.cell_h - THICKNESS - sprite_h - height - 2 + height // 2
+        y = figure.row * font.cell_h - THICKNESS - sprite_h - height - 8 + height // 2
         cells = max(8, min(14, figure.cells * 2))
         left = figure.cx - cells * font.cell_w // 2
         found = 0
