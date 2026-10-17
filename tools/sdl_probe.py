@@ -171,6 +171,7 @@ def _standing_in_a_fight(seed: int = 3, turn_it_over: bool = True):
     app = SdlApp(seed=seed)
     app.key("enter")  # NEW RUN
     app.key("enter")  # the first hero
+    app.key("escape")  # the premise, skipped: it is one screen and not a fight
 
     state = app.run
     here = state.player.position
