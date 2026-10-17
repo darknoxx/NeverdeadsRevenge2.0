@@ -22,21 +22,23 @@ Three movements, and the whole of it is about a second:
 
 Nothing here knows a rule about fights. It knows where the monster stood, what
 its letter looks like, and how long each of the three movements takes.
+
+And like the other screens with a pixel pass, it does not *draw* any of it: it
+works out the numbers -- how dark, which rings, which streaks, how big the
+letter is and where -- and hands them over as a `Turn`. The Qt build paints them
+with a `QPainter` and the second front end paints them with pygame, and there is
+one idea of what the turning *is* rather than two.
 """
 
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass, field
 
-from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPen
-
-from ..buffer import qcolour
-from ..render import screen_point
 from ..theme import parse_style
 from .base import Screen
 
-__all__ = ["EncounterScreen"]
+__all__ = ["EncounterScreen", "Letter", "Ring", "Streak", "Turn"]
 
 #: The whole turning, in seconds: the step, the letter, and the white. Long
 #: enough to be a moment and short enough not to be a wait -- a transition the
@@ -65,11 +67,77 @@ WHITE_FROM = 0.86
 #: is the room's reaction, and every fight in this game starts the same way.
 BLOW = "#f2f7ff"
 
+#: The delays of the three rings, and how far out they reach as a share of the
+#: frame's larger side.
+RING_DELAYS = (0.0, 0.09, 0.18)
+RING_REACH = 0.6
+#: The streaks: how many, and how far out they start and end.
+STREAKS = 28
+STREAK_NEAR = 60.0
+STREAK_SPAN = 420.0
+STREAK_LONG = 40.0
+STREAK_STRETCH = 260.0
+#: And the floor's own squash: this room is a floor seen at an angle, and so is
+#: everything on it -- an ellipse and not a circle, a streak that is flattened.
+FLAT = 0.72
+
 
 def _ease(progress: float) -> float:
     """Slow, then all at once: a thing coming *at* the camera is not a thing
     sliding across it. The last third of the movement covers half the frame."""
     return progress * progress
+
+
+@dataclass(frozen=True)
+class Ring:
+    """One ring going out of the square that was walked into."""
+
+    x: float
+    y: float
+    rx: float
+    ry: float
+    alpha: int
+    width: int
+
+
+@dataclass(frozen=True)
+class Streak:
+    """One line flying out of the middle of the room."""
+
+    x0: float
+    y0: float
+    x1: float
+    y1: float
+    alpha: int
+
+
+@dataclass(frozen=True)
+class Letter:
+    """The monster, in the only shape it has ever had on the floor.
+
+    Held by its *centre*, because that is the one thing both painters can agree
+    about: a face has an advance and a cap height and a blitter has a cell, and
+    neither of them is the other's business.
+    """
+
+    glyph: str
+    colour: str
+    x: float
+    y: float
+    size: int
+    weight: float
+
+
+@dataclass(frozen=True)
+class Turn:
+    """One frame of the turning, as numbers."""
+
+    origin: tuple[float, float]
+    dim: float = 0.0
+    rings: tuple[Ring, ...] = field(default_factory=tuple)
+    streaks: tuple[Streak, ...] = field(default_factory=tuple)
+    letter: Letter | None = None
+    white: float = 0.0
 
 
 class EncounterScreen(Screen):
@@ -98,23 +166,6 @@ class EncounterScreen(Screen):
         # everything this screen does to it happens in pixels.
         self._size = (buffer.cols, buffer.rows)
 
-    def paste(self, image, app) -> None:
-        """The three movements, over whatever the floor drew."""
-        cell_w, cell_h = app.font.cell_w, app.font.cell_h
-        origin = self._origin(app, cell_w, cell_h)
-        if origin is None:
-            return
-        ox, oy = origin
-        width, height = float(image.width()), float(image.height())
-        painter = QPainter(image)
-        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, False)
-        self._paste_dark(painter, width, height)
-        self._paste_rings(painter, ox, oy, width, height)
-        self._paste_streaks(painter, ox, oy)
-        self._paste_letter(painter, ox, oy, image, cell_h)
-        self._paste_white(painter, width, height)
-        painter.end()
-
     def _origin(self, app, cell_w: int, cell_h: int) -> tuple[float, float] | None:
         """Where the monster was standing, in the frame's own pixels."""
         if self._size is None or app.run is None:
@@ -123,99 +174,166 @@ class EncounterScreen(Screen):
         position = getattr(self.trigger, "position", None)
         if position is None:
             return None
+        from ..render import screen_point
+
         return screen_point(app.run, position, cols, rows, cell_w, cell_h)
 
-    def _paste_dark(self, painter: QPainter, width: float, height: float) -> None:
-        """The floor leaving: the dungeon goes under while the thing comes up."""
-        progress = _clamp((self.age - DIM_FROM) / (DIM_TO - DIM_FROM))
-        if progress <= 0:
-            return
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setOpacity(DIM * progress)
-        painter.setBrush(QColor(0, 0, 0))
-        painter.drawRect(QRectF(0.0, 0.0, width, height))
-        painter.setOpacity(1.0)
+    def frame(self, width: float, height: float, cell_w: int, cell_h: int, app) -> Turn | None:
+        """The turning at this age, as the numbers a painter needs.
 
-    def _paste_rings(self, painter: QPainter, ox: float, oy: float, width: float, height: float) -> None:
-        """Rings out of the square that was walked into. An ellipse, not a
-        circle: the room is a floor seen at an angle, and so is everything on
-        it."""
-        reach = max(width, height) * 0.6
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        for index, delay in enumerate((0.0, 0.09, 0.18)):
-            age = self.age - delay
-            if age < 0 or age > FLASH_IN * 2:
-                continue
-            progress = age / (FLASH_IN * 2)
-            radius = 16.0 + progress * reach
-            ink = QColor(BLOW)
-            ink.setAlpha(int(220 * (1.0 - progress)))
-            painter.setPen(QPen(ink, max(1, int(6 * (1.0 - progress)))))
-            painter.drawEllipse(
-                QRectF(ox - radius, oy - radius * 0.62, radius * 2, radius * 1.24)
-            )
-
-    def _paste_streaks(self, painter: QPainter, ox: float, oy: float) -> None:
-        """What the room does when something comes at the camera: lines, flying
-        out of the middle of it."""
-        if not STREAK_FROM < self.age < STREAK_TO:
-            return
-        progress = (self.age - STREAK_FROM) / (STREAK_TO - STREAK_FROM)
-        ink = QColor(BLOW)
-        ink.setAlpha(int(150 * math.sin(progress * math.pi)))
-        painter.setPen(QPen(ink, 2))
-        for index in range(28):
-            angle = index * math.pi / 14 + 0.11
-            near = 60.0 + progress * 420.0
-            far = near + 40.0 + progress * 260.0
-            painter.drawLine(
-                QPointF(ox + math.cos(angle) * near, oy + math.sin(angle) * near * 0.72),
-                QPointF(ox + math.cos(angle) * far, oy + math.sin(angle) * far * 0.72),
-            )
-
-    def _paste_letter(self, painter: QPainter, ox: float, oy: float, image, cell_h: int) -> None:
-        """The monster, in the only shape it has ever had on the floor.
-
-        Drawn at its own glyph and its own colour, growing and coming at the
-        camera as one movement: the same two passes the arena uses for a letter
-        -- a dark copy under a bright one -- so the edge of it is the game's own
-        edge and not a drop shadow.
+        Everything the three movements are made of, worked out once and in one
+        place: how dark the floor has gone, where the rings are and how wide,
+        where the streaks run, how big the letter is and where its middle sits,
+        and how far up the white has come. A painter has no numbers of its own.
         """
-        progress = _ease(_clamp((self.age - GROW_FROM) / (GROW_TO - GROW_FROM)))
-        if progress <= 0:
-            return
-        glyph = getattr(self.trigger, "glyph", "") or "?"
-        size = round(cell_h * (LETTER_FROM + progress * (LETTER_TO - LETTER_FROM)))
-        font = _letter_font(size)
-        painter.setFont(font)
-        metrics = QFontMetrics(font)
-        centre_x = image.width() / 2.0
-        centre_y = image.height() / 2.0
-        x = ox + (centre_x - ox) * progress
-        y = oy + (centre_y - oy) * progress
-        left = x - metrics.horizontalAdvance(glyph) / 2.0
-        baseline = y + metrics.capHeight() / 2.0
-        ink = parse_style(getattr(self.trigger, "color", "#ffffff")).fg
-        weight = max(3.0, size / 22.0)
-        painter.setPen(qcolour(ink).darker(340))
-        painter.drawText(QPointF(left, baseline + weight), glyph)
-        painter.setPen(qcolour(ink))
-        painter.drawText(QPointF(left, baseline), glyph)
+        origin = self._origin(app, cell_w, cell_h)
+        if origin is None:
+            return None
+        ox, oy = origin
+        blow = parse_style(BLOW).fg
 
-    def _paste_white(self, painter: QPainter, width: float, height: float) -> None:
-        """The blow, and the way out: white comes up under everything and the
-        arena is standing where the floor was."""
-        alpha = max(
+        dim = DIM * _clamp((self.age - DIM_FROM) / (DIM_TO - DIM_FROM))
+
+        rings: list[Ring] = []
+        reach = max(width, height) * RING_REACH
+        for delay in RING_DELAYS:
+            young = self.age - delay
+            if young < 0 or young > FLASH_IN * 2:
+                continue
+            progress = young / (FLASH_IN * 2)
+            radius = 16.0 + progress * reach
+            rings.append(
+                Ring(
+                    x=ox,
+                    y=oy,
+                    rx=radius,
+                    ry=radius * 0.62,
+                    alpha=int(220 * (1.0 - progress)),
+                    width=max(1, int(6 * (1.0 - progress))),
+                )
+            )
+
+        streaks: list[Streak] = []
+        if STREAK_FROM < self.age < STREAK_TO:
+            progress = (self.age - STREAK_FROM) / (STREAK_TO - STREAK_FROM)
+            alpha = int(150 * math.sin(progress * math.pi))
+            near = STREAK_NEAR + progress * STREAK_SPAN
+            far = near + STREAK_LONG + progress * STREAK_STRETCH
+            for index in range(STREAKS):
+                angle = index * math.pi / (STREAKS / 2) + 0.11
+                streaks.append(
+                    Streak(
+                        x0=ox + math.cos(angle) * near,
+                        y0=oy + math.sin(angle) * near * FLAT,
+                        x1=ox + math.cos(angle) * far,
+                        y1=oy + math.sin(angle) * far * FLAT,
+                        alpha=alpha,
+                    )
+                )
+
+        letter = None
+        progress = _ease(_clamp((self.age - GROW_FROM) / (GROW_TO - GROW_FROM)))
+        if progress > 0:
+            size = round(cell_h * (LETTER_FROM + progress * (LETTER_TO - LETTER_FROM)))
+            letter = Letter(
+                glyph=getattr(self.trigger, "glyph", "") or "?",
+                colour=getattr(self.trigger, "color", "#ffffff"),
+                x=ox + (width / 2.0 - ox) * progress,
+                y=oy + (height / 2.0 - oy) * progress,
+                size=size,
+                weight=max(3.0, size / 22.0),
+            )
+
+        white = max(
             _clamp(self.age / FLASH_IN) * (1.0 - self.age / FLASH_IN),
             _clamp((self.age - WHITE_FROM) / (LIFE - WHITE_FROM)),
         )
-        if alpha <= 0:
+        return Turn(
+            origin=(ox, oy),
+            dim=dim,
+            rings=tuple(rings),
+            streaks=tuple(streaks),
+            letter=letter,
+            white=min(1.0, white),
+        )
+
+    def paste(self, image, app) -> None:
+        """The three movements, over whatever the floor drew, in Qt.
+
+        The numbers come from :meth:`frame`; this is the painter and nothing
+        else, which is what lets the front end without a `QPainter` play the same
+        turning in its own pixels.
+        """
+        from PySide6.QtCore import QPointF, QRectF, Qt
+        from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPen
+
+        from ..buffer import qcolour
+
+        cell_w, cell_h = app.font.cell_w, app.font.cell_h
+        turn = self.frame(float(image.width()), float(image.height()), cell_w, cell_h, app)
+        if turn is None:
             return
+        width, height = float(image.width()), float(image.height())
+        blow = parse_style(BLOW).fg
+
+        painter = QPainter(image)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, False)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setOpacity(min(1.0, alpha))
-        painter.setBrush(QColor(BLOW))
-        painter.drawRect(QRectF(0.0, 0.0, width, height))
-        painter.setOpacity(1.0)
+        if turn.dim > 0:
+            painter.setOpacity(turn.dim)
+            painter.setBrush(QColor(0, 0, 0))
+            painter.drawRect(QRectF(0.0, 0.0, width, height))
+            painter.setOpacity(1.0)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        for ring in turn.rings:
+            ink = QColor(BLOW)
+            ink.setAlpha(ring.alpha)
+            painter.setPen(QPen(ink, ring.width))
+            painter.drawEllipse(
+                QRectF(ring.x - ring.rx, ring.y - ring.ry, ring.rx * 2, ring.ry * 2)
+            )
+        if turn.streaks:
+            ink = QColor(BLOW)
+            ink.setAlpha(turn.streaks[0].alpha)
+            painter.setPen(QPen(ink, 2))
+            for streak in turn.streaks:
+                painter.drawLine(
+                    QPointF(streak.x0, streak.y0), QPointF(streak.x1, streak.y1)
+                )
+        if turn.letter is not None:
+            self._paste_letter(painter, turn.letter)
+        painter.setPen(Qt.PenStyle.NoPen)
+        if turn.white > 0:
+            painter.setOpacity(turn.white)
+            painter.setBrush(QColor(BLOW))
+            painter.drawRect(QRectF(0.0, 0.0, width, height))
+            painter.setOpacity(1.0)
+        painter.end()
+
+    def _paste_letter(self, painter, letter: Letter) -> None:
+        """The monster's letter, at its size and in its own colour.
+
+        Two passes, a dark copy under a bright one, so the edge of it is the
+        game's own edge and not a drop shadow -- the same two passes the arena
+        draws every letter with.
+        """
+        from PySide6.QtCore import QPointF
+        from PySide6.QtGui import QFontMetrics
+        from PySide6.QtGui import QColor
+
+        from ..buffer import qcolour
+        from .battle import letter_font
+
+        font = letter_font(letter.size).bold
+        metrics = QFontMetrics(font)
+        painter.setFont(font)
+        left = letter.x - metrics.horizontalAdvance(letter.glyph) / 2.0
+        baseline = letter.y + metrics.capHeight() / 2.0
+        ink = parse_style(letter.colour).fg
+        painter.setPen(QColor(0, 0, 0, 255).darker(340))
+        painter.drawText(QPointF(left, baseline + letter.weight), letter.glyph)
+        painter.setPen(qcolour(ink))
+        painter.drawText(QPointF(left, baseline), letter.glyph)
 
     # -- the clock ----------------------------------------------------------
     def step(self, dt: float, app) -> None:
@@ -230,9 +348,7 @@ class EncounterScreen(Screen):
             app.view.shake(strength=9, seconds=0.45)
             origin = self._origin(app, app.font.cell_w, app.font.cell_h)
             if origin is not None:
-                app.effects.spark(
-                    origin, getattr(self.trigger, "color", BLOW), 34
-                )
+                app.effects.spark(origin, getattr(self.trigger, "color", BLOW), 34)
         if self.age >= LIFE:
             self.hand_over(app)
 
@@ -250,11 +366,3 @@ class EncounterScreen(Screen):
 
 def _clamp(value: float) -> float:
     return max(0.0, min(1.0, value))
-
-
-def _letter_font(size: int):
-    """The arena's own letters, imported here rather than copied: one cache for
-    both, or the game would have two ideas of what a big letter is."""
-    from .battle import letter_font
-
-    return letter_font(size).bold

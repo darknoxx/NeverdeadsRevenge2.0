@@ -271,6 +271,7 @@ def test_a_monster_is_walked_into_fought_and_the_floor_comes_back():
     state.refresh_vision()
 
     app.key("right")  # walk into it
+    _turn_it_over(app)
 
     assert isinstance(app.screens[-1], SdlArena), "the fight did not open"
     assert app.screens[-1].battle.enemies, "the arena is empty"
@@ -351,6 +352,7 @@ def test_the_arena_writes_its_panels_and_leaves_the_figures_to_the_art():
     state.refresh_vision()
 
     app.key("right")  # walk into it
+    _turn_it_over(app)
 
     arena = app.screens[-1]
     assert isinstance(arena, SdlArena), "the fight did not open"
@@ -420,6 +422,7 @@ def test_the_arena_paints_the_flagstones_and_the_monsters_on_them():
     state.refresh_vision()
 
     app.key("right")  # walk into it
+    _turn_it_over(app)
 
     arena = app.screens[-1]
     surface = app._surface
@@ -538,7 +541,14 @@ def test_a_run_starts_in_a_process_where_qt_does_not_exist():
         state.refresh_vision()
 
         app.key("right")
-        assert type(app.screens[-1]).__name__ == "SdlArena", "the fight did not open"
+        # The floor turns into the fight first -- and it does that without Qt
+        # too, which is part of the point of this walk: the turning is one of the
+        # game's own screens and has no toolkit in it either.
+        frames = 0
+        while type(app.screens[-1]).__name__ != "SdlArena" and frames < 400:
+            app.tick(1 / 30.0)
+            frames += 1
+        assert type(app.screens[-1]).__name__ == "SdlArena", "the turning never finished"
         app.key("a")      # pick ATTACK
         app.key("enter")  # and swing it
         assert not ghoul.alive, "the blow did not land"
@@ -653,6 +663,7 @@ def test_the_animation_comes_first_and_the_displays_after_it():
     state.refresh_vision()
 
     app.key("right")
+    _turn_it_over(app)
     arena = app.screens[-1]
     assert not arena.busy, "the fight opened mid-round"
 
@@ -713,6 +724,7 @@ def test_a_damage_number_is_painted_over_the_monster_that_took_it():
     state.refresh_vision()
 
     app.key("right")
+    _turn_it_over(app)
     arena = app.screens[-1]
     app.key("a")
     app.key("enter")
@@ -817,6 +829,24 @@ def test_the_floor_shows_the_log_and_the_sidebar_on_the_second_front_end():
     assert ink > 100, f"the sidebar's lower rows are blank: {ink} pixels of ink"
 
 
+
+def _turn_it_over(app, limit: int = 400) -> None:
+    """Play the turning out, the way a player does: by waiting.
+
+    Walking into a monster does not open the arena any more, on either front end
+    -- the floor *turns* into the fight, and that moment takes about a second. So
+    a test that used to walk in and look straight at the arena has to let it
+    happen, which is what the app's own clock is for.
+    """
+    frames = 0
+    while type(app.screens[-1]).__name__ != "SdlArena" and frames < limit:
+        app.tick(1 / 30.0)
+        frames += 1
+    assert type(app.screens[-1]).__name__ == "SdlArena", "the turning never finished"
+    assert frames > 2, "the turning was skipped rather than played"
+
+
+
 def _fight_with_a_monster(seed: int = 3):
     """An app, a floor, and one monster walked into: the fixture most want."""
     from neverdeads_revenge.game.actors import ENEMIES, make_enemy
@@ -835,6 +865,7 @@ def _fight_with_a_monster(seed: int = 3):
     state.turn_queue.add(monster)
     state.refresh_vision()
     app.key("right")
+    _turn_it_over(app)
     return app, monster
 
 
@@ -1144,3 +1175,63 @@ def test_the_room_has_walls_on_the_second_front_end():
     assert built is not None, "the wall was not built at all"
     app.redraw()
     assert arena._stage._walls[key] is built, "the wall was built a second time"
+
+
+def test_the_floor_turns_into_the_fight_on_the_second_front_end():
+    """The moment itself: the step, the letter, the white, and the hand-over.
+
+    Walking into a monster does not cut to the arena on either front end any
+    more: the floor *turns* into the fight, and the turning is one of the game's
+    own screens. On this front end it is wrapped -- the wrapper adds a painter,
+    and the screen inside owns the age, the sting and the hand-over -- so what is
+    checked here is that both halves are doing their job: the moment is on top,
+    a drummed key does not cut it, the letter is growing, and the arena stands
+    where the floor was when it is done.
+    """
+    from neverdeads_revenge.sdl_front.app import SdlApp
+    from neverdeads_revenge.sdl_front.turning import SdlTurning
+
+    app = SdlApp(seed=3)
+    app.key("enter")
+    app.key("enter")
+    state = app.run
+    beside = (state.player.position[0] + 1, state.player.position[1])
+
+    from neverdeads_revenge.game.actors import ENEMIES, make_enemy
+    from neverdeads_revenge.world.tiles import Tile
+
+    state.dungeon_map.set_tile(beside, Tile.FLOOR)
+    monster = make_enemy(ENEMIES["ghoul"], beside)
+    state.enemies.append(monster)
+    state.turn_queue.add(monster)
+    state.refresh_vision()
+
+    app.key("right")
+    turning = app.screens[-1]
+    assert isinstance(turning, SdlTurning), "the floor did not turn"
+
+    # A key goes nowhere: a moment a drummed key can cut short is a moment the
+    # player never sees.
+    app.key("enter")
+    assert isinstance(app.screens[-1], SdlTurning), "a key cut the turning short"
+
+    # The letter is coming at the camera, and it is *growing*: the size is the
+    # screen's own number, so a test can read it off an early frame and a late one.
+    app.tick(0.3)
+    early = turning.turning.frame(float(app._surface.get_width()), float(app._surface.get_height()), app.font.cell_w, app.font.cell_h, app)
+    app.tick(0.35)
+    late = turning.turning.frame(float(app._surface.get_width()), float(app._surface.get_height()), app.font.cell_w, app.font.cell_h, app)
+    assert early is not None and early.letter is not None
+    assert late is not None and late.letter is not None
+    assert late.letter.size > early.letter.size, "the letter is not coming closer"
+    assert late.dim > early.dim, "the room is not going under"
+
+    # And it hands the room over: the arena stands where the turning was, with
+    # the floor still underneath it.
+    for _ in range(60):
+        if type(app.screens[-1]).__name__ == "SdlArena":
+            break
+        app.tick(1 / 30.0)
+    assert type(app.screens[-1]).__name__ == "SdlArena", "the turning never finished"
+    assert len(app.screens) == 2, "the floor was lost in the hand-over"
+    assert type(app.screens[0]).__name__ == "GameScreen", "the floor is not underneath"

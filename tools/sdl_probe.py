@@ -26,7 +26,7 @@ and stages the figures as the letters they have always been. One round is then
 fought, so the log in the picture is a real round and not an empty panel:
 
     python tools/sdl_probe.py /tmp/sdl.png /tmp/sdl_arena.png /tmp/sdl_roster.png \
-        /tmp/sdl_impact.png
+        /tmp/sdl_impact.png /tmp/sdl_turning.png
 
 The third picture is the roster, and it is the first *art* on this side of the
 seam: a screen hands over ``Placed`` records -- what, and where -- and this
@@ -85,6 +85,7 @@ def main(argv: list[str] | None = None) -> int:
     arena_target = Path(given[1]) if len(given) > 1 else None
     roster_target = Path(given[2]) if len(given) > 2 else None
     impact_target = Path(given[3]) if len(given) > 3 else None
+    turning_target = Path(given[4]) if len(given) > 4 else None
 
     font = SdlFont(str(FONT))
     grid = PatternBuffer(96, 27)
@@ -113,6 +114,14 @@ def main(argv: list[str] | None = None) -> int:
             "  the roster, with the hero painted on it"
         )
 
+    if turning_target is not None:
+        turning = _caught_turning()
+        pygame.image.save(turning, str(turning_target))
+        print(
+            f"{turning_target}  {turning.get_width()}x{turning.get_height()}"
+            "  the floor turning into a fight"
+        )
+
     if impact_target is not None:
         impact = _caught_at_the_impact()
         pygame.image.save(impact, str(impact_target))
@@ -137,7 +146,7 @@ def _standing_on_the_roster(seed: int = 3):
     return app._surface
 
 
-def _standing_in_a_fight(seed: int = 3):
+def _standing_in_a_fight(seed: int = 3, turn_it_over: bool = True):
     """A real fight, reached the way a player reaches one: by walking into it.
 
     Nothing is faked and nothing is skipped: the same ``open_fight`` the game
@@ -166,7 +175,27 @@ def _standing_in_a_fight(seed: int = 3):
         state.turn_queue.add(monster)
     state.refresh_vision()
     app.key("right")  # into them
+    if not turn_it_over:
+        return app, state
+    # And the turning played out, because a fight is reached through it now.
+    frames = 0
+    while type(app.screens[-1]).__name__ != "SdlArena" and frames < 400:
+        app.tick(1 / 30.0)
+        frames += 1
     return app, state
+
+
+def _caught_turning(seed: int = 3):
+    """The floor *becoming* a fight: the step, mid-flight.
+
+    The one frame that has no other way to exist -- it is not the floor and it is
+    not the arena, and it lasts about a second. The letter is the monster's own
+    glyph coming at the camera, which is the promise the arena was built on.
+    """
+    app, _state = _standing_in_a_fight(seed, turn_it_over=False)
+    for _ in range(24):
+        app.tick(1 / 30.0)
+    return app._surface
 
 
 def _drawn_into_a_fight(seed: int = 3):

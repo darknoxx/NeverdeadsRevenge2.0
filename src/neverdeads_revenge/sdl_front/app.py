@@ -210,15 +210,22 @@ class SdlApp:
         """
         if self.run is None or self.run.encounter is None:
             return False
-        from ..game.battle import open_fight
+        from ..game.battle import Battle, encounter_around
+        from .turning import SdlTurning
 
-        fight = open_fight(self.run)
-        if fight is None:
-            return False
+        trigger = self.run.encounter
+        # Cleared before the arena opens: the domain is done with it the moment
+        # it is set, and a fight that is asked for twice would be two fights.
+        self.run.encounter = None
+        battle = Battle(self.run, encounter_around(self.run, trigger))
+        self.push(SdlTurning(trigger, battle))
+        return True
+
+    def enter_battle(self, battle) -> None:
+        """The arena, in the place of whoever was turning the room over."""
         from .arena import SdlArena
 
-        self.push(SdlArena(fight))
-        return True
+        self.swap(SdlArena(battle))
 
     def leave_battle(self) -> None:
         """The fight is over: back to the floor, or home if there is no floor."""
