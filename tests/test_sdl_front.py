@@ -1711,10 +1711,14 @@ def test_the_picture_is_fitted_to_the_window_it_is_actually_in():
     assert app._shown == (base[0] * 2, base[1] * 2), "a doubled window doubled nothing"
     assert app._shown_at == (0, 0), "a picture that fits exactly is not centred"
 
+    # A window that is not a whole multiple of the picture: the leftover room
+    # becomes *cells* and not bars, which is the Qt build's rule and the reason a
+    # 1440p monitor is full of dungeon rather than framed in black.
     pygame.display.set_mode((base[0] + 40, base[1] + 60))
     app._fit()
-    assert app._shown == base, "a window that fits one whole scale should use one"
-    assert app._shown_at == (20, 30), "the remainder was not shared out evenly"
+    assert app._shown == (base[0] + 40, base[1] + 60), "the picture left the window"
+    assert app._shown_at == (0, 0), "there is a bar left over"
+    assert app._buffer_size() == (base[0] + 40, base[1] + 60), "the grid did not grow"
 
 
 def test_the_glass_hears_about_a_window_that_changed():
@@ -1791,11 +1795,13 @@ def test_full_screen_re_fits_the_picture_to_the_screen(monkeypatch):
 
     app.feed(_pressed(pygame.K_F11))
     assert app._fullscreen, "F11 did not ask for full screen"
-    assert app._shown == (base[0] * 2, base[1] * 2), "the picture did not grow"
-    assert app._shown_at == (
-        (screen[0] - base[0] * 2) // 2,
-        (screen[1] - base[1] * 2) // 2,
-    ), "the picture was not centred on the screen"
+    # Full screen uses the *screen*: the grid grows to the room there is, so what
+    # is left over is an integer remainder and not a pair of bars. Less than one
+    # cell at this scale, which is the most a whole-number scale can leave.
+    scale = app._scale_for(*screen)
+    assert app._shown[0] > base[0] * 2, "the picture did not grow with the screen"
+    assert app._shown_at[0] < app.font.cell_w * scale, "there is a bar left over"
+    assert app._shown_at[1] < app.font.cell_h * scale, "there is a bar left over"
 
     app.feed(_pressed(pygame.K_F11))
     assert not app._fullscreen, "F11 did not come back"
@@ -2081,3 +2087,35 @@ def test_a_new_screen_wants_a_fresh_press():
         if type(app.screens[-1]).__name__ == "GameScreen":
             break
     assert type(app.screens[-1]).__name__ == "GameScreen", "a fresh hold did not work"
+
+
+def test_the_grid_comes_from_the_window_like_the_qt_build(monkeypatch):
+    """A 1440p screen full of dungeon instead of two bars: the Qt build's rule.
+
+    Integer scaling is the promise -- "a character is always a character and never
+    a smear" -- so the scale can only step in whole numbers, and on a 2560x1440
+    monitor the next step up does not fit. The Qt build's answer is to spend what
+    is left on *cells*: the same 2x, a 128x36 grid, no bars. That rule was missing
+    here, and the numbers are worth holding down because they are the ones the
+    game's panels were laid out for.
+    """
+    import pygame
+
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3, no_sound=True)
+    for size, scale, grid in (
+        ((960, 540), 1, (96, 27)),  # the window both front ends start with
+        ((1920, 1080), 2, (96, 27)),
+        ((2560, 1440), 2, (128, 36)),  # the one that used to be two black bars
+        ((1366, 768), 1, (136, 38)),
+    ):
+        assert app._scale_for(*size) == scale, size
+        assert app._grid_size(*size) == grid, size
+
+    # And the picture really does fill it: 128 cells at two pixels is 2560.
+    monkeypatch.setattr(pygame.display, "get_window_size", lambda: (2560, 1440))
+    app._fit()
+    assert (app.cols, app.rows) == (128, 36), "the grid did not follow the window"
+    assert app._shown == (2560, 1440), "the picture did not fill the screen"
+    assert app._shown_at == (0, 0), "there is a bar left over"

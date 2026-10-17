@@ -41,9 +41,17 @@ FONT = Path(__file__).resolve().parent.parent / "desktop" / "fonts" / "DejaVuSan
 
 #: The smallest playable grid, matching the Qt build: every panel in the game is
 #: laid out for at least this, and a window that fit fewer cells would not be a
-#: smaller game but a broken one.
-MIN_COLS = 76
+#: smaller game but a broken one. (These said 76 for a while, which is a *different*
+#: number from the one the Qt build derives its grid with -- so the same window had
+#: two answers about how many cells fit.)
+MIN_COLS = 80
 MIN_ROWS = 24
+
+#: How wide the grid wants to be on a big screen. The scale is chosen to land near
+#: this, and then the leftover room becomes *cells* rather than black bars -- which
+#: is the whole difference between a 1440p monitor full of dungeon and one with a
+#: couple of hundred pixels of nothing on every side.
+TARGET_COLS = 110
 
 
 class KeyPress:
@@ -777,6 +785,36 @@ class SdlApp:
                 ),
             )
 
+    def _max_scale(self, width: int, height: int) -> int:
+        """The largest whole-number scale that still leaves a playable grid."""
+        return max(
+            1,
+            min(
+                width // (MIN_COLS * self.font.cell_w),
+                height // (MIN_ROWS * self.font.cell_h),
+            ),
+        )
+
+    def _scale_for(self, width: int, height: int) -> int:
+        """The one scale: the biggest that lands the grid near the target width."""
+        ceiling = self._max_scale(width, height)
+        target = max(1, round(width / (TARGET_COLS * self.font.cell_w)))
+        return max(1, min(target, ceiling))
+
+    def _grid_size(self, width: int, height: int) -> tuple[int, int]:
+        """How many cells fit in a window of this size, at that scale.
+
+        The Qt build's rule, number for number, because it is the rule the game's
+        panels were laid out for -- and because a second front end with its own
+        idea of how much room there is would draw a different game at the same
+        size. At 960x540 it comes out at the 96x27 both front ends start with;
+        at 2560x1440 it comes out at 128x36, which is a full screen and no bars.
+        """
+        scale = self._scale_for(width, height)
+        cols = max(MIN_COLS, width // (self.font.cell_w * scale))
+        rows = max(MIN_ROWS, height // (self.font.cell_h * scale))
+        return cols, rows
+
     @property
     def cells(self) -> tuple[int, int]:
         """How big the frame is, in cells -- the same question the Qt app answers.
@@ -886,6 +924,14 @@ class SdlApp:
             width, height = self._window.get_size()
         else:
             return
+        # The grid comes from the window, the way the Qt build's does: whatever
+        # is left over after the biggest whole-number scale becomes *cells* and
+        # not black bars.
+        cols, rows = self._grid_size(width, height)
+        if (cols, rows) != (self.cols, self.rows):
+            self.cols, self.rows = cols, rows
+            if self.glass is not None:
+                self.glass.resize(self._buffer_size())
         buffer_w, buffer_h = self._buffer_size()
         fit = max(1, min(width // buffer_w, height // buffer_h))
         self._shown = (fit * buffer_w, fit * buffer_h)

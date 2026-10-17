@@ -80,6 +80,25 @@ class SdlGlass:
         self.program["buffer"] = self.buffer_size
         self.fit(self.display_size, self._fit_scale, self._fit_offset)
 
+    def resize(self, buffer_size) -> None:
+        """The grid changed size: a new texture for the frame to live in.
+
+        The *program* stays -- same shader either way -- and only the picture's
+        own surface is made again, because the moment a window goes full screen
+        is exactly the moment this happens and a shader rebuilt per resize would
+        be a stutter for a shape that never changed.
+        """
+        import moderngl
+
+        buffer_size = (int(buffer_size[0]), int(buffer_size[1]))
+        if buffer_size == self.buffer_size:
+            return
+        self.buffer_size = buffer_size
+        self.texture.release()
+        self.texture = self.ctx.texture(buffer_size, 4)
+        self.texture.filter = (moderngl.NEAREST, moderngl.NEAREST)
+        self.program["buffer"] = buffer_size
+
     def fit(self, display_size, scale: int, offset) -> None:
         """The window changed: where the picture goes, and how big it is.
 
