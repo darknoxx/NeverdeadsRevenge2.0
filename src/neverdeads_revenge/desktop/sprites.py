@@ -25,25 +25,19 @@ from pathlib import Path
 
 from PySide6.QtGui import QImage
 
+from .art import PORTRAITS_DIR, SPRITES_DIR, STATUS_DIR
+from .art import path as art_path
+
 __all__ = [
     "SPRITES_DIR",
     "PORTRAITS_DIR",
     "STATUS_DIR",
     "clear",
+    "image",
     "portrait",
     "sprite",
     "status_icon",
 ]
-
-#: The art that travels with the game, beside the fonts and the sounds.
-SPRITES_DIR = Path(__file__).resolve().parent / "sprites"
-
-#: And the heroes seen from the front, for the screens that stand them in front
-#: of the player with nothing to fight.
-PORTRAITS_DIR = SPRITES_DIR / "portraits"
-
-#: And the wounds, one a status key, for the plate to wear beside the life bar.
-STATUS_DIR = SPRITES_DIR / "status"
 
 _LOADED: dict[Path, QImage | None] = {}
 
@@ -58,6 +52,17 @@ def _load(path: Path) -> QImage | None:
     image = QImage(str(path)) if path.exists() else None
     _LOADED[path] = image if image is not None and not image.isNull() else None
     return _LOADED[path]
+
+
+def image(name: str) -> QImage | None:
+    """A piece of art by its path inside the art, e.g. ``sprites/portraits/Noxx.png``.
+
+    The door for a screen that hands over a ``Placed``: a screen says *which*
+    picture and *where*, and the front end asks for exactly what it was handed.
+    The same cache as the three named lookups below, because it is the same
+    pictures.
+    """
+    return _load(art_path(name))
 
 
 def sprite(name: str) -> QImage | None:

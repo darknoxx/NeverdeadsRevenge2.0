@@ -16,8 +16,8 @@ from __future__ import annotations
 import random
 import time
 
-from PySide6.QtCore import QEvent, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QKeyEvent, QPalette
+from PySide6.QtCore import QEvent, Qt, QRectF, QTimer, Signal
+from PySide6.QtGui import QColor, QKeyEvent, QPainter, QPalette
 from PySide6.QtWidgets import QMainWindow
 
 from neverdeads_revenge.core.rng import Rng
@@ -233,8 +233,44 @@ class DesktopApp(QMainWindow):
         # font, and the battle does it because a monster is a letter too big for
         # one cell. Drawn before the pixels, so a particle still lands on top.
         self.screens[-1].paste(image, self)
+        self._blit_art(image)
         self.effects.draw(image)
         self.view.set_frame(image)
+
+    def _blit_art(self, image, screen=None) -> None:
+        """The pictures a screen asked for, put where it asked for them.
+
+        A screen does not paint its own art: it hands over ``Placed`` records --
+        what, and where -- and the application that is drawing puts them down.
+        That is what lets one roster draw the same hero on a frame this build
+        painted and on one painted by a front end with no Qt in it at all.
+        """
+        from .sprites import image as art_image
+
+        screen = self.screens[-1] if screen is None else screen
+        painter = None
+        for piece in screen.art(self):
+            art = art_image(piece.art)
+            if art is None:
+                continue
+            width = max(1, round(art.width() * piece.height / max(1, art.height())))
+            if painter is None:
+                painter = QPainter(image)
+                # Fitted to the common height and *then* centred: a painted figure
+                # put through a nearest-neighbour resize looks like a mistake.
+                painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+            painter.drawImage(
+                QRectF(
+                    piece.centre - width / 2.0,
+                    piece.bottom - piece.height,
+                    width,
+                    piece.height,
+                ),
+                art,
+                QRectF(art.rect()),
+            )
+        if painter is not None:
+            painter.end()
 
     def _say_glass(self) -> None:
         """Say what a glass key just did, for as long as it takes to read.

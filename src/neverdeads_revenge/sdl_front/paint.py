@@ -14,11 +14,47 @@ from __future__ import annotations
 
 from pygame import Rect, Surface
 
+from ..desktop import art
 from ..desktop.pattern import PatternBuffer
 from ..desktop.theme import BACKGROUND, Colour
 from .font import SdlFont
 
-__all__ = ["paint"]
+__all__ = ["load", "paint"]
+
+_LOADED: dict[str, Surface | None] = {}
+
+
+def load(name: str):
+    """A piece of art by its path inside the art, read once.
+
+    ``None`` when the sheets have nothing there, and never a crash: the alphabet
+    is underneath every picture in this game, so the worst a missing file can do
+    is leave a letter standing. (A video mode that is not there is the same kind
+    of nothing: a headless run has no display to optimise for, and the picture is
+    still right.)
+    """
+    if name in _LOADED:
+        return _LOADED[name]
+    import pygame
+
+    path = art.path(name)
+    image = None
+    if path.exists():
+        try:
+            image = pygame.image.load(str(path))
+            try:
+                image = image.convert_alpha()
+            except pygame.error:
+                pass
+        except pygame.error:
+            image = None
+    _LOADED[name] = image
+    return image
+
+
+def clear() -> None:
+    """Forget what has been loaded. For tests, and for nothing else."""
+    _LOADED.clear()
 
 
 def paint(

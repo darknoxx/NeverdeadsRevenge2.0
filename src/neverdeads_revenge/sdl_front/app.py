@@ -305,7 +305,35 @@ class SdlApp:
         paint_over = getattr(self.screens[-1], "paint_over", None)
         if paint_over is not None:
             paint_over(self._surface, self)
+        self._blit_art()
         self._present()
+
+    def _blit_art(self) -> None:
+        """The pictures a screen asked for, put where it asked for them.
+
+        The same ``Placed`` records the Qt build blits, read by a painter that has
+        never heard of Qt: the screen says what and where, and this puts it down.
+        Which is the whole reason the records exist -- one roster, two frames.
+        """
+        import pygame
+
+        from .paint import load
+
+        for piece in self.screens[-1].art(self):
+            art = load(piece.art)
+            if art is None:
+                continue
+            width = max(
+                1, round(art.get_width() * piece.height / max(1, art.get_height()))
+            )
+            scaled = pygame.transform.smoothscale(art, (width, piece.height))
+            self._surface.blit(
+                scaled,
+                (
+                    round(piece.centre - width / 2),
+                    round(piece.bottom - piece.height),
+                ),
+            )
 
     def _present(self) -> None:
         """Put the picture on the screen, whole-number scaled, or nowhere.

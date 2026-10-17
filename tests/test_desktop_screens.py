@@ -1489,12 +1489,14 @@ def test_the_void_prompt_reads_the_right_states():
     text, colour = _void_prompt(state, 0.0)
     assert text == "give in to the void (f)"
     # The breath at t=0 is 0.35 + 0.95 * 0.5 = 0.825 of the petrol base.
-    assert colour.getRgb()[:3] == (round(14 * 0.825), round(111 * 0.825), round(111 * 0.825)), (
-        "the petrol does not breathe where the bloom can hear it"
-    )
+    assert tuple(colour) == (
+        round(14 * 0.825),
+        round(111 * 0.825),
+        round(111 * 0.825),
+    ), "the petrol does not breathe where the bloom can hear it"
     # and the crest overdraws the base, so the glow is an event, not a tint:
     text, crest = _void_prompt(state, 0.25)
-    assert crest.getRgb()[:3] == (18, 144, 144), "the crest never crosses the base"
+    assert tuple(crest) == (18, 144, 144), "the crest never crosses the base"
 
     state.ultimate_level = 1
     state.atritas = HEROES["noxx"]  # any object; the check is presence
@@ -1897,6 +1899,11 @@ def drawn(screen, app, font, cols: int = 96, rows: int = 27):
     screen.draw(buffer, app)
     image = buffer.render()
     screen.paste(image, app)
+    # And the pictures the screen asked for, through the application's own blit:
+    # a screen says what and where, and this is the half that puts it down, so a
+    # test that drew the grid and stopped would be looking at a roster with no
+    # faces on it.
+    app._blit_art(image, screen)
     return buffer, image
 
 
@@ -1983,6 +1990,7 @@ def test_the_roster_shows_the_hero_and_not_only_their_letter(app, font):
 
     from neverdeads_revenge.desktop.blocks import render_word
     from neverdeads_revenge.desktop.screens import hero_select
+    from neverdeads_revenge.desktop.screens.hero_select import exists
     from neverdeads_revenge.desktop.sprites import portrait
 
     press(app, Qt.Key.Key_Return)  # off the title, onto the roster
@@ -2036,12 +2044,12 @@ def test_the_roster_shows_the_hero_and_not_only_their_letter(app, font):
         "the portrait is not drawn at the roster's height"
     )
 
-    monkeypatch_absent = lambda name: None  # noqa: E731 - one line, one meaning
-    hero_select.portrait = monkeypatch_absent
+    monkeypatch_absent = lambda name: False  # noqa: E731 - one line, one meaning
+    hero_select.exists = monkeypatch_absent
     try:
         lettered, letter_columns = band()
     finally:
-        hero_select.portrait = portrait
+        hero_select.exists = exists
 
     assert len(lettered) < len(painted) / 4, "the fallback is not a letter"
     assert max(letter_columns) - min(letter_columns) + 1 < art.width(), (

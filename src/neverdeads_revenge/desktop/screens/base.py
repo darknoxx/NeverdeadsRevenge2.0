@@ -11,7 +11,7 @@ dimming a modal's background, done here by simply not clearing what is below.
 
 from __future__ import annotations
 
-from ..buffer import PatternBuffer
+from ..pattern import PatternBuffer
 
 __all__ = ["Screen"]
 
@@ -52,6 +52,16 @@ class Screen:
         alphabet of the dungeon drawn big enough to fight.
         """
         return None
+
+    def art(self, app) -> list:
+        """The pictures this screen wants on the frame, and where.
+
+        Empty for almost every screen, because the grid is the look. Where a
+        screen does have art, it says *what* and *where* and the application that
+        is drawing puts it down -- so the same roster draws the same hero on a
+        frame this build painted and on one a front end with no Qt painted.
+        """
+        return []
 
     #: Whether the screen is in the middle of something it has to finish.
     #: A screen that says yes is stepped once per frame and repainted while it

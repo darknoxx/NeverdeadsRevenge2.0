@@ -30,6 +30,7 @@ the strike poses and the numbers are waiting on.
 
 from __future__ import annotations
 
+from ..desktop.screens.base import Screen
 from ..desktop.screens.battle import LOG_LINES, BattleScreen
 from ..desktop.theme import parse_style
 from ..game.battle import Over, Said
@@ -39,10 +40,8 @@ from .stage import Stage
 __all__ = ["SdlArena"]
 
 
-class SdlArena:
+class SdlArena(Screen):
     """The arena's own panels, and the stage written in the alphabet."""
-
-    modal = False
 
     def __init__(self, battle) -> None:
         self.battle = battle

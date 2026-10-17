@@ -5,24 +5,23 @@ prose, and the numbers that make them a choice. Locked slots are shown rather
 than hidden, because the shape of what is coming is worth seeing.
 
 The picture is the hero *facing the player* -- the sheets' own front view, which
-is the second set of art the arena has no use for -- drawn at its own size, the
-way the arena draws everything painted, and standing on the line the block
-letter stood on. The letter is still what happens when there is no picture: a
-hero the sheets have never heard of is a letter on the card, not a broken menu.
+is the second set of art the arena has no use for -- asked for as a ``Placed``
+record and put down by whichever application is drawing, standing on the line the
+block letter stood on. The letter is still what happens when there is no picture:
+a hero the sheets have never heard of is a letter on the card, not a broken menu,
+and the screen asks the *sheets* whether there is one rather than asking a
+toolkit.
 """
 
 from __future__ import annotations
 
-from PySide6.QtCore import QRectF
-from PySide6.QtGui import QPainter
-
+from ..art import Placed, exists
 from neverdeads_revenge.game.actors import HEROES, Hero
 from neverdeads_revenge.game.combat import chance_against
 from neverdeads_revenge.game.pace import MAX_ACTIONS_PER_SECOND, actions_per_second
 
 from ..blocks import render_word
 from ..chrome import ASH, BONE, BLOOD, box
-from ..sprites import portrait
 from ..theme import parse_style
 from .base import Screen
 from .dialogs import wrap
@@ -59,10 +58,10 @@ class HeroSelectScreen(Screen):
     def __init__(self) -> None:
         self.index = 0
         #: Where the hero's picture goes, in pixels: the centre of the card and
-        #: the line the figure stands on. Decided in ``draw`` and used in
-        #: ``paste``, because the grid pass knows the card's rows and the pixel
-        #: pass knows the frame -- and this screen is the one that has to know
-        #: both, so it carries the seam between them.
+        #: the line the figure stands on. Decided in ``draw`` and handed out by
+        #: ``art``, because the grid pass knows the card's rows and the frame is
+        #: the front end's business -- and this screen is the one that has to
+        #: know both, so it carries the seam between them.
         self._where: tuple[int, int] | None = None
 
     @property
@@ -94,13 +93,13 @@ class HeroSelectScreen(Screen):
             # is a picture to put in them: the name and the prose below sit on
             # the same line for every hero, which is what keeps one card from
             # being taller than the next one's.
-            face = portrait(hero.name)
-            if face is None:
+            face = exists(f"sprites/portraits/{hero.name}.png")
+            if not face:
                 for i, line in enumerate(render_word(hero.glyph)[:ART_ROWS]):
                     self._centre(buffer, y + 2 + i, line, f"bold {hero.color}")
             self._centre(buffer, y + 2 + ART_ROWS, f"{hero.name}  {hero.title}",
                          f"bold {hero.color}")
-            if face is not None:
+            if face:
                 # The figure stands on the last row of the band, the way it
                 # stands on the arena's floor: a picture floats, a *figure* is
                 # standing somewhere.
@@ -125,33 +124,26 @@ class HeroSelectScreen(Screen):
         self._centre(buffer, y + height - 2, roster, BONE)
         self._centre(buffer, buffer.rows - 2, "← → choose   enter begin   esc back", ASH)
 
-    def paste(self, image, app) -> None:
-        """The hero, in pixels, over the card the grid drew.
+    def art(self, app) -> list[Placed]:
+        """The hero, as a picture the front end can put on the frame.
 
-        At its own size and not scaled, which is the same promise the arena
-        keeps: these are painted figures, and a painted figure put through a
-        resize looks like a mistake.
+        At a fixed *height* and centred on the card's own line, which is the same
+        promise the arena keeps: these are painted figures, and every one of them
+        stands the same height on the same line, because that is the whole of what
+        a roster row is for. The width is the picture's own shape, which the front
+        end has in hand and this screen deliberately does not.
+
+        Named rather than loaded: the screen says *what* and *where*, and whichever
+        application is drawing blits it. A screen that loaded its own picture would
+        be a screen that needed a toolkit.
         """
         hero = self.current
-        art = portrait(hero.name) if hero is not None else None
-        if self._where is None or art is None:
-            # Nothing to place it on, or nothing to place: the card is a letter
-            # or a question mark, and the grid has already drawn it.
-            return
+        if hero is None or self._where is None:
+            # Nothing to place it on, or nothing to place: the card is a letter or
+            # a question mark, and the grid has already drawn it.
+            return []
         cx, baseline = self._where
-        height = PORTRAIT_HEIGHT
-        width = max(1, round(art.width() * height / max(1, art.height())))
-        painter = QPainter(image)
-        # Fitted to the common height and *then* centred: every figure stands on
-        # the same line at the same size, which is the whole of what a roster
-        # row is for.
-        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
-        painter.drawImage(
-            QRectF(cx - width / 2.0, baseline - height, width, height),
-            art,
-            QRectF(art.rect()),
-        )
-        painter.end()
+        return [Placed(f"sprites/portraits/{hero.name}.png", cx, baseline, PORTRAIT_HEIGHT)]
 
     @staticmethod
     def _centre(buffer, y: int, text: str, style: str) -> None:

@@ -10,7 +10,7 @@ colour Noxx is.
 
 from __future__ import annotations
 
-from .buffer import PatternBuffer
+from .pattern import PatternBuffer
 from .theme import Style, parse_style
 
 __all__ = [

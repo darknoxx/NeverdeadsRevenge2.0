@@ -25,7 +25,11 @@ the order strip and the monsters' health bars are cell work and always were --
 and stages the figures as the letters they have always been. One round is then
 fought, so the log in the picture is a real round and not an empty panel:
 
-    python tools/sdl_probe.py /tmp/sdl.png /tmp/sdl_arena.png
+    python tools/sdl_probe.py /tmp/sdl.png /tmp/sdl_arena.png /tmp/sdl_roster.png
+
+The third picture is the roster, and it is the first *art* on this side of the
+seam: a screen hands over ``Placed`` records -- what, and where -- and this
+application puts them down. The same records the Qt build reads.
 """
 
 from __future__ import annotations
@@ -73,6 +77,7 @@ def main(argv: list[str] | None = None) -> int:
     given = list(argv if argv is not None else sys.argv[1:])
     target = Path(given[0]) if given else Path("/tmp/sdl_title.png")
     arena_target = Path(given[1]) if len(given) > 1 else None
+    roster_target = Path(given[2]) if len(given) > 2 else None
 
     font = SdlFont(str(FONT))
     grid = PatternBuffer(96, 27)
@@ -92,7 +97,29 @@ def main(argv: list[str] | None = None) -> int:
             f"{arena_target}  {fight.get_width()}x{fight.get_height()}"
             "  the arena, one round in"
         )
+
+    if roster_target is not None:
+        roster = _standing_on_the_roster()
+        pygame.image.save(roster, str(roster_target))
+        print(
+            f"{roster_target}  {roster.get_width()}x{roster.get_height()}"
+            "  the roster, with the hero painted on it"
+        )
     return 0
+
+
+def _standing_on_the_roster(seed: int = 3):
+    """The roster, on a front end with no QPainter: two keys and a real run.
+
+    The hero on the card is there because the screen *asked* for it and this
+    application blitted it -- which is the whole of what the ``Placed`` records
+    are for, and the thing a picture can show and a sentence cannot.
+    """
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=seed)
+    app.key("enter")  # NEW RUN
+    return app._surface
 
 
 def _drawn_into_a_fight(seed: int = 3):

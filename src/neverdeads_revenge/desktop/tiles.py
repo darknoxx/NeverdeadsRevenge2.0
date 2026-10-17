@@ -13,14 +13,11 @@ sometimes missing a picture of one. That is the same bargain the sprites make.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from PySide6.QtGui import QImage
 
-__all__ = ["TILES_DIR", "clear", "tile"]
+from .art import TILES_DIR
 
-#: The stone that travels with the game, beside the sprites.
-TILES_DIR = Path(__file__).resolve().parent / "tiles"
+__all__ = ["TILES_DIR", "clear", "tile"]
 
 _LOADED: dict[str, QImage | None] = {}
 

@@ -15,12 +15,8 @@ from __future__ import annotations
 import math
 import time
 
-from PySide6.QtCore import QRect
-from PySide6.QtGui import QColor, QImage, QPainter
-
 from neverdeads_revenge.game.actors import ActorKind
 from neverdeads_revenge.game.draughts import draught_by_key
-from .buffer import qcolour
 from neverdeads_revenge.game.levels import RAVAGING_POINTS
 from neverdeads_revenge.game.npcs import NPC_COLOR, NPC_GLYPH
 from neverdeads_revenge.game.state import GameState, LogKind
@@ -34,7 +30,7 @@ from neverdeads_revenge.world.items import (
 )
 from neverdeads_revenge.world.tiles import Tile
 
-from .buffer import PatternBuffer
+from .pattern import PatternBuffer
 from .chrome import ASH, rule
 from .theme import BACKGROUND, Colour, Style, parse_style
 
@@ -331,6 +327,11 @@ def paste_sidebar(image, state, cols, rows, cell_w, cell_h, small, now: float | 
     drift apart. ``now`` drives the ready state's breath; it defaults so a
     caller that has no clock -- a test -- still gets a prompt drawn.
     """
+    from PySide6.QtCore import QRect
+    from PySide6.QtGui import QPainter
+
+    from .buffer import qcolour
+
     areas = regions(cols, rows)
     sx, sy, sw, _sh = areas["sidebar"]
 
@@ -528,6 +529,11 @@ def paste_log(
     the ground they are printed on. The smaller face fits more of them into the
     same ten rows, without shrinking anything the player aims with.
     """
+    from PySide6.QtCore import QRect
+    from PySide6.QtGui import QPainter
+
+    from .buffer import qcolour
+
     areas = regions(cols, rows)
     x0, y0, width, height = areas["log"]
     # Aligned with the columns beside it: their headings sit one row into the
@@ -608,7 +614,7 @@ def ultimate_ready(state: GameState) -> bool:
     )
 
 
-def _void_prompt(state: GameState, now: float) -> tuple[str, QColor] | None:
+def _void_prompt(state: GameState, now: float) -> tuple[str, Colour] | None:
     """The sidebar's promise of the dark, in the state it is in.
 
     One line per hero, in that hero's colour: grey before the level, breathing
@@ -625,7 +631,7 @@ def _void_prompt(state: GameState, now: float) -> tuple[str, QColor] | None:
         fortress = state.fortress
         return (
             f"the fortress stands {fortress.stats.hp}/{fortress.stats.max_hp}",
-            QColor(*base),
+            Colour(*base),
         )
     if state.ravaging:
         # The receipt, and the one number that matters while it burns: the fire
@@ -633,7 +639,7 @@ def _void_prompt(state: GameState, now: float) -> tuple[str, QColor] | None:
         # it costs him for the rest of the floor.
         return (
             f"the floor burns; {RAVAGING_POINTS} kill points",
-            QColor(*base),
+            Colour(*base),
         )
     if state.atritas is not None or not state.ultimate_available:
         # Given: grey until the next floor says otherwise. The dead line is
@@ -652,7 +658,7 @@ def _void_prompt(state: GameState, now: float) -> tuple[str, QColor] | None:
     lit = tuple(
         max(0, min(255, int(round(channel * breathing)))) for channel in base
     )
-    return f"{name} (f)", QColor(*lit)
+    return f"{name} (f)", Colour(*lit)
 
 
 def marks_names(state: GameState, kind: str) -> list[str]:

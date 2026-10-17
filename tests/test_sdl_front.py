@@ -17,16 +17,29 @@ toolkits: the arena's whole `draw` path -- plate, log, verbs, order strip -- was
 measured and never asks Qt for a typeface, so the second front end hands it a grid
 and gets a real fight back. What it must not do is use the Qt screen's *pixel*
 staging, which measures a letter to size a shadow, and which is the one thing here
-that has been given a cell port of its own. The test at the bottom of the file
-walks into a monster and fights it with nothing but cells in the room.
+that has been given a cell port of its own.
+
+And the last test in this file is the one the whole port is for: it *blocks* the
+PySide6 import in a process of its own and plays a run -- title, roster, floor,
+walk. Whatever is on that path has to be free of Qt, and the day something stops
+being free of it, that test says so by name instead of by segfault. It grows as
+the port does: the arena is not on it yet.
 """
 
 from __future__ import annotations
+
+import os
+import subprocess
+import sys
+import textwrap
+from pathlib import Path
 
 from neverdeads_revenge.desktop.pattern import PatternBuffer
 from neverdeads_revenge.desktop.theme import BACKGROUND, Style, parse_style
 
 FONT = "src/neverdeads_revenge/desktop/fonts/DejaVuSansMono.ttf"
+
+ROOT = Path(__file__).resolve().parent.parent
 
 
 def _sdl():
@@ -433,3 +446,123 @@ def test_the_arena_paints_the_flagstones_and_the_monsters_on_them():
         if painted.get_at((x, y)) != bare.get_at((x, y))
     )
     assert changed > 200, f"the monster left {changed} pixels on the frame"
+
+
+def test_a_run_starts_in_a_process_where_qt_does_not_exist():
+    """Qt is not installed -- which is exactly what Android looks like.
+
+    This is the port's promise asked the blunt way: block the import entirely, in
+    a process of its own, and *play* the game. Nothing is mocked. The same title,
+    the same roster, the same floor, the same rules -- and if anything on that
+    path reaches for Qt, the process dies with an ImportError that says where,
+    instead of the segfault two toolkits in one process would give.
+
+    It covers the way a run *starts*, which is as far as the no-Qt path reaches
+    today. The arena still imports the Qt screen for its panels and its staging,
+    and the turning between a floor and a fight is still painted in Qt; when those
+    come across, this test grows with them rather than being rewritten.
+
+    The imports inside the child are deliberate and are the whole point: a test
+    that imported the app *here* would have Qt in the process already.
+    """
+    code = textwrap.dedent(
+        """
+        import sys
+
+
+        class NoQt:
+            \"\"\"Nothing named PySide6 may be imported. Not even to ask a path.\"\"\"
+
+            def find_spec(self, name, path=None, target=None):
+                if name.split(".")[0] == "PySide6":
+                    raise ImportError(f"no Qt here: {name}")
+
+
+        sys.meta_path.insert(0, NoQt())
+
+        from neverdeads_revenge.sdl_front.app import SdlApp
+
+        app = SdlApp(seed=3)
+        assert type(app.screens[-1]).__name__ == "TitleScreen", "the title did not open"
+        app.key("enter")
+        assert type(app.screens[-1]).__name__ == "HeroSelectScreen", "no roster"
+        app.key("enter")
+        assert type(app.screens[-1]).__name__ == "GameScreen", "no floor"
+
+        here = app.run.player.position
+        for direction in ("right", "down", "left", "up"):
+            app.key(direction)
+            if app.run.player.position != here:
+                break
+        assert app.run.player.position != here, "the hero could not take a step"
+        assert app._surface is not None, "the floor was never painted"
+        print("NOQT-OK")
+        """
+    )
+    env = dict(os.environ)
+    env["SDL_VIDEODRIVER"] = "dummy"
+    env["PYTHONPATH"] = str(ROOT / "src")
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "NOQT-OK" in result.stdout, result.stdout
+
+
+def test_the_roster_paints_the_hero_on_the_second_front_end():
+    """The same hero on the same card, put there by a painter that has no Qt in it.
+
+    A screen hands over ``Placed`` records -- what, and where -- and *whichever*
+    application is drawing puts them down. This is the second one doing it: the
+    front view, at the roster's own common height, in the band the grid left for
+    it. Asked as the number of colours in that band, which is exactly the fact
+    the Qt build's own roster test asks of its frame: a painted figure is a
+    hundred colours wide and a block letter is one.
+    """
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3)
+    app.key("enter")  # NEW RUN, onto the roster
+
+    screen = app.screens[-1]
+    assert type(screen).__name__ == "HeroSelectScreen", "the roster did not open"
+    hero = screen.current
+    assert hero is not None
+
+    placed = screen.art(app)
+    assert placed, "the roster asked for no picture at all"
+    assert placed[0].art == f"sprites/portraits/{hero.name}.png", placed[0].art
+    assert placed[0].height > 0, "the picture was asked for at no height"
+
+    def band() -> set:
+        return {
+            app._surface.get_at((x, y))[:3]
+            for x in range(cx - 40, cx + 40)
+            for y in range(baseline - 90, baseline)
+        }
+
+    cx, baseline = screen._where
+    painted = band()
+    assert len(painted) > 20, (
+        f"the band is {len(painted)} colours, so the hero is still a letter"
+    )
+
+    # And with nothing to place -- a hero the sheets have no picture of -- the
+    # card falls back to the alphabet, which the grid has already drawn. Withdrawn
+    # at the *sheets*, not at the screen: `draw` decides the place afresh every
+    # frame, so a screen told to forget it would simply decide again.
+    from neverdeads_revenge.desktop.screens import hero_select
+
+    real = hero_select.exists
+    hero_select.exists = lambda name: False  # noqa: E731 - one line, one meaning
+    try:
+        app.redraw()
+        assert screen.art(app) == [], "a picture was asked for with nowhere to put it"
+        lettered = band()
+    finally:
+        hero_select.exists = real
+    assert len(lettered) < len(painted) / 4, "the fallback is not a letter"

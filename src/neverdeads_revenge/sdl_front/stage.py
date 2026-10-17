@@ -24,12 +24,10 @@ this one.
 from __future__ import annotations
 
 import math
-from pathlib import Path
 
 from ..desktop.screens.battle import BOB_HEIGHT, BOB_SPEED, THICKNESS, BattleScreen
-from ..desktop.sprites import SPRITES_DIR
 from ..desktop.theme import parse_style
-from ..desktop.tiles import TILES_DIR
+from .paint import load
 
 __all__ = ["Stage"]
 
@@ -48,45 +46,17 @@ class Stage:
     """
 
     def __init__(self) -> None:
-        self._images: dict[str, object] = {}
         self._washes: dict[tuple[int, int, int], object] = {}
         self._shadow: object | None = None
 
     # -- the art ------------------------------------------------------------
     def sprite(self, name: str):
         """The painted figure called ``name``, or ``None`` if there is none."""
-        return self._load(SPRITES_DIR / f"{name}.png")
+        return load(f"sprites/{name}.png")
 
     def tile(self, name: str):
         """The stone called ``name``, or ``None`` if there is none."""
-        return self._load(TILES_DIR / f"{name}.png")
-
-    def _load(self, path: Path):
-        """One PNG, read once.
-
-        A missing file is ``None`` and not a crash: the room is built to be drawn
-        without art -- the alphabet is still underneath every picture in this game
-        -- so the worst a missing sprite can do is leave a letter standing.
-        """
-        key = str(path)
-        if key in self._images:
-            return self._images[key]
-        import pygame
-
-        image = None
-        if path.exists():
-            try:
-                image = pygame.image.load(str(path))
-                try:
-                    image = image.convert_alpha()
-                except pygame.error:
-                    # No video mode. That is a headless run -- how the tests drive
-                    # this -- and the picture is still right, just not optimised.
-                    pass
-            except pygame.error:
-                image = None
-        self._images[key] = image
-        return image
+        return load(f"tiles/{name}.png")
 
     # -- the floor ----------------------------------------------------------
     def floor(self, surface, field) -> None:
