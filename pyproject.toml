@@ -23,7 +23,15 @@ classifiers = [
 dependencies = ["PySide6-Essentials>=6.12", "miniaudio>=1.71"]
 
 [project.optional-dependencies]
-dev = ["pytest>=9.0", "pytest-qt>=4.4"]
+dev = [
+    "pytest>=9.0",
+    "pytest-qt>=4.4",
+    # The second front end: an SDL2 window and a GL shader. Development-only for
+    # now -- the game still ships the Qt one -- and deliberately *not* a runtime
+    # dependency of it.
+    "pygame-ce>=2.5",
+    "moderngl>=5.13",
+]
 
 [project.scripts]
 ndr2 = "neverdeads_revenge.__main__:main"
