@@ -252,10 +252,10 @@ class SdlApp:
 
         before_log, before_depth, before_level = before
         if run.depth != before_depth:
-            self.play("stairs")
+            self.play("door_creak")
             return
         if run.level != before_level:
-            self.play("level")
+            self.play("level_up")
             return
         kind = loudest_kind(entry.kind for entry in run.log[before_log:])
         sound = sound_for_kind(kind)
@@ -273,7 +273,7 @@ class SdlApp:
     def show_game_over(self, won: bool = False) -> None:
         from ..desktop.screens.game_over import GameOverScreen
 
-        self.play("victory" if won else "death")
+        self.play("quest_complete" if won else "death_game_over")
         self.push(
             GameOverScreen(
                 state=self.run,
@@ -1057,8 +1057,26 @@ class SdlApp:
             return True
         screen = self.screens[-1]
         used = screen.key(name, event or KeyPress(text=text), self)
+        self._interface_sound(name, bool(used))
         self.redraw()
         return bool(used)
+
+    def _interface_sound(self, name: str, used: bool) -> None:
+        """The click of the interface, from the one place a key is delivered.
+
+        Which sound is the *screen's* to say -- a key that walked the hero is a
+        footstep and a key that walked a cursor is a click, and only the screen
+        knows which it just did. This end only knows that something was wanted,
+        which is why asking is a question and not a table here.
+        """
+        if not used:
+            return
+        sound = getattr(self.screens[-1], "key_sound", None)
+        if sound is None:
+            return
+        played = sound(name)
+        if played:
+            self.play(played)
 
     def _glass_key(self, name: str) -> bool:
         """The four keys that belong to the glass and not to a screen.

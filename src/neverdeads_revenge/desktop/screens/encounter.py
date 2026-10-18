@@ -266,7 +266,7 @@ class EncounterScreen(Screen):
             # frame that gets to make the noise: everything after it is the
             # fight that noise promised.
             self._struck = True
-            app.play("encounter")
+            app.play("enemy_spawn")
             app.view.shake(strength=9, seconds=0.45)
             origin = self._origin(app, app.font.cell_w, app.font.cell_h)
             if origin is not None:

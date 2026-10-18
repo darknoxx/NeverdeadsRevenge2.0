@@ -37,6 +37,33 @@ class Screen:
         """
         return False
 
+    #: What a key this screen *used* sounds like.
+    #:
+    #: A cursor click, because a screen is a menu by default -- and the floor
+    #: overrides it, because in that one screen the four directions are not a
+    #: cursor, they are feet. The sound lives here and not in the screen's own
+    #: key handling for the reason the cells live in the grid: fourteen screens
+    #: clicking their own cursor is fourteen chances to forget it in the
+    #: fifteenth, and this way the answer is a table.
+    UI_SOUNDS: dict[str, str] = {
+        "up": "cursor_move",
+        "down": "cursor_move",
+        "left": "cursor_move",
+        "right": "cursor_move",
+        "pageup": "tab_switch",
+        "pagedown": "tab_switch",
+        "home": "tab_switch",
+        "end": "tab_switch",
+        "enter": "cursor_confirm",
+        "space": "cursor_confirm",
+        "escape": "cursor_back",
+        "backspace": "cursor_back",
+    }
+
+    def key_sound(self, name: str) -> str | None:
+        """The sound this screen makes for a key it used, or ``None``."""
+        return self.UI_SOUNDS.get(name)
+
     def key_up(self, name: str, event, app) -> bool:
         """The key went up. Only the hold screens care; everything else
         answers a press, never a release."""

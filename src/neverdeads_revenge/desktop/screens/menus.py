@@ -234,7 +234,7 @@ class PackScreen(_Panel):
             return True
         if name in ("enter", "return") and kinds:
             self.message = drink(self.state, kinds[self.index][0])
-            app.play("item")
+            app.play("item_pickup")
             return True
         if name in ("x", "d") and kinds:
             self.message = drop(self.state, kinds[self.index][0])
@@ -508,7 +508,7 @@ class ShopScreen(Screen):
                 # The till has a bell. A purchase that makes no noise feels
                 # like it never happened, and the second-guesser walks back
                 # through the shelves counting.
-                app.play("coin")
+                app.play("gold_pickup")
                 app.save_progress()
                 self._restock(app)
             return True

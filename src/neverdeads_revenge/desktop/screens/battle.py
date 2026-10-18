@@ -226,11 +226,11 @@ STATUS_LOOKS: dict[str, str] = {
 #: What each wound sounds like when it bites. Nothing new to generate: the set
 #: already has a wet one, a bad one, a sharp one and a cold one.
 STATUS_SOUNDS: dict[str, str] = {
-    "bleed": "hurt",
-    "maul": "hurt",
-    "poison": "curse",
-    "burn": "crit",
-    "chill": "ice",
+    "bleed": "status_tick",
+    "maul": "sword_heavy",
+    "poison": "poison_hit",
+    "burn": "fire_hit",
+    "chill": "ice_shatter",
 }
 #: Which picture a wound wears on the plate. ``maul`` has none of its own and
 #: wears the bleeding one, exactly as it shares the shape its tick makes -- a
@@ -915,11 +915,9 @@ class BattleScreen(Screen):
         # question nobody has been asked yet.
         if name == "up":
             self.verb = (self.verb - 1) % len(VERBS)
-            app.play("move")
             return True
         if name == "down":
             self.verb = (self.verb + 1) % len(VERBS)
-            app.play("move")
             return True
         shortcut = {"a": ATTACK, "s": SPECIAL, "i": ITEM, "f": FLEE}
         if name in shortcut:
@@ -945,17 +943,15 @@ class BattleScreen(Screen):
             if not self.battle.learned():
                 # Nothing learned yet: there is no list to open, and a panel with
                 # nothing in it is worse than a key that says no.
-                app.play("deny")
+                app.play("error_locked")
                 return
             self.picking = True
             self.special = 0
-            app.play("move")
             return
         if VERBS[self.verb] in AIMED:
             self.aiming = True
             self._aim_from = "verbs"
             self._picked = None
-            app.play("move")
             return
         self._choose(app)
 
@@ -970,7 +966,6 @@ class BattleScreen(Screen):
         if not living:
             return
         self.target = (self.target + step) % len(living)
-        app.play("move")
 
     def _aim(self, name: str, app) -> bool:
         """A monster is being walked to, and the next enter spends the turn.
@@ -992,7 +987,6 @@ class BattleScreen(Screen):
             # Back where the choice came from, with the trick still picked: the
             # aim is a step in a menu and not a trap.
             self.aiming = False
-            app.play("move")
             if self._aim_from == "list":
                 self.picking = True
             return True
@@ -1020,7 +1014,7 @@ class BattleScreen(Screen):
             # to open an empty list, and this is the guard for anything that
             # finds another road in.
             self.picking = False
-            app.play("deny")
+            app.play("error_locked")
             return True
         # The number keys still work and are no longer *shown*: the list carries
         # the price of each trick where the number used to be, and a shortcut is
@@ -1028,16 +1022,13 @@ class BattleScreen(Screen):
         index = {str(digit): digit - 1 for digit in range(1, 10)}.get(name)
         if name == "escape":
             self.picking = False
-            app.play("move")
             return True
         rows = self._list_rows(app)
         if name in ("up", "w"):
             self.special = (self.special - 1) % len(specials)
-            app.play("move")
             return True
         if name in ("down", "s"):
             self.special = (self.special + 1) % len(specials)
-            app.play("move")
             return True
         if name in ("left", "h", "right", "l"):
             # The list is two columns, so across is a whole column away -- and it
@@ -1047,7 +1038,6 @@ class BattleScreen(Screen):
             moved = self.special + jump
             if 0 <= moved < len(specials):
                 self.special = moved
-            app.play("move")
             return True
         if index is None and name in ("enter", "return", "space"):
             index = self.special
@@ -1056,7 +1046,6 @@ class BattleScreen(Screen):
         chosen = specials[index]
         if self.battle.special_available(chosen):
             self.picking = False
-            app.play("pick")
             if not chosen.needs_target:
                 # Set on himself, or through everything standing: there is nobody
                 # to walk the arrow to, and asking would be asking a question the
@@ -1073,7 +1062,7 @@ class BattleScreen(Screen):
             # Locked, or already spent this fight. Answered out loud and not with
             # silence: the same note for a refusal as for a commitment is a menu
             # the player cannot read with their ears.
-            app.play("deny")
+            app.play("error_locked")
         return True
 
     @property
@@ -1181,12 +1170,17 @@ class BattleScreen(Screen):
         # would be a stutter rather than a flourish. Everything else -- a swing,
         # a guard, a run for it -- has nothing to say for itself yet, so the note
         # that the key registered is all the player hears until it lands.
+        from ...desktop.audio import cast_sound
+
         if VERBS[self.verb] == SPECIAL:
-            app.play("void")
+            trick = special_by_key(special) if special else None
+            app.play(cast_sound(special, trick.look if trick else ""))
         elif VERBS[self.verb] == ITEM:
-            app.play("item")
+            app.play("potion_use")
+        elif VERBS[self.verb] == FLEE:
+            app.play("dash_roll")
         else:
-            app.play("pick")
+            app.play("weapon_draw")
         if not living:
             self._resync()
 
@@ -1352,7 +1346,13 @@ class BattleScreen(Screen):
                 if event.escaped
                 else "YOU DIED"
             )
-            app.play("victory" if event.won else "stairs" if event.escaped else "death")
+            app.play(
+                "quest_complete"
+                if event.won
+                else "dash_roll"
+                if event.escaped
+                else "death_game_over"
+            )
             if not event.won and not event.escaped:
                 # The run ended in here. The arena steps out of the way first:
                 # the summary is about the run, and the run is what is standing
@@ -1389,19 +1389,25 @@ class BattleScreen(Screen):
             # The sound belongs to the *blow* and not to the swing, like the
             # number and the bar and the sparks: everything the player hears and
             # sees about a hit happens on the frame it lands in.
-            number.sound = (
-                (
+            from ...desktop.audio import cast_sound, weapon_sound
+
+            if struck.actor is self.battle.hero:
+                trick = special_by_key(struck.flair) if struck.flair else None
+                number.sound = (
                     "kill"
                     if outcome.killed
-                    else "crit"
+                    else "critical_hit"
                     if outcome.crit
-                    else "hit"
+                    else cast_sound(struck.flair, trick.look if trick else "")
+                    if trick is not None
+                    else weapon_sound(self.state.player.weapon_inflicts)
                 )
-                if struck.actor is self.battle.hero
-                else "hurt"
-            )
+            else:
+                number.sound = "player_hurt"
             if not outcome.hit:
-                number.sound = ""
+                # A swing that met air is its own sound and not silence: the
+                # player has to hear that the turn was spent and nothing landed.
+                number.sound = "miss_dodge"
             self._popups.append(number)
             # Owed, and paid at the impact: a wound the blow inflicts is read on
             # the frame the number is, which is what "the sword did it" means.
@@ -2080,7 +2086,7 @@ class BattleScreen(Screen):
         # move with the arrow, which is the moment the level happened for the
         # player rather than the moment the rules worked it out.
         self._reading()
-        app.play("level")
+        app.play("level_up")
 
     def _took_a_turn(self, actor) -> None:
         """The strip moves on: whoever acted is done and the rest come up.

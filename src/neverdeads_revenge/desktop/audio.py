@@ -45,6 +45,34 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ..game.specials import (
+    AVALANCHE,
+    BELLS_THROW,
+    BETWEEN_BLOWS,
+    CHORD,
+    DEVOURING_DARKNESS,
+    ECHOING_CUT,
+    FIRST_NOTE,
+    FLEETING_SHADOW,
+    FORTRESS,
+    FRIENDS_LIKE_THESE,
+    GUT_PUNCH,
+    HOARFROST,
+    JAB,
+    LEFT_HAND,
+    LONG_WINTER,
+    OPEN_VEIN,
+    ORB_OF_PTAMERA,
+    OVERTURE,
+    QUAKE,
+    RIME,
+    SHATTERED_BELL,
+    SILENCE,
+    SNOW_BLIND,
+    STILLNESS,
+    TRUE_NOTE,
+    VOID,
+)
 from ..game.state import LogKind
 
 __all__ = [
@@ -60,6 +88,11 @@ __all__ = [
     "LOUDNESS",
     "sound_for_kind",
     "loudest_kind",
+    "cast_sound",
+    "weapon_sound",
+    "BY_KIND",
+    "BY_SPECIAL",
+    "BY_LOOK",
 ]
 
 #: Where the generated sounds live. Inside the package rather than in
@@ -114,13 +147,109 @@ GIVE_UP_AFTER = 3
 #: rules to be written down. The plainer kinds are silent on purpose: a sound
 #: for every line is a sound for none of them.
 BY_KIND: dict[LogKind, str] = {
-    LogKind.CRIT: "crit",
-    LogKind.COMBAT: "hit",
-    LogKind.DAMAGE: "hurt",
-    LogKind.BAD: "curse",
-    LogKind.GOOD: "item",
-    LogKind.COIN: "coin",
+    LogKind.CRIT: "critical_hit",
+    LogKind.COMBAT: "sword_light",
+    LogKind.DAMAGE: "player_hurt",
+    LogKind.BAD: "curse_apply",
+    LogKind.GOOD: "item_pickup",
+    LogKind.COIN: "gold_pickup",
 }
+
+#: What each trick *sounds* like when it is asked for: the voice going out.
+#:
+#: By the trick's own key, because that is the only place the game says which
+#: trick a button was -- and a trick is a whole idea, not an element: THE LEFT
+#: HAND is a knife and OPEN VEIN is a knife twice, and a quake is not the same
+#: noise as an avalanche however much masonry both of them move. Where a trick
+#: has no line here it falls back to its *shape* (:data:`BY_LOOK`), which every
+#: trick has by construction -- the same ``look`` that draws it draws its sound.
+BY_SPECIAL: dict[str, str] = {
+    LEFT_HAND: "poison_cast",
+    ORB_OF_PTAMERA: "shadow_bolt",
+    FLEETING_SHADOW: "wind_cast",
+    DEVOURING_DARKNESS: "dark_cast",
+    OPEN_VEIN: "sword_heavy",
+    FRIENDS_LIKE_THESE: "dark_impact",
+    BETWEEN_BLOWS: "blade_clash",
+    VOID: "dark_cast",
+    AVALANCHE: "ice_shatter",
+    SNOW_BLIND: "ice_cast",
+    RIME: "ice_cast",
+    HOARFROST: "ice_cast",
+    STILLNESS: "wind_cast",
+    QUAKE: "blunt_impact",
+    LONG_WINTER: "ice_shatter",
+    FORTRESS: "relic_resonance",
+    FIRST_NOTE: "ritual_chime",
+    OVERTURE: "light_cast",
+    BELLS_THROW: "dark_bell",
+    TRUE_NOTE: "ritual_chime",
+    ECHOING_CUT: "sword_light",
+    CHORD: "light_cast",
+    SILENCE: "wind_cast",
+    SHATTERED_BELL: "dark_bell",
+    JAB: "blunt_impact",
+    GUT_PUNCH: "blunt_impact",
+}
+
+#: And what a trick sounds like by its *shape*, for the ones no line above names.
+#:
+#: The pack was written the other way round from the game: it has a sound per
+#: element and a sound per *motion*, and the game names its tricks by what they
+#: do to a body. The ``look`` is where those two meet -- every trick already
+#: carries one, because a painter needs it -- so a trick that arrives tomorrow
+#: gets the right kind of noise without anybody remembering to come back here.
+BY_LOOK: dict[str, str] = {
+    "slash": "sword_light",
+    "bleed": "sword_heavy",
+    "bleed_deep": "sword_heavy",
+    "punch": "blunt_impact",
+    "impact": "blunt_impact",
+    "shatter": "ice_shatter",
+    "frost": "ice_cast",
+    "throw": "wind_cast",
+    "wave": "light_cast",
+    "ring": "ritual_chime",
+    "aura": "light_cast",
+    "pulse": "poison_cast",
+    "wall": "relic_resonance",
+    "fleet": "dash_roll",
+    "trail": "sword_light",
+    "drain": "dark_cast",
+    "orb": "shadow_bolt",
+    "dissolve": "dark_cast",
+    "shadow": "dark_impact",
+    "burn": "fire_hit",
+    "lightning": "lightning_cast",
+}
+
+
+def weapon_sound(inflicts) -> str:
+    """What the plain swing of this weapon sounds like.
+
+    The game knows a weapon by what it *leaves behind* and not by its shape --
+    ``weapon_inflicts`` is a list of wounds -- so the blade's own voice is read
+    off that: something that opens a deep cut is heavy, something that breaks
+    bone is blunt, and everything else is the ordinary edge.
+    """
+    keys = set(inflicts or ())
+    if "maul" in keys:
+        return "blunt_impact"
+    if "bleed" in keys:
+        return "sword_heavy"
+    return "sword_light"
+
+
+def cast_sound(special: str | None, look: str = "") -> str:
+    """What asking for this trick sounds like.
+
+    A key first and a shape second, so the sharpening a trick gets from being
+    *named* is not lost to the shape it shares with three others -- and a shape
+    at all, so that the answer is never "nothing".
+    """
+    if special and special in BY_SPECIAL:
+        return BY_SPECIAL[special]
+    return BY_LOOK.get(look, "light_cast")
 
 #: Which sound wins when one turn produces several messages.
 #:
@@ -142,7 +271,19 @@ LOUDNESS: dict[LogKind, int] = {
 #: sound about a moment that has gone; a level arriving late is still the level,
 #: and swallowing it because a fight was in progress would be the one case where
 #: the fix is worse than the problem.
-URGENT: frozenset[str] = frozenset({"level", "death", "victory", "chest", "stairs"})
+URGENT: frozenset[str] = frozenset({
+    "level_up",
+    "skill_unlocked",
+    "death_game_over",
+    "quest_complete",
+    "revive_resurrect",
+    "chest_open",
+    "door_creak",
+    "boss_roar_sting",
+    "secret_found",
+    "rare_item",
+    "dark_bell",
+})
 
 
 def sound_for_kind(kind: LogKind) -> str | None:

@@ -34,9 +34,9 @@ from .game_over import REWIND as REWIND
 #: layer because it is a casting decision -- the sound module only knows how
 #: to play a name.
 ULTIMATE_SOUND: dict[str, str] = {
-    "noxx": "void",
-    "yeti": "ice",
-    "walkyrion": "bell",
+    "noxx": "fire_burst",
+    "yeti": "ice_shatter",
+    "walkyrion": "dark_bell",
 }
 
 __all__ = ["GameScreen", "REWIND"]
@@ -68,6 +68,21 @@ class GameScreen(Screen):
         draw_game(buffer, self.state)
 
     # -- input --------------------------------------------------------------
+    #: Feet, not a cursor: this is the one screen where the four directions
+    #: move a body rather than a pointer.
+    UI_SOUNDS = {
+        "up": "footstep_stone",
+        "down": "footstep_stone",
+        "left": "footstep_stone",
+        "right": "footstep_stone",
+        "enter": "cursor_confirm",
+        "space": "cursor_confirm",
+        "escape": "cursor_back",
+        "backspace": "cursor_back",
+        "?" : "cursor_confirm",
+        "f1": "cursor_confirm",
+    }
+
     def key(self, name: str, event, app) -> bool:
         if name == "escape":
             from .pause import PauseScreen
@@ -267,6 +282,7 @@ class GameScreen(Screen):
     def _spring(self, app, wash_it) -> None:
         if not wash_it:
             return
+        app.play("ritual_chime")
         result = perform_action(self.state, Action.CLEANSE)
         app.play_after((len(self.state.log), self.state.depth, self.state.level))
         if result.died or result.escaped:
@@ -275,7 +291,7 @@ class GameScreen(Screen):
     def _chest(self, app, answer) -> None:
         if not answer:
             return
-        app.play("chest")
+        app.play("chest_open")
         action = Action.OPEN_CHEST if answer == OPEN else Action.TAKE_FAME
         run = self.state
         gifts_before = set(run.gifts)
@@ -302,7 +318,7 @@ class GameScreen(Screen):
         for number in self.state.found_pages:
             if not app.progress.record_page(number):
                 continue
-            app.play("item")
+            app.play("rare_item")
             app.save_progress()
             text = page(number)
             if text is not None:

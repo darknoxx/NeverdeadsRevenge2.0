@@ -95,6 +95,9 @@ class GameOverScreen(Screen):
             return True
         if name == "r" and self.can_rewind:
             if not event.isAutoRepeat():
+                # The one moment the game gives a run back, and it should sound
+                # like what it is.
+                app.play("revive_resurrect")
                 self.finish(app, REWIND)
             return True
         if name in ("enter", "return"):

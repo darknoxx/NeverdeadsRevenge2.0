@@ -224,10 +224,12 @@ def test_a_run_starts_and_the_hero_walks_with_no_qt_in_the_room():
             break
     assert app.run.player.position != here, "the hero could not take a step"
     assert app.run.player.steps == 1, "the step was not counted"
-    # And *silence* is the right answer here, in both front ends: a step logs
-    # nothing, and what the sound layer plays is the loudest thing that happened.
-    # Fights, stairs and levels make a noise; walking does not.
-    assert app.played == []
+    # And the step itself is the sound: it logs nothing -- fights, stairs and
+    # levels are what the *world* makes a noise about, and the loudest line in the
+    # log is still the rule for those -- but a body moving is a foot on stone, and
+    # the screen is the only thing that knows the four directions meant *feet*
+    # here and a cursor in every other screen.
+    assert app.played[-1] == "footstep_stone", app.played
 
     # And the picture is the grid the game drew, at the size its panels need.
     assert app.grid.cols >= 76 and app.grid.rows >= 24

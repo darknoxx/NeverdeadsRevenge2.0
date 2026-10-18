@@ -39,16 +39,106 @@ from neverdeads_revenge.desktop.audio import SOUNDS_DIR, RATE, Sfx, loudest_kind
 
 ROOT = Path(__file__).resolve().parent.parent
 MAKE_SOUNDS = ROOT / "tools" / "make_sounds.py"
+TOOL = ROOT / "tools" / "install_sounds.py"
 
 
 # -- the files ---------------------------------------------------------------
 def test_every_sound_the_game_can_ask_for_exists():
-    """The recipes are the list. A sound named in the code and not generated is
-    a sound that plays nothing, silently, forever."""
-    for name in audio.BY_KIND.values():
-        assert (SOUNDS_DIR / f"{name}.wav").exists(), name
-    for name in ("level", "stairs", "death", "victory", "chest"):
-        assert (SOUNDS_DIR / f"{name}.wav").exists(), name
+    """The code is the list -- and a sound named in it and not shipped plays
+    nothing, silently, forever.
+
+    Two places name a sound: the tables in ``desktop.audio`` that the log's kinds
+    and the tricks go through, and the literal names in a ``play(...)`` call at
+    the moment something happens -- a door, a chest, a level. Both are swept, by
+    *walking the source* rather than by keeping a list here: a list in a test is
+    a list that goes stale the first time somebody adds a sound in a hurry, and
+    the pack added fifty of them in one afternoon.
+    """
+    named = set(audio.BY_KIND.values())
+    named |= set(audio.BY_SPECIAL.values())
+    named |= set(audio.BY_LOOK.values())
+    named |= set(audio.URGENT)
+    for inflicts in ((), ("bleed",), ("maul",), ("chill",)):
+        named.add(audio.weapon_sound(inflicts))
+    named |= _tables_in_the_screens()
+    named |= _literals_in_the_code()
+
+    assert len(named) > 20, f"the sweep found almost nothing: {sorted(named)}"
+    for name in sorted(named):
+        assert (SOUNDS_DIR / f"{name}.wav").exists(), (
+            f"{name} is asked for by the code and not in the pack"
+        )
+
+
+#: The tables in the screens that name a sound: the interface's clicks, what a
+#: wound sounds like, and the three ultimates. They are listed here rather than
+#: guessed at, because a table of sounds is a decision somebody made and this is
+#: the inventory of those decisions. A *new* table belongs in this list -- and
+#: ``test_a_fight_never_asks_for_a_sound_that_is_not_there`` is what catches the
+#: one somebody forgets to add.
+TABLES = (
+    ("neverdeads_revenge.desktop.screens.base", "Screen", "UI_SOUNDS"),
+    ("neverdeads_revenge.desktop.screens.game", "GameScreen", "UI_SOUNDS"),
+    ("neverdeads_revenge.desktop.screens.game", None, "ULTIMATE_SOUND"),
+    ("neverdeads_revenge.desktop.screens.battle", None, "STATUS_SOUNDS"),
+)
+
+
+def _tables_in_the_screens() -> set[str]:
+    import importlib
+
+    named: set[str] = set()
+    for module_name, class_name, attribute in TABLES:
+        holder = importlib.import_module(module_name)
+        if class_name is not None:
+            holder = getattr(holder, class_name)
+        table = getattr(holder, attribute)
+        named |= set(table.values())
+    return named
+
+
+def _literals_in_the_code() -> set[str]:
+    """Every ``play("...")`` in the source: the sounds named where they happen."""
+    import ast
+
+    named: set[str] = set()
+    for path in sorted((ROOT / "src").rglob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text())):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            called = (
+                func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
+            )
+            if called != "play":
+                continue
+            for arg in node.args:
+                if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                    if arg.value:
+                        named.add(arg.value)
+    return named
+    for path in sorted(source.rglob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text())):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            called = (
+                func.attr
+                if isinstance(func, ast.Attribute)
+                else getattr(func, "id", None)
+            )
+            if called != "play":
+                continue
+            for arg in node.args:
+                if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                    if arg.value:
+                        named.add(arg.value)
+
+    assert len(named) > 20, f"the sweep found almost nothing: {sorted(named)}"
+    for name in sorted(named):
+        assert (SOUNDS_DIR / f"{name}.wav").exists(), (
+            f"{name} is asked for by the code and not in the pack"
+        )
 
 
 def test_every_committed_sound_is_a_playable_wav():
@@ -64,24 +154,37 @@ def test_every_committed_sound_is_a_playable_wav():
 
 def test_no_sound_outlives_the_thing_it_announces():
     """A sound effect in a turn-based game is punctuation. Anything long enough
-    to be waited for is a sound the player learns to dread."""
+    to be waited for is a sound the player learns to dread.
+
+    A second, then: the pack's two long ones are a bell tolling and a run ending
+    (0.95s and 0.87s, both of them trimmed from what they arrived as), and those
+    are moments rather than punctuation. Everything else is well under it.
+    """
     for path in SOUNDS_DIR.glob("*.wav"):
         with wave.open(str(path), "rb") as handle:
             seconds = handle.getnframes() / handle.getframerate()
-        assert seconds <= 0.8, f"{path.name} is {seconds:.2f}s"
+        assert seconds <= 1.0, f"{path.name} is {seconds:.2f}s"
 
 
 def test_the_sounds_are_small_enough_to_ship():
+    """Three quarters of a megabyte of sound, which a game this size can afford
+    and a download should. It was 118 kB before the pack arrived, and the pack
+    is the point: it is what the game sounds *like*, and it travels with the
+    code because nothing else can read it."""
     total = sum(path.stat().st_size for path in SOUNDS_DIR.glob("*.wav"))
-    assert total < 200_000, f"the sound set is {total / 1024:.0f} kB"
+    assert total < 1_000_000, f"the sound set is {total / 1024:.0f} kB"
 
 
 def test_the_committed_sounds_are_what_the_generator_produces(tmp_path):
-    """They are generated, so they must not be hand-edited out of sync.
+    """The *generated* half of the set, and only that half.
 
-    Without this, someone nudges a WAV and the next regeneration silently undoes
-    it -- which is the same trap the icon has a test for, and for the same
-    reason.
+    Two kinds of file live in the sound folder now. The ones ``make_sounds.py``
+    writes are checked the way the icon is -- regenerate and compare -- so that
+    a nudge to a WAV is not silently undone by the next regeneration. The other
+    half arrived as a pack and is put through ``tools/install_sounds.py``
+    instead; nothing in the repository can regenerate those, so nothing here
+    pretends to check them (the converter has its own test, and every name the
+    code asks for is checked above).
     """
     result = subprocess.run(
         [sys.executable, str(MAKE_SOUNDS), "--out", str(tmp_path)],
@@ -91,9 +194,13 @@ def test_the_committed_sounds_are_what_the_generator_produces(tmp_path):
     assert result.returncode == 0, result.stderr
 
     generated = {path.name: path.read_bytes() for path in tmp_path.glob("*.wav")}
-    for path in SOUNDS_DIR.glob("*.wav"):
-        assert path.name in generated, f"a generated sound vanished: {path.name}"
-        assert generated[path.name] == path.read_bytes(), path.name
+    assert generated, "the generator produced nothing at all"
+    shipped = {path.name: path.read_bytes() for path in SOUNDS_DIR.glob("*.wav")}
+    for name, data in generated.items():
+        assert name in shipped, f"a generated sound vanished: {name}"
+        assert shipped[name] == data, (
+            f"{name} has been edited away from what make_sounds.py writes"
+        )
 
 
 # -- what each kind of message sounds like -----------------------------------
@@ -469,3 +576,82 @@ def test_no_device_means_no_ring_to_drain(devices):
 
     assert sfx._ring.seconds_pending == 0.0
     assert sfx._queue.empty(), "the names queued up for nobody"
+
+
+# -- bringing a sound in from outside ----------------------------------------
+def test_the_converter_writes_the_rate_the_game_plays(tmp_path):
+    """``tools/install_sounds.py``, asked the one question that matters.
+
+    A sound from outside arrives at whatever rate it was made at -- the pack is
+    44.1kHz, which is four times what this game mixes -- and a file that arrived
+    unchanged is not a small mistake: it is the wrong speed and the wrong pitch,
+    and the mixer will not say so. So: write a wav that looks nothing like the
+    game's, convert it, and check what comes out.
+    """
+    source = tmp_path / "from_elsewhere"
+    source.mkdir()
+    out = tmp_path / "installed"
+    silence = array("h", [0] * 4000)
+    tone = array("h")
+    for index in range(22050):
+        tone.append(int(9000 * (1 if index % 2 else -1)))
+    with wave.open(str(source / "loud_and_stereo.wav"), "wb") as handle:
+        handle.setnchannels(2)
+        handle.setsampwidth(2)
+        handle.setframerate(44100)
+        handle.writeframes((silence + tone + tone + silence).tobytes())
+
+    result = subprocess.run(
+        [sys.executable, str(TOOL), str(source), str(out)],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert (out / "loud_and_stereo.wav").exists(), "nothing came out"
+
+    with wave.open(str(out / "loud_and_stereo.wav"), "rb") as handle:
+        assert handle.getnchannels() == 1, "stereo was not mixed down"
+        assert handle.getsampwidth() == 2, "the sample width changed"
+        assert handle.getframerate() == RATE, "the rate is not the game's"
+        seconds = handle.getnframes() / handle.getframerate()
+    # The wav above is *two* channels of 48104 samples, which is 24052 frames --
+    # 0.545s, and a reminder that frames are not samples. Out comes the same
+    # sound a quarter as long, with the silence at each end gone (silence is a
+    # sound that arrives late) and a hair of air put back.
+    assert 0.5 < seconds < 0.6, f"the conversion gave {seconds:.2f}s"
+
+
+def test_a_fight_never_asks_for_a_sound_that_is_not_there(devices, monkeypatch, tmp_path):
+    """The runtime half of the same question, and the one that cannot go stale.
+
+    The sweep above knows where sounds are *named*; this one knows where they are
+    *asked for* -- a whole fight, watched to its end with the sound log switched
+    on, and the log says ``MISSING`` in the middle of it if any name along the way
+    has no file. Which is the failure worth catching: a sound that is not in the
+    pack is not an error, it is silence, and silence in a fight reads as a bug in
+    the game rather than as a typo in a table.
+    """
+    log = tmp_path / "sound.log"
+    monkeypatch.setenv(audio.DEBUG_ENV, str(log))
+
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3, battle_scene=True)
+    # A few rounds of a real fight, the way the app plays them: the choice, the
+    # queue, then the frames that play it out.
+    for _ in range(3):
+        for key in ("a", "enter"):
+            app.key(key)
+        for _frame in range(400):
+            if not app.screens[-1].busy:
+                break
+            app.tick(1 / 30.0)
+        app.key("enter")
+    app.sfx._queue.join()
+    app.sfx.close()
+
+    text = log.read_text()
+    assert "MISSING" not in text, text
+    # And the log is not empty: a test that passed because nothing was ever
+    # asked for would pass for the wrong reason.
+    assert "sound log:" in text, text
