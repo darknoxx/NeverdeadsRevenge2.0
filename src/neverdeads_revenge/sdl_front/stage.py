@@ -78,6 +78,15 @@ FLOOR_AT = 0.5556
 #: standing in the last row of masonry.
 HORIZON_AT = 0.472
 
+#: How far the arc spreads, as a share of the painting's height per unit of depth.
+#:
+#: A depth says how far into the room a monster stands, and this turns that into
+#: pixels *of the painting* rather than rows *of the grid* -- which is what makes
+#: the arc the same shape on every monitor. The number is the one a sixteen-by-nine
+#: frame already produced: a lane twelve hundredths of a depth behind the front one
+#: stands a row (twenty pixels of five hundred and forty, 3.7%) further back.
+SPREAD_AT = 0.31
+
 #: Where the painting's two torches are, as shares of the painting itself.
 #: Measured off the picture: the bright pixels of the flames, left and right.
 TORCHES = ((0.110, 0.250), (0.890, 0.267))
@@ -405,6 +414,15 @@ class Stage:
     def horizon_line(self, width: int, height: int) -> float:
         """The far edge: beyond it there is wall, and nothing stands there."""
         return self.line_at(HORIZON_AT, width, height)
+
+    def spread_px(self, width: int, height: int) -> float:
+        """How many pixels one whole unit of depth is worth, on this frame."""
+        image = load("backdrops/arena.png")
+        if image is None:
+            return height * SPREAD_AT
+        own_w, own_h = image.get_size()
+        factor = max(width / own_w, height / own_h)
+        return own_h * factor * SPREAD_AT
 
     def glow(self, surface, width: int, height: int, clock: float) -> None:
         """Light on the two torches in the painting, breathing.

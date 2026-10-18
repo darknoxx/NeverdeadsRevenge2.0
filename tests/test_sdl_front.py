@@ -2594,9 +2594,10 @@ def test_a_figure_can_stand_between_rows():
     assert step % 1 != 0, (
         f"the middle of the arc is a whole {step} rows from the left"
     )
-    assert (right_free.row - pinned.row) % 1 == 0, (
-        "the outer two are not a whole row apart"
-    )
+    # And the arc is drawn in the *painting's* pixels now, so its steps are not
+    # whole rows at all -- what has to hold is the order: the deeper lane stands
+    # higher up the screen, and the nearer one lower.
+    assert middle_free.row < pinned.row < right_free.row, "the arc is not in depth order"
     assert hero.row % 1 != 0, "the hero is back on a whole row"
     assert 0 < hero.row % 1 < 0.5 or hero.row % 1 > 0.5, hero.row
 
@@ -2798,3 +2799,85 @@ def test_a_room_of_cells_still_stands_on_its_own_band():
     assert painted.screens[-1].arena.stage_floor is not None, (
         "a painted room was not told where its floor is"
     )
+
+
+def test_the_composition_is_the_same_at_every_window_shape():
+    """The furniture and the fight, asked of eight window shapes at once.
+
+    The complaint this answers was not one of these things going wrong, it was all
+    of them drifting together: the panels were seven rows tall above twenty-six
+    rows of grid and *five* below it -- which fired on a 21:9 monitor, giving that
+    machine a shorter ORDER strip, a shorter log, and the hero standing twenty
+    pixels lower in his own plate -- and the arc was measured as a share of the
+    ground band, so a taller band spread the same fight further apart.
+
+    Now: the furniture is a fixed number of rows, the hero stands the same distance
+    into his plate, and the monsters stand at the same *fraction of the painting*
+    wherever they are. Which is the whole point of a painted room -- the composition
+    is the artwork's, and the window only decides how much of it you see.
+    """
+    import pygame
+
+    from neverdeads_revenge.desktop.screens.battle import THICKNESS
+    from neverdeads_revenge.sdl_front.app import SdlApp
+    from neverdeads_revenge.sdl_front.paint import load
+
+    painting = load("backdrops/arena.png")
+    own_w, own_h = painting.get_size()
+    probe = SdlApp(seed=3, battle_scene=True, no_sound=True)
+
+    panel_rows = set()
+    log_rows = set()
+    drops = set()
+    lanes: dict[float, list[float]] = {}
+    clamped: set[float] = set()
+
+    for width, height in (
+        (960, 540),
+        (1280, 800),
+        (1680, 1050),
+        (1920, 1200),
+        (1024, 768),
+        (2560, 1080),
+        (3440, 1440),
+        (2560, 1440),
+    ):
+        cols, rows = probe._grid_size(width, height)
+        app = SdlApp(seed=3, battle_scene=True, no_sound=True, cols=cols, rows=rows)
+        app.redraw()
+        arena = app.screens[-1]
+        cell_h = app.font.cell_h
+        frame_w, frame_h = cols * app.font.cell_w, rows * cell_h
+        area = arena.arena._areas(cols, rows)
+        figures = arena.arena._figures(cols, rows, app.font)
+        hero = next(one for one in figures if one.actor is arena.battle.hero)
+        monsters = sorted(
+            (one for one in figures if one.actor is not arena.battle.hero),
+            key=lambda one: one.cx,
+        )
+
+        panel_rows.add(area["plate"][3])
+        log_rows.add(area["log"][3])
+        drops.add((hero.row * cell_h - THICKNESS) - area["plate"][1] * cell_h)
+
+        factor = max(frame_w / own_w, frame_h / own_h)
+        span_h = own_h * factor
+        cropped = (span_h - frame_h) / 2.0
+        for index, one in enumerate(monsters):
+            feet = one.row * cell_h - THICKNESS
+            lanes.setdefault(float(index), []).append((feet + cropped) / span_h)
+            if one.row >= area["plate"][1] - 1 - 1e-9:
+                clamped.add(float(index))
+
+    assert panel_rows == {7}, f"the panels changed height: {panel_rows}"
+    assert log_rows == {3}, f"the log changed height: {log_rows}"
+    assert drops == {0.0}, f"the hero sits differently in his plate: {drops}"
+    for lane, shares in lanes.items():
+        spread = max(shares) - min(shares)
+        # A lane that sits on the last row above the panels is *clamped*, and a
+        # clamped lane is the room being honest about being short -- on the widest
+        # window here the nearest monster would stand in the menu, so it stands at
+        # the menu's edge instead. Everything else stands in the same place.
+        assert spread < 0.01 or lane in clamped, (
+            f"lane {lane} moves {spread:.1%} of the painting between window shapes"
+        )

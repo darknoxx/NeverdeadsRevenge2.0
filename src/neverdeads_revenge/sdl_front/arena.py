@@ -120,6 +120,10 @@ class SdlArena(Screen):
         self.arena.stage_horizon = (
             self._stage.horizon_line(frame_w, frame_h) if self.backdrop else None
         )
+        #: And how wide one unit of depth is, in the painting's own pixels.
+        self.arena.stage_spread = (
+            self._stage.spread_px(frame_w, frame_h) if self.backdrop else None
+        )
         self.arena.draw(buffer, app, ground=not self.backdrop)
         if self.backdrop:
             # The painting *is* the room, so the grid's room is not drawn: the
