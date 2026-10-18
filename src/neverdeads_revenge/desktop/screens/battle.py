@@ -125,8 +125,11 @@ AIMED: tuple[str, ...] = (ATTACK, SPECIAL)
 #: middle of the room, two on either side of that middle, and three in the
 #: shallow arc the stage was drawn for, with the outer ones a little nearer, the
 #: way a line of anything stands. The one in the arc that stands furthest back is
-#: lifted half a row, because a row was a step too much for it and a *half* row is
-#: exactly what the floor between two of them wants.
+#: lifted half a row -- which is the *second* time that number came down: it was
+#: raised twice by eye while the staging was still measured in the grid's rows and
+#: the middle kept drifting into the wall, and once the stage was anchored to the
+#: painting's floor those two nudges were a step too far. Half a row leaves it
+#: standing in the floor band with a visible arc and no drift.
 #:
 #: Nothing stands at the rim. The floor tapers, so the far corners of it are
 #: *wall* -- an outer monster at the very edge was standing in the masonry with
@@ -135,7 +138,7 @@ AIMED: tuple[str, ...] = (ATTACK, SPECIAL)
 ROWS: dict[int, tuple[tuple[float, float, float], ...]] = {
     1: ((0.0, 0.88, 0.0),),
     2: ((-0.20, 1.00, 0.0), (0.20, 1.00, 0.0)),
-    3: ((-0.30, 1.00, 0.0), (-0.02, 0.88, 1.5), (0.30, 1.13, 0.0)),
+    3: ((-0.30, 1.00, 0.0), (-0.02, 0.88, 0.5), (0.30, 1.13, 0.0)),
 }
 
 #: How far below the foot of the floor band the hero stands, in rows. He is the

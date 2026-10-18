@@ -2756,8 +2756,10 @@ def test_the_monsters_stand_on_the_painting_at_any_window_shape():
         share = (feet + cropped) / span_h
         reported[(width, height)] = round(share * 100, 1)
 
-        # On the painting's floor, whatever the shape...
-        assert 0.42 < share < 0.49, f"{width}x{height}: the middle stands at {share:.1%}"
+        # On the painting's floor, whatever the shape: in the band between the wall
+        # (measured at 0.463) and the middle of the flagstones, which is where an arc
+        # two rows deep puts the back lane.
+        assert 0.44 < share < 0.52, f"{width}x{height}: the middle stands at {share:.1%}"
         # ...never down in the menu, and never up in the wall. The horizon is the
         # painting's own line -- the feet of the far lane were measured against it
         # when the sprite sheet was drawn -- and a lane with a nudge of its own can

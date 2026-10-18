@@ -70,9 +70,12 @@ FLOOR_AT = 0.5556
 #: cross the line, and the one that crosses it is always the middle of three: the
 #: only lane with a nudge of its own.
 #:
-#: 0.472 is where a sixteen-by-nine frame puts it, which is the value the pack's
-#: own sprite sheet was laid out against -- the monsters' feet were measured at
-#: 255, 275 and 295 pixels of 540, and 255 is the horizon.
+#: 0.472 is the value the staging was tuned against -- the monsters' feet were
+#: measured at 255, 275 and 295 pixels of 540 and 255 was taken for the horizon --
+#: and it is used as a *clamp* rather than as a placement, so it is deliberately a
+#: few pixels in front of the line: measured off the painting itself, the wall
+#: meets the floor at 0.463, and a clamp set exactly there would leave a monster
+#: standing in the last row of masonry.
 HORIZON_AT = 0.472
 
 #: Where the painting's two torches are, as shares of the painting itself.
