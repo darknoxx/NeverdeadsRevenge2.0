@@ -2818,7 +2818,11 @@ def test_the_composition_is_the_same_at_every_window_shape():
     """
     import pygame
 
-    from neverdeads_revenge.desktop.screens.battle import THICKNESS
+    from neverdeads_revenge.desktop.screens.battle import (
+        HERO_CLEARANCE,
+        HERO_CLEARANCE_CELLS,
+        THICKNESS,
+    )
     from neverdeads_revenge.sdl_front.app import SdlApp
     from neverdeads_revenge.sdl_front.paint import load
 
@@ -2866,7 +2870,13 @@ def test_the_composition_is_the_same_at_every_window_shape():
         for index, one in enumerate(monsters):
             feet = one.row * cell_h - THICKNESS
             lanes.setdefault(float(index), []).append((feet + cropped) / span_h)
-            if one.row >= area["plate"][1] - 1 - 1e-9:
+            # A lane is *held* when one of the room's own lines has it: the last row
+            # above the panels, or the four rows a monster standing over the hero
+            # must leave him. Held is not drifting.
+            over_hero = abs(one.cx - hero.cx) <= HERO_CLEARANCE_CELLS * app.font.cell_w
+            if one.row >= area["plate"][1] - 1 - 1e-9 or (
+                over_hero and one.row >= hero.row - HERO_CLEARANCE - 1e-9
+            ):
                 clamped.add(float(index))
 
     assert panel_rows == {7}, f"the panels changed height: {panel_rows}"

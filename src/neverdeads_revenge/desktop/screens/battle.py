@@ -1724,6 +1724,10 @@ class BattleScreen(Screen):
         # painting -- where the artist drew it. The staging keeps its shape either
         # way; this moves the whole row onto the right line.
         band_foot = y0 + height - 1
+        # Where the hero will stand, in rows, whatever kind of room this is: the
+        # monsters are kept off his head below, and that rule does not care whether
+        # the room is a painting or a band of flagstones.
+        hero_row = y0 + height - 1 + HERO_DROP - STAGE_LIFT
         painted = self.stage_floor is not None and self.stage_spread is not None
         if not painted:
             shift = 0.0
@@ -1748,7 +1752,6 @@ class BattleScreen(Screen):
             # the *middle*, and it is applied per monster below, because a lane off
             # to the side is nobody's problem and pulling those up too would flatten
             # the whole arc on every monitor to fix one of them.
-            hero_row = y0 + height - 1 + HERO_DROP - STAGE_LIFT
             lowest = panel_row
         # The back of the room: no monster stands above the painting's horizon. A
         # lane with a nudge of its own can cross it -- the middle of three is the
