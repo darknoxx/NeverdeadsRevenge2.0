@@ -2412,7 +2412,11 @@ def test_the_paintings_torches_are_lit_and_the_light_breathes():
     for x in range(0, width, 7):
         for y in range(0, height, 7):
             was, now = early.get_at((x, y))[:3], late.get_at((x, y))[:3]
-            assert all(a >= b for a, b in zip(now, was)), (
+            # A couple of units of slack: the ramp is drawn at a different size for
+            # each clock, and resampling it can land one unit under the other. Two
+            # frames of the same *light* may differ by a rounding; they may not
+            # differ by the light being taken away.
+            assert all(a >= b - 3 for a, b in zip(now, was)), (
                 f"the light darkened ({x}, {y}): {was} -> {now}"
             )
 

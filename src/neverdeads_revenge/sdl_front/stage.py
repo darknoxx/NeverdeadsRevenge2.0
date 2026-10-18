@@ -80,7 +80,7 @@ HORIZON_AT = 0.472
 
 #: Where the painting's two torches are, as shares of the painting itself.
 #: Measured off the picture: the bright pixels of the flames, left and right.
-TORCHES = ((0.110, 0.250), (0.890, 0.267))
+TORCHES = ((0.112, 0.264), (0.889, 0.268))
 
 
 class Stage:
