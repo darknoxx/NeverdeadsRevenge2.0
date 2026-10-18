@@ -2342,7 +2342,11 @@ def test_a_shadow_lies_under_a_figure_and_fades_towards_its_rim():
     assert _changed(without, with_pool, box) > 40, "the shadow is not there at all"
     # Over the sprite's own band nothing of it shows: it is drawn first, so a
     # figure stands *on* its shadow instead of wearing it.
-    body = (figure.cx - 20, feet - 60, figure.cx + 20, feet - 6)
+    # Inside the torso and not near the feet: a shadow whose pool is wider than the
+    # figure shows *between* its legs, which is the floor and not the figure. The
+    # claim is that nothing of the pool is painted over the sprite, so the box is
+    # where the body is solid.
+    body = (figure.cx - 20, feet - 150, figure.cx + 20, feet - 100)
     assert _changed(without, with_pool, body) == 0, "the shadow was drawn over a figure"
 
     # The gradient: the darkest ring is the middle and the edge is nearly nothing.
@@ -2656,7 +2660,15 @@ def test_the_panels_are_painted_over_the_hero_and_not_under_him():
     width = app._surface.get_width()
     band = (0, first * app.font.cell_h, width, last * app.font.cell_h)
     room = (0, 0, width, first * app.font.cell_h)
-    assert _changed(with_him, without, band) == 0, "the hero showed through the panels"
+    # Where a panel is, the hero is gone -- and the band is *cells*, so between the
+    # boxes the room shows through and so does he. Both halves are asked, because a
+    # band that covered him *everywhere* would pass the first half on its own, and a
+    # band that covered him nowhere would pass the second.
+    x, y, w, h = arena.arena._areas(app.cols, app.rows)["plate"]
+    plate = (x * app.font.cell_w, y * app.font.cell_h, (x + w) * app.font.cell_w,
+             (y + h) * app.font.cell_h)
+    assert _changed(with_him, without, plate) == 0, "the hero showed through the plate"
+    assert _changed(with_him, without, band) > 0, "the hero was hidden by a gap in the menu"
     assert _changed(with_him, without, room) > 200, "the hero was not drawn at all"
 
 

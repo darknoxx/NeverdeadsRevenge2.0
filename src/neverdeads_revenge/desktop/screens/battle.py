@@ -140,7 +140,7 @@ AIMED: tuple[str, ...] = (ATTACK, SPECIAL)
 ROWS: dict[int, tuple[tuple[float, float, float], ...]] = {
     1: ((0.0, 0.88, 0.0),),
     2: ((-0.20, 1.00, 0.0), (0.20, 1.00, 0.0)),
-    3: ((-0.30, 1.00, -1.0), (-0.02, 0.88, -0.75), (0.30, 1.13, -1.0)),
+    3: ((-0.30, 1.00, -1.0), (-0.065, 0.88, -0.75), (0.30, 1.13, -1.0)),
 }
 
 #: How tall the panels and the log are, in rows, at *every* grid. Two numbers and
@@ -164,9 +164,10 @@ HERO_CLEARANCE_CELLS = 4
 #: room's front: on the plate, which is four or five rows under the band whatever
 #: grid the window was derived for -- so a row count keeps him there, and a share
 #: of the band (which is what a depth is) would not. The quarter is the fifteen
-#: pixels he was asked to come up by: a row is twenty, and he stands at the very
-#: top of the panel he is in front of rather than in the middle of it.
-HERO_DROP = 5.25
+#: pixels he was asked to come up by -- and then two rows *down* again, because the
+#: sheets are drawn at twice the game's pixels now and a tall hero reaches up into the
+#: room: standing lower is what gives the row above him its air back.
+HERO_DROP = 7.25
 
 #: How far up the whole stage stands, in rows, from the row it was laid out on.
 #:
