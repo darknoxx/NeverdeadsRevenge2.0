@@ -78,15 +78,6 @@ FLOOR_AT = 0.5556
 #: standing in the last row of masonry.
 HORIZON_AT = 0.472
 
-#: How far the arc spreads, as a share of the painting's height per unit of depth.
-#:
-#: A depth says how far into the room a monster stands, and this turns that into
-#: pixels *of the painting* rather than rows *of the grid* -- which is what makes
-#: the arc the same shape on every monitor. The number is the one a sixteen-by-nine
-#: frame already produced: a lane twelve hundredths of a depth behind the front one
-#: stands a row (twenty pixels of five hundred and forty, 3.7%) further back.
-SPREAD_AT = 0.31
-
 #: Where the painting's two torches are, as shares of the painting itself.
 #: Measured off the picture: the bright pixels of the flames, left and right.
 TORCHES = ((0.110, 0.250), (0.890, 0.267))
@@ -286,46 +277,6 @@ class Stage:
         return self._stones[key]
 
     # -- and the room in one picture ----------------------------------------
-    def paper(self, cols: int, rows: int, font):
-        """The painting, fitted to the whole frame, or ``None`` if there is none.
-
-        Covered and not stretched: the painting is three by two and a frame is
-        sixteen by nine, so it is scaled until it fills and centred -- crops,
-        rather than squashes. One dial for the eye, and this is the neutral
-        setting.
-        """
-        image = load("backdrops/arena.png")
-        if image is None:
-            return None
-        return self._backdrop_for(
-            image, (cols * font.cell_w, rows * font.cell_h)
-        )
-
-    def _backdrop_for(self, image, size):
-        """The painting, fitted to that rectangle, once per size."""
-        import pygame
-
-        key = (int(size[0]), int(size[1]))
-        if key not in self._fitted:
-            width, height = key
-            factor = max(width / image.get_width(), height / image.get_height())
-            scaled = pygame.transform.smoothscale(
-                image,
-                (
-                    max(1, round(image.get_width() * factor)),
-                    max(1, round(image.get_height() * factor)),
-                ),
-            )
-            self._fitted[key] = scaled.subsurface(
-                pygame.Rect(
-                    (scaled.get_width() - width) // 2,
-                    (scaled.get_height() - height) // 2,
-                    width,
-                    height,
-                )
-            )
-        return self._fitted[key]
-
     def _cell(self, field) -> tuple[int, int]:
         """The cell the room is measured in, off the field it was built from."""
         return (int(field["cell_w"]), int(field["cell_h"]))
@@ -390,39 +341,78 @@ class Stage:
             (round(figure.cx - width / 2.0), round(centre_y - height / 2.0)),
         )
 
-    def line_at(self, share: float, width: int, height: int) -> float:
-        """Where a share of the painting's height lands, in frame pixels.
+    def placement(self, width: int, height: int, floor_px: float):
+        """The painting on this frame: scaled and *placed* so its floor is the room's.
 
-        The same fit as the paper itself -- covered, cropped, centred -- which is
-        the whole point: the staging asks the artwork where its floor is, and the
-        answer has to be the line the *paper* drew and not a line of the grid's
-        own arithmetic. Without a painting there is no answer, and the frame's own
-        foot is the best a room of cells can do.
+        This is the whole of how the artwork and the cells agree. The room's floor
+        line is a row of the grid -- the foot of the ground band, which is a fixed
+        number of rows above the panels whatever the window did -- and the painting
+        is scaled until its painted floor edge can be laid exactly on that line and
+        still cover the frame. So the monsters stand on the floor the artist drew
+        *and* on the row the room says, and neither of them is a compromise.
+
+        Returns ``(factor, off_x, off_y)``: the scale, and where the scaled painting
+        is put, both in frame pixels. ``off_y`` may be negative -- the painting
+        hanging over the top of the frame is a crop, and it is meant.
         """
         image = load("backdrops/arena.png")
         if image is None:
-            return float(height)
+            return 1.0, 0.0, 0.0
         own_w, own_h = image.get_size()
-        factor = max(width / own_w, height / own_h)
-        span_h = own_h * factor
-        return share * span_h - (span_h - height) / 2.0
+        # Big enough to cover sideways, big enough that the floor edge can reach
+        # `floor_px` from above it, and big enough that what is below that edge
+        # still reaches the bottom of the frame.
+        above = max(1.0, floor_px) / (own_h * FLOOR_AT)
+        below = max(1.0, height - floor_px) / (own_h * (1.0 - FLOOR_AT))
+        factor = max(width / own_w, above, below)
+        span_w, span_h = own_w * factor, own_h * factor
+        return factor, (span_w - width) / 2.0, floor_px - FLOOR_AT * span_h
 
-    def floor_line(self, width: int, height: int) -> float:
-        """The near edge of the painting's floor: where a monster *stands*."""
-        return self.line_at(FLOOR_AT, width, height)
-
-    def horizon_line(self, width: int, height: int) -> float:
-        """The far edge: beyond it there is wall, and nothing stands there."""
-        return self.line_at(HORIZON_AT, width, height)
-
-    def spread_px(self, width: int, height: int) -> float:
-        """How many pixels one whole unit of depth is worth, on this frame."""
+    def _own_size(self, height: int) -> tuple[int, int]:
+        """The painting's own pixels, or the frame's shape when there is none."""
         image = load("backdrops/arena.png")
         if image is None:
-            return height * SPREAD_AT
-        own_w, own_h = image.get_size()
-        factor = max(width / own_w, height / own_h)
-        return own_h * factor * SPREAD_AT
+            return max(1, height), max(1, height)
+        return image.get_size()
+
+    def line_at(self, share: float, width: int, height: int, floor_px: float) -> float:
+        """Where a share of the painting's height lands, in frame pixels.
+
+        The placement's offset is where the painting's *top* is put, so a line on
+        the painting is that offset plus the share of its height -- and the floor
+        edge is the line the whole placement exists to land on the room's own row.
+        """
+        factor, _off_x, off_y = self.placement(width, height, floor_px)
+        return off_y + share * self._own_size(height)[1] * factor
+
+    def horizon_line(self, width: int, height: int, floor_px: float) -> float:
+        """The far edge: beyond it there is wall, and nothing stands there."""
+        return self.line_at(HORIZON_AT, width, height, floor_px)
+
+    def paper(self, cols: int, rows: int, font, floor_px: float):
+        """The painting, placed on this frame, at the room's own floor line."""
+        image = load("backdrops/arena.png")
+        if image is None:
+            return None
+        import pygame
+
+        width, height = cols * font.cell_w, rows * font.cell_h
+        key = (int(width), int(height), int(floor_px))
+        if key not in self._fitted:
+            factor, off_x, off_y = self.placement(width, height, floor_px)
+            own_w, own_h = image.get_size()
+            scaled = pygame.transform.smoothscale(
+                image,
+                (
+                    max(1, round(own_w * factor)),
+                    max(1, round(own_h * factor)),
+                ),
+            )
+            frame = pygame.Surface((width, height))
+            frame.fill((0, 0, 0))
+            frame.blit(scaled, (round(off_x), round(off_y)))
+            self._fitted[key] = frame
+        return self._fitted[key]
 
     def glow(self, surface, width: int, height: int, clock: float) -> None:
         """Light on the two torches in the painting, breathing.

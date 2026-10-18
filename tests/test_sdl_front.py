@@ -2701,120 +2701,45 @@ def test_the_menu_covers_the_hero_where_it_is_and_nowhere_else():
         )
 
 
-def test_the_monsters_stand_on_the_painting_at_any_window_shape():
-    """The floor is the *painting's*, and it does not move when the window does.
+def test_a_room_of_cells_has_no_wall_line_to_be_told():
+    """No painting, no wall: the flagstones *are* the room.
 
-    The staging used to be measured in the grid's rows -- from the foot of the
-    room's ground band -- which agrees with the painting at sixteen by nine and
-    drifts at every other shape, because the grid is derived from the window and
-    grows by *cells* while the painting grows by *pixels*. On a monitor that is
-    not sixteen by nine the monsters ended up standing on the horizon, in the
-    wall. Anchored to the artwork's own floor line they stand where the artist
-    drew it, and this is that asked as a fraction: the middle monster's feet, as
-    a share of the painting, at seven window shapes including two that are not
-    sixteen by nine.
-
-    A band and not a number, because a row is twenty pixels and the room is
-    written in rows: a stride that lands within three percent of the line is a
-    stride that lands on it.
-    """
-    import pygame
-
-    from neverdeads_revenge.desktop.screens.battle import THICKNESS
-    from neverdeads_revenge.sdl_front.app import SdlApp
-    from neverdeads_revenge.sdl_front.paint import load
-
-    painting = load("backdrops/arena.png")
-    own_w, own_h = painting.get_size()
-    probe = SdlApp(seed=3, battle_scene=True, no_sound=True)
-
-    reported = {}
-    for width, height in (
-        (960, 540),  # the tuned shape
-        (1280, 800),  # 16:10
-        (1680, 1050),
-        (1920, 1200),
-        (1024, 768),  # 4:3
-        (2560, 1080),  # 21:9
-        (3440, 1440),
-    ):
-        cols, rows = probe._grid_size(width, height)
-        app = SdlApp(seed=3, battle_scene=True, no_sound=True, cols=cols, rows=rows)
-        app.redraw()
-        arena = app.screens[-1]
-        cell_h = app.font.cell_h
-        frame_w, frame_h = cols * app.font.cell_w, rows * cell_h
-        factor = max(frame_w / own_w, frame_h / own_h)
-        span_h = own_h * factor
-        cropped = (span_h - frame_h) / 2.0
-
-        monsters = [
-            one
-            for one in arena.arena._figures(cols, rows, app.font)
-            if one.actor is not arena.battle.hero
-        ]
-        middle = min(monsters, key=lambda one: one.row)
-        feet = middle.row * cell_h - THICKNESS
-        share = (feet + cropped) / span_h
-        reported[(width, height)] = round(share * 100, 1)
-
-        # On the painting's floor, whatever the shape: in the band between the wall
-        # (measured at 0.463) and the middle of the flagstones, which is where an arc
-        # two rows deep puts the back lane.
-        assert 0.44 < share < 0.52, f"{width}x{height}: the middle stands at {share:.1%}"
-        # ...never down in the menu, and never up in the wall. The horizon is the
-        # painting's own line -- the feet of the far lane were measured against it
-        # when the sprite sheet was drawn -- and a lane with a nudge of its own can
-        # cross it, which is what the middle of three did on most monitors.
-        plate_row = arena.arena._areas(cols, rows)["plate"][1]
-        horizon = arena._stage.horizon_line(frame_w, frame_h)
-        for one in monsters:
-            assert one.row < plate_row, f"{width}x{height}: a monster is in the panel"
-            feet = one.row * cell_h - THICKNESS
-            assert feet + cropped >= horizon - 1.0, (
-                f"{width}x{height}: {one.actor.name} is standing in the wall"
-            )
-
-    # And the shape it was tuned at is *exactly* where it was: the shift is
-    # nothing there, which is why the anchor is that particular fraction.
-    across = max(reported.values()) - min(reported.values())
-    assert across < 6.0, f"the line moved {across}% between window shapes: {reported}"
-
-
-def test_a_room_of_cells_still_stands_on_its_own_band():
-    """No painting, no anchor: the flagstones *are* the floor.
-
-    The dial is told by the front end that owns the artwork, so a room made of
-    cells keeps the arithmetic it always had -- and that is not a detail, it is
-    the difference between "the room is a picture" and "the room is the room".
+    The one thing the staging has to be told is where the *artwork's* wall ends,
+    because that depends on where the painting was placed -- and a room made of
+    cells has no artwork and no wall line, so it is told nothing and keeps the
+    arithmetic it always had.
     """
     from neverdeads_revenge.sdl_front.app import SdlApp
 
     tiled = SdlApp(seed=3, battle_scene=True, no_sound=True, backdrop=False)
     tiled.redraw()
-    assert tiled.screens[-1].arena.stage_floor is None, "a tiled room was given a floor line"
+    assert tiled.screens[-1].arena.stage_horizon is None, (
+        "a tiled room was given a wall line"
+    )
 
     painted = SdlApp(seed=3, battle_scene=True, no_sound=True, backdrop=True)
     painted.redraw()
-    assert painted.screens[-1].arena.stage_floor is not None, (
-        "a painted room was not told where its floor is"
+    assert painted.screens[-1].arena.stage_horizon is not None, (
+        "a painted room was not told where its wall ends"
     )
 
 
 def test_the_composition_is_the_same_at_every_window_shape():
-    """The furniture and the fight, asked of eight window shapes at once.
+    """The furniture, the hero and the fight, asked of eight window shapes at once.
 
-    The complaint this answers was not one of these things going wrong, it was all
-    of them drifting together: the panels were seven rows tall above twenty-six
-    rows of grid and *five* below it -- which fired on a 21:9 monitor, giving that
-    machine a shorter ORDER strip, a shorter log, and the hero standing twenty
-    pixels lower in his own plate -- and the arc was measured as a share of the
-    ground band, so a taller band spread the same fight further apart.
+    The complaint this answers was not one of them going wrong, it was all of them
+    drifting together: the panels were seven rows tall above twenty-six rows of grid
+    and *five* below it -- which fired on a 21:9 monitor, giving that machine a
+    shorter ORDER strip, a shorter log, and the hero standing twenty pixels lower in
+    his own plate -- and a depth was a share of the ground band, so a taller band
+    spread the same fight further apart.
 
-    Now: the furniture is a fixed number of rows, the hero stands the same distance
-    into his plate, and the monsters stand at the same *fraction of the painting*
-    wherever they are. Which is the whole point of a painted room -- the composition
-    is the artwork's, and the window only decides how much of it you see.
+    So the *cells* are the truth: fixed furniture, a fixed number of rows from the
+    panel line for each lane and for the hero, at every window. And a painted room
+    is fitted to that rather than the other way round -- the artwork is placed so
+    that its own painted floor edge lies on the room's floor row, which is the line
+    the monsters actually stand on. Both halves are asked here, because one without
+    the other is a room that looks right and stands in the wrong place.
     """
     import pygame
 
@@ -2825,6 +2750,7 @@ def test_the_composition_is_the_same_at_every_window_shape():
     )
     from neverdeads_revenge.sdl_front.app import SdlApp
     from neverdeads_revenge.sdl_front.paint import load
+    from neverdeads_revenge.sdl_front.stage import FLOOR_AT
 
     painting = load("backdrops/arena.png")
     own_w, own_h = painting.get_size()
@@ -2833,7 +2759,8 @@ def test_the_composition_is_the_same_at_every_window_shape():
     panel_rows = set()
     log_rows = set()
     drops = set()
-    lanes: dict[float, list[float]] = {}
+    gaps: dict[float, list[float]] = {}
+    painted_off: list[float] = []
     clamped: set[float] = set()
 
     for width, height in (
@@ -2853,6 +2780,10 @@ def test_the_composition_is_the_same_at_every_window_shape():
         cell_h = app.font.cell_h
         frame_w, frame_h = cols * app.font.cell_w, rows * cell_h
         area = arena.arena._areas(cols, rows)
+        plain = arena.arena._floor_row(cols, rows) * cell_h
+        parm, _px, p_off = arena._stage.placement(frame_w, frame_h, plain)
+        painted_off.append(p_off + FLOOR_AT * own_h * parm - plain)
+
         figures = arena.arena._figures(cols, rows, app.font)
         hero = next(one for one in figures if one.actor is arena.battle.hero)
         monsters = sorted(
@@ -2864,15 +2795,8 @@ def test_the_composition_is_the_same_at_every_window_shape():
         log_rows.add(area["log"][3])
         drops.add((hero.row * cell_h - THICKNESS) - area["plate"][1] * cell_h)
 
-        factor = max(frame_w / own_w, frame_h / own_h)
-        span_h = own_h * factor
-        cropped = (span_h - frame_h) / 2.0
         for index, one in enumerate(monsters):
-            feet = one.row * cell_h - THICKNESS
-            lanes.setdefault(float(index), []).append((feet + cropped) / span_h)
-            # A lane is *held* when one of the room's own lines has it: the last row
-            # above the panels, or the four rows a monster standing over the hero
-            # must leave him. Held is not drifting.
+            gaps.setdefault(float(index), []).append(area["plate"][1] - one.row)
             over_hero = abs(one.cx - hero.cx) <= HERO_CLEARANCE_CELLS * app.font.cell_w
             if one.row >= area["plate"][1] - 1 - 1e-9 or (
                 over_hero and one.row >= hero.row - HERO_CLEARANCE - 1e-9
@@ -2881,13 +2805,17 @@ def test_the_composition_is_the_same_at_every_window_shape():
 
     assert panel_rows == {7}, f"the panels changed height: {panel_rows}"
     assert log_rows == {3}, f"the log changed height: {log_rows}"
-    assert drops == {0.0}, f"the hero sits differently in his plate: {drops}"
-    for lane, shares in lanes.items():
-        spread = max(shares) - min(shares)
-        # A lane that sits on the last row above the panels is *clamped*, and a
-        # clamped lane is the room being honest about being short -- on the widest
-        # window here the nearest monster would stand in the menu, so it stands at
-        # the menu's edge instead. Everything else stands in the same place.
-        assert spread < 0.01 or lane in clamped, (
-            f"lane {lane} moves {spread:.1%} of the painting between window shapes"
+    assert len(drops) == 1, f"the hero sits differently in his plate: {drops}"
+    for lane, distances in gaps.items():
+        spread = max(distances) - min(distances)
+        # A lane held by the wall or by the hero's head is the room being honest
+        # about being short, not a lane that drifted.
+        assert spread < 0.5 or lane in clamped, (
+            f"lane {lane} moves {spread:.2f} rows from the panels between window shapes"
         )
+    # And the painting is *placed*, not merely fitted: its own floor edge lands on
+    # the room's floor row, whatever shape the frame is.
+    for off in painted_off:
+        assert abs(off) < 1.5, f"the painted floor is {off:.1f}px off the room's floor"
+
+

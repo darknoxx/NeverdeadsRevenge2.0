@@ -97,7 +97,9 @@ class SdlArena(Screen):
         """
         if not self.backdrop:
             return None
-        return self._stage.paper(cols, rows, font)
+        return self._stage.paper(
+            cols, rows, font, float(self.arena._floor_row(cols, rows) * font.cell_h)
+        )
 
     # -- the first pass -----------------------------------------------------
     def draw(self, buffer, app) -> None:
@@ -114,15 +116,15 @@ class SdlArena(Screen):
         # cells, where the grid's own band *is* the floor.
         frame_w = buffer.cols * buffer.font.cell_w
         frame_h = buffer.rows * buffer.font.cell_h
-        self.arena.stage_floor = (
-            self._stage.floor_line(frame_w, frame_h) if self.backdrop else None
-        )
+        # Where the *room* says its floor is: the foot of the ground band, in
+        # pixels. The painting is fitted to this line rather than the staging being
+        # fitted to the painting -- so the monsters stand on the row the game's own
+        # layout puts them on, and the artwork is placed to agree.
+        floor_px = float(self.arena._floor_row(buffer.cols, buffer.rows) * buffer.font.cell_h)
+        #: The wall, as the *placed* painting draws it: the one line the staging has
+        #: to be told, because only the front end knows where the artwork ended up.
         self.arena.stage_horizon = (
-            self._stage.horizon_line(frame_w, frame_h) if self.backdrop else None
-        )
-        #: And how wide one unit of depth is, in the painting's own pixels.
-        self.arena.stage_spread = (
-            self._stage.spread_px(frame_w, frame_h) if self.backdrop else None
+            self._stage.horizon_line(frame_w, frame_h, floor_px) if self.backdrop else None
         )
         self.arena.draw(buffer, app, ground=not self.backdrop)
         if self.backdrop:

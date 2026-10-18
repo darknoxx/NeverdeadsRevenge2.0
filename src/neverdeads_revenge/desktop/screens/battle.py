@@ -148,6 +148,11 @@ ROWS: dict[int, tuple[tuple[float, float, float], ...]] = {
 PANEL_ROWS = 7
 LOG_ROWS = 3
 
+#: How many rows further back a lane stands, per unit of depth. The number is the
+#: one the staging was tuned at -- twelve hundredths of a depth was a row -- and it
+#: is fixed, so the arc is the same shape however many rows the window fit.
+ARC_ROWS = 25 / 3
+
 #: How many rows of room a monster leaves the hero when it is standing over him:
 #: his own height, near enough. And how many cells to the side it stops counting as
 #: "over him" -- a sprite is five or six cells wide, and so is his.
@@ -636,25 +641,11 @@ class BattleScreen(Screen):
         #: front of it. The same reason ``_size`` is kept -- a painter that paints
         #: in two passes has to agree with itself about the first one.
         self._grid = None
-        #: Where the room's floor is, in *frame pixels* from the top, when the room
-        #: is a painting and not a band of cells. Set by the front end that owns the
-        #: artwork -- the one thing a screen cannot know -- and used to shift the
-        #: staging onto it: a depth says how far into the room a monster stands, and
-        #: this says where "into the room" begins. ``None`` means a room of cells,
-        #: and the ground band's own foot is the floor.
-        self.stage_floor: float | None = None
-        #: And where the painting's floor *ends*, at the back: no monster stands
-        #: above this line, because above it is the wall. Set by the same front end
-        #: and for the same reason -- it is the artwork's number and not the grid's.
+        #: Where the painting's *wall* begins, in frame pixels from the top. Set by
+        #: the front end that owns the artwork -- it is the one line only it knows,
+        #: because it depends on where the painting was placed -- and no monster
+        #: stands above it. ``None`` is a room of cells, which has no wall line.
         self.stage_horizon: float | None = None
-        #: And how many pixels one whole unit of *depth* is worth on this frame,
-        #: which is how the arc is drawn: a monster half a depth further back
-        #: stands half of this further up the floor, whatever the window did to the
-        #: grid. The depth used to be a share of the ground band's *height*, which
-        #: made the same fight a different shape on every monitor -- a taller band
-        #: spread the monsters further apart, and a 21:9 window spread them further
-        #: still.
-        self.stage_spread: float | None = None
         #: The arena's own clock, in seconds. The idle breath and every phase of
         #: a strike are read off it, so nothing here owns a timer.
         self._clock = 0.0
@@ -1677,29 +1668,32 @@ class BattleScreen(Screen):
         """
         return self._stage(self._field(cols, rows, font.cell_w, font.cell_h))
 
-    def _row_for(
-        self, depth: float, lift: float, y0: int, height: int, cell_h: int, shift: float
-    ) -> float:
-        """Where a monster stands, in rows: the floor line, and the depth from it.
+    def _floor_row(self, cols: int, rows: int) -> int:
+        """The row the room's floor is on: the foot of the ground band.
 
-        Two ways to ask, and the difference is the whole of this: a room of *cells*
-        has a band of floor and its height is the room, so a depth is a share of
-        that band. A room that is a *painting* has a floor the artist drew, and the
-        depth is then pixels of the painting -- so the same fight is the same shape
-        on a laptop and on a wide monitor, instead of spreading out with however
-        many rows the window happened to fit.
-
-        The lift is in rows in both cases, because a row is twenty pixels and a
-        playtest says "ten pixels higher", not "a hundredth of the room".
+        One number, asked of the layout, and the painting is fitted to it -- which
+        is the other way round from fitting the staging to the painting, and the
+        right way round: the room's floor is where the game's own furniture leaves
+        it, and that is a fixed number of rows above the panels at every window.
         """
-        if self.stage_floor is None or self.stage_spread is None:
-            return y0 + max(1, round(depth * height)) - STAGE_LIFT - lift + shift
-        feet = (
-            self.stage_floor
-            + (depth - 1.0) * self.stage_spread
-            - lift * cell_h
-        )
-        return (feet + THICKNESS) / max(1, cell_h)
+        _x, y0, _w, ground_h = self._areas(cols, rows)["ground"]
+        return y0 + ground_h - 1
+
+    def _row_for(self, depth: float, lift: float, y0: int, height: int) -> float:
+        """Where a monster stands, in rows: the room's floor, and the depth from it.
+
+        One rule for both kinds of room, and the *rows* are the truth in both: the
+        floor is the foot of the ground band -- a fixed number of rows above the
+        panels, at every window -- and a depth walks back from there by a fixed
+        number of rows. It used to be a share of the band's own height, which is
+        how the same fight came out spread further apart on a taller window; the
+        grid decides how much floor there *is*, not how deep a lane stands.
+
+        ``ARC_ROWS`` is the row of twenty pixels the staging was tuned at: a lane
+        twelve hundredths of a depth behind the front one stands one row further
+        back, and the front one stands on the floor line itself.
+        """
+        return (y0 + height - 1) - STAGE_LIFT - (1.0 - depth) * ARC_ROWS - lift
 
     def _stage(self, field: dict[str, float]) -> list[Staged]:
         """Who stands where: the monsters in the far half, the hero in front.
@@ -1721,42 +1715,24 @@ class BattleScreen(Screen):
         marked = living[self.target % len(living)] if self.aiming and living else None
         scale = 1.35 if width >= 120 else 1.0
         # The room's floor, in rows: the band's own foot, or -- when the room is a
-        # painting -- where the artist drew it. The staging keeps its shape either
-        # way; this moves the whole row onto the right line.
-        band_foot = y0 + height - 1
-        # Where the hero will stand, in rows, whatever kind of room this is: the
-        # monsters are kept off his head below, and that rule does not care whether
-        # the room is a painting or a band of flagstones.
+        # Where the hero will stand, in rows -- the monsters are kept off his head
+        # below, and that rule does not care whether the room is a painting.
         hero_row = y0 + height - 1 + HERO_DROP - STAGE_LIFT
-        painted = self.stage_floor is not None and self.stage_spread is not None
-        if not painted:
-            shift = 0.0
-            # A room of cells: not a clamp at all, because the band's foot is
-            # already the line they stand on and there is nothing below it but
-            # the log and the panels they were never meant to reach.
-            lowest = y0 + height - 1
-        else:
-            shift = (self.stage_floor - band_foot * cell_h) / max(1, cell_h)
-            # And never into the panels: a floor line low enough to be *inside* the
-            # menu is a floor line the menu is standing on, so the monsters stop at
-            # the first row above it. The grid's own size, which this screen is told
-            # every time it is drawn -- the field below is the *room's* band and
-            # does not know where the panels are.
-            size = self._size or (0, 0)
-            panel_row = (
-                max(1, self._areas(*size)["plate"][1] - 1)
-                if size[0] and size[1]
-                else y0 + height
-            )
-            # And never on the hero's head -- but that is a rule about the lane in
-            # the *middle*, and it is applied per monster below, because a lane off
-            # to the side is nobody's problem and pulling those up too would flatten
-            # the whole arc on every monitor to fix one of them.
-            lowest = panel_row
-        # The back of the room: no monster stands above the painting's horizon. A
-        # lane with a nudge of its own can cross it -- the middle of three is the
-        # only one that has a nudge, which is why it is the only one that ever
-        # ended up in the wall -- and the rule is the artwork's, not the lane's.
+        # And never into the panels: a floor line low enough to be *inside* the
+        # menu is a floor line the menu is standing on, so the monsters stop at the
+        # first row above it. The grid's own size, which this screen is told every
+        # time it is drawn -- the field below is the *room's* band and does not know
+        # where the panels are.
+        size = self._size or (0, 0)
+        lowest = (
+            max(1, self._areas(*size)["plate"][1] - 1)
+            if size[0] and size[1]
+            else y0 + height
+        )
+        # The back of the room: no monster stands above the wall. A lane with a
+        # nudge of its own can cross it -- the middle of three is the only one that
+        # has a nudge, which is why it is the only one that ever ended up in the
+        # wall -- and the line is the artwork's, not the lane's.
         highest = -1e9
         if self.stage_horizon is not None:
             highest = (self.stage_horizon + THICKNESS) / max(1, cell_h)
@@ -1786,10 +1762,7 @@ class BattleScreen(Screen):
                     cx=cx,
                     row=min(
                         floor_here,
-                        max(
-                            highest,
-                            self._row_for(depth, lift, y0, height, cell_h, shift),
-                        ),
+                        max(highest, self._row_for(depth, lift, y0, height)),
                     ),
                     cells=self._span(art, cell_w),
                     chosen=enemy is marked,
