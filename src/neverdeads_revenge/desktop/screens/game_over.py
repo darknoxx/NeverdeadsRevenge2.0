@@ -85,6 +85,19 @@ class GameOverScreen(Screen):
             text = f"hold enter   {bar}"
         buffer.text(x + 3, y, text[: width - 6], parse_style(ASH))
 
+    #: The hold key has no click of its own.
+    #:
+    #: A press that *starts* a hold has decided nothing -- that is the whole
+    #: design of the bar, and a tap goes nowhere -- so the only sound this screen
+    #: makes for ``enter`` is the one at the end of the fill, played by the
+    #: screen itself. Everything else about the interface still clicks through
+    #: the table it inherits.
+    UI_SOUNDS = {
+        key: sound
+        for key, sound in Screen.UI_SOUNDS.items()
+        if key not in ("enter", "space")
+    }
+
     def key(self, name, event, app) -> bool:
         if name == "escape":
             # One gesture: a held escape from the screen before this one must
@@ -103,6 +116,7 @@ class GameOverScreen(Screen):
         if name in ("enter", "return"):
             # Repeats are fed on purpose: the hold *is* the repeats.
             if self.hold.press(name, event.isAutoRepeat()):
+                app.play("cursor_confirm")
                 self.finish(app, None)
             return True
         return True

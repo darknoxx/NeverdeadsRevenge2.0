@@ -224,12 +224,13 @@ def test_a_run_starts_and_the_hero_walks_with_no_qt_in_the_room():
             break
     assert app.run.player.position != here, "the hero could not take a step"
     assert app.run.player.steps == 1, "the step was not counted"
-    # And the step itself is the sound: it logs nothing -- fights, stairs and
-    # levels are what the *world* makes a noise about, and the loudest line in the
-    # log is still the rule for those -- but a body moving is a foot on stone, and
-    # the screen is the only thing that knows the four directions meant *feet*
-    # here and a cursor in every other screen.
-    assert app.played[-1] == "footstep_stone", app.played
+    # And the step is *silent*, which is a decision and not an oversight: a walk
+    # logs nothing -- fights, stairs and levels are what the world makes a noise
+    # about -- and a footstep on every step was the most repeated sound in the
+    # game, played again on every auto-repeat of a held key. It lasted one
+    # playtest. The floor's arrows are the one thing in the interface that does
+    # not click.
+    assert "footstep_stone" not in app.played, app.played
 
     # And the picture is the grid the game drew, at the size its panels need.
     assert app.grid.cols >= 76 and app.grid.rows >= 24
@@ -2014,6 +2015,45 @@ def test_the_prologue_waits_for_a_held_key_and_a_tap_banks_nothing():
         if type(app.screens[-1]).__name__ == "GameScreen":
             break
     assert type(app.screens[-1]).__name__ == "GameScreen", "a held key did not get through"
+
+
+def test_a_hold_confirms_once_and_not_once_a_repeat():
+    """One gesture, one sound -- at the *end* of it.
+
+    A hold arrives as a press and then thirty repeats, and every one of them is
+    a key the screen used, so the interface's own click played on all of them: a
+    stutter of confirmations for one decision, at the exact moment the player is
+    watching a bar fill. So two rules, and this is both of them asked at once:
+    the door does not click for a repeat (a repeat is not a second press), and a
+    hold's confirm belongs to the *end* of the hold and to the screen that knows
+    the bar is full -- which means the press that starts one is silent too.
+    """
+    import time
+
+    import pygame
+
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3, no_sound=True)
+    app.feed(_pressed(pygame.K_n))  # new run
+    app.feed(_pressed(pygame.K_RETURN))  # and the first hero
+    assert type(app.screens[-1]).__name__ == "PrologueScreen", "no premise to skip"
+
+    # The pick that opened this screen left enter down, and a screen that has
+    # just changed wants a *fresh* press: let it up first, the way a player does.
+    app.feed(_released(pygame.K_RETURN))
+
+    confirms = app.played.count("cursor_confirm")
+    app.feed(_pressed(pygame.K_RETURN))  # the press that starts the hold
+    for _ in range(20):
+        time.sleep(0.07)
+        app.feed(_pressed(pygame.K_RETURN, repeat=True))
+        if type(app.screens[-1]).__name__ == "GameScreen":
+            break
+    assert type(app.screens[-1]).__name__ == "GameScreen", "the hold did not get through"
+
+    made = app.played.count("cursor_confirm") - confirms
+    assert made == 1, f"one hold made {made} confirmations"
 
 
 def test_the_premise_is_told_once_per_session():

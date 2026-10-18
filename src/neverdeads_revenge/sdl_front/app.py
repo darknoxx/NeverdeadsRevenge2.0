@@ -1056,20 +1056,29 @@ class SdlApp:
         if self._glass_key(name):
             return True
         screen = self.screens[-1]
-        used = screen.key(name, event or KeyPress(text=text), self)
-        self._interface_sound(name, bool(used))
+        press = event or KeyPress(text=text)
+        used = screen.key(name, press, self)
+        self._interface_sound(name, bool(used), press)
         self.redraw()
         return bool(used)
 
-    def _interface_sound(self, name: str, used: bool) -> None:
+    def _interface_sound(self, name: str, used: bool, event) -> None:
         """The click of the interface, from the one place a key is delivered.
 
-        Which sound is the *screen's* to say -- a key that walked the hero is a
-        footstep and a key that walked a cursor is a click, and only the screen
-        knows which it just did. This end only knows that something was wanted,
-        which is why asking is a question and not a table here.
+        Which sound is the *screen's* to say -- the floor's arrows walk a body
+        and a menu's arrows walk a cursor, and only the screen knows which it
+        just did. This end knows two things instead, and both of them are about
+        *one* press: whether anything wanted it, and whether it was a repeat.
+
+        A repeat is not a second click. Holding a key down is one gesture -- the
+        hold-to-continue screens are built on exactly that -- and a click on
+        every auto-repeat is a stutter of thirty confirmations for one decision.
+        The screens that *are* a hold play their own confirm when the hold
+        completes, which is the moment the player made it.
         """
         if not used:
+            return
+        if getattr(event, "isAutoRepeat", None) is not None and event.isAutoRepeat():
             return
         sound = getattr(self.screens[-1], "key_sound", None)
         if sound is None:

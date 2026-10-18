@@ -68,13 +68,13 @@ class GameScreen(Screen):
         draw_game(buffer, self.state)
 
     # -- input --------------------------------------------------------------
-    #: Feet, not a cursor: this is the one screen where the four directions
-    #: move a body rather than a pointer.
+    #: The floor, and the one screen whose arrows are silent.
+    #:
+    #: A step is not punctuation and it is not rare: it is the most repeated
+    #: action in the game, held keys repeat it at the platform's own pace, and a
+    #: footstep every sixtieth of a second is not a game that sounds like a walk,
+    #: it is a game that buzzes. It was a nice idea and it lasted one playtest.
     UI_SOUNDS = {
-        "up": "footstep_stone",
-        "down": "footstep_stone",
-        "left": "footstep_stone",
-        "right": "footstep_stone",
         "enter": "cursor_confirm",
         "space": "cursor_confirm",
         "escape": "cursor_back",

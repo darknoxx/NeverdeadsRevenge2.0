@@ -85,6 +85,19 @@ class PrologueScreen(Screen):
         buffer.text(x + width - 4 - 10, y + height - 2, self.hold.bar(), parse_style(bar_style))
 
     # -- input --------------------------------------------------------------
+    #: The hold key has no click of its own.
+    #:
+    #: A press that *starts* a hold has decided nothing -- that is the whole
+    #: design of the bar, and a tap goes nowhere -- so the only sound this screen
+    #: makes for ``enter`` is the one at the end of the fill, played by the
+    #: screen itself. Everything else about the interface still clicks through
+    #: the table it inherits.
+    UI_SOUNDS = {
+        key: sound
+        for key, sound in Screen.UI_SOUNDS.items()
+        if key not in ("enter", "space")
+    }
+
     def key(self, name: str, event, app) -> bool:
         if name in _SCROLL_STEP:
             if event.isAutoRepeat():
@@ -105,6 +118,9 @@ class PrologueScreen(Screen):
         if name in ("enter", "return"):
             # Repeats are the hold's food; nothing else here acts on them.
             if self.hold.press(name, event.isAutoRepeat()):
+                # One sound, at the end of the hold and not on every repeat:
+                # this is one decision however many frames it took to make.
+                app.play("cursor_confirm")
                 self.finish(app)
             return True
         return True
