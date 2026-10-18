@@ -65,6 +65,11 @@ def main(argv: list[str] | None = None) -> int:
         help="show a frame counter in the corner",
     )
     parser.add_argument(
+        "--display",
+        action="store_true",
+        help="print what this machine says about its display, and stop",
+    )
+    parser.add_argument(
         "--timings",
         action="store_true",
         help="print what each stage of the frame costs, once a second",
@@ -85,6 +90,18 @@ def main(argv: list[str] | None = None) -> int:
             tempfile.gettempdir(), "ndr2-sound.log"
         )
         os.environ["NEVERDEADS_REVENGE_SOUND_LOG"] = path
+
+    if args.display:
+        from .sdl_front.app import SdlApp
+
+        for line in SdlApp(
+            seed=args.seed,
+            scale=args.scale,
+            no_sound=True,
+            backdrop=not args.no_backdrop,
+        ).display_report():
+            print(line)
+        return 0
 
     if args.testrun:
         from .persistence import grant_test_save

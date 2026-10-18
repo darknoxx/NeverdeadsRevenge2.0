@@ -2928,3 +2928,23 @@ def test_the_torches_burn_where_the_painting_put_them():
             f"the brightest lit pixel is at {best} and the painting's torch at "
             f"{want[0]:.0f},{want[1]:.0f}"
         )
+
+
+def test_the_display_report_says_what_the_machine_says():
+    """``--display``: the numbers a screenshot cannot show.
+
+    When the room comes out the wrong size on somebody's monitor, the question is
+    what the *platform* reports -- the window, the drawable, the desktop, the scale --
+    and none of that is visible in a picture of the game. So it is printed, and this
+    holds that it prints the things worth asking for.
+    """
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3, no_sound=True, cols=96, rows=27)
+    report = app.display_report()
+    text = "\n".join(report)
+
+    for wanted in ("platform", "dpi scale", "desktop", "window", "canvas"):
+        assert wanted in text, f"{wanted} is not in the report:\n{text}"
+    assert "96x27" in text, text
+    assert app._dpi() >= 1.0, "a display scale below one is not a display scale"

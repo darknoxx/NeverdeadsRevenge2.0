@@ -19,7 +19,9 @@ Two things are honestly missing, and named rather than hidden:
 
 from __future__ import annotations
 
+import os
 import random
+import sys
 import time
 from pathlib import Path
 
@@ -93,6 +95,19 @@ class SdlApp:
     ) -> None:
         import pygame
 
+        # A DPI-aware process, said out loud rather than left to a toolkit's default.
+        #
+        # On a display scaled to 125% the *window* is the same size on the desk and a
+        # quarter more pixels across it. Left unaware, a full screen is handed the
+        # scaled-down view of the desktop -- 2048x1152 on a 2560x1440 monitor -- and
+        # the room is derived from *that*: a quarter more cells across, a backdrop
+        # fitted to a bigger canvas, and the same sprites in it. Which reads as
+        # figures that shrank, and it is the one thing a player notices at once.
+        #
+        # Aware, full screen is the panel's own mode, the canvas comes out the same as
+        # it would on an unscaled display, and the painting covers it exactly -- so
+        # there is nothing to fix up afterwards.
+        os.environ.setdefault("SDL_WINDOWS_DPI_AWARENESS", "permonitorv2")
         pygame.init()
         # The screens decide what a *held* key means -- the floor walks on one, a
         # shelf scrolls on one, and everything else refuses the repeats -- but SDL
@@ -903,6 +918,63 @@ class SdlApp:
     def _buffer_size(self) -> tuple[int, int]:
         """The picture's own size, in pixels: a cell is ten by twenty, always."""
         return (self.cols * self.font.cell_w, self.rows * self.font.cell_h)
+
+    def _dpi(self) -> float:
+        """How many physical pixels this desktop gives one logical pixel.
+
+        Asked of the operating system, because nothing else knows: SDL hands an
+        unaware process a scaled-down view of the desktop and hands an aware one the
+        real thing, and from inside the game the two look identical. Windows answers
+        directly; on Linux the toolkit's own scale is read from the environment, which
+        covers GNOME and KDE; anything else is 1.0, which is the behaviour before this
+        question was asked at all.
+        """
+        if sys.platform.startswith("win"):
+            try:
+                import ctypes
+
+                return max(1.0, ctypes.windll.shcore.GetScaleFactorForDevice(0) / 100.0)
+            except Exception:  # noqa: BLE001 - a scale we cannot read is 1.0
+                return 1.0
+        for name in ("GDK_SCALE", "QT_SCALE_FACTOR"):
+            value = os.environ.get(name)
+            if value:
+                try:
+                    return max(1.0, float(value))
+                except ValueError:
+                    continue
+        return 1.0
+
+    def display_report(self) -> list[str]:
+        """What this machine says about its display, for the case where it lies.
+
+        A lines-of-text report and not a picture: when the room comes out the wrong
+        size on somebody's monitor, the numbers that matter are the ones the platform
+        is reporting -- the window, the drawable, the desktop, the scale -- and they
+        cannot be read off a screenshot.
+        """
+        import pygame
+
+        if not pygame.display.get_init():
+            pygame.init()
+        desktop = pygame.display.get_desktop_sizes()
+        try:
+            surface = pygame.display.get_surface()
+            drawable = surface.get_size() if surface is not None else None
+        except pygame.error:
+            drawable = None
+        grid = self._grid_size(self.cols * self.font.cell_w, self.rows * self.font.cell_h)
+        return [
+            f"platform      {sys.platform}",
+            f"dpi scale     {self._dpi():.2f}",
+            f"desktop       {desktop}",
+            f"drawable      {drawable}",
+            f"window        {self._shown}",
+            f"canvas        {self.cols}x{self.rows} cells "
+            f"= {self.cols * self.font.cell_w}x{self.rows * self.font.cell_h} px",
+            f"scale setting {self.scale}",
+            f"grid if full screen at that window  {grid[0]}x{grid[1]}",
+        ]
 
     def _open_window(self) -> None:
         """Make the window, once, before the loop starts.
