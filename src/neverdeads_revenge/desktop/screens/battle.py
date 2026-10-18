@@ -125,8 +125,8 @@ AIMED: tuple[str, ...] = (ATTACK, SPECIAL)
 #: middle of the room, two on either side of that middle, and three in the
 #: shallow arc the stage was drawn for, with the outer ones a little nearer, the
 #: way a line of anything stands. The one in the arc that stands furthest back is
-#: lifted a quarter of a row -- which is the *third* time that number came down, and
-#: the smallest step there is: it was
+#: set half a row *below* its depth line -- the fourth time that number moved, and the
+#: first time it went the other way: it was
 #: raised twice by eye while the staging was still measured in the grid's rows and
 #: the middle kept drifting into the wall, and once the stage was anchored to the
 #: painting's floor those two nudges were a step too far. Half a row leaves it
@@ -139,7 +139,7 @@ AIMED: tuple[str, ...] = (ATTACK, SPECIAL)
 ROWS: dict[int, tuple[tuple[float, float, float], ...]] = {
     1: ((0.0, 0.88, 0.0),),
     2: ((-0.20, 1.00, 0.0), (0.20, 1.00, 0.0)),
-    3: ((-0.30, 1.00, 0.0), (-0.02, 0.88, 0.25), (0.30, 1.13, 0.0)),
+    3: ((-0.30, 1.00, 0.0), (-0.02, 0.88, -0.5), (0.30, 1.13, 0.0)),
 }
 
 #: How tall the panels and the log are, in rows, at *every* grid. Two numbers and
