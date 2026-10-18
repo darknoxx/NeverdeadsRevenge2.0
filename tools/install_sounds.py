@@ -74,7 +74,13 @@ SKIP = {"PREVIEW_ALL_SOUNDS.wav"}
 #: The ear is doing RMS, so this dial is RMS: the move goes down until it is the
 #: quietest of the family, because it is the one that repeats.
 LEVELS: dict[str, float] = {
-    "cursor_move": 0.5,  # -6dB: the most repeated sound is the quietest
+    # -6dB, and it survived a whole new pack without moving: the second edition
+    # arrived with a cursor that was already 2.7dB under its confirm, through this
+    # dial, so the relationship held by itself. The reference was two different
+    # numbers once -- the first pack put the move 2.7dB *over* the confirm -- which
+    # is why what is written down is the rule and not the decibel: the most
+    # repeated sound in the game is the quietest one in the interface.
+    "cursor_move": 0.5,
 }
 
 ROOT = Path(__file__).resolve().parent.parent
