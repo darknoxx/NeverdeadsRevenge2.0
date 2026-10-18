@@ -108,6 +108,17 @@ class SdlArena(Screen):
         sheets *do* have a picture for is left to the second pass, because a letter
         written here would stand through the sprite pasted over it.
         """
+        # Where the painting's floor is, told to the screen that stages the fight:
+        # the room's own rules stay in the room, and the artwork's answer to "where
+        # is the floor" is the one thing only the artwork knows. None for a room of
+        # cells, where the grid's own band *is* the floor.
+        self.arena.stage_floor = (
+            self._stage.floor_line(
+                buffer.cols * buffer.font.cell_w, buffer.rows * buffer.font.cell_h
+            )
+            if self.backdrop
+            else None
+        )
         self.arena.draw(buffer, app, ground=not self.backdrop)
         if self.backdrop:
             # The painting *is* the room, so the grid's room is not drawn: the

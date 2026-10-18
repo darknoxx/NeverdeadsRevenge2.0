@@ -44,6 +44,23 @@ __all__ = ["Stage"]
 FADE_ALPHA = 140
 FADE_COLOUR = (6, 6, 10)
 
+#: Where the front edge of the painting's floor is, as a share of the painting's
+#: own height: the line the nearest monsters stand on.
+#:
+#: It is a property of the *painting* and not of the window, and that is the whole
+#: point of it. The staging used to be measured in the grid's rows -- from the foot
+#: of the room's ground band -- which agrees with the painting exactly at sixteen
+#: by nine and drifts away from it at any other shape, because the grid is derived
+#: from the window and grows by *cells* while the painting grows by *pixels*. On a
+#: taller or shorter monitor the monsters ended up standing on the flagstones'
+#: horizon line, in the wall, at whatever distance the arithmetic happened to put
+#: them. Anchored here they stand on the floor the artist drew, at every size.
+#:
+#: The number is where a sixteen-by-nine frame puts it, which is the shape the
+#: staging was tuned at -- so nothing moves there, and everything else is measured
+#: from the painting instead of from the grid.
+FLOOR_AT = 0.5556
+
 #: Where the painting's two torches are, as shares of the painting itself.
 #: Measured off the picture: the bright pixels of the flames, left and right.
 TORCHES = ((0.110, 0.250), (0.890, 0.267))
@@ -346,6 +363,22 @@ class Stage:
             scaled,
             (round(figure.cx - width / 2.0), round(centre_y - height / 2.0)),
         )
+
+    def floor_line(self, width: int, height: int) -> float:
+        """Where the painting's near floor edge is, in frame pixels from the top.
+
+        The same fit as the paper itself -- covered, cropped, centred -- so this
+        answers the one question the staging has to ask the artwork: *where does a
+        monster stand*. Without a painting the answer is the bottom of the frame,
+        which is where a room made of cells puts its floor anyway.
+        """
+        image = load("backdrops/arena.png")
+        if image is None:
+            return float(height)
+        own_w, own_h = image.get_size()
+        factor = max(width / own_w, height / own_h)
+        span_h = own_h * factor
+        return FLOOR_AT * span_h - (span_h - height) / 2.0
 
     def glow(self, surface, width: int, height: int, clock: float) -> None:
         """Light on the two torches in the painting, breathing.

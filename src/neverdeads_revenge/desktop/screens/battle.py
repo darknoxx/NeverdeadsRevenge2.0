@@ -620,6 +620,13 @@ class BattleScreen(Screen):
         #: front of it. The same reason ``_size`` is kept -- a painter that paints
         #: in two passes has to agree with itself about the first one.
         self._grid = None
+        #: Where the room's floor is, in *frame pixels* from the top, when the room
+        #: is a painting and not a band of cells. Set by the front end that owns the
+        #: artwork -- the one thing a screen cannot know -- and used to shift the
+        #: staging onto it: a depth says how far into the room a monster stands, and
+        #: this says where "into the room" begins. ``None`` means a room of cells,
+        #: and the ground band's own foot is the floor.
+        self.stage_floor: float | None = None
         #: The arena's own clock, in seconds. The idle breath and every phase of
         #: a strike are read off it, so nothing here owns a timer.
         self._clock = 0.0
@@ -1644,6 +1651,7 @@ class BattleScreen(Screen):
         is one v in the middle of it.
         """
         cell_w = int(field["cell_w"])
+        cell_h = int(field["cell_h"])
         x0, y0 = int(field["cells_x0"]), int(field["cells_y0"])
         width, height = int(field["cells_w"]), int(field["cells_h"])
         centre = x0 + width // 2
@@ -1653,6 +1661,29 @@ class BattleScreen(Screen):
         # asked one.
         marked = living[self.target % len(living)] if self.aiming and living else None
         scale = 1.35 if width >= 120 else 1.0
+        # The room's floor, in rows: the band's own foot, or -- when the room is a
+        # painting -- where the artist drew it. The staging keeps its shape either
+        # way; this moves the whole row onto the right line.
+        band_foot = y0 + height - 1
+        if self.stage_floor is None:
+            shift = 0.0
+            # A room of cells: not a clamp at all, because the band's foot is
+            # already the line they stand on and there is nothing below it but
+            # the log and the panels they were never meant to reach.
+            lowest = y0 + height - 1
+        else:
+            shift = (self.stage_floor - band_foot * cell_h) / max(1, cell_h)
+            # And never into the panels: a floor line low enough to be *inside* the
+            # menu is a floor line the menu is standing on, so the monsters stop at
+            # the first row above it. The grid's own size, which this screen is told
+            # every time it is drawn -- the field below is the *room's* band and
+            # does not know where the panels are.
+            size = self._size or (0, 0)
+            lowest = (
+                max(1, self._areas(*size)["plate"][1] - 1)
+                if size[0] and size[1]
+                else y0 + height
+            )
         monsters = self.battle.enemies[:STAGE]
         places = ROWS.get(len(monsters), ROWS[STAGE])
         staged: list[Staged] = []
@@ -1667,7 +1698,10 @@ class BattleScreen(Screen):
                     colour=enemy.color,
                     size=size,
                     cx=(centre + round(lane * width) + 1) * cell_w,
-                    row=y0 + max(1, round(depth * height)) - STAGE_LIFT - lift,
+                    row=min(
+                        lowest,
+                        y0 + max(1, round(depth * height)) - STAGE_LIFT - lift + shift,
+                    ),
                     cells=self._span(art, cell_w),
                     chosen=enemy is marked,
                     art=art,

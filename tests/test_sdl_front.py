@@ -2569,11 +2569,16 @@ def test_a_figure_can_stand_on_half_a_row():
     hero = next(one for one in figures if one.actor is arena.battle.hero)
     assert len(monsters) == 3, "this is the three-monster staging"
 
-    middle = monsters[1]
-    assert middle.row % 1 == 0.5, f"the middle of the arc is on {middle.row}"
-    assert monsters[0].row % 1 == 0 and monsters[2].row % 1 == 0, (
-        "the outer two moved with it"
+    middle, left, right = monsters[1], monsters[0], monsters[2]
+    # The whole row is placed on the room's floor line when the room is a
+    # painting, so the *absolute* rows carry that fraction -- what the staging
+    # promises is the shape: half a row of lift for the middle and nothing for
+    # the outer two, which is a half row between them however the row as a whole
+    # is shifted.
+    assert (middle.row - left.row) % 1 == 0.5, (
+        f"the middle of the arc is {middle.row - left.row} rows from the left"
     )
+    assert (right.row - left.row) % 1 == 0, "the outer two are not a whole row apart"
     assert hero.row % 1 != 0, "the hero is back on a whole row"
     assert 0 < hero.row % 1 < 0.5 or hero.row % 1 > 0.5, hero.row
 
@@ -2675,3 +2680,93 @@ def test_the_menu_covers_the_hero_where_it_is_and_nowhere_else():
             f"a shadow shows through the panel at {cell}: the band is painting "
             "over what is behind it"
         )
+
+
+def test_the_monsters_stand_on_the_painting_at_any_window_shape():
+    """The floor is the *painting's*, and it does not move when the window does.
+
+    The staging used to be measured in the grid's rows -- from the foot of the
+    room's ground band -- which agrees with the painting at sixteen by nine and
+    drifts at every other shape, because the grid is derived from the window and
+    grows by *cells* while the painting grows by *pixels*. On a monitor that is
+    not sixteen by nine the monsters ended up standing on the horizon, in the
+    wall. Anchored to the artwork's own floor line they stand where the artist
+    drew it, and this is that asked as a fraction: the middle monster's feet, as
+    a share of the painting, at seven window shapes including two that are not
+    sixteen by nine.
+
+    A band and not a number, because a row is twenty pixels and the room is
+    written in rows: a stride that lands within three percent of the line is a
+    stride that lands on it.
+    """
+    import pygame
+
+    from neverdeads_revenge.desktop.screens.battle import THICKNESS
+    from neverdeads_revenge.sdl_front.app import SdlApp
+    from neverdeads_revenge.sdl_front.paint import load
+
+    painting = load("backdrops/arena.png")
+    own_w, own_h = painting.get_size()
+    probe = SdlApp(seed=3, battle_scene=True, no_sound=True)
+
+    reported = {}
+    for width, height in (
+        (960, 540),  # the tuned shape
+        (1280, 800),  # 16:10
+        (1680, 1050),
+        (1920, 1200),
+        (1024, 768),  # 4:3
+        (2560, 1080),  # 21:9
+        (3440, 1440),
+    ):
+        cols, rows = probe._grid_size(width, height)
+        app = SdlApp(seed=3, battle_scene=True, no_sound=True, cols=cols, rows=rows)
+        app.redraw()
+        arena = app.screens[-1]
+        cell_h = app.font.cell_h
+        frame_w, frame_h = cols * app.font.cell_w, rows * cell_h
+        factor = max(frame_w / own_w, frame_h / own_h)
+        span_h = own_h * factor
+        cropped = (span_h - frame_h) / 2.0
+
+        monsters = [
+            one
+            for one in arena.arena._figures(cols, rows, app.font)
+            if one.actor is not arena.battle.hero
+        ]
+        middle = min(monsters, key=lambda one: one.row)
+        feet = middle.row * cell_h - THICKNESS
+        share = (feet + cropped) / span_h
+        reported[(width, height)] = round(share * 100, 1)
+
+        # On the painting's floor, whatever the shape...
+        assert 0.42 < share < 0.49, f"{width}x{height}: the middle stands at {share:.1%}"
+        # ...and never down in the menu.
+        plate_row = arena.arena._areas(cols, rows)["plate"][1]
+        for one in monsters:
+            assert one.row < plate_row, f"{width}x{height}: a monster is in the panel"
+
+    # And the shape it was tuned at is *exactly* where it was: the shift is
+    # nothing there, which is why the anchor is that particular fraction.
+    across = max(reported.values()) - min(reported.values())
+    assert across < 6.0, f"the line moved {across}% between window shapes: {reported}"
+
+
+def test_a_room_of_cells_still_stands_on_its_own_band():
+    """No painting, no anchor: the flagstones *are* the floor.
+
+    The dial is told by the front end that owns the artwork, so a room made of
+    cells keeps the arithmetic it always had -- and that is not a detail, it is
+    the difference between "the room is a picture" and "the room is the room".
+    """
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    tiled = SdlApp(seed=3, battle_scene=True, no_sound=True, backdrop=False)
+    tiled.redraw()
+    assert tiled.screens[-1].arena.stage_floor is None, "a tiled room was given a floor line"
+
+    painted = SdlApp(seed=3, battle_scene=True, no_sound=True, backdrop=True)
+    painted.redraw()
+    assert painted.screens[-1].arena.stage_floor is not None, (
+        "a painted room was not told where its floor is"
+    )
