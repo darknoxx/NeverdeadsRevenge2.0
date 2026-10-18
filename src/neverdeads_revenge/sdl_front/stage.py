@@ -61,6 +61,20 @@ FADE_COLOUR = (6, 6, 10)
 #: from the painting instead of from the grid.
 FLOOR_AT = 0.5556
 
+#: And where the floor *ends*, at the back: the line the wall stands on.
+#:
+#: A monster behind it is a monster in the masonry. That is not a mistake the
+#: staging makes by design -- every lane has a depth and every depth is a place --
+#: but a lane that stands 1.5 rows higher than its depth asks for, on a frame that
+#: draws the room's rows in a different size than the painting draws its floor, can
+#: cross the line, and the one that crosses it is always the middle of three: the
+#: only lane with a nudge of its own.
+#:
+#: 0.472 is where a sixteen-by-nine frame puts it, which is the value the pack's
+#: own sprite sheet was laid out against -- the monsters' feet were measured at
+#: 255, 275 and 295 pixels of 540, and 255 is the horizon.
+HORIZON_AT = 0.472
+
 #: Where the painting's two torches are, as shares of the painting itself.
 #: Measured off the picture: the bright pixels of the flames, left and right.
 TORCHES = ((0.110, 0.250), (0.890, 0.267))
@@ -364,13 +378,14 @@ class Stage:
             (round(figure.cx - width / 2.0), round(centre_y - height / 2.0)),
         )
 
-    def floor_line(self, width: int, height: int) -> float:
-        """Where the painting's near floor edge is, in frame pixels from the top.
+    def line_at(self, share: float, width: int, height: int) -> float:
+        """Where a share of the painting's height lands, in frame pixels.
 
-        The same fit as the paper itself -- covered, cropped, centred -- so this
-        answers the one question the staging has to ask the artwork: *where does a
-        monster stand*. Without a painting the answer is the bottom of the frame,
-        which is where a room made of cells puts its floor anyway.
+        The same fit as the paper itself -- covered, cropped, centred -- which is
+        the whole point: the staging asks the artwork where its floor is, and the
+        answer has to be the line the *paper* drew and not a line of the grid's
+        own arithmetic. Without a painting there is no answer, and the frame's own
+        foot is the best a room of cells can do.
         """
         image = load("backdrops/arena.png")
         if image is None:
@@ -378,7 +393,15 @@ class Stage:
         own_w, own_h = image.get_size()
         factor = max(width / own_w, height / own_h)
         span_h = own_h * factor
-        return FLOOR_AT * span_h - (span_h - height) / 2.0
+        return share * span_h - (span_h - height) / 2.0
+
+    def floor_line(self, width: int, height: int) -> float:
+        """The near edge of the painting's floor: where a monster *stands*."""
+        return self.line_at(FLOOR_AT, width, height)
+
+    def horizon_line(self, width: int, height: int) -> float:
+        """The far edge: beyond it there is wall, and nothing stands there."""
+        return self.line_at(HORIZON_AT, width, height)
 
     def glow(self, surface, width: int, height: int, clock: float) -> None:
         """Light on the two torches in the painting, breathing.

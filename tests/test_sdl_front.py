@@ -2280,6 +2280,11 @@ def test_the_whole_stage_can_be_lifted_by_a_row_at_a_time():
 
     app = SdlApp(seed=3, battle_scene=True, no_sound=True)
     arena = app.screens[-1]
+    # The room's own lines are asked about elsewhere; here the lift is the only
+    # thing under measurement, so the horizon is taken out of it -- a lane pinned
+    # to the painting's floor cannot rise with the rest, however far the rest is
+    # lifted, and that is a fact about the wall rather than about the lift.
+    arena.arena.stage_horizon = None
     here = arena.arena._figures(app.grid.cols, app.grid.rows, app.font)
     assert rules.STAGE_LIFT >= 1, "the stage was asked to move and did not"
 
@@ -2292,7 +2297,12 @@ def test_the_whole_stage_can_be_lifted_by_a_row_at_a_time():
     assert len(here) == len(floor)
     for lifted, sat in zip(here, floor):
         assert lifted.actor is sat.actor
-        assert sat.row - lifted.row == was, (
+        moved = sat.row - lifted.row
+        # Together, where the room allows it. A figure pinned to the painting's
+        # horizon -- which is where the nudge lifts the middle of three -- cannot
+        # move *up* with the rest, and pinning it there is the point: the room has
+        # a back wall and the stage is not allowed through it.
+        assert moved in (was, 0.0), (
             f"{lifted.actor.name} did not move with the stage: {sat.row} -> {lifted.row}"
         )
 
@@ -2570,15 +2580,22 @@ def test_a_figure_can_stand_on_half_a_row():
     assert len(monsters) == 3, "this is the three-monster staging"
 
     middle, left, right = monsters[1], monsters[0], monsters[2]
-    # The whole row is placed on the room's floor line when the room is a
-    # painting, so the *absolute* rows carry that fraction -- what the staging
-    # promises is the shape: half a row of lift for the middle and nothing for
-    # the outer two, which is a half row between them however the row as a whole
-    # is shifted.
-    assert (middle.row - left.row) % 1 == 0.5, (
-        f"the middle of the arc is {middle.row - left.row} rows from the left"
+    # Asked with the room's horizon *out* of the way, because that line can pin the
+    # middle lane -- and a pinned row is a row on the artwork, not a row of the
+    # staging. What this test owns is the *shape*: half a row of nudge for the
+    # middle and nothing for the outer two, which is a half row between them
+    # however the row as a whole is shifted onto the floor.
+    arena.arena.stage_horizon = None
+    free = arena.arena._figures(app.cols, app.rows, app.font)
+    pinned, middle_free, right_free = (
+        next(one for one in free if one.actor is monsters[i].actor) for i in (0, 1, 2)
     )
-    assert (right.row - left.row) % 1 == 0, "the outer two are not a whole row apart"
+    assert (middle_free.row - pinned.row) % 1 == 0.5, (
+        f"the middle of the arc is {middle_free.row - pinned.row} rows from the left"
+    )
+    assert (right_free.row - pinned.row) % 1 == 0, (
+        "the outer two are not a whole row apart"
+    )
     assert hero.row % 1 != 0, "the hero is back on a whole row"
     assert 0 < hero.row % 1 < 0.5 or hero.row % 1 > 0.5, hero.row
 
@@ -2741,10 +2758,18 @@ def test_the_monsters_stand_on_the_painting_at_any_window_shape():
 
         # On the painting's floor, whatever the shape...
         assert 0.42 < share < 0.49, f"{width}x{height}: the middle stands at {share:.1%}"
-        # ...and never down in the menu.
+        # ...never down in the menu, and never up in the wall. The horizon is the
+        # painting's own line -- the feet of the far lane were measured against it
+        # when the sprite sheet was drawn -- and a lane with a nudge of its own can
+        # cross it, which is what the middle of three did on most monitors.
         plate_row = arena.arena._areas(cols, rows)["plate"][1]
+        horizon = arena._stage.horizon_line(frame_w, frame_h)
         for one in monsters:
             assert one.row < plate_row, f"{width}x{height}: a monster is in the panel"
+            feet = one.row * cell_h - THICKNESS
+            assert feet + cropped >= horizon - 1.0, (
+                f"{width}x{height}: {one.actor.name} is standing in the wall"
+            )
 
     # And the shape it was tuned at is *exactly* where it was: the shift is
     # nothing there, which is why the anchor is that particular fraction.

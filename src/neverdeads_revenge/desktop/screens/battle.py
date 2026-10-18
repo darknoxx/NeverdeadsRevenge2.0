@@ -627,6 +627,10 @@ class BattleScreen(Screen):
         #: this says where "into the room" begins. ``None`` means a room of cells,
         #: and the ground band's own foot is the floor.
         self.stage_floor: float | None = None
+        #: And where the painting's floor *ends*, at the back: no monster stands
+        #: above this line, because above it is the wall. Set by the same front end
+        #: and for the same reason -- it is the artwork's number and not the grid's.
+        self.stage_horizon: float | None = None
         #: The arena's own clock, in seconds. The idle breath and every phase of
         #: a strike are read off it, so nothing here owns a timer.
         self._clock = 0.0
@@ -1684,6 +1688,13 @@ class BattleScreen(Screen):
                 if size[0] and size[1]
                 else y0 + height
             )
+        # The back of the room: no monster stands above the painting's horizon. A
+        # lane with a nudge of its own can cross it -- the middle of three is the
+        # only one that has a nudge, which is why it is the only one that ever
+        # ended up in the wall -- and the rule is the artwork's, not the lane's.
+        highest = -1e9
+        if self.stage_horizon is not None:
+            highest = (self.stage_horizon + THICKNESS) / max(1, cell_h)
         monsters = self.battle.enemies[:STAGE]
         places = ROWS.get(len(monsters), ROWS[STAGE])
         staged: list[Staged] = []
@@ -1700,7 +1711,10 @@ class BattleScreen(Screen):
                     cx=(centre + round(lane * width) + 1) * cell_w,
                     row=min(
                         lowest,
-                        y0 + max(1, round(depth * height)) - STAGE_LIFT - lift + shift,
+                        max(
+                            highest,
+                            y0 + max(1, round(depth * height)) - STAGE_LIFT - lift + shift,
+                        ),
                     ),
                     cells=self._span(art, cell_w),
                     chosen=enemy is marked,

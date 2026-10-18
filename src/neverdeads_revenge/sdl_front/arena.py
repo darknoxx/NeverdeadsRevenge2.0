@@ -112,12 +112,13 @@ class SdlArena(Screen):
         # the room's own rules stay in the room, and the artwork's answer to "where
         # is the floor" is the one thing only the artwork knows. None for a room of
         # cells, where the grid's own band *is* the floor.
+        frame_w = buffer.cols * buffer.font.cell_w
+        frame_h = buffer.rows * buffer.font.cell_h
         self.arena.stage_floor = (
-            self._stage.floor_line(
-                buffer.cols * buffer.font.cell_w, buffer.rows * buffer.font.cell_h
-            )
-            if self.backdrop
-            else None
+            self._stage.floor_line(frame_w, frame_h) if self.backdrop else None
+        )
+        self.arena.stage_horizon = (
+            self._stage.horizon_line(frame_w, frame_h) if self.backdrop else None
         )
         self.arena.draw(buffer, app, ground=not self.backdrop)
         if self.backdrop:
