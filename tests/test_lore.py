@@ -33,7 +33,7 @@ def test_the_pages_are_the_source_text_and_no_words_were_lost():
     so a page written as separate pieces arrives as "Lord ofDarkness". It did,
     once. This is the check that says it does not.
     """
-    source = (ROOT / "docs" / "lore.txt").read_text().strip().split("\n", 1)[1]
+    source = (ROOT / "docs" / "lore.txt").read_text(encoding="utf-8").strip().split("\n", 1)[1]
     normalise = lambda text: re.sub(r"\s+", " ", text).strip()  # noqa: E731
 
     assert normalise(" ".join(PAGES)) == normalise(source)

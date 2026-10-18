@@ -104,7 +104,7 @@ def _literals_in_the_code() -> set[str]:
 
     named: set[str] = set()
     for path in sorted((ROOT / "src").rglob("*.py")):
-        for node in ast.walk(ast.parse(path.read_text())):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             if not isinstance(node, ast.Call):
                 continue
             func = node.func
@@ -119,7 +119,7 @@ def _literals_in_the_code() -> set[str]:
                         named.add(arg.value)
     return named
     for path in sorted(source.rglob("*.py")):
-        for node in ast.walk(ast.parse(path.read_text())):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             if not isinstance(node, ast.Call):
                 continue
             func = node.func
@@ -651,7 +651,7 @@ def test_a_fight_never_asks_for_a_sound_that_is_not_there(devices, monkeypatch, 
     app.sfx._queue.join()
     app.sfx.close()
 
-    text = log.read_text()
+    text = log.read_text(encoding="utf-8")
     assert "MISSING" not in text, text
     # And the log is not empty: a test that passed because nothing was ever
     # asked for would pass for the wrong reason.

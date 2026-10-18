@@ -168,7 +168,7 @@ def main() -> int:
     parser.add_argument("--target", type=int, default=TARGET_WORDS)
     args = parser.parse_args()
 
-    title, pages = cut(args.source.read_text(), args.target)
+    title, pages = cut(args.source.read_text(encoding="utf-8"), args.target)
     path = write(title, pages)
     sizes = [len(p.split()) for p in pages]
     print(
