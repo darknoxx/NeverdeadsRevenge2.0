@@ -175,7 +175,11 @@ class SdlArena(Screen):
         # the game's own stones has no flames to be lit by.
         if self.backdrop:
             self._stage.glow(
-                surface, surface.get_width(), surface.get_height(), self.arena._clock
+                surface,
+                surface.get_width(),
+                surface.get_height(),
+                self.arena._clock,
+                float(self.arena._floor_row(cols, rows) * app.font.cell_h),
             )
         self._stage.health(
             surface, figures, font, self.arena._shown, self.battle.hero, fades

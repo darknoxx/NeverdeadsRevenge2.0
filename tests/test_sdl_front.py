@@ -2392,7 +2392,8 @@ def test_the_paintings_torches_are_lit_and_the_light_breathes():
 
     def lit(clock: float):
         frame = app._surface.copy()
-        stage.glow(frame, width, height, clock)
+        floor = arena.arena._floor_row(app.cols, app.rows) * app.font.cell_h
+        stage.glow(frame, width, height, clock, float(floor))
         return frame
 
     early, late = lit(0.0), lit(0.75)
@@ -2819,3 +2820,107 @@ def test_the_composition_is_the_same_at_every_window_shape():
         assert abs(off) < 1.5, f"the painted floor is {off:.1f}px off the room's floor"
 
 
+
+
+def test_the_painting_covers_the_frame_at_every_window_shape():
+    """And never leaves a bar of nothing down a side.
+
+    The bug this holds down was one sign: the horizontal offset was handed over as
+    ``(span - width) / 2`` -- which is *positive* when the painting is wider than
+    the frame, so the picture was put to the right of the frame's left edge and the
+    sliver it left behind was black. It showed on exactly the shapes wide enough for
+    the painting to be wider than the frame (2560x1440 fullscreen) and on none of
+    the ones it was looked at.
+
+    Asked of the placement rather than of pixels, because the dungeon's own painting
+    is dark enough in places to be black and a colour test would lie about which
+    black it found.
+    """
+    from neverdeads_revenge.sdl_front.app import SdlApp
+    from neverdeads_revenge.sdl_front.paint import load
+
+    painting = load("backdrops/arena.png")
+    own_w, own_h = painting.get_size()
+    probe = SdlApp(seed=3, battle_scene=True, no_sound=True)
+
+    for width, height in (
+        (960, 540),
+        (1280, 720),
+        (1280, 800),
+        (1920, 1080),
+        (2560, 1440),
+        (2560, 1080),
+        (3440, 1440),
+        (1680, 1050),
+        (1024, 768),
+        (1240, 1080),
+    ):
+        cols, rows = probe._grid_size(width, height)
+        app = SdlApp(seed=3, battle_scene=True, no_sound=True, cols=cols, rows=rows)
+        app.redraw()
+        arena = app.screens[-1]
+        frame_w, frame_h = cols * app.font.cell_w, rows * app.font.cell_h
+        floor = arena.arena._floor_row(cols, rows) * app.font.cell_h
+        factor, off_x, off_y = arena._stage.placement(frame_w, frame_h, floor)
+        span_w, span_h = own_w * factor, own_h * factor
+
+        assert off_x <= 0.5, f"{width}x{height}: a bar of nothing down the left"
+        assert off_y <= 0.5, f"{width}x{height}: a bar of nothing across the top"
+        assert off_x + span_w >= frame_w - 0.5, f"{width}x{height}: nothing down the right"
+        assert off_y + span_h >= frame_h - 0.5, f"{width}x{height}: nothing at the foot"
+
+
+def test_the_torches_burn_where_the_painting_put_them():
+    """The light and the paper, asked of the same frame.
+
+    There were two placements for one picture: the paper was fitted to the room's
+    floor line and the torch glow to the old centred fit, so on any screen wide
+    enough to tell them apart the flame was in one place and its light in another --
+    and the paper itself had slid sideways. This is the light's half: the warm
+    pixels the glow adds are where the artwork's torch is, not where some other
+    arithmetic remembers it.
+    """
+    import pygame
+
+    from neverdeads_revenge.sdl_front.app import SdlApp
+    from neverdeads_revenge.sdl_front.paint import load
+    from neverdeads_revenge.sdl_front.stage import TORCHES
+
+    painting = load("backdrops/arena.png")
+    own_w, own_h = painting.get_size()
+    app = SdlApp(seed=3, battle_scene=True, no_sound=True, cols=128, rows=36)
+    app.redraw()
+    arena = app.screens[-1]
+    frame_w, frame_h = 128 * app.font.cell_w, 36 * app.font.cell_h
+    floor = arena.arena._floor_row(128, 36) * app.font.cell_h
+
+    lit = app._surface.copy()
+    kept = arena._stage.glow
+    arena._stage.glow = lambda *args, **kwargs: None
+    try:
+        app.redraw()
+    finally:
+        arena._stage.glow = kept
+    dark = app._surface.copy()
+
+    factor, off_x, off_y = arena._stage.placement(frame_w, frame_h, floor)
+    span_w, span_h = own_w * factor, own_h * factor
+    for fx, fy in TORCHES:
+        want = (off_x + fx * span_w, off_y + fy * span_h)
+        # The brightest thing the light added is the middle of its ramp, which is
+        # the torch itself -- so the two placements agree if that pixel is on it.
+        best, brightest = None, -1
+        left = max(0, int(want[0]) - 200)
+        right = min(frame_w, int(want[0]) + 200)
+        top = max(0, int(want[1]) - 200)
+        foot = min(frame_h, int(want[1]) + 200)
+        for x in range(left, right, 2):
+            for y in range(top, foot, 2):
+                gain = sum(lit.get_at((x, y))[:3]) - sum(dark.get_at((x, y))[:3])
+                if gain > brightest:
+                    best, brightest = (x, y), gain
+        assert best is not None and brightest > 30, "nothing was lit at all"
+        assert abs(best[0] - want[0]) < 40 and abs(best[1] - want[1]) < 40, (
+            f"the brightest lit pixel is at {best} and the painting's torch at "
+            f"{want[0]:.0f},{want[1]:.0f}"
+        )

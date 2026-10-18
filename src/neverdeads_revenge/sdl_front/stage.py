@@ -366,7 +366,12 @@ class Stage:
         below = max(1.0, height - floor_px) / (own_h * (1.0 - FLOOR_AT))
         factor = max(width / own_w, above, below)
         span_w, span_h = own_w * factor, own_h * factor
-        return factor, (span_w - width) / 2.0, floor_px - FLOOR_AT * span_h
+        # Centred: half of what hangs over goes off each side. This was the wrong
+        # way round for one release -- a positive offset here puts the painting to
+        # the *right* of the frame's left edge, which is a black bar down the left
+        # and the room sliding sideways, and it only showed on shapes wide enough
+        # for the painting to be wider than the frame (2560x1440 fullscreen).
+        return factor, (width - span_w) / 2.0, floor_px - FLOOR_AT * span_h
 
     def _own_size(self, height: int) -> tuple[int, int]:
         """The painting's own pixels, or the frame's shape when there is none."""
@@ -401,20 +406,23 @@ class Stage:
         if key not in self._fitted:
             factor, off_x, off_y = self.placement(width, height, floor_px)
             own_w, own_h = image.get_size()
+            # Rounded *up* and placed *down*: a covering fit that rounds the wrong
+            # way leaves a one-pixel sliver of nothing along an edge, and a sliver
+            # of nothing is a black line on a player's screen.
             scaled = pygame.transform.smoothscale(
                 image,
                 (
-                    max(1, round(own_w * factor)),
-                    max(1, round(own_h * factor)),
+                    max(1, math.ceil(own_w * factor)),
+                    max(1, math.ceil(own_h * factor)),
                 ),
             )
             frame = pygame.Surface((width, height))
             frame.fill((0, 0, 0))
-            frame.blit(scaled, (round(off_x), round(off_y)))
+            frame.blit(scaled, (math.floor(off_x), math.floor(off_y)))
             self._fitted[key] = frame
         return self._fitted[key]
 
-    def glow(self, surface, width: int, height: int, clock: float) -> None:
+    def glow(self, surface, width: int, height: int, clock: float, floor_px: float) -> None:
         """Light on the two torches in the painting, breathing.
 
         The painting brought its own flames and they are, of course, painted: they
@@ -437,10 +445,14 @@ class Stage:
             return
         import pygame
 
-        own_w, own_h = image.get_size()
-        factor = max(width / own_w, height / own_h)
-        span_w, span_h = own_w * factor, own_h * factor
-        off_x, off_y = (span_w - width) / 2.0, (span_h - height) / 2.0
+        # The same placement the paper uses, or the light drifts off the torch it
+        # belongs to -- which is exactly what happened: the paper was placed by the
+        # room's floor line and the light by the old centred fit, and on a screen
+        # wide enough to tell them apart the flame was in one place and its glow in
+        # another.
+        factor, off_x, off_y = self.placement(width, height, floor_px)
+        own_h = image.get_size()[1]
+        span_w, span_h = image.get_size()[0] * factor, own_h * factor
         pool = self._light()
         breath = 0.5 + 0.5 * math.sin(clock * 2.1)
         wobble = 0.5 + 0.5 * math.sin(clock * 3.7 + 1.0)
@@ -451,8 +463,8 @@ class Stage:
             surface.blit(
                 lit,
                 (
-                    round(fx * span_w - off_x - side / 2),
-                    round(fy * span_h - off_y - side / 2),
+                    round(off_x + fx * span_w - side / 2),
+                    round(off_y + fy * span_h - side / 2),
                 ),
                 special_flags=pygame.BLEND_RGB_ADD,
             )
