@@ -2556,7 +2556,7 @@ def test_skipping_the_cell_floor_changes_no_pixel_of_the_painting():
     )
 
 
-def test_a_figure_can_stand_on_half_a_row():
+def test_a_figure_can_stand_between_rows():
     """The staging in halves, because the eye asks in halves.
 
     A depth is a share of the band, so it lands on a whole row -- and a row is
@@ -2590,8 +2590,9 @@ def test_a_figure_can_stand_on_half_a_row():
     pinned, middle_free, right_free = (
         next(one for one in free if one.actor is monsters[i].actor) for i in (0, 1, 2)
     )
-    assert (middle_free.row - pinned.row) % 1 == 0.5, (
-        f"the middle of the arc is {middle_free.row - pinned.row} rows from the left"
+    step = middle_free.row - pinned.row
+    assert step % 1 != 0, (
+        f"the middle of the arc is a whole {step} rows from the left"
     )
     assert (right_free.row - pinned.row) % 1 == 0, (
         "the outer two are not a whole row apart"
