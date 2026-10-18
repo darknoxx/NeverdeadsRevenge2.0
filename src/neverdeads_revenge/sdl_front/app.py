@@ -229,6 +229,9 @@ class SdlApp:
     def return_to_title(self) -> None:
         from ..desktop.screens.title import TitleScreen
 
+        # The music belongs to the *run* and the run is over: the title is a
+        # quiet room with a decision in it.
+        self.music.stop()
         self.screens = [TitleScreen()]
 
     # -- what the screens ask of an application ------------------------------
