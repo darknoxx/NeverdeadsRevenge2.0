@@ -38,6 +38,7 @@ after the source folder changes and the same sounds come back.
 
 from __future__ import annotations
 
+import math
 import sys
 import wave
 from array import array
@@ -62,8 +63,26 @@ FADE = 0.002
 #: Not a sound: the pack's own demo reel, which is every sound in a row.
 SKIP = {"PREVIEW_ALL_SOUNDS.wav"}
 
+#: Sounds that are *not* normalised like the rest, and why each one is here.
+#:
+#: To the same peak is the right rule for a pack generated in one go, and the
+#: wrong rule for a sound that is played more than every other sound in the game
+#: put together. A cursor click is fifty milliseconds of a hard attack: peak
+#: normalised, it *measured* the same as everything else and was heard over the
+#: confirmation it belongs with -- measured here, -8.2dB RMS against the
+#: confirm's -12.4, which is the loudest thing in the interface by four decibels.
+#: The ear is doing RMS, so this dial is RMS: the move goes down until it is the
+#: quietest of the family, because it is the one that repeats.
+LEVELS: dict[str, float] = {
+    "cursor_move": 0.5,  # -6dB: the most repeated sound is the quietest
+}
+
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OUT = ROOT / "src" / "neverdeads_revenge" / "sounds"
+
+
+def _log10(value: float) -> float:
+    return math.log10(value)
 
 
 def read_wav(path: Path) -> tuple[array, int]:
@@ -130,10 +149,10 @@ def trim(samples: array, rate: int = RATE) -> array:
     return samples[first:last + 1]
 
 
-def shape(samples: array, rate: int = RATE) -> array:
-    """Peak to ``PEAK``, and a fade on at both ends."""
+def shape(samples: array, rate: int = RATE, level: float = 1.0) -> array:
+    """Peak to ``PEAK`` (times ``level``), and a fade on at both ends."""
     peak = max(1, max(abs(value) for value in samples))
-    gain = (PEAK * 32767) / peak
+    gain = (PEAK * 32767 * level) / peak
     out = array("h", [int(value * gain) for value in samples])
     fade = max(1, int(FADE * rate))
     for index in range(min(fade, len(out))):
@@ -159,7 +178,8 @@ def convert(source: Path, out_dir: Path) -> list[tuple[str, float, float, int]]:
             continue
         samples, rate = read_wav(path)
         before = len(samples) / rate
-        samples = shape(trim(resample(samples, rate)), RATE)
+        level = LEVELS.get(path.stem, 1.0)
+        samples = shape(trim(resample(samples, rate)), RATE, level)
         write_wav(out_dir / path.name, samples)
         report.append((path.name, before, len(samples) / RATE, path.stat().st_size))
     return report
@@ -183,9 +203,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"no wav files under {source}", file=sys.stderr)
         return 1
 
-    print(f"{'sound':22s} {'in':>6s} {'out':>6s} {'source':>9s}")
+    print(f"{'sound':22s} {'in':>6s} {'out':>6s} {'source':>9s}  level")
     for name, before, after, size in report:
-        print(f"{name:22s} {before:5.2f}s {after:5.2f}s {size / 1024:7.0f} kB")
+        level = LEVELS.get(Path(name).stem, 1.0)
+        mark = "" if level == 1.0 else f"{20 * _log10(level):+.0f}dB"
+        print(f"{name:22s} {before:5.2f}s {after:5.2f}s {size / 1024:7.0f} kB  {mark}")
     total = sum(path.stat().st_size for path in out_dir.glob("*.wav"))
     print(f"\n{len(report)} sounds -> {out_dir}")
     print(f"the folder now holds {total / 1024:.0f} kB of wav at "

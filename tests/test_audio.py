@@ -24,6 +24,7 @@ And three invariants that are the whole reason this was rewritten:
 
 from __future__ import annotations
 
+import math
 import subprocess
 import sys
 import wave
@@ -655,3 +656,32 @@ def test_a_fight_never_asks_for_a_sound_that_is_not_there(devices, monkeypatch, 
     # And the log is not empty: a test that passed because nothing was ever
     # asked for would pass for the wrong reason.
     assert "sound log:" in text, text
+
+
+def _rms_db(name: str) -> float:
+    """A sound's loudness the way an ear hears it, and not its peak."""
+    with wave.open(str(SOUNDS_DIR / f"{name}.wav"), "rb") as handle:
+        samples = array("h")
+        samples.frombytes(handle.readframes(handle.getnframes()))
+    mean = sum(value * value for value in samples) / max(1, len(samples))
+    return 20 * math.log10(math.sqrt(mean) / 32768) if mean else float("-inf")
+
+
+def test_the_cursor_is_quieter_than_the_choice_it_makes():
+    """The most repeated sound in the game is the quietest one in the interface.
+
+    Peak normalisation is the right rule for a pack generated in one go and the
+    wrong one for fifty milliseconds of a hard attack played on *every* cursor
+    move: measured, the move came out at -8.2dB RMS against the confirm's -12.4,
+    which made it the loudest thing in the interface by four decibels -- and the
+    first thing anybody said about the pack. The converter has a level table for
+    exactly this case, and this is the one sound in it, so this test is where the
+    ear that asked for it is written down.
+    """
+    move = _rms_db("cursor_move")
+    confirm = _rms_db("cursor_confirm")
+    assert move < confirm - 1.0, (
+        f"the cursor is only {confirm - move:.1f}dB away from the confirm it makes"
+    )
+    # And not *nothing*: a move nobody hears is a cursor that feels broken.
+    assert move > confirm - 12.0, f"the cursor is inaudible at {move:.1f}dB"
