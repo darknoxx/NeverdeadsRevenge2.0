@@ -2960,3 +2960,38 @@ def test_the_display_report_says_what_the_machine_says():
         assert wanted in text, f"{wanted} is not in the report:\n{text}"
     assert "96x27" in text, text
     assert app._dpi() >= 1.0, "a display scale below one is not a display scale"
+
+
+def test_a_hero_whose_sheets_are_being_redrawn_is_a_slot_and_not_a_choice():
+    """Walkyrion's slot while he is redrawn: still in the roster, not selectable.
+
+    The slot keeps its *place*, so the order of the cards and the row of letters under
+    them do not move -- what changed is that the slot draws as one of the "not yet
+    resurrected" ones. So: his name is not among the choices, the roster is the same
+    length, and a confirm on his card begins nothing. (The card can still be *looked*
+    at, which is why the cursor is allowed to rest on it at all.)
+    """
+    from neverdeads_revenge.desktop.screens.hero_select import UNFINISHED
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    assert "walkyrion" in UNFINISHED, "this test is about the switch being on"
+
+    app = SdlApp(seed=3, no_sound=True)
+    app.open_hero_select()
+    screen = app.screens[-1]
+    chosen = [hero.key if hero is not None else None for hero in screen.slots]
+    assert "walkyrion" not in chosen, f"a locked hero is still a choice: {chosen}"
+    assert len(chosen) == 6, f"the roster changed length: {chosen}"
+
+    # Walk to his card, look at it, and try to begin: the choice must stay on the
+    # screen and no run must be behind it.
+    app.key("right")
+    app.key("right")
+    assert screen.current is None, "his slot is not where it was"
+    app.key("enter")
+    assert type(app.screens[-1]).__name__ == "HeroSelectScreen", "a locked card began a run"
+    assert app.run is None, "a locked card began a run"
+
+    # And the neighbouring slots still work, so the lock is one slot and not a wall.
+    app.key("right")
+    assert screen.current is not None and screen.current.key == "inferno", screen.current

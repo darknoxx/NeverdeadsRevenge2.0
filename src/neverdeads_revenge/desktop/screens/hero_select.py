@@ -31,6 +31,14 @@ __all__ = ["HeroSelectScreen", "FUTURE_HEROES"]
 #: Slugs that exist as a design idea and not yet as code.
 FUTURE_HEROES = ("revenant", "warden")
 
+#: Heroes whose sheets are being redrawn: in the roster, and not a choice.
+#:
+#: They keep their *slot* -- the order of the cards and the row of hotkeys do not move,
+#: because a slot that moved would move four others with it -- and draw as one of the
+#: "not yet resurrected" ones until they have their art back. A name in here and out
+#: again is the whole switch.
+UNFINISHED: tuple[str, ...] = ("walkyrion",)
+
 #: How many rows the picture band is, in cells: the block font's own height, and
 #: a *constant* rather than a measurement. The card's layout is the same card for
 #: every hero, and deriving its height from the hero's letter meant that a hero
@@ -66,7 +74,7 @@ class HeroSelectScreen(Screen):
 
     @property
     def slots(self) -> list[Hero | None]:
-        real = [HEROES[key] for key in HEROES]
+        real = [None if key in UNFINISHED else HEROES[key] for key in HEROES]
         return [*real, *(None for _ in FUTURE_HEROES)]
 
     @property
