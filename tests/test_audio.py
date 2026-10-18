@@ -142,8 +142,19 @@ def _literals_in_the_code() -> set[str]:
         )
 
 
+#: The music is not an effect and is not measured like one: it has its own rate
+#: (the one it was written at), it is a *loop* and has no length to speak of, and
+#: it is the reason the sound folder is as big as it is.
+MUSIC_FILE = "background_music_loop.wav"
+
+
+def _effects():
+    """Every wav in the sound folder except the music."""
+    return sorted(path for path in SOUNDS_DIR.glob("*.wav") if path.name != MUSIC_FILE)
+
+
 def test_every_committed_sound_is_a_playable_wav():
-    files = sorted(SOUNDS_DIR.glob("*.wav"))
+    files = _effects()
     assert len(files) >= 10, "the sound set shrank"
     for path in files:
         with wave.open(str(path), "rb") as handle:
@@ -151,6 +162,13 @@ def test_every_committed_sound_is_a_playable_wav():
             assert handle.getsampwidth() == 2, path.name
             assert handle.getframerate() == RATE, path.name
             assert handle.getnframes() > 0, path.name
+    # And the music is playable too -- at the rate it was written at, which is
+    # its own and not this game's mixing rate.
+    with wave.open(str(SOUNDS_DIR / MUSIC_FILE), "rb") as handle:
+        assert handle.getnchannels() == 1, MUSIC_FILE
+        assert handle.getsampwidth() == 2, MUSIC_FILE
+        assert handle.getframerate() == 44100, MUSIC_FILE
+        assert handle.getnframes() > 0, MUSIC_FILE
 
 
 def test_no_sound_outlives_the_thing_it_announces():
@@ -161,10 +179,12 @@ def test_no_sound_outlives_the_thing_it_announces():
     (0.95s and 0.87s, both of them trimmed from what they arrived as), and those
     are moments rather than punctuation. Everything else is well under it.
     """
-    for path in SOUNDS_DIR.glob("*.wav"):
+    for path in _effects():
         with wave.open(str(path), "rb") as handle:
             seconds = handle.getnframes() / handle.getframerate()
         assert seconds <= 1.0, f"{path.name} is {seconds:.2f}s"
+    # And the music is a loop: it has no length to speak of, and it is the one
+    # file here that is *meant* to go on until the run does.
 
 
 def test_the_sounds_are_small_enough_to_ship():
@@ -172,8 +192,10 @@ def test_the_sounds_are_small_enough_to_ship():
     and a download should. It was 118 kB before the pack arrived, and the pack
     is the point: it is what the game sounds *like*, and it travels with the
     code because nothing else can read it."""
-    total = sum(path.stat().st_size for path in SOUNDS_DIR.glob("*.wav"))
-    assert total < 1_000_000, f"the sound set is {total / 1024:.0f} kB"
+    effects = sum(path.stat().st_size for path in _effects())
+    assert effects < 1_000_000, f"the effect set is {effects / 1024:.0f} kB"
+    total = effects + (SOUNDS_DIR / MUSIC_FILE).stat().st_size
+    assert total < 8_000_000, f"the sound set is {total / 1024:.0f} kB"
 
 
 def test_the_committed_sounds_are_what_the_generator_produces(tmp_path):
