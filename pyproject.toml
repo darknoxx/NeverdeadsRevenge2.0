@@ -24,6 +24,11 @@ dependencies = ["pygame-ce>=2.5", "moderngl>=5.13", "miniaudio>=1.71"]
 [project.optional-dependencies]
 dev = [
     "pytest>=9.0",
+    # The test suite is ten times slower on Windows than on Linux -- SDL and the
+    # font atlas are paid for per process -- and the Windows build is where it
+    # runs on every release. Parallel workers are four cores of a runner doing in
+    # four minutes what one was doing in twelve.
+    "pytest-xdist>=3.6",
 ]
 
 [project.scripts]

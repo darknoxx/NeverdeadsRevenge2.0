@@ -40,7 +40,11 @@ jobs:
           python -m pip install -e ".[dev]" pyinstaller
 
       - name: Test
-        run: python -m pytest -q
+        # Parallel, because the suite is ten times slower here than on Linux and
+        # every second of it is on the critical path of a release. The slowest
+        # tests are named in the log so that the next person can see where the
+        # time goes rather than guess at it.
+        run: python -m pytest -q -n auto --durations=10
 
       - name: Build the .exe
         run: pyinstaller packaging/windows/neverdeads_revenge.spec
