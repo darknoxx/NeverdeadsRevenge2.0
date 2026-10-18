@@ -168,11 +168,6 @@ class SdlApp:
         from ..desktop.audio import Sfx
 
         self.sfx = Sfx(muted=no_sound or self.progress.muted)
-        #: And the music, which is a bed and not a voice: one mute for the whole
-        #: game, its own stream at the rate the loop was written at.
-        from ..desktop.music import Music
-
-        self.music = Music(muted=self.sfx.muted)
         #: And when it gives up mid-session, the record has to agree -- or the
         #: next toggle writes the give-up back down as "unmuted".
         self.sfx.on_mute = self._sound_gave_up
@@ -278,7 +273,6 @@ class SdlApp:
     def show_game_over(self, won: bool = False) -> None:
         from ..desktop.screens.game_over import GameOverScreen
 
-        self.music.stop()
         self.play("quest_complete" if won else "death_game_over")
         self.push(
             GameOverScreen(
@@ -375,8 +369,6 @@ class SdlApp:
         self.screens = [
             SdlArena(Battle(self.run, self.run.enemies[:3]), backdrop=self.backdrop)
         ]
-        # The dev door opens *into* the game, so the music belongs here too.
-        self.music.start()
         self.redraw()
 
     def open_shop(self) -> None:
@@ -501,13 +493,7 @@ class SdlApp:
         )
 
     def _sound_gave_up(self, muted: bool) -> None:
-        """The audio session quit on its own; the record has to agree.
-
-        The music is *not* told, on purpose: it has its own stream and its own
-        device, and a machine where the effects cannot open a player may still
-        have one for the loop -- or the other way round. Each of them gives up
-        on its own, which is the promise audio here always makes.
-        """
+        """The audio session quit on its own; the record has to agree."""
         self.progress.muted = muted
         self.save_progress()
 
@@ -515,7 +501,6 @@ class SdlApp:
         """Turn the sound over, and write the answer down: a player who mutes a
         game expects it to *stay* muted the next time they open it."""
         self.sfx.toggle()
-        self.music.set_muted(self.sfx.muted)
         self.progress.muted = self.sfx.muted
         self.save_progress()
 
@@ -570,7 +555,6 @@ class SdlApp:
         )
         self.effects.clear()
         self.screens = [GameScreen(self.run)]
-        self.music.start()
         self.redraw()
 
     def continue_run(self) -> None:
@@ -598,7 +582,6 @@ class SdlApp:
         clear_run()
         self.run = state
         self.screens = [GameScreen(state)]
-        self.music.start()
         self.redraw()
 
     # -- the picture --------------------------------------------------------
@@ -1202,5 +1185,4 @@ class SdlApp:
             self.tick(min(clock.tick(60) / 1000.0, 1 / 30.0))
             for event in pygame.event.get():
                 self.feed(event)
-        self.music.close()
         pygame.quit()
