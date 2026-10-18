@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "neverdeads-revenge2"
-version = "0.5.2"
+version = "0.5.3"
 description = "Neverdead's Revenge 2.0 -- the same dungeon, rendered as a CRT."
 readme = "README.md"
 requires-python = ">=3.12"
