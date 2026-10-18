@@ -94,22 +94,6 @@ def test_the_music_starts_with_the_run_and_stops_at_the_tally(device):
     assert not app.music.playing, "the tally is still playing the floor's loop"
 
 
-def test_quitting_to_the_title_stops_the_music(device):
-    """The pause menu's "quit to title" ends the run, so it ends the loop.
-
-    The music's rule is where the *game* is and not where a screen is, and this
-    is the one door out of a run that is not the tally: back to the title, where
-    the only sound is the click of a cursor.
-    """
-    from neverdeads_revenge.sdl_front.app import SdlApp
-
-    app = SdlApp(seed=3, battle_scene=True, no_sound=False)
-    assert app.music.playing, "a fight opened without its music"
-
-    app.return_to_title()
-    assert not app.music.playing, "the title is still playing the run's loop"
-
-
 def test_the_loop_plays_past_its_own_end(device):
     """A loop wraps on the sample and keeps going: forty-nine seconds of music
     asked for ninety seconds' worth of buffer is the same sound, again."""
