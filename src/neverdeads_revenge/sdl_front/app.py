@@ -221,6 +221,15 @@ class SdlApp:
         #: the window is the screen and gets the last word -- but only before the
         #: first frame, so a resize never moves the game.
         self._drawn = False
+        #: The painted cells, and what they were painted from. A fight's panels and
+        #: log are the same frame after frame -- the animation is the *art* pass --
+        #: and repainting a megapixel of glyphs to get the same picture back is the
+        #: one cost this application cannot afford on a phone.
+        self._base = None
+        self._base_key = None
+        #: Scaled pieces of art, keyed by what they were scaled from: a roster's
+        #: portrait does not change size between frames either.
+        self._art_scaled: dict[tuple, object] = {}
         #: The face, and with it the *canvas*. A handheld chooses both -- the
         #: screen is fixed, the face is picked for it, and the grid follows from
         #: the two -- which is the whole difference from the desktop, where the
@@ -1038,7 +1047,14 @@ class SdlApp:
             # A screen with no painting to show answers None, and flat paper is
             # what the frame wanted all along.
             base = paper(self.cols, self.rows, self.font) or BACKGROUND
-        self._surface = paint(self.grid, self.font, base)
+        # The cells are repainted only when something was *written*. The art over
+        # them is not part of this cache: it moves every frame, which is the point.
+        key = (self.grid.signature, self.cols, self.rows, base)
+        if key != self._base_key:
+            self._base = paint(self.grid, self.font, base)
+            self._base_key = key
+        self._surface = self._frame()
+        self._surface.blit(self._base, (0, 0))
         mark = self._note("paint", mark)
         self._small_face()
         # And a screen may paint straight onto the frame once the grid is drawn:
@@ -1060,6 +1076,25 @@ class SdlApp:
         self._present()
         self._drawn = True
         self._note("present", mark)
+
+    def _frame(self):
+        """The frame's surface, reused.
+
+        It used to be whatever the painter returned, which was a megapixel made
+        afresh every frame: an allocation and a first touch that a phone feels. It
+        is made once per size now, in the display's own format so that blitting
+        the cells into it is a copy and not a conversion.
+        """
+        import pygame
+
+        width, height = self._buffer_size()
+        if self._surface is None or self._surface.get_size() != (width, height):
+            self._surface = pygame.Surface((width, height))
+            try:
+                self._surface = self._surface.convert()
+            except pygame.error:  # pragma: no cover - no display to convert to
+                pass
+        return self._surface
 
     def _note(self, name: str, mark: float) -> float:
         """Book the milliseconds since ``mark`` under ``name``, and pass it on.
@@ -1214,7 +1249,13 @@ class SdlApp:
             width = max(
                 1, round(art.get_width() * piece.height / max(1, art.get_height()))
             )
-            scaled = pygame.transform.smoothscale(art, (width, piece.height))
+            # A portrait is the same size every frame: scaling it again is a
+            # filtered resize of a megapixel, once per frame, for nothing.
+            key = (piece.art, width, piece.height)
+            scaled = self._art_scaled.get(key)
+            if scaled is None:
+                scaled = pygame.transform.smoothscale(art, (width, piece.height))
+                self._art_scaled[key] = scaled
             self._surface.blit(
                 scaled,
                 (

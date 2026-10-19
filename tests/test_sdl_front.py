@@ -3235,3 +3235,30 @@ def test_the_first_window_a_phone_gets_has_the_last_word_on_the_canvas(monkeypat
     app._drawn = True
     app._fit()
     assert app._pinned == (62, 26)
+
+
+def test_a_frame_that_says_the_same_thing_is_not_painted_again():
+    """The cell pass is cached, and the *art* is what moves.
+
+    A fight's panels and log are the same frame after frame -- the breathing, the
+    shadows and the sparks are the art pass -- and repainting a megapixel of glyphs
+    to get the same picture back is the one cost this cannot afford on a phone: the
+    glyph blits are per-pixel blends, and an ARM pygame has no SIMD blitters to do
+    them with. So the painted cells are kept, and repainted only when something was
+    *written*.
+    """
+    font, _ = _sdl()
+    from neverdeads_revenge.game.battle import Said
+    from neverdeads_revenge.game.state import LogKind
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3, battle_scene=True, no_sound=True)
+    app.redraw()
+    first = app._base
+    app.redraw()
+    assert app._base is first, "an unchanged frame was painted again"
+
+    # A line in the log is a write: the cells changed, and so does the picture.
+    app.screens[-1].arena.lines = [Said("The ghoul blocks the way.", LogKind.PLAIN)]
+    app.redraw()
+    assert app._base is not first, "a changed frame was not painted"

@@ -37,6 +37,14 @@ class PatternBuffer:
     """A grid of character cells."""
 
     def __init__(self, cols: int, rows: int, font=None) -> None:
+        #: A hash of what has been *written* into the grid since it was cleared.
+        #:
+        #: The painter wants to know whether this frame's cells are the same as
+        #: the last frame's -- a fight's panels and log are still between its
+        #: breaths, and repainting them costs a megapixel of blending on a machine
+        #: without SIMD blitters. It is kept here, as the writes happen, because a
+        #: pass over the grid to find out afterwards is the cost it exists to avoid.
+        self.signature = 0
         self.cols = cols
         self.rows = rows
         #: Kept rather than used: the grid is measured in cells and does not
@@ -54,6 +62,7 @@ class PatternBuffer:
         # of them is a frame spending a millisecond and a half writing the same
         # blank. (Measured: 1.43 ms a frame, and 0.03 ms this way.)
         blank = style or Style()
+        self.signature = 0
         for row in self.cells:
             for cell in row:
                 cell.char = char
@@ -74,6 +83,10 @@ class PatternBuffer:
                 )
             cell.char = char
             cell.style = new
+            # Order matters and does not have to be stable across frames: the
+            # screens draw in the same order every time, so the same content
+            # writes the same signature.
+            self.signature = (self.signature * 31 + hash((char, new))) & 0xFFFFFFFF
 
     def text(self, x: int, y: int, string: str, style: Style | None = None) -> int:
         """Write ``string`` starting at ``x``. Returns the next free column.

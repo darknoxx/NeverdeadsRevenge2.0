@@ -62,15 +62,11 @@ class PadBench(Screen):
         buffer.text(
             x + 2,
             y + 3,
-            f"{app.frames:5.1f} fps      escape (or B) leaves",
+            f"{app.frames:5.0f} fps      escape (or B) leaves",
             parse_style(ASH),
         )
-        buffer.text(
-            x + 2,
-            y + 4,
-            _cost(app),
-            parse_style(ASH),
-        )
+        for offset, line in enumerate(_cost(app)):
+            buffer.text(x + 2, y + 4 + offset, line, parse_style(ASH))
         row = y + 6
         if not pads:
             buffer.text(
@@ -129,19 +125,28 @@ class PadBench(Screen):
         return None
 
 
-def _cost(app) -> str:
+def _cost(app) -> list[str]:
     """The frame's stages, in milliseconds: where a slow frame actually went.
 
     A handheld cannot run ``--timings`` -- there is no terminal -- and "it is slow"
     is not a measurement. The stages are the ones the application books anyway:
     the cells, the paint into the frame, the art over it, and the presentation,
-    each as an average of every frame so far and the worst one.
+    each as an average and its worst frame.
+
+    Two lines, and whole milliseconds, for two reasons: at a handheld's width the
+    fourth stage would fall off the edge of the box, and a number that changes in
+    its first decimal would make the *bench* a screen that changes every frame --
+    which is exactly what the frame cache exists to avoid.
     """
     stages = getattr(app, "frame_cost", None)
     if stages is None:
-        return ""
-    parts = [f"{name} {avg:.1f}/{worst:.0f}" for name, avg, worst in stages()]
-    return "ms avg/worst   " + "   ".join(parts) if parts else ""
+        return []
+    parts = [f"{name} {avg:.0f}/{worst:.0f}" for name, avg, worst in stages()]
+    lines = []
+    for start in range(0, len(parts), 2):
+        prefix = "ms avg/worst  " if start == 0 else "              "
+        lines.append(prefix + "   ".join(parts[start : start + 2]))
+    return lines
 
 
 def shown_name(button: int) -> str:

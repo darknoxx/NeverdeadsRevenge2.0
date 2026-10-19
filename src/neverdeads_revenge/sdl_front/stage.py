@@ -108,6 +108,9 @@ class Stage:
         #: sheets were cut for -- keyed by the picture and the multiple, because
         #: there is one of each and a scale is not something to do every frame.
         self._scaled: dict[tuple[str, int], object] = {}
+        #: The shadow's pool and a torch's light, stretched once per size.
+        self._pools: dict[tuple[int, int], object] = {}
+        self._lamps: dict[int, object] = {}
 
     # -- the art ------------------------------------------------------------
     def tile(self, name: str):
@@ -338,7 +341,15 @@ class Stage:
         width = max(24.0, float(figure.cells * font.cell_w) * 1.25)
         height = max(6.0, width * 0.24)
         pool = self._pool()
-        scaled = pygame.transform.smoothscale(pool, (round(width), round(height)))
+        # The stretched pool, kept by its size: a figure's shadow does not change
+        # shape between frames, and a filtered resize of one every frame is a cost
+        # a phone notices. The *opacity* is per figure and is set per use, which is
+        # safe because it is always followed by the blit it belongs to.
+        key = (round(width), round(height))
+        scaled = self._pools.get(key)
+        if scaled is None:
+            scaled = pygame.transform.smoothscale(pool, key)
+            self._pools[key] = scaled
         scaled.set_alpha(round(255 * fade))
         centre_y = round(figure.row * font.cell_h - 1)
         surface.blit(
@@ -464,7 +475,10 @@ class Stage:
         for fx, fy in TORCHES:
             scale = 0.86 + 0.24 * breath + 0.06 * wobble
             side = max(8, round(220 * scale))
-            lit = pygame.transform.smoothscale(pool, (side, side))
+            lit = self._lamps.get(side)
+            if lit is None:
+                lit = pygame.transform.smoothscale(pool, (side, side))
+                self._lamps[side] = lit
             surface.blit(
                 lit,
                 (
