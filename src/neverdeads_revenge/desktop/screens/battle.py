@@ -61,7 +61,10 @@ def _picture(name: str) -> str | None:
     its cell and a letter is not. The painting loads the file; the room only ever
     needs the name.
     """
-    where = f"sprites/{name}.png"
+    # A monster's picture is its *name*, with the spaces as underscores: "the
+    # kindly one" is a sentence in the log and a file on disk, and the file cannot
+    # have the space. The one rule, here, so no caller has to remember it.
+    where = f"sprites/{name.replace(' ', '_')}.png"
     return where if art_exists(where) else None
 
 #: The floor's two tile tones at the hero's feet, and the same two at the far

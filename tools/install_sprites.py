@@ -77,6 +77,15 @@ EXPORTS: dict[str, tuple[str, float]] = {
     "walkyrion_back.png": ("Walkyrion.png", 1.0),
     "inferno_back.png": ("Inferno.png", 1.0),
     "atritas_back.png": ("atritas.png", 1.0),
+    # The seven whose worth is a question. Their exports keep the article the
+    # *log* puts in front of them ("The kindly one strikes you"); the game's name
+    # does not, so the file the arena asks for has no "the" in it.
+    "the_kindly_one.png": ("kindly_one.png", MONSTER_SCALE),
+    "the_hush.png": ("hush.png", MONSTER_SCALE),
+    "the_already-dying.png": ("already-dying.png", MONSTER_SCALE),
+    "the_briar.png": ("briar.png", MONSTER_SCALE),
+    "the_picker.png": ("picker.png", MONSTER_SCALE),
+    "the_lid.png": ("lid.png", MONSTER_SCALE),
 }
 
 
