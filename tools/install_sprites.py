@@ -68,9 +68,11 @@ EXPORTS: dict[str, tuple[str, float]] = {
     "mound.png": ("mound.png", MONSTER_SCALE),
     "hunter.png": ("hunter.png", MONSTER_SCALE),
     "wraith.png": ("wraith.png", MONSTER_SCALE),
-    # Noxx and his shadow are two pictures now: Atritas is a summon, and a summon
-    # that is painted into the hero is a summon that is already standing there.
-    "noxx_back_noatritas.png": ("Noxx.png", 1.0),
+    # Noxx keeps his shadow in both views -- it is his look, not a summon that
+    # happened to be painted in. The export named "transparent" is the arena's and
+    # the newest of the two; Atritas also has a sheet of his own, for the trick
+    # that calls him into the room.
+    "noxx_back_transparent.png": ("Noxx.png", 1.0),
     "yeti_back.png": ("Yeti.png", 1.0),
     "walkyrion_back.png": ("Walkyrion.png", 1.0),
     "inferno_back.png": ("Inferno.png", 1.0),
@@ -81,7 +83,7 @@ EXPORTS: dict[str, tuple[str, float]] = {
 #: The heroes facing the player, at the size they are drawn: what the roster wants
 #: and what the arena has no use for.
 PORTRAITS: dict[str, tuple[str, float]] = {
-    "noxx_front_noatritas.png": ("Noxx.png", 1.0),
+    "noxx_front.png": ("Noxx.png", 1.0),
     "yeti_front.png": ("Yeti.png", 1.0),
     "walkyrion_front.png": ("Walkyrion.png", 1.0),
     "inferno_front.png": ("Inferno.png", 1.0),
