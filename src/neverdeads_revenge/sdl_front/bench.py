@@ -65,7 +65,13 @@ class PadBench(Screen):
             f"{app.frames:5.1f} fps      escape (or B) leaves",
             parse_style(ASH),
         )
-        row = y + 5
+        buffer.text(
+            x + 2,
+            y + 4,
+            _cost(app),
+            parse_style(ASH),
+        )
+        row = y + 6
         if not pads:
             buffer.text(
                 x + 2, row, "no pad seen -- a keyboard is all there is",
@@ -73,10 +79,12 @@ class PadBench(Screen):
             )
         for index, stick in enumerate(pads):
             row = self._pad_rows(buffer, stick, index, x + 2, row, width - 4)
-        row = min(row + 1, y + height - MAX_EVENTS - 2)
+        # The events get a line of their own and a blank one under it, so the
+        # heading cannot end up sharing a row with the first thing it describes.
+        row = min(row + 2, y + height - MAX_EVENTS - 3)
         buffer.text(x + 2, row, "last events", parse_style(f"bold {BONE}"))
         for offset, line in enumerate(self.events[-MAX_EVENTS:]):
-            buffer.text(x + 2, row + 1 + offset, line[: width - 4], parse_style(ASH))
+            buffer.text(x + 2, row + 2 + offset, line[: width - 4], parse_style(ASH))
 
     def _pad_rows(self, buffer, stick, index: int, x: int, row: int, width: int) -> int:
         """One pad's own rows: what it is, where it is pushed, and what is down."""
@@ -119,6 +127,21 @@ class PadBench(Screen):
 
     def key_sound(self, name: str) -> str | None:
         return None
+
+
+def _cost(app) -> str:
+    """The frame's stages, in milliseconds: where a slow frame actually went.
+
+    A handheld cannot run ``--timings`` -- there is no terminal -- and "it is slow"
+    is not a measurement. The stages are the ones the application books anyway:
+    the cells, the paint into the frame, the art over it, and the presentation,
+    each as an average of every frame so far and the worst one.
+    """
+    stages = getattr(app, "frame_cost", None)
+    if stages is None:
+        return ""
+    parts = [f"{name} {avg:.1f}/{worst:.0f}" for name, avg, worst in stages()]
+    return "ms avg/worst   " + "   ".join(parts) if parts else ""
 
 
 def shown_name(button: int) -> str:

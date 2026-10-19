@@ -210,6 +210,12 @@ class SdlApp:
         #: Whether the platform's own keyboard has been asked for. See
         #: ``_text_input``: a phone has none until it is.
         self._text_wanted = False
+        #: Whether SDL's own renderer presents the frame. On Android it must: a
+        #: plain window surface is copied to the screen *in software* on every
+        #: flip, and that is the difference between a game and a slide show. A
+        #: renderer keeps the frame as a texture and the GPU scales it -- which
+        #: is what the handheld fork did for exactly this reason.
+        self._renderer = on_android()
         #: Whether a frame has been drawn yet. The one thing that has to know is
         #: ``_fit``: the canvas is chosen before the window exists, and on Android
         #: the window is the screen and gets the last word -- but only before the
@@ -260,6 +266,9 @@ class SdlApp:
         #: not a thing to put in the picture.
         self.show_timings = timings
         self._timing: dict[str, tuple[float, int]] = {}
+        #: The worst a stage has been, for the bench: an average hides the frame
+        #: that took a second, and the frame that took a second is the question.
+        self._worst: dict[str, float] = {}
         self._timing_since = time.monotonic()
         #: The grid, made once and cleared from then on. It is *this* app's, so it
         #: is made here rather than on the first frame -- a screen is handed a
@@ -1008,7 +1017,7 @@ class SdlApp:
         else:
             self.grid.font = self.font
             self.grid.clear()
-        mark = time.perf_counter() if self.show_timings else 0.0
+        mark = time.perf_counter()
         # An opaque modal: nothing under it is drawn. A menu is a panel, not a
         # window onto the dungeon, so the topmost modal roots the stack -- the
         # same rule the Qt build keeps, and the reason a dialog is not a
@@ -1055,15 +1064,30 @@ class SdlApp:
     def _note(self, name: str, mark: float) -> float:
         """Book the milliseconds since ``mark`` under ``name``, and pass it on.
 
-        Nothing but two clock reads when ``--timings`` was not asked for, which is
-        why it can stand in the middle of the frame at all.
+        Always measured, and not only when ``--timings`` asked: four clock reads a
+        frame cost nothing, and the bench on a handheld has no terminal to print
+        into -- the numbers it needs are exactly these. What the flag still decides
+        is whether they are also *printed* once a second.
         """
-        if not self.show_timings:
-            return mark
         now = time.perf_counter()
-        spent, frames = self._timing.get(name, (0.0, 0))
-        self._timing[name] = (spent + (now - mark), frames + 1)
+        spent = now - mark
+        total, frames = self._timing.get(name, (0.0, 0))
+        self._timing[name] = (total + spent, frames + 1)
+        self._worst[name] = max(self._worst.get(name, 0.0), spent)
         return now
+
+    def frame_cost(self) -> list[tuple[str, float, float]]:
+        """The frame's stages: ``(name, average ms, worst ms)``.
+
+        For the bench, which is where a handheld's numbers can be read: a screen
+        that says "4 ms in the cells and 900 in the presentation" is a diagnosis,
+        and one that says "less than a frame a second" is a symptom.
+        """
+        return [
+            (name, total / frames * 1000.0, self._worst.get(name, 0.0) * 1000.0)
+            for name, (total, frames) in self._timing.items()
+            if frames
+        ]
 
     def _report_timings(self, now: float) -> None:
         """Once a second: what each stage of the frame cost, in milliseconds."""
@@ -1363,6 +1387,17 @@ class SdlApp:
 
         base = self._buffer_size()
         size = (base[0] * self.scale, base[1] * self.scale)
+        if self._renderer:
+            # SCALED asks SDL for a renderer and makes the display surface the
+            # *logical* one: the canvas is what is drawn into, and the renderer
+            # scales and letterboxes it to the panel on every flip. Measured on a
+            # desktop, the frame costs 4.5 ms at this canvas; a phone's plain
+            # window surface turned that into less than one frame a second.
+            self._window = pygame.display.set_mode(
+                size, pygame.SCALED | pygame.FULLSCREEN
+            )
+            self._fit()
+            return
         if self.crt.scanlines or self.crt.bloom or self.crt.geometry:
             try:
                 import moderngl
@@ -1484,6 +1519,15 @@ class SdlApp:
         surface = self._window
         offset = self.effects.offset()
         fit = max(1, self._shown[0] // max(1, self._buffer_size()[0]))
+        if self._renderer:
+            # The display surface *is* the canvas and `flip` hands it to the GPU,
+            # so nothing here is scaled: one copy of the frame, unless a blow is
+            # shaking it, which is a blit a few pixels off centre.
+            if offset != (0, 0):
+                surface.fill((0, 0, 0))
+            surface.blit(self._surface, offset)
+            pygame.display.flip()
+            return
         if self.glass is not None:
             # The glass has the whole picture and the whole window: it is the
             # thing that scales, so the shake goes in as part of its offset.
@@ -1493,9 +1537,15 @@ class SdlApp:
             pygame.display.flip()
             return
         surface.fill((0, 0, 0))
-        scaled = pygame.transform.scale(
-            self._surface,
-            (self._surface.get_width() * fit, self._surface.get_height() * fit),
+        # At one-to-one the "scale" is a full-frame copy of a megapixel, once per
+        # frame, for nothing.
+        scaled = (
+            self._surface
+            if fit == 1
+            else pygame.transform.scale(
+                self._surface,
+                (self._surface.get_width() * fit, self._surface.get_height() * fit),
+            )
         )
         surface.blit(
             scaled,
