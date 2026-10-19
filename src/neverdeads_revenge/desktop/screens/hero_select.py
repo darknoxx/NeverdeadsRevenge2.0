@@ -36,8 +36,9 @@ FUTURE_HEROES = ("revenant", "warden")
 #: They keep their *slot* -- the order of the cards and the row of hotkeys do not move,
 #: because a slot that moved would move four others with it -- and draw as one of the
 #: "not yet resurrected" ones until they have their art back. A name in here and out
-#: again is the whole switch.
-UNFINISHED: tuple[str, ...] = ("walkyrion",)
+#: again is the whole switch; it is empty today, and Walkyrion is the reason the
+#: switch exists.
+UNFINISHED: tuple[str, ...] = ()
 
 #: How many rows the picture band is, in cells: the block font's own height, and
 #: a *constant* rather than a measurement. The card's layout is the same card for

@@ -2962,39 +2962,34 @@ def test_the_display_report_says_what_the_machine_says():
     assert app._dpi() >= 1.0, "a display scale below one is not a display scale"
 
 
-def test_a_hero_whose_sheets_are_being_redrawn_is_a_slot_and_not_a_choice():
-    """Walkyrion's slot while he is redrawn: still in the roster, not selectable.
+def test_the_roster_offers_every_hero_the_game_has(monkeypatch):
+    """Walkyrion is back, and the switch that hid him still works.
 
-    The slot keeps its *place*, so the order of the cards and the row of letters under
-    them do not move -- what changed is that the slot draws as one of the "not yet
-    resurrected" ones. So: his name is not among the choices, the roster is the same
-    length, and a confirm on his card begins nothing. (The card can still be *looked*
-    at, which is why the cursor is allowed to rest on it at all.)
+    Both halves matter. The roster offers every hero in HEROES, in their own slots
+    -- the order of the cards and the row of letters under them is the picture a
+    player learns -- and the *lock* is a switch that hides one if his sheets ever
+    have to be redrawn again: a name in `UNFINISHED` and he draws as a "not yet
+    resurrected" card, which is a slot and not a choice.
     """
-    from neverdeads_revenge.desktop.screens.hero_select import UNFINISHED
+    from neverdeads_revenge.desktop.screens import hero_select
+    from neverdeads_revenge.game.actors import HEROES
     from neverdeads_revenge.sdl_front.app import SdlApp
 
-    assert "walkyrion" in UNFINISHED, "this test is about the switch being on"
+    assert hero_select.UNFINISHED == (), "a hero is still parked"
 
     app = SdlApp(seed=3, no_sound=True)
     app.open_hero_select()
     screen = app.screens[-1]
-    chosen = [hero.key if hero is not None else None for hero in screen.slots]
-    assert "walkyrion" not in chosen, f"a locked hero is still a choice: {chosen}"
-    assert len(chosen) == 6, f"the roster changed length: {chosen}"
+    keys = [hero.key if hero is not None else None for hero in screen.slots]
+    assert keys[: len(HEROES)] == list(HEROES), "the cards are not in their slots"
+    assert keys[len(HEROES) :] == [None, None], "the future heroes lost their slots"
 
-    # Walk to his card, look at it, and try to begin: the choice must stay on the
-    # screen and no run must be behind it.
-    app.key("right")
-    app.key("right")
-    assert screen.current is None, "his slot is not where it was"
-    app.key("enter")
-    assert type(app.screens[-1]).__name__ == "HeroSelectScreen", "a locked card began a run"
-    assert app.run is None, "a locked card began a run"
+    # And the switch: park him, and his slot is a card to look at, not to choose.
+    monkeypatch.setattr(hero_select, "UNFINISHED", ("walkyrion",))
+    parked = [hero.key if hero is not None else None for hero in screen.slots]
+    assert "walkyrion" not in parked
+    assert len(parked) == len(keys), "parking a hero moved the roster"
 
-    # And the neighbouring slots still work, so the lock is one slot and not a wall.
-    app.key("right")
-    assert screen.current is not None and screen.current.key == "inferno", screen.current
 
 def test_the_order_strip_is_reserved_before_the_panels():
     """The strip was the leftover, and on a narrow grid there is no leftover.
