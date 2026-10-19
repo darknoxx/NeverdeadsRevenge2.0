@@ -21,6 +21,7 @@ from neverdeads_revenge.game.state import GameState
 from ..keys import KEY_BINDINGS
 from .base import Screen
 from .dialogs import (
+    KindlyScreen,
     FAME,
     OPEN,
     ChestScreen,
@@ -141,6 +142,22 @@ class GameScreen(Screen):
         ultimate_ready = run.ultimate_available
 
         result = perform_action(run, action)
+        if (
+            run.encounter is not None
+            and run.encounter.behaviour == "kindly"
+            and run.encounter.stats.alive
+        ):
+            # THE KINDLY ONE asks before the arena opens. It is the one monster
+            # whose whole fight is a question, and a question is a dialog.
+            from neverdeads_revenge.game.actions import KINDLY_PRICE, pay_the_kindly_one
+
+            def answered(paid: bool) -> None:
+                if paid and pay_the_kindly_one(run):
+                    return
+                app.open_encounter()
+
+            app.push(KindlyScreen(KINDLY_PRICE, on_done=answered))
+            return
         if run.encounter is not None:
             # The step walked into something. The floor hands the fight over,
             # and everything the map would have done about it -- the blow, the

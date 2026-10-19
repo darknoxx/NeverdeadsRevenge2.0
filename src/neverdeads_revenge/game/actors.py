@@ -249,6 +249,14 @@ class Actor:
     #: Statuses this actor's blows leave running, by key. Copied from the
     #: template for a monster; the player's is read off the blade in hand.
     inflicts: tuple[str, ...] = ()
+    #: Statuses this actor takes on *itself* whenever it lands a blow, and the
+    #: damage it gives back to whoever lands one on it. Both are the monster's,
+    #: for one monster each: the already-dying and the briar.
+    self_inflicts: tuple[str, ...] = ()
+    thorns: int = 0
+    #: What a thief has taken off the hero. The picker leaves when it has
+    #: something to leave with, and this is what says it does.
+    stolen: int = 0
     #: Which NPC this is, by key. ``None`` for everything that is not a person.
     npc: str | None = None
     #: Cells entered since the run started. A run total, like ``total_turns``,
@@ -733,6 +741,16 @@ class EnemyTemplate:
     #: that is how the enemy *mix* shifts rather than just the enemy *numbers*.
     #: See :mod:`game.difficulty`.
     weight_growth: float = 1.0
+    #: Never rolled before this floor. The echo is a boss and a boss on floor one
+    #: is a joke that kills you; everything else is 1.
+    min_depth: int = 1
+    #: Statuses this monster takes *itself* every time it lands a blow. One does:
+    #: the already-dying is a wound with a body around it, and the race is the
+    #: whole of it.
+    self_inflicts: tuple[str, ...] = ()
+    #: Damage given back to whatever lands a blow on it. One does: the briar is
+    #: the answer to a hero who wins by taking more turns.
+    thorns: int = 0
 
 
 ENEMIES: dict[str, EnemyTemplate] = {
@@ -865,6 +883,114 @@ ENEMIES: dict[str, EnemyTemplate] = {
         # ``world/generator.py``.
         weight=0.0,
     ),
+    # -- the ones that ask a question instead of hitting harder ---------------
+    #
+    # The names are one lowercase phrase and never "the ...": every line that
+    # names a monster already says "The {name}", so an article here is read out
+    # as "The the hunter strikes you". The rule is the hunter's, and it is right.
+    "kindly": EnemyTemplate(
+        key="kindly",
+        name="kindly one",
+        glyph="k",
+        color="#3f5f9f",
+        # It does not want a fight. It asks first -- see the encounter in the
+        # screen, which is where the bargain lives. What it is when refused is
+        # the worst thing the floor has, which is the price of refusing.
+        behaviour="kindly",
+        stats=Stats(max_hp=20, hp=20, speed=0.95, damage=(6, 9), accuracy=2, armor=1),
+        gold=(8, 12),
+        min_depth=2,
+        weight=0.9,
+        weight_growth=1.10,
+    ),
+    "hush": EnemyTemplate(
+        key="hush",
+        name="hush",
+        glyph="h",
+        color="#8a8a8a",
+        # While it lives the dark does not *pay*: no kill point a turn, no point
+        # a kill. A hero is his tricks, and this takes them away without touching
+        # his health -- the fight nobody has practised.
+        behaviour="hush",
+        stats=Stats(max_hp=14, hp=14, speed=1.15, damage=(4, 6), evasion=2),
+        gold=(4, 7),
+        min_depth=2,
+        weight=1.2,
+        weight_growth=1.15,
+    ),
+    "dying": EnemyTemplate(
+        key="dying",
+        name="already-dying",
+        glyph="d",
+        color="#5a1f1f",
+        # A wound with a body around it: every blow it lands opens one on itself.
+        # It hits hard and it is nearly gone, so the fight is a race and the race
+        # is the point.
+        self_inflicts=("bleed",),
+        stats=Stats(max_hp=10, hp=10, speed=1.05, damage=(7, 10)),
+        gold=(6, 10),
+        min_depth=2,
+        weight=1.1,
+        weight_growth=1.10,
+    ),
+    "briar": EnemyTemplate(
+        key="briar",
+        name="briar",
+        glyph="n",
+        color="#6b8e23",
+        # What it grows, you take: thorns is the answer to a hero who wins by
+        # taking more turns, and the hummingbird's nightmare.
+        thorns=2,
+        stats=Stats(max_hp=26, hp=26, speed=0.65, damage=(5, 7), armor=1),
+        gold=(6, 11),
+        min_depth=2,
+        weight=1.4,
+        weight_growth=1.10,
+    ),
+    "picker": EnemyTemplate(
+        key="picker",
+        name="picker",
+        glyph="p",
+        color="#8f4f5f",
+        # It wants the purse and not the blood, and it leaves when it has what it
+        # came for. The gold it carries is what it took from somebody.
+        behaviour="thief",
+        stats=Stats(max_hp=12, hp=12, speed=1.45, damage=(3, 5), evasion=2),
+        gold=(7, 12),
+        min_depth=2,
+        weight=1.2,
+        weight_growth=1.10,
+    ),
+    "echo": EnemyTemplate(
+        key="echo",
+        name="one who did not come back",
+        glyph="@",
+        color="#4a3b6b",
+        # A hero out of the chronicle, with the numbers of the run that got
+        # furthest. It is *built* at spawn from a score entry; this is the frame.
+        behaviour="echo",
+        min_depth=4,
+        stats=Stats(
+            max_hp=40, hp=40, speed=1.25, damage=(8, 11), accuracy=1, armor=1, evasion=1
+        ),
+        gold=(20, 30),
+        weight=0.35,
+        weight_growth=1.0,
+    ),
+    "lid": EnemyTemplate(
+        key="lid",
+        name="lid",
+        glyph="&",
+        color="bright_yellow",
+        # Never rolled: a chest that opens into a mouth. Weight zero and a
+        # behaviour of its own, because a mimic is an event and not a monster in
+        # the mix.
+        behaviour="mimic",
+        stats=Stats(max_hp=24, hp=24, speed=0.85, damage=(6, 9), armor=2),
+        gold=(10, 16),
+        min_depth=1,
+        weight=0.0,
+    ),
 }
 
 
@@ -882,6 +1008,8 @@ def make_enemy(template: EnemyTemplate, position: Pos) -> Actor:
         gold=template.gold,
         curse_chance=template.curse_chance,
         inflicts=template.inflicts,
+        self_inflicts=template.self_inflicts,
+        thorns=template.thorns,
     )
 
 
@@ -1012,6 +1140,6 @@ def pick_enemy_template(rng: Rng, depth: int = 1) -> EnemyTemplate:
         # A weight of zero is "never rolled". The hunter is placed by the floor
         # rather than drawn from the table, and leaving it in with a zero would
         # be a trap for whatever ``choice_weighted`` does with one.
-        if t.weight > 0
+        if t.weight > 0 and depth >= t.min_depth
     ]
     return scale_template(rng.choice_weighted(weights), depth)

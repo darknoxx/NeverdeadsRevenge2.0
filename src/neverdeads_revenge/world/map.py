@@ -41,6 +41,10 @@ class GroundItem:
     #: A gift a chest holds *instead* of contents, by key. Like ``curse``, a
     #: string: the world places the bargain and ``game/`` knows what it means.
     gift: str | None = None
+    #: Whether this chest is a *jaw*. Rolled when the floor is built, like the
+    #: contents: the seed decides which lids are teeth, because a trap the player
+    #: could see coming by the dice changing would not be a trap.
+    mimic: bool = False
     #: Which page of the chronicle this is, for a page lying on the floor. The
     #: number is the whole of what a page *is*: it is what decides the slot it
     #: goes into, and a page without one cannot go back into the book.

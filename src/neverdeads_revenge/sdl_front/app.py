@@ -322,7 +322,23 @@ class SdlApp:
         # Cleared before the arena opens: the domain is done with it the moment
         # it is set, and a fight that is asked for twice would be two fights.
         self.run.encounter = None
-        battle = Battle(self.run, encounter_around(self.run, trigger))
+        enemies = encounter_around(self.run, trigger)
+        # THE ONE WHO DID NOT COME BACK. The chronicle's best run puts its name on
+        # the echo and fights with the numbers it got furthest with: a hero's
+        # record is the only thing in this dungeon that has ever beaten him.
+        scores = getattr(self.progress, "scores", ())
+        if scores:
+            best = scores[0]
+            for enemy in enemies:
+                if enemy.behaviour != "echo":
+                    continue
+                from ..game.actors import ENEMIES, scale_template
+
+                enemy.name = best.name
+                enemy.stats = scale_template(
+                    ENEMIES["echo"], max(4, best.depth)
+                ).stats
+        battle = Battle(self.run, enemies)
         self.push(SdlTurning(trigger, battle))
         return True
 

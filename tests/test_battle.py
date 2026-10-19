@@ -209,7 +209,9 @@ def test_the_void_takes_everything_and_costs_everything():
     """
     state = run(ultimate_level=1)
     state.level = 8
-    state.kill_points = 99
+    # A *legal* purse: the cap is what the game would hold, and the void costs
+    # twelve of it. A purse of 99 was a state the game cannot be in.
+    state.kill_points = state.kill_points_max
     enemies = take(state, 3)
     battle = Battle(state, enemies)
     battle.begin()

@@ -326,6 +326,34 @@ def _weapon_rule_bonus(state: GameState, first: bool) -> int:
     return 0
 
 
+#: What THE KINDLY ONE asks for. Small on purpose: it is not a toll, it is a hand
+#: held out, and refusing is the expensive answer.
+KINDLY_PRICE = 8
+
+
+def pay_the_kindly_one(state: GameState) -> bool:
+    """Pay its price, and let it go. ``False`` when the purse cannot.
+
+    The enemy *leaves*: no kill, no coin, no kill point. It got what it came for,
+    which is the whole of what refusing was protecting.
+    """
+    enemy = state.encounter
+    if enemy is None or enemy.behaviour != "kindly":
+        return False
+    if state.gold < KINDLY_PRICE:
+        return False
+    state.gold -= KINDLY_PRICE
+    enemy.alive = False
+    if enemy in state.enemies:
+        state.enemies.remove(enemy)
+    state.encounter = None
+    state.say(
+        f"You give it {KINDLY_PRICE} gold, and it is not there any more.",
+        LogKind.BAD,
+    )
+    return True
+
+
 def _thorns_of(actor: Actor) -> int:
     """What the wearer gives back to whatever lands a blow on them.
 
@@ -1126,6 +1154,16 @@ def resolve_player_attack(
     if outcome.killed:
         _remove_corpse(state, target)
         return outcome
+    if target.thorns:
+        # THE BRIAR: what it grows, you take -- straight, because a thorn is not
+        # a blow and armour has nothing to do with it.
+        back = state.player.stats.reflect(target.thorns)
+        if back:
+            state.say(
+                f"The {target.name} gives {back} of it back.", LogKind.BAD
+            )
+            if state.player.hp <= 0:
+                state.die("The briar had the last of it.")
 
     if state.has_passive("dead_weight"):
         _knock_back(state, target)
@@ -1335,6 +1373,20 @@ def _open_chest(state: GameState) -> ActionResult:
         )
     elif curse is not None:
         state.add_curse(curse)
+
+    if chest.mimic:
+        # THE LID. The price was paid and the lid was a jaw: it was never a chest,
+        # it was a thing wearing one. The fight starts with it already at the door,
+        # and no contents change hands.
+        from .actors import ENEMIES, make_enemy, scale_template
+
+        lid = make_enemy(
+            scale_template(ENEMIES["lid"], state.depth), state.player.position
+        )
+        state.enemies.append(lid)
+        state.encounter = lid
+        state.say("The lid is a jaw, and it has been patient.", LogKind.BAD)
+        return ActionResult(consumed_turn=False, acted=False)
 
     if chest.gift is not None:
         state.gifts.add(chest.gift)
@@ -2426,6 +2478,21 @@ def resolve_enemy_attack(
     _player_takes_damage(state, attacker, outcome)
     if outcome.hit and not outcome.killed:
         inflict(state, player, attacker.inflicts)
+        if attacker.self_inflicts:
+            # THE ALREADY-DYING: the blow opens a wound on the thing that threw
+            # it. A monster that is a race against itself, and the race is the
+            # whole of the fight.
+            inflict(state, attacker, attacker.self_inflicts)
+        if attacker.behaviour == "thief" and state.gold:
+            # THE PICKER: it wants the purse, not the blood. One or two coins a
+            # blow, and it remembers what it took -- that is what it leaves with.
+            taken = min(state.gold, state.rng.between(1, 2))
+            state.gold -= taken
+            attacker.stolen += taken
+            state.say(
+                f"The {attacker.name} takes {taken} gold and steps away.",
+                LogKind.BAD,
+            )
         thorns = _thorns_of(player)
         if thorns:
             back = attacker.stats.reflect(thorns)

@@ -896,6 +896,11 @@ def make_coin(value: int) -> GroundItem:
 #: hand over. The loot still matters; it is no longer the whole of a chest.
 GIFT_CHANCE = 1 / 2
 
+#: How often a chest is not a chest. One in six: often enough that a player learns
+#: to open the lid with one eye, rare enough that the bargain is still worth
+#: taking. Rolled when the floor is built, so the seed decides.
+MIMIC_CHANCE = 1 / 6
+
 
 def page_count(depth: int) -> int:
     """How many pages a floor holds.
@@ -928,6 +933,8 @@ def make_chest(
     curse_key: str,
     contents: ItemTemplate | None,
     gift: str | None = None,
+    *,
+    mimic: bool = False,
 ) -> GroundItem:
     """A locked chest owing ``curse_key``, holding ``contents`` or ``gift``.
 
@@ -947,6 +954,7 @@ def make_chest(
         curse=curse_key,
         contents=make_item(contents) if contents is not None else None,
         gift=gift,
+        mimic=mimic,
     )
 
 

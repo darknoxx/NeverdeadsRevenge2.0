@@ -19,6 +19,7 @@ from neverdeads_revenge.core.rng import Rng
 
 from .items import (
     GIFT_CHANCE,
+    MIMIC_CHANCE,
     chest_count,
     make_page,
     page_count,
@@ -638,6 +639,7 @@ def _scatter_loot(
                         rng, depth, filled_slots
                     ),
                     gift=gifts.pop() if holding_a_gift else None,
+                    mimic=rng.chance(MIMIC_CHANCE),
                 )
             )
     # The chronicle, torn up and scattered. Drawn without replacement from what

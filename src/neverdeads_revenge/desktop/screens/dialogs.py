@@ -101,6 +101,46 @@ class ConfirmScreen(_Dialog):
         return True
 
 
+class KindlyScreen(_Dialog):
+    """THE KINDLY ONE, asking.
+
+    It does not attack and it does not block: it stands with a hand out and asks
+    for a little. Pay it and it goes; refuse and it is the worst thing on the
+    floor. The dialog is the whole of the encounter -- the arena never opens for
+    a price that was paid.
+    """
+
+    modal = True
+    title = "THE KINDLY ONE"
+    hint = "enter pay it    esc refuse"
+
+    def __init__(self, price: int, on_done=None) -> None:
+        from ..hold import HoldToContinue
+
+        super().__init__(on_done)
+        self.price = price
+        self.hold = HoldToContinue()
+
+    def _body(self) -> str:
+        return (
+            "It holds out a hand. It does not want a fight, and it is not asking "
+            "for one.\n\n"
+            f"It wants {self.price} gold.\n\n"
+            "Refuse, and you will find out what it is when it is not asking."
+        )
+
+    def key(self, name, event, app) -> bool:
+        if event.isAutoRepeat():
+            return True
+        if name == "escape":
+            self.finish(app, False)
+            return True
+        if name in ("enter", "return"):
+            self.finish(app, True)
+            return True
+        return True
+
+
 class ChestScreen(_Dialog):
     """The price, and nothing else. The reward stays behind the lid."""
 

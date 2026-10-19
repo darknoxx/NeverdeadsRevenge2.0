@@ -505,12 +505,22 @@ class Battle:
                 # And the purse fills, one point a turn of his own. Which makes
                 # the cheap tricks a rhythm and the dear ones a plan -- and makes
                 # a quick hero richer in them, on top of getting more turns.
-                self.state.kill_points = min(
-                    self.state.kill_points_max, self.state.kill_points + 1
-                )
+                if not self._hushed():
+                    # THE HUSH: while it lives the dark does not pay. A hero is
+                    # his tricks, and this takes them away without touching his
+                    # health.
+                    self.state.kill_points = min(
+                        self.state.kill_points_max, self.state.kill_points + 1
+                    )
                 return
             self._turns.append(actor)
             self._enemy_acts(actor, events)
+
+    def _hushed(self) -> bool:
+        """Whether a hush is standing: no kill point is paid while it is."""
+        return any(
+            one.stats.alive and one.behaviour == "hush" for one in self.enemies
+        )
 
     def _next(self) -> Actor:
         """Whose turn it is: whoever's own pace is up.
@@ -1322,6 +1332,18 @@ class Battle:
         lives where closing happens. Inventing a second reading of it for the
         arena would be two opinions about one word.
         """
+        if (attacker.behaviour == "thief" and attacker.stolen
+                and attacker.stats.hp * 2 < attacker.stats.max_hp):
+            # THE PICKER leaves when it has something to leave with, and it does
+            # not wait to be killed for it. The coins are gone; the room is
+            # quieter.
+            self.enemies.remove(attacker)
+            attacker.alive = False
+            self.state.say(
+                f"The {attacker.name} is gone, and so is what it took.",
+                LogKind.BAD,
+            )
+            return
         if self._unseen:
             # BETWEEN BLOWS: the swing goes through the place he was standing.
             before = len(self.state.log)
