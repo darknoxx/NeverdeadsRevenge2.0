@@ -3201,3 +3201,37 @@ def test_a_phone_s_keyboard_is_asked_for_and_its_text_arrives(monkeypatch):
     # And the keyboard goes away again with the screen that wanted it.
     app.key("enter")
     assert asked[-1] == "off", "the keyboard was left up"
+
+
+def test_the_first_window_a_phone_gets_has_the_last_word_on_the_canvas(monkeypatch):
+    """The screen is guessed before the window exists, so the window corrects it.
+
+    A canvas has to be known *before* there is a window to ask -- the window is made
+    from it -- so the platform is asked for its screen instead. On a phone the
+    window *is* that screen, so the first window that exists is the better answer,
+    and this is the one place it is allowed to speak. A desktop's window is a
+    preview of the device, and letting it have a say would make the preview a
+    different game at a different size.
+    """
+    font, _ = _sdl()
+    import pygame
+
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    monkeypatch.setenv("ANDROID_ARGUMENT", "1")
+    app = SdlApp(seed=3, no_sound=True)
+    assert app.zoom == "M", "a handheld did not choose its own zoom"
+    assert app._pinned is not None
+
+    # The device's own window, as the phone would report it.
+    monkeypatch.setattr(pygame.display, "get_window_size", lambda: (1240, 1080))
+    monkeypatch.setattr(pygame.display, "get_init", lambda: True)
+    monkeypatch.setattr(pygame.display, "get_surface", lambda: pygame.Surface((8, 8)))
+    app._fit()
+    assert app._pinned == (62, 26), f"the window said {app._pinned}"
+    assert (app.cols, app.rows) == (62, 26)
+
+    # And after the first frame it stops listening, so a resize cannot move it.
+    app._drawn = True
+    app._fit()
+    assert app._pinned == (62, 26)

@@ -210,6 +210,11 @@ class SdlApp:
         #: Whether the platform's own keyboard has been asked for. See
         #: ``_text_input``: a phone has none until it is.
         self._text_wanted = False
+        #: Whether a frame has been drawn yet. The one thing that has to know is
+        #: ``_fit``: the canvas is chosen before the window exists, and on Android
+        #: the window is the screen and gets the last word -- but only before the
+        #: first frame, so a resize never moves the game.
+        self._drawn = False
         #: The face, and with it the *canvas*. A handheld chooses both -- the
         #: screen is fixed, the face is picked for it, and the grid follows from
         #: the two -- which is the whole difference from the desktop, where the
@@ -1044,6 +1049,7 @@ class SdlApp:
         if self.show_fps:
             self._draw_fps()
         self._present()
+        self._drawn = True
         self._note("present", mark)
 
     def _note(self, name: str, mark: float) -> float:
@@ -1230,19 +1236,24 @@ class SdlApp:
                     return int(width), int(height)
         return SCREEN
 
-    def _handheld_grid(self) -> tuple[int, int]:
-        """The canvas for a handheld: the screen, the face, and the cells they make.
-
-        Chosen once, from the *screen*, and left alone from then on. On a device
-        the window is the screen and never moves; on a laptop this is a preview of
-        the device, so the window is scaled and the grid stays the device's -- and
-        `--scale 0.5` is how a desktop looks at what the handheld will do.
-        """
-        width, height = self._screen_size()
+    def _grid_for(self, width: int, height: int) -> tuple[int, int]:
+        """The cells a face makes of a screen of this size."""
         return (
             max(1, width // self.font.cell_w),
             max(1, height // self.font.cell_h),
         )
+
+    def _handheld_grid(self) -> tuple[int, int]:
+        """The canvas for a handheld: the screen, the face, and the cells they make.
+
+        Chosen from the *screen*, and left alone from then on -- with one
+        correction, in ``_fit``: the screen has to be asked for before there is a
+        window to ask, and on a phone the window *is* the screen, so the first one
+        that exists gets the last word. A desktop's window is a preview of the
+        device and is deliberately not allowed to say anything.
+        """
+        width, height = self._screen_size()
+        return self._grid_for(width, height)
 
     def _grid_size(self, width: int, height: int) -> tuple[int, int]:
         """How many cells fit in a window of this size, at that scale.
@@ -1435,6 +1446,13 @@ class SdlApp:
             width, height = self._window.get_size()
         else:
             return
+        if self._pinned is not None and on_android() and not self._drawn:
+            # A phone's window *is* its screen, and the screen had to be guessed
+            # at before there was a window to ask -- so the first window that
+            # exists gets the last word on the canvas. Once, and only on Android:
+            # a desktop's window is a preview of the device, and letting *that*
+            # have a say would make a preview a different game at a different size.
+            self._pinned = self._grid_for(width, height)
         # The grid comes from the window, the way the Qt build's does: whatever
         # is left over after the biggest whole-number scale becomes *cells* and
         # not black bars. A chosen canvas is the exception and answers itself --
