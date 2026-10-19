@@ -23,13 +23,20 @@ class PauseScreen(Screen):
         self.index = 0
 
     def items(self, app) -> list[tuple[str, str]]:
-        return [
+        items = [
             ("r", "RESUME"),
             ("c", "CONTROLS"),
             ("s", "SAVE AND QUIT"),
             ("q", "QUIT TO TITLE"),
             ("m", f"SOUND: {'on' if not app.sfx.muted else 'off'}"),
         ]
+        if getattr(app, "joysticks", None):
+            # The bench, and only when there is something to bench. On a desktop
+            # with no pad plugged in it would be a line answering a question
+            # nobody asked, and a menu line that does nothing is a line that
+            # teaches a player to distrust the menu.
+            items.insert(2, ("p", "THE PAD"))
+        return items
 
     def draw(self, buffer, app) -> None:
         items = self.items(app)
@@ -57,7 +64,7 @@ class PauseScreen(Screen):
         if name in ("escape", "r"):
             app.pop()
             return True
-        if name in ("s", "q", "m", "c"):
+        if name in ("s", "q", "m", "c", "p"):
             self._choose(name, app)
             return True
         return True
@@ -70,6 +77,11 @@ class PauseScreen(Screen):
             from .menus import HelpScreen
 
             app.push(HelpScreen())
+        elif key == "p":
+            # What the pad actually sends. Here rather than only on the command
+            # line because a handheld has no command line: this is the only door
+            # left once the game is installed.
+            app.open_bench()
         elif key == "s":
             app.save_and_quit()
         elif key == "q":

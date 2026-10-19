@@ -30,6 +30,7 @@ from ..desktop.theme import BACKGROUND, Colour
 from .font import SdlFont
 from .effects import SdlEffects
 from .keys import name_of, typed
+from .pad import DIRECTION_KEYS, button_name, dpad_direction
 from .paint import paint
 
 __all__ = ["SdlApp", "FONT", "MIN_COLS", "MIN_ROWS", "SMALL_PIXELS"]
@@ -54,6 +55,29 @@ MIN_ROWS = 24
 #: is the whole difference between a 1440p monitor full of dungeon and one with a
 #: couple of hundred pixels of nothing on every side.
 TARGET_COLS = 110
+
+#: How long a pushed direction waits before it walks, in seconds, and how often
+#: it is fed once it does.
+#:
+#: A keyboard repeats by itself -- SDL's own delay and interval, asked for below
+#: -- but a pad sends *nothing* between a button going down and coming up, so on
+#: a handheld the stream has to be made here, or a held direction moves exactly
+#: one square. The *pace* is deliberately not decided here: the floor throttles
+#: its repeats by the hero's own ``action_gap``, exactly as it does for a held
+#: key, so a fast hero walks fast on both instruments.
+PAD_WALK_DELAY = 0.22
+
+#: How long the pad's A waits before it starts repeating, in seconds.
+#:
+#: Longer than the walk delay, and longer on purpose: the hold screens settle a
+#: tap by its own length (``hold.TAP_SECONDS``, 0.18) and a tap banks nothing, so
+#: a first repeat that arrived sooner than that would turn every tap into a hold
+#: nobody held.
+PAD_HOLD_DELAY = 0.30
+
+#: How often the made-up repeat stream ticks, in seconds. The hold's fill is
+#: wall-clock time, so this only sets how smoothly its bar moves.
+PAD_REPEAT_RATE = 0.05
 
 
 class KeyPress:
@@ -91,6 +115,7 @@ class SdlApp:
         battle_scene: bool = False,
         fps: bool = False,
         timings: bool = False,
+        sniff: bool = False,
         backdrop: bool = True,
     ) -> None:
         import pygame
@@ -115,6 +140,26 @@ class SdlApp:
         # at all. Delay and interval are the terminal's own feel: a pause long
         # enough that a tap is a tap, then the key's own pace.
         pygame.key.set_repeat(400, 60)
+        #: The pads, if there are any. A handheld has nothing else and a desktop
+        #: usually has none, which is why every screen still answers a keyboard:
+        #: the keyboard is the *stand-in* here and not the other way round.
+        #:
+        #: Kept as a plain list so a test can hand in a pad that is not plugged
+        #: in -- which is the only way the mapping can be held still.
+        pygame.joystick.init()
+        self.joysticks: list = [
+            pygame.joystick.Joystick(index)
+            for index in range(pygame.joystick.get_count())
+        ]
+        #: Pad buttons that are *down* right now, by SDL's number. SDL reports a
+        #: press and a release and nothing in between, so this is what tells a
+        #: held button from a tap -- and what the made-up repeats are fed from.
+        self._buttons_down: set[int] = set()
+        self._pad_walk: str | None = None
+        self._pad_walk_from = 0.0
+        self._pad_walk_last = 0.0
+        self._pad_hold_from: float | None = None
+        self._pad_hold_last = 0.0
         self.font = SdlFont(str(FONT))
         #: The same smaller face the Qt build uses for the sidebar and the log:
         #: one size down, which is the one place a mixed size pays for itself.
@@ -211,6 +256,8 @@ class SdlApp:
         self._running = True
         if battle_scene:
             self.open_battle_scene()
+        if sniff:
+            self.open_bench()
 
     # -- the stack ---------------------------------------------------------
     def _forget_presses(self) -> None:
@@ -401,6 +448,19 @@ class SdlApp:
         from ..desktop.screens.menus import ChronicleScreen
 
         self.push(ChronicleScreen())
+
+    def open_bench(self) -> None:
+        """The pad bench: what *this* pad actually sends, raw.
+
+        Reachable from the command line (``--sniff``) and from the pause menu
+        whenever a pad is plugged in, which is the door that matters on a
+        handheld: there is no command line to pass a flag to once the app is
+        installed, and the question it answers -- is the button arriving at all,
+        and as what? -- can only be asked on the device.
+        """
+        from .bench import PadBench
+
+        self.push(PadBench())
 
     def open_delete_progress(self) -> None:
         """Ask for the word, then erase everything.
@@ -613,6 +673,12 @@ class SdlApp:
         """
         import pygame
 
+        # The bench (``--sniff``) is shown every event *raw*, before any mapping
+        # has read it -- which is the whole point of it: the question there is
+        # what arrives, not what survived. No other screen defines this.
+        note = getattr(self.screens[-1], "note", None)
+        if note is not None:
+            note(event, self)
         if event.type == pygame.QUIT:
             self.quit()
         elif event.type == pygame.KEYDOWN:
@@ -648,6 +714,115 @@ class SdlApp:
             # whatever it says, and the glass hears about it.
             self._fit()
             self.redraw()
+        elif event.type == pygame.JOYBUTTONDOWN:
+            self._pad_button(event.button, down=True)
+        elif event.type == pygame.JOYBUTTONUP:
+            self._pad_button(event.button, down=False)
+
+    # -- the pad ------------------------------------------------------------
+    def _pad_button(self, button: int, *, down: bool) -> None:
+        """One pad button, in the game's own words.
+
+        A button is an *event*, exactly like a key: one press, one action. Only
+        the directions are polled (a d-pad is a position and not a stream of
+        presses), and only the holds are repeated (SDL sends nothing between a
+        button going down and coming up) -- both of which live in ``tick``.
+
+        The two books are kept the same way a key's are, for the same reason: a
+        held button that opened a screen must not choose anything on it.
+        """
+        name = button_name(button)
+        if name is None:
+            return
+        if down:
+            self._buttons_down.add(button)
+            if name in self._stale:
+                # Down before this screen existed: it has to come up and be
+                # pressed again before anything here hears it.
+                return
+            self._down.add(name)
+            self.key(name, KeyPress(False, ""), "")
+            return
+        self._buttons_down.discard(button)
+        self._down.discard(name)
+        self._stale.discard(name)
+        screen = self.screens[-1]
+        if screen.key_up(name, KeyPress(False, ""), self):
+            self.redraw()
+
+    def pad_direction(self) -> str | None:
+        """Where the pad is being pushed, as the key the game answers to.
+
+        The d-pad only. The analog stick is deliberately **not** read for
+        movement: it drifts, and a resting stick on the bench reported itself as
+        "down" forever -- which walked the premise and ran the menus off the
+        bottom of the screen. The bench still shows the stick raw, which is
+        where a mapping is checked.
+
+        No keyboard fallback either, and that is the one place this differs from
+        the handheld build it comes from: on a desktop the arrow keys already
+        repeat themselves (SDL's own delay and interval, asked for above), so
+        reading them here as well would walk a held key twice per repeat.
+        """
+        for stick in self.joysticks:
+            pushed = dpad_direction(stick)
+            if pushed is not None:
+                return DIRECTION_KEYS.get(pushed)
+        return None
+
+    def _poll_pad(self, now: float) -> None:
+        """A pushed direction walks, and the pad's A holds.
+
+        Read on the clock and not on events, because neither is a stream: a
+        d-pad is a *position*, and a held button is a *state*. A keyboard does
+        both by itself; a pad sends one press and one release and nothing in
+        between, so both streams are made here.
+        """
+        self._poll_pad_walk(now)
+        self._poll_pad_hold(now)
+
+    def _poll_pad_walk(self, now: float) -> None:
+        """A held direction: one step at once, then repeats at the game's pace."""
+        direction = self.pad_direction()
+        if direction is None:
+            self._pad_walk = None
+            return
+        if direction != self._pad_walk:
+            # A new direction, or the first frame of one: that is a press, not a
+            # repeat, so a tap of any ordinary length is exactly one square.
+            self._pad_walk = direction
+            self._pad_walk_from = now + PAD_WALK_DELAY
+            self._pad_walk_last = now
+            self.key(direction, KeyPress(False, ""), "")
+            return
+        if now < self._pad_walk_from or now - self._pad_walk_last < PAD_REPEAT_RATE:
+            return
+        self._pad_walk_last = now
+        self.key(direction, KeyPress(True, ""), "")
+
+    def _poll_pad_hold(self, now: float) -> None:
+        """The pad's A, fed as the repeat stream a hold screen waits for.
+
+        The prologue, the death tally and erasing the profile all advance on a
+        *stream* of presses -- the fill is the time since the first one -- and a
+        pad does not send one. Fed here rather than by the keyboard's own
+        repeats, so a desktop hold is exactly what it was: only the pad's A is
+        watched, and the first repeat waits longer than a tap so that a tap
+        still banks nothing.
+        """
+        hold = getattr(self.screens[-1], "hold", None)
+        key = hold.keys[0] if hold is not None and hold.keys else None
+        if key is None or key != button_name(0) or 0 not in self._buttons_down:
+            self._pad_hold_from = None
+            return
+        if self._pad_hold_from is None:
+            self._pad_hold_from = now + PAD_HOLD_DELAY
+            self._pad_hold_last = now
+            return
+        if now < self._pad_hold_from or now - self._pad_hold_last < PAD_REPEAT_RATE:
+            return
+        self._pad_hold_last = now
+        self.key(key, KeyPress(True, ""), "")
 
     def tick(self, dt: float) -> None:
         """A frame went by: let the screen play, let the pixels move, repaint.
@@ -669,6 +844,10 @@ class SdlApp:
         if getattr(screen, "busy", False) or getattr(screen, "animating", False):
             screen.step(dt, self)
         self.effects.step(dt)
+        # A pad sends no repeats of its own: a held direction and a held button
+        # are turned into the stream the screens already answer, before the frame
+        # that shows what they did.
+        self._poll_pad(now)
         self.redraw()
         self._report_timings(time.monotonic())
 

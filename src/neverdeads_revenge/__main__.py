@@ -65,6 +65,11 @@ def main(argv: list[str] | None = None) -> int:
         help="show a frame counter in the corner",
     )
     parser.add_argument(
+        "--sniff",
+        action="store_true",
+        help="start on the pad bench: every axis, button and hat, raw",
+    )
+    parser.add_argument(
         "--display",
         action="store_true",
         help="print what this machine says about its display, and stop",
@@ -117,6 +122,7 @@ def main(argv: list[str] | None = None) -> int:
         battle_scene=args.battle_scene,
         fps=args.fps,
         timings=args.timings,
+        sniff=args.sniff,
         backdrop=not args.no_backdrop,
     )
     window.open_window()

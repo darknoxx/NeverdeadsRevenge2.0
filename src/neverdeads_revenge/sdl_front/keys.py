@@ -35,6 +35,11 @@ NAMES: dict[int, str] = {
     "K_BACKSPACE": "backspace",
     "K_DELETE": "delete",
     "K_TAB": "tab",
+    # Android's own back gesture. A handheld has one key a keyboard does not,
+    # and everywhere in this game "back" is what escape means -- so it is spelled
+    # that way and no screen had to learn a second word. Guarded like the rest:
+    # a pygame built without Android support does not define it.
+    "K_AC_BACK": "escape",
     **{f"K_F{n}": f"f{n}" for n in range(1, 13)},
 }
 
