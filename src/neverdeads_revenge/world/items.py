@@ -93,6 +93,15 @@ class ItemTemplate:
     #: coats have it, and it is the one property that acts when the player
     #: is *hit* rather than when they swing.
     thorns: int = 0
+    #: Statuses the *wearer* takes when they swing with it. One blade does this:
+    #: the blood price is the strongest cheap steel in the game and takes a cut
+    #: for every blow it lands.
+    self_inflicts: tuple[str, ...] = ()
+    #: A named rule the fight reads at the moment it matters, for the blades whose
+    #: worth is not a number. A *string* for the same reason a monster's behaviour
+    #: is one: the vocabulary is small, it is written down in one place, and the
+    #: item table stays data.
+    rule: str = ""
 
 
 #: Glyph and colour per kind of thing. Weapons and armour follow the old
@@ -294,6 +303,103 @@ ITEMS: dict[str, ItemTemplate] = {
         inflicts=("chill",),
         weight=1.8,
         weight_growth=1.15,
+    ),
+
+    "hummingbird": ItemTemplate(
+        key="hummingbird",
+        name="the hummingbird",
+        glyph=WEAPON_GLYPH,
+        color=WEAPON_COLOR,
+        kind="weapon",
+        slot="weapon",
+        # No damage at all and the most speed any weapon has: a blade for the
+        # statuses, because more turns is more cuts.
+        modifiers=Modifiers(speed=0.35),
+        inflicts=("bleed",),
+        weight=2.0,
+        weight_growth=1.10,
+    ),
+    "frostbite": ItemTemplate(
+        key="frostbite",
+        name="the frostbite",
+        glyph=WEAPON_GLYPH,
+        color=WEAPON_COLOR,
+        kind="weapon",
+        slot="weapon",
+        # The slow cut: it bleeds them and takes a turn in four away, so the
+        # wound is paid out on fewer turns than it would be.
+        modifiers=Modifiers(damage=1),
+        inflicts=("bleed", "chill"),
+        weight=2.2,
+        weight_growth=1.12,
+    ),
+    "pyre": ItemTemplate(
+        key="pyre",
+        name="the pyre",
+        glyph=WEAPON_GLYPH,
+        color=WEAPON_COLOR,
+        kind="weapon",
+        slot="weapon",
+        # Two clocks on one target: a fire over in two turns and a rot that is
+        # not over for eight.
+        modifiers=Modifiers(damage=1),
+        inflicts=("burn", "poison"),
+        weight=1.8,
+        weight_growth=1.14,
+    ),
+    "marksman": ItemTemplate(
+        key="marksman",
+        name="the marksman's",
+        glyph=WEAPON_GLYPH,
+        color=WEAPON_COLOR,
+        kind="weapon",
+        slot="weapon",
+        # The only blade that uses accuracy -- the one modifier no item has ever
+        # set -- and it hits a plain thing 99% of the time.
+        modifiers=Modifiers(damage=2, accuracy=2),
+        weight=2.0,
+        weight_growth=1.10,
+    ),
+    "gambler": ItemTemplate(
+        key="gambler",
+        name="the gambler",
+        glyph=WEAPON_GLYPH,
+        color=WEAPON_COLOR,
+        kind="weapon",
+        slot="weapon",
+        # The swing: every fifth blow is a miss a plainer blade would have landed,
+        # and every fifth one is a crit.
+        modifiers=Modifiers(damage=3, crit_chance=0.20, accuracy=-2),
+        weight=1.8,
+        weight_growth=1.12,
+    ),
+    "patient": ItemTemplate(
+        key="patient",
+        name="the patient",
+        glyph=WEAPON_GLYPH,
+        color=WEAPON_COLOR,
+        kind="weapon",
+        slot="weapon",
+        # No damage and the longest clock in the game: twelve turns of one. For
+        # the thing that will not die, and for nothing else.
+        modifiers=Modifiers(),
+        inflicts=("taint",),
+        weight=1.8,
+        weight_growth=1.12,
+    ),
+    "numbing": ItemTemplate(
+        key="numbing",
+        name="the numb",
+        glyph=WEAPON_GLYPH,
+        color=WEAPON_COLOR,
+        kind="weapon",
+        slot="weapon",
+        # A deeper chill than the winter's tooth, for two turns instead of four:
+        # the same trade, told sharper.
+        modifiers=Modifiers(damage=1),
+        inflicts=("numb",),
+        weight=1.8,
+        weight_growth=1.10,
     ),
 
     # -- armour ------------------------------------------------------------
@@ -562,6 +668,89 @@ ITEMS: dict[str, ItemTemplate] = {
         chest_only=True,
         weight_growth=1.2
     ),
+    "blood_price": ItemTemplate(
+        key="blood_price",
+        name="the blood price",
+        glyph=WEAPON_GLYPH,
+        color=WEAPON_COLOR,
+        kind="weapon",
+        slot="weapon",
+        # The strongest cheap steel in the game, and it takes a cut for every
+        # blow: five now, and a wound of your own that keeps opening.
+        modifiers=Modifiers(damage=5),
+        self_inflicts=("bleed",),
+        chest_only=True,
+        weight_growth=1.15,
+    ),
+    "first_blow": ItemTemplate(
+        key="first_blow",
+        name="the first blow",
+        glyph=WEAPON_GLYPH,
+        color=WEAPON_COLOR,
+        kind="weapon",
+        slot="weapon",
+        # Seven on the first landing blow of a fight and nothing after it: the
+        # door-kicker. The fight already knows which blow was first -- the patient
+        # knife and the grave ward read the same flag.
+        modifiers=Modifiers(),
+        rule="first_blow",
+        chest_only=True,
+        weight_growth=1.10,
+    ),
+    "coward": ItemTemplate(
+        key="coward",
+        name="the coward's edge",
+        glyph=WEAPON_GLYPH,
+        color=WEAPON_COLOR,
+        kind="weapon",
+        slot="weapon",
+        # Four while he is above half his blood and none under it: a blade that
+        # wants him to run, and is right.
+        modifiers=Modifiers(),
+        rule="coward",
+        chest_only=True,
+        weight_growth=1.10,
+    ),
+    "needle": ItemTemplate(
+        key="needle",
+        name="the needle",
+        glyph=WEAPON_GLYPH,
+        color=WEAPON_COLOR,
+        kind="weapon",
+        slot="weapon",
+        # Through the coat rather than around it: two points of armour ignored,
+        # which is a ghoul's whole plating.
+        modifiers=Modifiers(damage=2, pierce=2),
+        chest_only=True,
+        weight_growth=1.12,
+    ),
+    "ledger": ItemTemplate(
+        key="ledger",
+        name="the reaper's ledger",
+        glyph=WEAPON_GLYPH,
+        color=WEAPON_COLOR,
+        kind="weapon",
+        slot="weapon",
+        # One point per kill this floor, to five: it starts as nothing and ends a
+        # floor as a blade. The count is the floor's, not the run's.
+        modifiers=Modifiers(damage=1),
+        rule="ledger",
+        chest_only=True,
+        weight_growth=1.15,
+    ),
+    "debtor": ItemTemplate(
+        key="debtor",
+        name="the debtor",
+        glyph=WEAPON_GLYPH,
+        color=WEAPON_COLOR,
+        kind="weapon",
+        slot="weapon",
+        # Four, and a coin for every kill: the blade that wants paying.
+        modifiers=Modifiers(damage=4),
+        rule="debtor",
+        chest_only=True,
+        weight_growth=1.10,
+    ),
     "kiss": ItemTemplate(
         key="kiss",
         name="the ash kiss",
@@ -575,6 +764,9 @@ ITEMS: dict[str, ItemTemplate] = {
         # everything that lies on a floor even before the burn is counted.
         modifiers=Modifiers(damage=4),
         inflicts=("burn",),
+        # And the fire does not stop with the thing it started on: a kill passes
+        # it to another of them.
+        rule="spread_burn",
         chest_only=True,
         weight_growth=1.0,
     ),
@@ -772,6 +964,8 @@ def make_item(template: ItemTemplate) -> GroundItem:
         amulet=template.amulet,
         inflicts=template.inflicts,
         thorns=template.thorns,
+        self_inflicts=template.self_inflicts,
+        rule=template.rule,
     )
 
 

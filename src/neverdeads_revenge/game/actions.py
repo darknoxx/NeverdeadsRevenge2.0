@@ -297,6 +297,35 @@ def inflict(
             state.say(f"The {target.name} is {status.name}.", LogKind.GOOD)
 
 
+#: What a blade's *rule* is worth, at the moment it is read. They live here and
+#: not in the item table because they are rules and not numbers: the table says
+#: which rule a blade carries, and these say what it does.
+FIRST_BLOW = 7
+COWARD_EDGE = 4
+LEDGER_CAP = 5
+
+
+def _weapon_rule_bonus(state: GameState, first: bool) -> int:
+    """Flat damage the blade's own rule adds, read at the swing.
+
+    Three blades are worth something the numbers cannot say: THE FIRST BLOW is
+    worth seven *once* -- the first landing blow of the fight, the same flag the
+    patient knife and the grave ward read -- THE COWARD'S EDGE is worth four
+    while the hero is above half his blood, and THE REAPER'S LEDGER is worth one
+    a kill *this floor*. A blade with no rule adds nothing, and so does a fist.
+    """
+    weapon = state.player.equipment.get("weapon")
+    if weapon is None:
+        return 0
+    if weapon.rule == "first_blow":
+        return FIRST_BLOW if first else 0
+    if weapon.rule == "coward":
+        return COWARD_EDGE if state.player.hp * 2 > state.player.max_hp else 0
+    if weapon.rule == "ledger":
+        return min(LEDGER_CAP, state.floor_kills)
+    return 0
+
+
 def _thorns_of(actor: Actor) -> int:
     """What the wearer gives back to whatever lands a blow on them.
 
@@ -361,6 +390,7 @@ def _on_death(state: GameState, enemy: Actor) -> None:
         # it, for the rest of the floor.
         state.encounter = None
     state.kills += 1
+    state.floor_kills += 1
     state.deaths.append(enemy.position)
     # THE CARRION TONGUE reads this long after the blood has been cleared: a
     # square where something died is a square that feeds, for the whole floor.
@@ -369,6 +399,22 @@ def _on_death(state: GameState, enemy: Actor) -> None:
     if enemy.behaviour == "hunter":
         _hunter_spoils(state, enemy)
     _learn(state)
+
+    # The blade's own reckoning, after the kill is counted: a debt paid, and a
+    # fire that does not stop with the thing it started on.
+    weapon = state.player.equipment.get("weapon")
+    rule = weapon.rule if weapon is not None else ""
+    if rule == "debtor" and state.gold:
+        state.gold = max(0, state.gold - 1)
+        state.say("The debtor takes a coin.", LogKind.BAD)
+    elif rule == "spread_burn":
+        others = [
+            one for one in state.enemies if one is not enemy and one.stats.alive
+        ]
+        if others:
+            victim = state.rng.pick(others)
+            inflict(state, victim, ("burn",))
+            state.say(f"The fire takes the {victim.name}.", LogKind.GOOD)
 
     # THE TITHE. The one price that argues with the score, which now pays for
     # killing: it can finish the hero, and a price that cannot is not a price.
@@ -982,7 +1028,9 @@ def resolve_player_attack(
     # has to remember whether there has been one. The flag is cleared on every
     # descent, with the monsters it belonged to.
     first = not target.struck
-    bonus_flat = bonus
+    # The blade's own rule, read here: *first* and the hero's blood are facts
+    # about this moment, and the weapon is only where the rule is written down.
+    bonus_flat = bonus + _weapon_rule_bonus(state, first)
     # Three gifts load the blow itself. The charge and the debt are read here and
     # spent below, and only on a *landing* blow -- a swing that missed was not
     # the blow either of them was waiting for, which is the rule the patient
@@ -1050,6 +1098,13 @@ def resolve_player_attack(
         if first and state.has_gift("open_wound"):
             opening += ("bleed",)
         inflict(state, target, opening)
+        if wield:
+            weapon = state.player.equipment.get("weapon")
+            if weapon is not None and weapon.self_inflicts:
+                # THE BLOOD PRICE: the blow costs the hand that swings it, and
+                # only on a blow *with the blade* -- the same rule the blade's own
+                # statuses keep, because a trick is not the weapon.
+                inflict(state, state.player, weapon.self_inflicts)
         if outcome.crit and state.bleed_on_crit:
             # BLEEDING EDGE. A lucky blow opens a wound as deep as the bloodline
             # is: one stack, two, three -- the ceiling the wounds have. It used

@@ -146,7 +146,7 @@ def attack(
     if bonus:
         damage = max(1, damage + bonus)
 
-    dealt = defender.hurt(damage)
+    dealt = defender.hurt(damage, pierce=attacker.pierce)
     killed = not defender.stats.alive
     if killed:
         defender.alive = False

@@ -189,6 +189,10 @@ class GameState:
     total_turns: int = 0
     run_state: RunState = RunState.PLAYING
     kills: int = 0
+    #: Kills *on this floor*, which is what THE REAPER'S LEDGER counts. The run's
+    #: count never comes back down; this one is emptied every descent, because a
+    #: ledger is a page and a page is a floor.
+    floor_kills: int = 0
     #: What the run has taught the hero so far. Derived from ``kills`` by
     #: :func:`~neverdeads_revenge.game.levels.level_for`; kept as a field only so
     #: the moment it changes can be noticed and written into the log.
@@ -843,6 +847,9 @@ class GameState:
             else []
         )
         self.depth = depth
+        # The ledger is a page and a page is a floor: a new floor starts it empty,
+        # wherever the floor was begun from.
+        self.floor_kills = 0
         # What the player is already carrying goes into the floor's own dice.
         # A chest that hands out a third coat is a chest nobody opens twice, and
         # the floor is the only place that can decide not to.

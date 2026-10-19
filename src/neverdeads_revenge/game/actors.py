@@ -90,14 +90,18 @@ class Stats:
         self.hp = max(0, self.hp - amount)
         return amount
 
-    def hurt(self, amount: int, bonus_armor: int = 0) -> int:
+    def hurt(self, amount: int, bonus_armor: int = 0, pierce: int = 0) -> int:
         """Apply ``amount`` after armour. Returns damage actually taken.
 
         ``bonus_armor`` is the defender's temporary armour, which lives on the
         :class:`Actor` rather than here: this object is copied from a template
         and never sees a kill, so it has no business knowing about REVENGE.
+
+        ``pierce`` is the *attacker's*: points of armour the blow goes through
+        rather than around. THE NEEDLE carries it, and a coat that is ignored in
+        part is the answer a ghoul's plating asks for.
         """
-        amount = max(0, amount - self.armor - bonus_armor)
+        amount = max(0, amount - max(0, self.armor + bonus_armor - pierce))
         self.hp = max(0, self.hp - amount)
         return amount
 
@@ -347,6 +351,18 @@ class Actor:
         return base * factor
 
     @property
+    def pierce(self) -> int:
+        """Armour this actor's blows go through: the weapon's, and nobody else's.
+
+        Read off the blade at the moment of the swing, like every other weapon
+        property: one swapped mid-floor works on the next blow.
+        """
+        if not self.is_player:
+            return 0
+        weapon = self.equipment.get("weapon")
+        return weapon.modifiers.pierce if weapon is not None else 0
+
+    @property
     def armor(self) -> int:
         """Armour from every source, for display and for combat."""
         return (
@@ -402,7 +418,7 @@ class Actor:
             high = round(middle + (high - middle) * spread)
         return rng.between(low, high)
 
-    def hurt(self, amount: int) -> int:
+    def hurt(self, amount: int, pierce: int = 0) -> int:
         """Take a hit, after everything this actor has on.
 
         The armour is passed down to ``Stats`` rather than subtracted here so
@@ -410,8 +426,11 @@ class Actor:
         ``armor`` minus the base, so a new source of armour cannot be added to the
         property and forgotten here -- which is the bug this line exists to not
         have.
+
+        ``pierce`` is the attacker's, and is passed the same way: the one place
+        that knows what armour does also knows what going *through* it does.
         """
-        return self.stats.hurt(amount, self.armor - self.stats.armor)
+        return self.stats.hurt(amount, self.armor - self.stats.armor, pierce)
 
     def __repr__(self) -> str:
         return f"Actor({self.name!r}, hp={self.hp}/{self.max_hp}, at={self.position})"

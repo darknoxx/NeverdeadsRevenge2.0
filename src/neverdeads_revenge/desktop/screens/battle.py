@@ -253,6 +253,8 @@ STATUS_COLOURS: dict[str, str] = {
     "poison": "#5bd75b",
     "burn": "#ff7a1f",
     "chill": "#9fd8f5",
+    "numb": "#7fb3d5",
+    "taint": "#7fbf5f",
 }
 #: The shape its tick makes. A bleed drips, a poison climbs, a burn goes out
 #: through the room as a wave of heat, and the cold leaves crystals.
@@ -281,6 +283,11 @@ STATUS_ICONS: dict[str, str] = {
     "poison": "poison",
     "burn": "burn",
     "chill": "chill",
+    #: Two states with no picture of their own: they borrow the nearest one they
+    #: are a sharper version of, because an icon is a *recognition*, and a plate
+    #: with no badge for "numb" is a status the player cannot see at all.
+    "numb": "chill",
+    "taint": "poison",
 }
 #: The row of them: how tall one may be drawn (the sheets' own size, so a plate
 #: with room for one shows it as painted), where it starts -- one row under the

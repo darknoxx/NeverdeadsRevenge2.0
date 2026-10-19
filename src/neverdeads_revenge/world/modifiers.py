@@ -31,6 +31,9 @@ class Modifiers:
     accuracy: int = 0
     evasion: int = 0
     armor: int = 0
+    #: Armour this weapon ignores, in points: THE NEEDLE goes through a coat
+    #: rather than around it, which is what a ghoul's plating asks for.
+    pierce: int = 0
 
     def __add__(self, other: Modifiers) -> Modifiers:
         return Modifiers(

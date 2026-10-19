@@ -59,6 +59,11 @@ class GroundItem:
     #: coats have it, and it is the one property that acts when the player
     #: is *hit* rather than when they swing.
     thorns: int = 0
+    #: Statuses the *wearer* takes when they swing with it, and the named rule a
+    #: blade carries instead of a number. The table that says what either of them
+    #: *means* is in ``game/``; the world only carries the names, like ``curse``.
+    self_inflicts: tuple[str, ...] = ()
+    rule: str = ""
 
 
 @dataclass(slots=True)

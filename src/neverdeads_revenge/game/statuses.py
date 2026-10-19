@@ -64,6 +64,12 @@ STATUSES: dict[str, Status] = {
     "poison": Status(key="poison", name="poisoned", damage=1, turns=8),
     "burn": Status(key="burn", name="burning", damage=3, turns=2),
     "chill": Status(key="chill", name="chilled", speed_factor=0.6, turns=4),
+    #: The deep cold: two fifths of a turn taken away, and only two turns long.
+    #: The same trade as chill, told sharper -- which is what THE NUMB is.
+    "numb": Status(key="numb", name="numb", speed_factor=0.4, turns=2),
+    #: And the longest rot in the game: one a turn for twelve. It is the patient
+    #: blade's whole plan; against a crowd it is nothing at all.
+    "taint": Status(key="taint", name="tainted", damage=1, turns=12),
 }
 
 

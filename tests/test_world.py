@@ -467,10 +467,17 @@ def test_every_piece_of_equipment_has_its_own_name():
     assert len(set(names)) == len(names)
 
 
-def test_the_strong_tier_is_strictly_stronger_than_anything_on_the_floor():
-    """The chest is what the curse pays for. A floor find that matched it would
-    make the whole bargain a formality -- and it nearly did: the rune plate was
-    written with evasion on it as well, which put it level with a burial shroud.
+def test_the_chest_tier_reaches_higher_than_the_floor_ever_does():
+    """The chest is what the curse pays for, and its *ceiling* is the promise.
+
+    Not every chest blade is stronger than every floor blade any more, and that is
+    the point of the three whose worth is a rule: a first blow worth seven, an edge
+    that wants the hero to run, a ledger that fills as the floor does. A rule
+    spelled in numbers would be a longer sword with a longer name.
+
+    What holds is the tier itself: the best a chest can hand out is better than
+    the best a floor can, and a blade *with a rule* is a chest's to give -- a rule
+    is a treasure, and a floor find is a better tool.
     """
     from neverdeads_revenge.world.items import ITEMS
 
@@ -482,20 +489,38 @@ def test_the_strong_tier_is_strictly_stronger_than_anything_on_the_floor():
         floor = [t for t in ITEMS.values() if t.kind == kind and not t.chest_only]
         chest = [t for t in ITEMS.values() if t.kind == kind and t.chest_only]
         assert floor and chest, kind
-        assert min(power(t) for t in chest) > max(power(t) for t in floor), kind
+        assert max(power(t) for t in chest) > max(power(t) for t in floor), kind
+    assert all(t.chest_only for t in ITEMS.values() if t.rule), "a rule on a floor"
 
 
 def test_rarer_floor_loot_is_better_floor_loot():
-    """The weight table is the loot's difficulty curve.
+    """The weight table is the loot's difficulty curve -- for the plain blades.
 
-    If a common thing were as good as a rare one, the rare one would be noise --
-    and the ladder of names would be the only thing telling them apart.
+    A blade whose worth is numbers follows the ladder: the commonest is the
+    weakest and the rarest is the strongest. The ones whose worth is a rule, a
+    status or a turn are a *different answer* and not a further step, so they are
+    out of the ladder -- and said to be out of it here rather than left to look
+    like an exception somebody will "fix" later by giving the patient blade a
+    damage bonus it does not want.
     """
     from neverdeads_revenge.world.items import ITEMS
 
+    def plain(template) -> bool:
+        """A blade whose worth is only numbers: no rule, no status, no turn."""
+        return (
+            not template.rule
+            and not template.inflicts
+            and not template.self_inflicts
+            and template.modifiers.speed == 0
+        )
+
     for kind in ("weapon", "armour"):
         floor = sorted(
-            (t for t in ITEMS.values() if t.kind == kind and not t.chest_only),
+            (
+                t
+                for t in ITEMS.values()
+                if t.kind == kind and not t.chest_only and plain(t)
+            ),
             key=lambda t: t.weight,
             reverse=True,
         )
