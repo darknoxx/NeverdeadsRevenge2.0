@@ -1,5 +1,12 @@
 # The virtualenv is built per machine, never committed.
 .venv/
+# The Android toolchain's working directory and what it produces. Ignored on
+# every branch, because a clone that happens to have built an APK is still a
+# clone -- and the build tree is gigabytes of somebody else's source.
+.venv-android/
+.buildozer/
+bin/
+*.apk
 
 # Bytecode.
 __pycache__/

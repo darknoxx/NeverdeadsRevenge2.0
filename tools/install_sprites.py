@@ -45,33 +45,46 @@ PORTRAITS_OUT = OUT / "portraits"
 #: says "burning" and the table says "burn".
 STATUS_OUT = OUT / "status"
 
-#: ``export name -> the name the game asks for``. Spelled out rather than
-#: derived, because a typo in an export is a typo in a file name and nothing
-#: should have to guess what "yedti" wants to be.
-EXPORTS: dict[str, str] = {
-    "ghoul_front.png": "ghoul.png",
-    "skeleton_front.png": "skeleton.png",
-    "viper_front.png": "viper.png",
-    "ooze_front.png": "ooze.png",
-    "mound_front.png": "mound.png",
-    "hunter_front.png": "hunter.png",
-    "wraith_front.png": "wraith.png",
-    "noxx_back.png": "Noxx.png",
-    "yedti_back.png": "Yeti.png",
-    "walkyrion_back.png": "Walkyrion.png",
-    "inferno_back.png": "Inferno.png",
+#: How much smaller a model is installed than it was exported.
+#:
+#: The monsters come at twice the size the room uses. A *whole* multiple, so
+#: halving them is a box of four pixels into one: every edge keeps the shape it was
+#: drawn with, and nothing is resampled by a fraction -- which is what makes a
+#: painted sprite look resampled. The heroes come at the size they are meant to
+#: stand, so they are only trimmed.
+MONSTER_SCALE = 0.5
+
+#: ``export -> (the name the game asks for, the scale it is installed at)``.
+#:
+#: Spelled out rather than derived, because a typo in an export is a typo in a file
+#: name and nothing should have to guess what "yedti" wants to be. A name that is
+#: not in the folder is reported and left alone: a missing export is a letter on
+#: the floor, not a broken fight.
+EXPORTS: dict[str, tuple[str, float]] = {
+    "ghoul.png": ("ghoul.png", MONSTER_SCALE),
+    "skeleton.png": ("skeleton.png", MONSTER_SCALE),
+    "viper.png": ("viper.png", MONSTER_SCALE),
+    "ooze.png": ("ooze.png", MONSTER_SCALE),
+    "mound.png": ("mound.png", MONSTER_SCALE),
+    "hunter.png": ("hunter.png", MONSTER_SCALE),
+    "wraith.png": ("wraith.png", MONSTER_SCALE),
+    # Noxx and his shadow are two pictures now: Atritas is a summon, and a summon
+    # that is painted into the hero is a summon that is already standing there.
+    "noxx_back_noatritas.png": ("Noxx.png", 1.0),
+    "yeti_back.png": ("Yeti.png", 1.0),
+    "walkyrion_back.png": ("Walkyrion.png", 1.0),
+    "inferno_back.png": ("Inferno.png", 1.0),
+    "atritas_back.png": ("atritas.png", 1.0),
 }
 
 
-#: ``export name -> the name the game asks for``, for the heroes facing the
-#: player. The same names as the arena's, in a folder of their own: one actor
-#: with two pictures is two *views*, and a folder says so where a file name
-#: would have to be told apart by eye.
-PORTRAITS: dict[str, str] = {
-    "noxx_front.png": "Noxx.png",
-    "yeti_front.png": "Yeti.png",
-    "walkyrion_front.png": "Walkyrion.png",
-    "inferno_front.png": "Inferno.png",
+#: The heroes facing the player, at the size they are drawn: what the roster wants
+#: and what the arena has no use for.
+PORTRAITS: dict[str, tuple[str, float]] = {
+    "noxx_front_noatritas.png": ("Noxx.png", 1.0),
+    "yeti_front.png": ("Yeti.png", 1.0),
+    "walkyrion_front.png": ("Walkyrion.png", 1.0),
+    "inferno_front.png": ("Inferno.png", 1.0),
 }
 
 
@@ -86,7 +99,42 @@ STATUS_SYMBOLS: dict[str, str] = {
 }
 
 
+def install_picture(origin: Path, target: Path, scale: float) -> tuple[int, int]:
+    """One export, trimmed of its canvas and installed at the game's own size.
+
+    The exports arrive on a square canvas with a margin around the figure. The
+    arena stands a figure on the room's floor by its *bottom edge*, so a margin
+    under the feet is a hero floating above the ground -- which is why the trim
+    comes first, and why it is here rather than in a second script.
+
+    And then the scale, with ``smoothscale``: at a half that is a box of four
+    pixels into one, which is the right way down and keeps the drawing; a
+    nearest-neighbour pick would keep one of four and throw away the edge it did
+    not pick.
+    """
+    import pygame
+
+    image = pygame.image.load(str(origin)).convert_alpha()
+    image = image.subsurface(image.get_bounding_rect(8)).copy()
+    if scale != 1.0:
+        image = pygame.transform.smoothscale(
+            image,
+            (
+                max(1, round(image.get_width() * scale)),
+                max(1, round(image.get_height() * scale)),
+            ),
+        )
+    target.parent.mkdir(parents=True, exist_ok=True)
+    pygame.image.save(image, str(target))
+    return image.get_size()
+
+
 def main(argv: list[str] | None = None) -> int:
+    import pygame
+
+    pygame.init()
+    pygame.display.set_mode((64, 64))
+
     args = argv if argv is not None else sys.argv[1:]
     source = Path(args[0] if args else "~/Vibecoding/grafiken_kampfsystem").expanduser()
     missing = []
@@ -96,17 +144,27 @@ def main(argv: list[str] | None = None) -> int:
     for table, under, into in (
         (EXPORTS, "", OUT),
         (PORTRAITS, "", PORTRAITS_OUT),
-        (STATUS_SYMBOLS, "status", STATUS_OUT),
     ):
         into.mkdir(parents=True, exist_ok=True)
-        for export, name in table.items():
+        for export, (name, scale) in table.items():
             origin = (source / under if under else source) / export
             if not origin.exists():
                 missing.append(export)
                 continue
-            shutil.copyfile(origin, into / name)
+            size = install_picture(origin, into / name, scale)
             where = name if into is OUT else f"{into.name}/{name}"
-            print(f"{export:26s} -> {where}")
+            print(f"{export:26s} -> {where:22s} {size[0]}x{size[1]}")
+    # The wound symbols are pictures already at the size they are drawn: copied,
+    # not trimmed, because their canvas is the slot they are fitted into.
+    if STATUS_SYMBOLS:
+        STATUS_OUT.mkdir(parents=True, exist_ok=True)
+        for export, name in STATUS_SYMBOLS.items():
+            origin = source / "status" / export
+            if not origin.exists():
+                missing.append(export)
+                continue
+            shutil.copyfile(origin, STATUS_OUT / name)
+            print(f"{export:26s} -> status/{name}")
     if missing:
         print(f"missing: {', '.join(missing)}")
         return 1

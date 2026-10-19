@@ -3049,3 +3049,38 @@ def test_the_prologue_fits_its_own_box_at_every_grid():
         width = min(cols - 8, 66)
         for text, _style in screen._page(width):
             assert len(text) <= width - 8, f"{cols} columns clipped {text!r}"
+
+
+def test_a_summoned_shadow_stands_beside_the_hero():
+    """Atritas is a picture now, and a picture that is never staged is not one.
+
+    The trick calls him and he *acts* for a few turns, but he is not a target and
+    never was: he is what the trick looks like. So he is staged beside the hero,
+    out of his own outline by the offset the arena's own constant names -- a
+    silhouette in the hero's place is a silhouette nobody sees -- and he carries
+    the new sheet, which is a model of his own since Noxx's back stopped having him
+    painted into it.
+    """
+    font, _ = _sdl()
+    from neverdeads_revenge.game.actors import HEROES, make_atritas
+    from neverdeads_revenge.game.battle import Battle
+    from neverdeads_revenge.game.state import start_run
+    from neverdeads_revenge.sdl_front.app import SdlApp
+    from neverdeads_revenge.sdl_front.arena import SdlArena
+
+    app = SdlApp(seed=3, no_sound=True)
+    state = start_run(HEROES["noxx"], 3)
+    state.atritas = make_atritas(state.player.position, state.level, state.depth)
+    app.screens = [SdlArena(Battle(state, state.enemies[:2]), backdrop=True)]
+    arena = app.screens[-1].arena
+
+    figures = arena._figures(app.cols, app.rows, app.font)
+    named = {figure.actor.name: figure for figure in figures}
+    assert "atritas" in named, "the shadow was called and never stood anywhere"
+    assert named["atritas"].art == "sprites/atritas.png"
+    assert named["atritas"].cx != named["Noxx"].cx, "the shadow stands in the hero's place"
+
+    # And without the call he is not there at all: a summon is not scenery.
+    state.atritas = None
+    figures = arena._figures(app.cols, app.rows, app.font)
+    assert all(figure.actor.name != "atritas" for figure in figures)

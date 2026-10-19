@@ -138,7 +138,11 @@ AIMED: tuple[str, ...] = (ATTACK, SPECIAL)
 #: its health bar running off the frame, and the row was as wide as the room
 #: instead of as wide as a row. The arc is the same shape, pulled in.
 ROWS: dict[int, tuple[tuple[float, float, float], ...]] = {
-    1: ((0.0, 0.88, 0.0),),
+    # One monster stands where the middle of three stands and not dead centre:
+    # the hero is centred, and a single enemy straight above him is a statue on
+    # the same axis. The nudge is the middle lane's, so a fight reads the same
+    # whether the room is full or holds one thing.
+    1: ((-0.065, 0.88, 0.0),),
     2: ((-0.20, 1.00, 0.0), (0.20, 1.00, 0.0)),
     3: ((-0.30, 1.00, -1.0), (-0.065, 0.88, -0.75), (0.30, 1.13, -1.0)),
 }
@@ -1787,6 +1791,26 @@ class BattleScreen(Screen):
                     chosen=enemy is marked,
                     art=art,
                     phase=index * 1.9,
+                )
+            )
+        # Atritas, when the trick has called him: a figure beside the hero and on
+        # his own row, because a shadow that stands in the hero's place is a
+        # silhouette nobody sees. He is not a target and never was -- he is what
+        # the trick *looks* like -- so he is staged and not counted.
+        shadow = self.battle.state.atritas
+        if shadow is not None:
+            shadow_art = _picture(shadow.name)
+            staged.append(
+                Staged(
+                    actor=shadow,
+                    glyph=shadow.glyph,
+                    colour=shadow.color,
+                    size=round(HERO_SIZE * scale),
+                    cx=(centre + 1 + SHADOW_OFFSET) * cell_w,
+                    row=y0 + height - 1 + HERO_DROP - STAGE_LIFT,
+                    cells=self._span(shadow_art, cell_w),
+                    art=shadow_art,
+                    phase=2.7,
                 )
             )
         hero = self.battle.hero
