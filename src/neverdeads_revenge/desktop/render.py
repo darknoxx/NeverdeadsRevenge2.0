@@ -38,7 +38,6 @@ from .theme import BACKGROUND, Colour, Style, parse_style
 __all__ = [
     "SIDEBAR",
     "BOTTOM",
-    "HUD_WIDTH",
     "Ink",
     "regions",
     "viewport",
@@ -58,8 +57,16 @@ __all__ = [
 SIDEBAR = 34
 #: The bottom row's height: the log, pasted smaller, and nothing else.
 BOTTOM = 7
-#: What the HUD wraps at, inside the sidebar's content box.
-HUD_WIDTH = SIDEBAR - 4
+def sidebar_width(cols: int) -> int:
+    """The sidebar's width, as the *share* of the grid it was designed for.
+
+    Thirty-four cells is the designed width at ninety-six columns -- the grid the
+    sidebar was laid out for -- so it is that share the game keeps, and a narrower
+    grid gets a narrower sidebar and more map. At ninety-six (or more) this answers
+    thirty-four, which is exactly what it always did; a handheld's sixty-odd
+    columns get twenty-two, and the dungeon gains twelve columns of view.
+    """
+    return max(18, min(SIDEBAR, round(cols * SIDEBAR / 96)))
 
 #: LogKind -> style, the same mapping the terminal log used.
 _KIND_STYLES: dict[LogKind, str] = {
@@ -103,12 +110,13 @@ def regions(cols: int, rows: int) -> dict[str, tuple[int, int, int, int]]:
     to share it and moved into the sidebar, which is why their width constants
     are gone.
     """
-    map_w = max(1, cols - SIDEBAR)
+    sidebar = sidebar_width(cols)
+    map_w = max(1, cols - sidebar)
     map_h = max(1, rows - BOTTOM)
     bottom_y = map_h
     return {
         "map": (0, 0, map_w, map_h),
-        "sidebar": (map_w, 0, SIDEBAR, rows),
+        "sidebar": (map_w, 0, sidebar, rows),
         "bottom": (0, bottom_y, map_w, BOTTOM),
         "log": (0, bottom_y, map_w, BOTTOM),
     }
@@ -310,15 +318,21 @@ def _draw_sidebar(buffer, state, area) -> None:
     """
     x0, y0, width, height = area
     y = y0
-    for text, style in hud_lines(state):
-        buffer.text(x0 + 1, y, text[: width - 2], parse_style(style))
+    for text, style in hud_lines(state, width - 2):
+        # Already fitted: a slice here would be the crop this no longer does.
+        buffer.text(x0 + 1, y, text, parse_style(style))
         y += 1
     rule(buffer, x0 + 1, y, width - 2, ASH)
 
 
-def small_face_top(state) -> int:
-    """The sidebar row the small face starts on: right under the rule."""
-    return len(hud_lines(state)) + 1
+def small_face_top(state, width: int | None = None) -> int:
+    """The sidebar row the small face starts on: right under the rule.
+
+    Counted with the *same* width the HUD was drawn at -- a wrapped HUD is more
+    rows, and a small face that started at the unwrapped count would be drawn over
+    the rule and the stats above it.
+    """
+    return len(hud_lines(state, width)) + 1
 
 
 #: One line of the small face: what it says, where it goes, and in which of the
@@ -358,7 +372,7 @@ def sidebar_text(
     sx, sy, sw, _sh = areas["sidebar"]
 
     out: list[Ink] = []
-    top = (sy + small_face_top(state)) * cell_h
+    top = (sy + small_face_top(state, sw - 2)) * cell_h
     left = sx * cell_w + small_cell_w
     text_x = left + small_cell_w * 2  # one cell for a glyph, one for air under it
     text_w = (sx + sw) * cell_w - text_x - small_cell_w
@@ -480,47 +494,76 @@ def _legend_colour(glyph: str) -> str:
     return "grey70"
 
 
-def hud_lines(state: GameState) -> list[tuple[str, str]]:
+def _fitted(text: str, width: int) -> list[str]:
+    """One line, wrapped to the sidebar's width by words.
+
+    The HUD's lines were written for a thirty-four-cell sidebar and then *cut* to
+    whatever narrower one the grid gave: "Draughts 0/" and "Lv 1 (+3)" were the
+    last two things a player could read. A narrower sidebar is a layout the text
+    follows, not a crop it survives.
+    """
+    lines: list[str] = []
+    line = ""
+    for word in text.split():
+        if not line:
+            line = word
+        elif len(line) + 1 + len(word) <= width:
+            line += " " + word
+        else:
+            lines.append(line)
+            line = word
+    if line:
+        lines.append(line)
+    return lines or [""]
+
+
+def hud_lines(state: GameState, width: int | None = None) -> list[tuple[str, str]]:
     """The HUD, as ``(text, style)`` lines. The port of ``Hud.redraw``.
 
     Returned as lines rather than drawn, so a test can read the sidebar without
     a screen -- the same reason ``legend_rows`` is a function in the engine.
     """
     player = state.player
+    width = SIDEBAR - 2 if width is None else width
     lines: list[tuple[str, str]] = []
 
-    lines.append((f"{player.glyph} {player.name}", f"bold {player.color}"))
-    lines.append((state.hero.title, "dim"))
+    def add(text: str, style: str) -> None:
+        lines.extend((part, style) for part in _fitted(text, width))
+
+    add(f"{player.glyph} {player.name}", f"bold {player.color}")
+    add(state.hero.title, "dim")
 
     ratio = player.hp / player.max_hp if player.max_hp else 0.0
-    filled = max(0, min(_BAR_CELLS, round(ratio * _BAR_CELLS)))
+    # The bar takes whatever room the numbers leave: twelve cells was the width of
+    # a thirty-four-cell sidebar, and a bar that runs off a narrower one is a bar
+    # whose end -- and the numbers at it -- a player never sees.
+    bar = max(2, min(_BAR_CELLS, width - len("HP  ") - len("  99/99")))
+    filled = max(0, min(bar, round(ratio * bar)))
     bar_colour = "green" if ratio > 0.5 else "yellow" if ratio > 0.25 else "red"
     lines.append(
         (
-            "HP  " + "█" * filled + "░" * (_BAR_CELLS - filled) + f"  {player.hp}/{player.max_hp}",
+            "HP  " + "█" * filled + "░" * (bar - filled) + f"  {player.hp}/{player.max_hp}",
             bar_colour,
         )
     )
 
     low, high = player.damage_range
-    lines.append((f"DMG {low}-{high}  CRT {player.crit_chance:.0%}", "bold white"))
+    add(f"DMG {low}-{high}  CRT {player.crit_chance:.0%}", "bold white")
 
     speed = f"SPD {player.speed:.2f}"
     if player.speed_bonus:
         speed += f"+{player.speed_bonus:.1f}"
-    lines.append((f"{speed}  ARM {player.armor}  EVA {player.evasion}", "bold white"))
+    add(f"{speed}  ARM {player.armor}  EVA {player.evasion}", "bold white")
 
     if state.revenge_stacks:
         # Name the grant by its own name, not by the system's: BLACK TIDE means
         # a different thing to play around than FROZEN FORTRESS, and neither is
         # just "revenge". And the ceiling with it, because the ceiling is
         # invisible otherwise.
-        lines.append(
-            (
-                f"{player.trait.title} x{state.revenge_stacks}/{player.trait.cap}  "
-                f"{player.trait.describe(state.revenge_stacks)}",
-                "bold green",
-            )
+        add(
+            f"{player.trait.title} x{state.revenge_stacks}/{player.trait.cap}  "
+            f"{player.trait.describe(state.revenge_stacks)}",
+            "bold green",
         )
 
     gear = []
@@ -528,20 +571,20 @@ def hud_lines(state: GameState) -> list[tuple[str, str]]:
         item = player.equipment.get(slot)
         name = item.name.split()[-1][:_SHORT_NAME] if item else "—"
         gear.append(f"{_SLOT_GLYPH[slot]} {name}")
-    lines.append(("  ".join(gear), "bold white"))
+    add("  ".join(gear), "bold white")
     amulet = player.equipment.get("amulet")
     amulet_name = amulet.name.split()[-1][:_SHORT_NAME] if amulet else "—"
-    lines.append((f"{_SLOT_GLYPH['amulet']} {amulet_name}", "bold white"))
+    add(f"{_SLOT_GLYPH['amulet']} {amulet_name}", "bold white")
 
     score = f"Floor {state.depth}/{ESCAPE_DEPTH}  Score {state.score}"
     if state.fame:
         score += f"  x{state.score_multiplier:.2f}"
-    lines.append((score, "bold cyan"))
+    add(score, "bold cyan")
 
     if state.rewind_ready:
-        lines.append(("r take the hour back", "bold green"))
+        add("r take the hour back", "bold green")
     if state.at_the_rift:
-        lines.append(("The rift hums.", "bold bright_cyan"))
+        add("The rift hums.", "bold bright_cyan")
 
     # The whole pack, not just the medicine: a strange bottle takes a slot, and
     # a counter that said 1/2 while the pack was full was a counter that lied
@@ -552,17 +595,15 @@ def hud_lines(state: GameState) -> list[tuple[str, str]]:
     )
     if healing:
         draughts += " q"
-    lines.append((draughts, "bold yellow"))
+    add(draughts, "bold yellow")
 
-    lines.append(
-        (
-            # "+3" is the three kills the *next* level still wants. It reads as a
-            # footnote to the level rather than a fourth number in a row, which
-            # is what the line has room for.
-            f"Kills {state.kills}  Lv {state.level} (+{state.kills_to_level})"
-            f"  Turns {state.total_turns}",
-            "bold green",
-        )
+    # "+3" is the three kills the *next* level still wants. It reads as a
+    # footnote to the level rather than a fourth number in a row, which is what
+    # the line has room for.
+    add(
+        f"Kills {state.kills}  Lv {state.level} (+{state.kills_to_level})"
+        f"  Turns {state.total_turns}",
+        "bold green",
     )
     return lines
 

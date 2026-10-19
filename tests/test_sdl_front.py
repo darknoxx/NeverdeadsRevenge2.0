@@ -3331,3 +3331,70 @@ def test_the_numbers_can_be_brought_up_over_a_fight():
     app._pad_button(4, down=True)
     app._pad_button(6, down=True)
     assert app.show_overlay is False, "the pair did not toggle back"
+
+
+def test_the_sidebar_keeps_its_share_and_not_its_width():
+    """More dungeon on a narrow grid: the sidebar is a *share* of the columns.
+
+    Thirty-four cells is the designed width at ninety-six columns, and on a
+    handheld's sixty-odd those thirty-four were more than half the picture. The
+    share is what the layout means, so it is the share that is kept: twenty-two at
+    sixty-two columns leaves the map forty, and at ninety-six nothing moves.
+    """
+    from neverdeads_revenge.desktop.render import regions, sidebar_width
+
+    assert sidebar_width(96) == 34, "the designed grid moved"
+    assert sidebar_width(128) == 34, "a wide grid keeps the sidebar it had"
+    assert sidebar_width(62) == 22
+    assert regions(62, 27)["map"][2] == 40
+    assert regions(96, 27)["map"][2] == 62
+
+
+def test_select_pauses_from_anywhere_there_is_a_run():
+    """The one button a handheld keeps for "stop" has to stop something.
+
+    The pause was reachable only through escape in the dungeon, and a pad has no
+    escape -- so Select and Start, which the pad maps to `select`, did nothing at
+    all. From a fight too: a pause is not fleeing, and the fight is still there
+    under the menu.
+    """
+    font, _ = _sdl()
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3, battle_scene=True, no_sound=True)
+    app.key("select")
+    assert type(app.screens[-1]).__name__ == "PauseScreen", "select did not pause"
+
+    app.key("select")
+    assert type(app.screens[-1]).__name__ == "PauseScreen", "a second select stacked menus"
+
+
+def test_every_sidebar_line_fits_the_sidebar_it_is_drawn_in():
+    """The share, the wrap and the row count agree at every grid.
+
+    A sidebar that is a *share* of the columns means the HUD has to be laid out for
+    the width it is given -- and the small face underneath starts one row under a
+    rule whose position is *counted*, so a wrapped HUD and a count that did not
+    know about it would draw the sidebar over its own stats. That is exactly what
+    happened first: the lines were truncated to fit, and the row count was not.
+    """
+    from neverdeads_revenge.desktop.render import (
+        hud_lines,
+        regions,
+        sidebar_width,
+        small_face_top,
+    )
+    from neverdeads_revenge.game.actors import HEROES
+    from neverdeads_revenge.game.state import start_run
+
+    state = start_run(HEROES["noxx"], 3)
+    for cols in (62, 70, 80, 96, 128):
+        width = sidebar_width(cols) - 2
+        lines = hud_lines(state, width)
+        for text, _style in lines:
+            assert len(text) <= width, f"{cols} cols: {text!r} is {len(text)} wide"
+        assert small_face_top(state, width) == len(lines) + 1
+        assert regions(cols, 27)["sidebar"][2] == sidebar_width(cols)
+    # And with no width it answers the designed one, which is what a caller that
+    # has not been taught about narrow grids keeps getting.
+    assert small_face_top(state) == len(hud_lines(state, 32)) + 1

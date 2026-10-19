@@ -205,6 +205,13 @@ class SdlApp:
         #: Kept as a plain list so a test can hand in a pad that is not plugged
         #: in -- which is the only way the mapping can be held still.
         pygame.joystick.init()
+        # The sticks and triggers do not need an *event*: the app polls the d-pad
+        # every frame and reads the axes for the bench. SDL, left alone, puts an
+        # event in the queue for every twitch of a noisy axis -- thousands a
+        # second on a handheld -- and feeding each one cost about a third of the
+        # frame. Blocked, the state is still there to be read; only the stream of
+        # "it moved a hundredth" is gone.
+        pygame.event.set_blocked([pygame.JOYAXISMOTION, pygame.JOYHATMOTION])
         self.joysticks: list = [
             pygame.joystick.Joystick(index)
             for index in range(pygame.joystick.get_count())
@@ -1647,6 +1654,15 @@ class SdlApp:
             return False
         if self._glass_key(name):
             return True
+        if name == "select" and self.run is not None:
+            # Select and Start pause, from anywhere there is a run. The pause used
+            # to be reachable only through the dungeon's escape -- and a pad has no
+            # escape, so the one button a handheld keeps for "stop" did nothing.
+            from ..desktop.screens.pause import PauseScreen
+
+            if not isinstance(self.screens[-1], PauseScreen):
+                self.push(PauseScreen())
+                return True
         screen = self.screens[-1]
         press = event or KeyPress(text=text)
         used = screen.key(name, press, self)
