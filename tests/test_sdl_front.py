@@ -2995,3 +2995,38 @@ def test_a_hero_whose_sheets_are_being_redrawn_is_a_slot_and_not_a_choice():
     # And the neighbouring slots still work, so the lock is one slot and not a wall.
     app.key("right")
     assert screen.current is not None and screen.current.key == "inferno", screen.current
+
+def test_the_order_strip_is_reserved_before_the_panels():
+    """The strip was the leftover, and on a narrow grid there is no leftover.
+
+    The panels are the plate and the verbs, and the order of battle lives in the
+    gap between them -- which was *whatever they left*. On a wide grid that is
+    fine; at the smallest grid the game claims to support (eighty columns) it came
+    out **two cells wide**, an order of battle two characters across, and on a
+    handheld's narrower grid it was none at all. It is the thing a player reads
+    while deciding, so it is reserved first and the panels take what is left,
+    still capped as they always were.
+
+    The desktop's own grid has to come out *unchanged* -- 36 + 36 + 16 and the
+    margins are 96, so the cap is what pays for the strip exactly as before.
+    """
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen
+
+    def areas(cols: int, rows: int = 27):
+        """The arena's own layout, asked without a fight behind it.
+
+        ``_areas`` reads no battle, which is the reason it can be asked here at
+        all -- and why a layout can be held still while the room moves.
+        """
+        return BattleScreen._areas(None, cols, rows)
+
+    assert areas(96)["order"][2] == 16
+    assert areas(96)["plate"][2] == 36
+    assert areas(128)["order"][2] == 48, "a wide grid is left exactly as it was"
+    for cols in (62, 70, 80, 84, 88, 92, 110, 128):
+        layout = areas(cols)
+        strip = layout["order"][2]
+        assert strip >= 12, f"{cols} columns left the strip {strip} cells"
+        assert layout["plate"][2] >= 21, f"{cols} columns squeezed the plate"
+        assert layout["commands"][2] == layout["plate"][2]
+        assert layout["order"][0] + strip <= cols

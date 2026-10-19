@@ -149,6 +149,19 @@ ROWS: dict[int, tuple[tuple[float, float, float], ...]] = {
 PANEL_ROWS = 7
 LOG_ROWS = 3
 
+#: The ORDER strip's own width, in cells, and the narrowest a panel is allowed to
+#: become to pay for it.
+#:
+#: The strip used to be *whatever the two panels left* between them, which reads
+#: fine on a wide grid and is nothing on a narrow one: at the smallest grid the
+#: game claims to support it came out two cells wide -- an order of battle two
+#: characters across -- and a handheld's grid is narrower still. It is the thing
+#: a player reads while deciding, so it is paid for out of the panels, and no
+#: further than the width the plate's own numbers need -- twenty-one cells is
+#: where the HP bar, the purse and the kills line still all fit.
+ORDER_CELLS = 14
+PANEL_FLOOR = 21
+
 #: How many rows further back a lane stands, per unit of depth. The number is the
 #: one the staging was tuned at -- twelve hundredths of a depth was a row -- and it
 #: is fixed, so the arc is the same shape however many rows the window fit.
@@ -1608,10 +1621,14 @@ class BattleScreen(Screen):
         wall_y = margin
         ground_y = min(log_y - 1, wall_y + wall_h)
         ground_h = max(1, log_y - ground_y)
-        panel_w = max(12, min((cols - margin * 3) // 2, 36))
-        # The strip lives in the gap the two panels leave between them: the plate
-        # on the left, the verbs on the right, and the order in the middle, which
-        # is where a player's eye already is when they are deciding.
+        # The strip is reserved *before* the panels -- and the panels are then
+        # what takes the leftover, capped as they always were. That is the fix:
+        # the strip used to be the leftover itself, which reads fine on a wide
+        # grid and is nothing on a narrow one (two cells at eighty columns, none
+        # at all on a handheld's sixty-odd), and it is the thing a player reads
+        # while deciding. At ninety-six columns the cap is what pays for it,
+        # exactly as it always did: 36 + 36 + 16 and the margins are 96.
+        panel_w = max(PANEL_FLOOR, min((cols - margin * 3 - ORDER_CELLS) // 2, 36))
         order_x = margin + panel_w + 1
         order_w = max(0, cols - margin - panel_w - order_x - 1)
         return {
