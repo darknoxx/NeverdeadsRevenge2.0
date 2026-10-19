@@ -3255,10 +3255,16 @@ def test_a_frame_that_says_the_same_thing_is_not_painted_again():
     app = SdlApp(seed=3, battle_scene=True, no_sound=True)
     app.redraw()
     first = app._base
+    before = app._base_rows
     app.redraw()
     assert app._base is first, "an unchanged frame was painted again"
+    assert app._base_rows == before, "an unchanged frame repainted its rows"
 
-    # A line in the log is a write: the cells changed, and so does the picture.
+    # A line in the log is a write -- and a *band* of rows, not a frame: the
+    # picture around it is kept, and only the lines that moved are painted again.
     app.screens[-1].arena.lines = [Said("The ghoul blocks the way.", LogKind.PLAIN)]
     app.redraw()
-    assert app._base is not first, "a changed frame was not painted"
+    assert app._base is first, "one line rebuilt the whole frame"
+    changed = [i for i, (a, b) in enumerate(zip(before, app._base_rows)) if a != b]
+    assert changed, "a changed frame was not painted"
+    assert len(changed) <= 3, f"one log line changed {len(changed)} rows"

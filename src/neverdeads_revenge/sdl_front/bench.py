@@ -94,7 +94,7 @@ class PadBench(Screen):
             parse_style(BONE),
         )
         axes = ", ".join(
-            f"{stick.get_axis(axis):+.2f}" for axis in range(stick.get_numaxes())
+            _axis(stick.get_axis(axis)) for axis in range(stick.get_numaxes())
         )
         buffer.text(x, row + 2, f"   axes {axes}"[:width], parse_style(ASH))
         if stick.get_numhats():
@@ -123,6 +123,19 @@ class PadBench(Screen):
 
     def key_sound(self, name: str) -> str | None:
         return None
+
+
+def _axis(value: float) -> str:
+    """One axis as the bench shows it: a resting stick reads as *rest*.
+
+    Two decimals of a drifting axis is a line that changes every frame, which
+    makes the bench a screen that repaints itself -- the very thing the frame
+    cache exists to avoid -- and tells the player nothing, because a stick at rest
+    is at rest. Inside the deadzone it says so; outside it says the number.
+    """
+    from .pad import DEADZONE
+
+    return f"{value:+.2f}" if abs(value) > DEADZONE else "·"
 
 
 def _cost(app) -> list[str]:

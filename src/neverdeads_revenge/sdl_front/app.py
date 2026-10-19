@@ -139,6 +139,27 @@ class KeyPress:
         return self._text
 
 
+def _changed_rows(before: tuple[int, ...], after: tuple[int, ...]) -> list[tuple[int, int]]:
+    """The rows that differ, as ``(first, last)`` bands of consecutive rows.
+
+    One band per uninterrupted stretch of changed lines, because a screen that
+    scrolls its log changes three rows *next to each other* and a blit of a band is
+    one blit rather than three.
+    """
+    bands: list[tuple[int, int]] = []
+    start: int | None = None
+    for index, (old, new) in enumerate(zip(before, after)):
+        if old != new:
+            if start is None:
+                start = index
+        elif start is not None:
+            bands.append((start, index))
+            start = None
+    if start is not None:
+        bands.append((start, len(after)))
+    return bands
+
+
 class SdlApp:
     """A window, a stack of screens, and the run they are about."""
 
@@ -226,7 +247,8 @@ class SdlApp:
         #: and repainting a megapixel of glyphs to get the same picture back is the
         #: one cost this application cannot afford on a phone.
         self._base = None
-        self._base_key = None
+        self._base_rows: tuple[int, ...] | None = None
+        self._base_frame: tuple | None = None
         #: Scaled pieces of art, keyed by what they were scaled from: a roster's
         #: portrait does not change size between frames either.
         self._art_scaled: dict[tuple, object] = {}
@@ -1047,12 +1069,22 @@ class SdlApp:
             # A screen with no painting to show answers None, and flat paper is
             # what the frame wanted all along.
             base = paper(self.cols, self.rows, self.font) or BACKGROUND
-        # The cells are repainted only when something was *written*. The art over
-        # them is not part of this cache: it moves every frame, which is the point.
-        key = (self.grid.signature, self.cols, self.rows, base)
-        if key != self._base_key:
+        # The cells are repainted only when something was *written*, and then only
+        # the *rows* that were written: a cursor in a menu and a line arriving in
+        # the log are one row each, and a row is a hundredth of the frame. The art
+        # over the cells is not part of this cache -- it moves every frame, which
+        # is the point.
+        rows = tuple(self.grid.row_signature)
+        frame = (self.cols, self.rows, base)
+        if self._base is None or frame != self._base_frame:
             self._base = paint(self.grid, self.font, base)
-            self._base_key = key
+            self._base_rows = rows
+            self._base_frame = frame
+        elif rows != self._base_rows:
+            for first, last in _changed_rows(self._base_rows, rows):
+                band = paint(self.grid, self.font, base, rows=(first, last))
+                self._base.blit(band, (0, first * self.font.cell_h))
+            self._base_rows = rows
         self._surface = self._frame()
         self._surface.blit(self._base, (0, 0))
         mark = self._note("paint", mark)

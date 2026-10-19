@@ -45,6 +45,11 @@ class PatternBuffer:
         #: without SIMD blitters. It is kept here, as the writes happen, because a
         #: pass over the grid to find out afterwards is the cost it exists to avoid.
         self.signature = 0
+        #: And the same signature per *row*, because a changed frame is almost
+        #: always a changed line: a cursor in a menu, a line arriving in the log.
+        #: Repainting the row that moved is a hundredth of the cost of repainting
+        #: the megapixel around it.
+        self.row_signature: list[int] = [0] * rows
         self.cols = cols
         self.rows = rows
         #: Kept rather than used: the grid is measured in cells and does not
@@ -63,6 +68,7 @@ class PatternBuffer:
         # blank. (Measured: 1.43 ms a frame, and 0.03 ms this way.)
         blank = style or Style()
         self.signature = 0
+        self.row_signature = [0] * self.rows
         for row in self.cells:
             for cell in row:
                 cell.char = char
@@ -86,7 +92,9 @@ class PatternBuffer:
             # Order matters and does not have to be stable across frames: the
             # screens draw in the same order every time, so the same content
             # writes the same signature.
-            self.signature = (self.signature * 31 + hash((char, new))) & 0xFFFFFFFF
+            stamp = hash((char, new))
+            self.signature = (self.signature * 31 + stamp) & 0xFFFFFFFF
+            self.row_signature[y] = (self.row_signature[y] * 31 + stamp) & 0xFFFFFFFF
 
     def text(self, x: int, y: int, string: str, style: Style | None = None) -> int:
         """Write ``string`` starting at ``x``. Returns the next free column.
