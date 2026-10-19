@@ -163,14 +163,23 @@ class MetaProgress:
 def data_dir() -> Path:
     """Return the directory the save file belongs in.
 
-    Honours ``NEVERDEADS_REVENGE_HOME`` (the tests), then the platform's own
-    place: ``%LOCALAPPDATA%`` on Windows, ``XDG_DATA_HOME`` (or
-    ``~/.local/share``) everywhere else. The source tree never collects save
-    data, on any of them.
+    Honours ``NEVERDEADS_REVENGE_HOME`` (the tests), then the phone's own sandbox
+    (``ANDROID_PRIVATE``, which p4a sets), then the platform's own place:
+    ``%LOCALAPPDATA%`` on Windows, ``XDG_DATA_HOME`` (or ``~/.local/share``)
+    everywhere else. The source tree never collects save data, on any of them.
     """
     override = os.environ.get("NEVERDEADS_REVENGE_HOME")
     if override:
         return Path(override).expanduser()
+
+    private = os.environ.get("ANDROID_PRIVATE")
+    if private:
+        # A handheld has no ``$HOME`` to fall back to and nothing outside the
+        # app's own sandbox is ours to write to, so this comes before every
+        # desktop rule -- and a desktop, which never sets the variable, is
+        # untouched by it. python-for-android sets it to the app's private
+        # directory, which is where a save belongs on Android anyway.
+        return Path(private).expanduser()
 
     if os.name == "nt":
         # Windows has no XDG and no ~/.local/share; a game's save belongs under

@@ -231,3 +231,27 @@ def test_a_test_save_on_a_machine_with_nothing_saved_has_nothing_to_keep(tmp_pat
 
     assert backup is None
     assert not (tmp_path / "meta.json.bak").exists()
+
+
+# -- where a save lives -----------------------------------------------------
+def test_a_phone_writes_into_its_own_sandbox(monkeypatch, tmp_path: Path):
+    """The one platform whose save directory is not a convention but a *fact*.
+
+    A desktop has ``$XDG_DATA_HOME`` or ``%LOCALAPPDATA%`` and a home directory to
+    fall back on; an Android app has neither, and nothing outside its sandbox is
+    its to write to. python-for-android hands the sandbox in ``ANDROID_PRIVATE``,
+    so that comes before every desktop rule -- and a desktop, which never sets the
+    variable, is untouched by it.
+    """
+    from neverdeads_revenge.persistence import data_dir
+
+    sandbox = tmp_path / "data" / "data" / "org.darknoxx.neverdeads_revenge" / "files"
+    monkeypatch.setenv("ANDROID_PRIVATE", str(sandbox))
+    monkeypatch.setenv("ANDROID_ARGUMENT", str(tmp_path))
+    monkeypatch.delenv("NEVERDEADS_REVENGE_HOME", raising=False)
+    assert data_dir() == sandbox
+
+    # And the tests' own override still wins, which is what keeps the suite from
+    # writing into a sandbox that is not there.
+    monkeypatch.setenv("NEVERDEADS_REVENGE_HOME", str(tmp_path / "home"))
+    assert data_dir() == tmp_path / "home"
