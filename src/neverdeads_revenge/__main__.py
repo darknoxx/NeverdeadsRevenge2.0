@@ -70,12 +70,11 @@ def main(argv: list[str] | None = None) -> int:
         help="start on the pad bench: every axis, button and hat, raw",
     )
     parser.add_argument(
-        "--zoom",
-        choices=("S", "M", "L"),
+        "--handheld",
+        action="store_true",
         default=None,
-        metavar="S|M|L",
-        help="the handheld's canvas: the screen's grid at a chosen face size "
-        "(default on a handheld: M; pair it with --scale 0.5 on a laptop)",
+        help="draw the handheld's canvas: half the screen at the game's own cell, "
+        "doubled by the GPU (default on Android; a desktop preview)",
     )
     parser.add_argument(
         "--display",
@@ -111,7 +110,7 @@ def main(argv: list[str] | None = None) -> int:
             seed=args.seed,
             scale=args.scale,
             no_sound=True,
-            zoom=args.zoom,
+            handheld=args.handheld,
             backdrop=not args.no_backdrop,
         ).display_report():
             print(line)
@@ -132,7 +131,7 @@ def main(argv: list[str] | None = None) -> int:
         fps=args.fps,
         timings=args.timings,
         sniff=args.sniff,
-        zoom=args.zoom,
+        handheld=args.handheld,
         backdrop=not args.no_backdrop,
     )
     window.open_window()

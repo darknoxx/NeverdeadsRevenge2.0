@@ -79,32 +79,24 @@ PAD_HOLD_DELAY = 0.30
 #: wall-clock time, so this only sets how smoothly its bar moves.
 PAD_REPEAT_RATE = 0.05
 
-#: The face sizes a handheld is offered, as the *font's* pixel size.
+#: The handheld draws its canvas at *half* the screen, and the GPU puts it back.
 #:
-#: Not as a cell size, which would be a number that lies about the grid it
-#: produces: a cell is about half as wide as it is tall, so a face has to be
-#: measured to know what it makes. Measured at the device's own screen:
+#: That is the ordinary pipeline of a pixel game -- a fixed low-resolution canvas,
+#: scaled up by a whole number with nearest-neighbour filtering -- and it is what a
+#: phone actually wants: every pixel the game blends is a *quarter* of the work of
+#: blending at the panel's own resolution, and the scaling is the one thing the GPU
+#: is good at. Measured before this: the art pass alone was 47 ms a frame on a
+#: device whose GPU would have done the same picture for nothing.
 #:
-#: ==========  =========  ============  =========================
-#: zoom        cell       grid          what it is
-#: ==========  =========  ============  =========================
-#: ``S``       17x34      72x31         the most room, smallest letters
-#: ``M``       20x41      62x26         the default: the painting at 1:1
-#: ``L``       24x48      51x22         the biggest letters, a tighter room
-#: ==========  =========  ============  =========================
-#:
-#: ``M`` is the default because of the *painting*: its floor edge is drawn at
-#: 55.56% of its height, the room's floor row lands at 53.8% of that grid, and
-#: that is the closest any of the three comes to showing the artwork at its own
-#: size -- 1.025, against 1.077 and 1.200. A painting upscaled is a painting gone
-#: soft, and on a 420 ppi panel that is the first thing a player sees.
-ZOOMS: dict[str, int] = {"S": 28, "M": 34, "L": 40}
-
-#: The zoom a handheld starts on, when nobody said otherwise.
-DEFAULT_ZOOM = "M"
+#: Two, and not a ladder of zooms: 1240x1080 divided by two is exactly 620x540,
+#: which is 62 cells by 27 at the game's own ten-by-twenty cell -- the desktop's
+#: twenty-seven rows, the same face, the same figures. A third or a fourth would
+#: not divide the grid, and a fractional upscale is a pixel game with uneven
+#: pixels, which is the one thing a pixel game cannot be.
+HANDHELD_SCALE = 2
 
 #: The handheld's screen, for the one thing that has to be known before a window
-#: exists: the grid. The platform is asked first -- it knows -- and this is what a
+#: exists: the canvas. The platform is asked first -- it knows -- and this is what a
 #: platform that answers nonsense gets.
 SCREEN = (1240, 1080)
 
@@ -177,7 +169,7 @@ class SdlApp:
         fps: bool = False,
         timings: bool = False,
         sniff: bool = False,
-        zoom: str | None = None,
+        handheld: bool | None = None,
         backdrop: bool = True,
     ) -> None:
         import pygame
@@ -195,6 +187,10 @@ class SdlApp:
         # it would on an unscaled display, and the painting covers it exactly -- so
         # there is nothing to fix up afterwards.
         os.environ.setdefault("SDL_WINDOWS_DPI_AWARENESS", "permonitorv2")
+        # The canvas is a pixel game's and the renderer scales it; linear filtering
+        # would turn every pixel into a smear, which is the whole thing a pixel
+        # game exists against.
+        os.environ.setdefault("SDL_RENDER_SCALE_QUALITY", "0")
         pygame.init()
         # The screens decide what a *held* key means -- the floor walks on one, a
         # shelf scrolls on one, and everything else refuses the repeats -- but SDL
@@ -256,28 +252,17 @@ class SdlApp:
         #: `--timings` into and no ESC menu in a fight, so the one place the battle
         #: can be measured is over the battle: Select and Start together, or F1.
         self.show_overlay = False
-        #: The face, and with it the *canvas*. A handheld chooses both -- the
-        #: screen is fixed, the face is picked for it, and the grid follows from
-        #: the two -- which is the whole difference from the desktop, where the
-        #: grid is derived from the window every time the window moves.
-        #:
-        #: On Android the choice is made here without being asked for, because
-        #: there is no command line on a handheld to pass a flag to.
-        if zoom is None and on_android():
-            zoom = DEFAULT_ZOOM
-        self.zoom = zoom
-        pixel = ZOOMS[zoom] if zoom is not None else 16
+        #: Whether this is a handheld's canvas rather than a window's grid. On
+        #: Android it is, without being asked -- there is no command line on a
+        #: handheld -- and on a desktop it is how the handheld is previewed.
+        self.handheld = handheld if handheld is not None else on_android()
+        pixel = 16
         self.font = SdlFont(str(FONT), pixel)
         #: The same smaller face the Qt build uses for the sidebar and the log:
         #: one size down, which is the one place a mixed size pays for itself.
-        #: Scaled with the big one -- a handheld's log in a desktop's small face
-        #: would be the one thing on the screen nobody could read.
-        self.font_small = SdlFont(
-            str(FONT),
-            SMALL_PIXELS if zoom is None else max(8, round(pixel * SMALL_PIXELS / 16)),
-        )
+        self.font_small = SdlFont(str(FONT), SMALL_PIXELS)
         self._pinned: tuple[int, int] | None = (
-            self._handheld_grid() if zoom is not None else None
+            self._handheld_grid() if self.handheld else None
         )
         self.progress = load_meta()
         #: The glass: the same settings the Qt build reads out of the same file,
@@ -1384,7 +1369,7 @@ class SdlApp:
         )
 
     def _handheld_grid(self) -> tuple[int, int]:
-        """The canvas for a handheld: the screen, the face, and the cells they make.
+        """The canvas for a handheld: the screen at half size, in the game's cells.
 
         Chosen from the *screen*, and left alone from then on -- with one
         correction, in ``_fit``: the screen has to be asked for before there is a
@@ -1393,7 +1378,7 @@ class SdlApp:
         device and is deliberately not allowed to say anything.
         """
         width, height = self._screen_size()
-        return self._grid_for(width, height)
+        return self._grid_for(width // HANDHELD_SCALE, height // HANDHELD_SCALE)
 
     def _grid_size(self, width: int, height: int) -> tuple[int, int]:
         """How many cells fit in a window of this size, at that scale.
@@ -1481,10 +1466,11 @@ class SdlApp:
             f"canvas        {self.cols}x{self.rows} cells "
             f"= {self.cols * self.font.cell_w}x{self.rows * self.font.cell_h} px",
             f"scale setting {self.scale}",
-            # A handheld's canvas is chosen rather than derived, so the three
-            # things that chose it are worth saying out loud: which zoom, which
-            # face, and which of the two renderers drew it.
-            f"zoom          {self.zoom or '-'}  face {self.font.pixel_size}px  "
+            # A handheld's canvas is chosen rather than derived, so the things that
+            # chose it are worth saying out loud: the face, the scale the GPU puts
+            # it back up by, and which renderer drew it.
+            f"canvas mode   {'handheld' if self.handheld else 'window'}  "
+            f"face {self.font.pixel_size}px  x{HANDHELD_SCALE if self.handheld else 1} "
             f"drawn by {self.font.renderer}",
             f"screen        {self._screen_size()}",
             f"grid if full screen at that window  {grid[0]}x{grid[1]}",
@@ -1603,7 +1589,9 @@ class SdlApp:
             # exists gets the last word on the canvas. Once, and only on Android:
             # a desktop's window is a preview of the device, and letting *that*
             # have a say would make a preview a different game at a different size.
-            self._pinned = self._grid_for(width, height)
+            self._pinned = self._grid_for(
+                width // HANDHELD_SCALE, height // HANDHELD_SCALE
+            )
         # The grid comes from the window, the way the Qt build's does: whatever
         # is left over after the biggest whole-number scale becomes *cells* and
         # not black bars. A chosen canvas is the exception and answers itself --

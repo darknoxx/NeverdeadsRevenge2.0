@@ -3051,40 +3051,32 @@ def test_the_prologue_fits_its_own_box_at_every_grid():
             assert len(text) <= width - 8, f"{cols} columns clipped {text!r}"
 
 
-def test_a_handheld_s_canvas_is_chosen_from_the_screen_and_not_the_window():
-    """The grid a device gets, and why it is not derived from the window.
+def test_a_handheld_draws_half_the_screen_and_the_gpu_doubles_it():
+    """The canvas a device gets: the screen at half size, in the game's own cells.
 
-    A desktop derives its grid from the window every time the window moves, which
-    is right for a desktop: the room fills whatever it is given. A handheld's
-    screen never moves, and deriving the grid there would be wrong twice over --
-    at 1240x1080 with a sixteen-pixel face the window division lands on 124x54
-    cells, and 124 columns of the game's furniture in a frame whose rows are twice
-    what the composition was tuned for.
+    A pixel game draws a fixed, low-resolution canvas and lets the GPU put it up by
+    a whole number -- nearest neighbour, or the pixels are not pixels. It is the
+    ordinary pipeline and it is also the fix for a phone: blending at the panel's
+    own resolution is four times the pixels for a picture the GPU scales for free.
 
-    So the canvas is *chosen*: the screen, the face, and the cells they make. The
-    numbers here are the device's own -- a 1240x1080 panel at zoom M comes out at
-    62x26, which is the same twenty-seven-ish rows the desktop plays in, with the
-    painting shown at 1.025 of its own size rather than 1.4.
+    The numbers: 1240x1080 halved is 620x540, which at a ten-by-twenty cell is 62
+    by 27 -- the desktop's twenty-seven rows and the desktop's face, doubled.
     """
     font, _ = _sdl()
-    from neverdeads_revenge.sdl_front.app import SCREEN, SdlApp, ZOOMS
-    from neverdeads_revenge.sdl_front.font import SdlFont
+    from neverdeads_revenge.sdl_front.app import HANDHELD_SCALE, SCREEN, SdlApp
 
-    app = SdlApp(seed=3, no_sound=True, zoom="M")
-    # The screen the device will report, and the face the zoom chose: the grid is
-    # the two of them, so both are set here and the canvas asked for again -- the
-    # one made in the constructor came from whatever screen this machine's dummy
-    # driver claims.
+    assert HANDHELD_SCALE == 2
+    app = SdlApp(seed=3, no_sound=True, handheld=True)
     app._screen_size = lambda: SCREEN
-    app.font = SdlFont(FONT, ZOOMS["M"])
     app._pinned = app._handheld_grid()
     cols, rows = app._pinned
-    assert (cols, rows) == (62, 26), f"the handheld grid came out {cols}x{rows}"
-    assert (cols * app.font.cell_w, rows * app.font.cell_h) == (1240, 1066)
+    assert (cols, rows) == (62, 27), f"the handheld grid came out {cols}x{rows}"
+    assert (cols * app.font.cell_w, rows * app.font.cell_h) == (620, 540)
+    assert (620 * HANDHELD_SCALE, 540 * HANDHELD_SCALE) == SCREEN
 
-    # And the window has no say in it: a preview at half size is the same game.
-    assert app._grid_size(620, 533) == (62, 26)
-    assert app._grid_size(1920, 1080) == (62, 26)
+    # And the window has no say in it: a preview at any size is the same game.
+    assert app._grid_size(620, 540) == (62, 27)
+    assert app._grid_size(1920, 1080) == (62, 27)
 
 
 def test_the_desktop_s_grid_is_still_derived_from_its_window():
@@ -3114,10 +3106,13 @@ def test_a_sprite_grows_with_the_cell_so_the_composition_survives():
     relative size in a room that grew around it: the composition of a handheld
     would not be the composition of a desktop.
 
-    So the picture is scaled by a whole multiple of that ratio, and the test that
-    matters is the one about *cells*: a figure's footprint in the grid is the same
-    number on both -- thirteen cells of ghoul -- because that is what the shadow,
-    the health bar and the hero's clearance are all measured against.
+    So a canvas whose cells are *larger* than the installed ones scales the picture
+    by a whole multiple of that ratio, and the test that matters is the one about
+    *cells*: a figure's footprint in the grid is the same number on both -- thirteen
+    cells of ghoul -- because that is what the shadow, the health bar and the hero's
+    clearance are all measured against. (The handheld does not need this: its canvas
+    is at the game's own cell and the *GPU* doubles the whole frame.) The rule stays
+    because it is the rule, and a canvas is free to be any size.
     """
     font, _ = _sdl()
     from neverdeads_revenge.desktop.screens.battle import BattleScreen, art_scale
@@ -3220,7 +3215,7 @@ def test_the_first_window_a_phone_gets_has_the_last_word_on_the_canvas(monkeypat
 
     monkeypatch.setenv("ANDROID_ARGUMENT", "1")
     app = SdlApp(seed=3, no_sound=True)
-    assert app.zoom == "M", "a handheld did not choose its own zoom"
+    assert app.handheld is True, "a handheld did not choose its own canvas"
     assert app._pinned is not None
 
     # The device's own window, as the phone would report it.
@@ -3228,13 +3223,13 @@ def test_the_first_window_a_phone_gets_has_the_last_word_on_the_canvas(monkeypat
     monkeypatch.setattr(pygame.display, "get_init", lambda: True)
     monkeypatch.setattr(pygame.display, "get_surface", lambda: pygame.Surface((8, 8)))
     app._fit()
-    assert app._pinned == (62, 26), f"the window said {app._pinned}"
-    assert (app.cols, app.rows) == (62, 26)
+    assert app._pinned == (62, 27), f"the window said {app._pinned}"
+    assert (app.cols, app.rows) == (62, 27)
 
     # And after the first frame it stops listening, so a resize cannot move it.
     app._drawn = True
     app._fit()
-    assert app._pinned == (62, 26)
+    assert app._pinned == (62, 27)
 
 
 def test_a_frame_that_says_the_same_thing_is_not_painted_again():
