@@ -252,6 +252,10 @@ class SdlApp:
         #: Scaled pieces of art, keyed by what they were scaled from: a roster's
         #: portrait does not change size between frames either.
         self._art_scaled: dict[tuple, object] = {}
+        #: The frame's numbers, on the frame. A handheld has no terminal to print
+        #: `--timings` into and no ESC menu in a fight, so the one place the battle
+        #: can be measured is over the battle: Select and Start together, or F1.
+        self.show_overlay = False
         #: The face, and with it the *canvas*. A handheld chooses both -- the
         #: screen is fixed, the face is picked for it, and the grid follows from
         #: the two -- which is the whole difference from the desktop, where the
@@ -919,6 +923,11 @@ class SdlApp:
             return
         if down:
             self._buttons_down.add(button)
+            if {4, 6} <= self._buttons_down:
+                # Select and Start together: the numbers, over whatever is on the
+                # frame -- which in a fight is the only way to see them at all.
+                self.show_overlay = not self.show_overlay
+                self.redraw()
             if name in self._stale:
                 # Down before this screen existed: it has to come up and be
                 # pressed again before anything here hears it.
@@ -1105,6 +1114,8 @@ class SdlApp:
         self._draw_note()
         if self.show_fps:
             self._draw_fps()
+        if self.show_overlay:
+            self._draw_costs()
         self._present()
         self._drawn = True
         self._note("present", mark)
@@ -1262,6 +1273,38 @@ class SdlApp:
                 self._surface.blit(
                     glyph, (left + 3 + index * face.cell_w, top + 2)
                 )
+
+    def _draw_costs(self) -> None:
+        """The frame's numbers, in the corner, over the picture.
+
+        For a device: the stages as average and worst, in whole milliseconds, and
+        the frame rate. Whole numbers on purpose -- a figure that changes in its
+        first decimal would make this overlay a reason to repaint every frame,
+        which is the cost it exists to find.
+        """
+        import pygame
+
+        from ..desktop.theme import BACKGROUND, parse_style
+
+        face = self.font_small
+        lines = [f"{self.frames:4.0f} fps"]
+        stages = self.frame_cost()
+        for start in range(0, len(stages), 2):
+            parts = [f"{name} {avg:.0f}/{worst:.0f}" for name, avg, worst in stages[start : start + 2]]
+            lines.append("  ".join(parts))
+        width = (max(len(line) for line in lines) + 1) * face.cell_w + 6
+        height = (len(lines) + 1) * face.cell_h + 4
+        left = max(0, self._surface.get_width() - width)
+        patch = pygame.Rect(left, 0, width, height)
+        self._surface.fill(tuple(BACKGROUND), patch)
+        colour = parse_style("bone").fg
+        for row, line in enumerate(lines):
+            for index, char in enumerate(line):
+                glyph = face.glyph(char, colour)
+                if glyph is not None:
+                    self._surface.blit(
+                        glyph, (left + 3 + index * face.cell_w, 2 + row * face.cell_h)
+                    )
 
     def _blit_art(self) -> None:
         """The pictures a screen asked for, put where it asked for them.
@@ -1682,6 +1725,12 @@ class SdlApp:
         """
         import pygame
 
+        if name == "f1":
+            # The numbers on the frame, on a desktop as on a handheld: a
+            # developer's switch, next to the ones that change the glass.
+            self.show_overlay = not self.show_overlay
+            self.redraw()
+            return True
         if name == "f11":
             self._toggle_fullscreen()
             self.redraw()

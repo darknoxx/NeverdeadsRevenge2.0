@@ -3268,3 +3268,30 @@ def test_a_frame_that_says_the_same_thing_is_not_painted_again():
     changed = [i for i, (a, b) in enumerate(zip(before, app._base_rows)) if a != b]
     assert changed, "a changed frame was not painted"
     assert len(changed) <= 3, f"one log line changed {len(changed)} rows"
+
+
+def test_the_numbers_can_be_brought_up_over_a_fight():
+    """The one place a battle can be measured: over the battle.
+
+    A handheld has no terminal for ``--timings``, and a fight has no ESC menu --
+    escape there is not a way out, it is a sentence about the only way through. So
+    the frame's stages are drawn on the frame itself, and the way in is a pad
+    combination nothing else uses (Select and Start together) or F1 at a keyboard.
+    """
+    font, _ = _sdl()
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3, battle_scene=True, no_sound=True)
+    assert app.show_overlay is False
+
+    app._pad_button(4, down=True)  # Select
+    assert app.show_overlay is False, "one button of the pair was enough"
+    app._pad_button(6, down=True)  # Start
+    assert app.show_overlay is True
+
+    app.redraw()  # it draws, over the fight, without a word about it
+    app._pad_button(4, down=False)
+    app._pad_button(6, down=False)
+    app._pad_button(4, down=True)
+    app._pad_button(6, down=True)
+    assert app.show_overlay is False, "the pair did not toggle back"

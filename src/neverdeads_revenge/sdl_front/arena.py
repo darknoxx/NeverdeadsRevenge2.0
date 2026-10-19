@@ -83,6 +83,12 @@ class SdlArena(Screen):
         #: The faces the damage numbers are drawn in, one per size, made when the
         #: first number needs one.
         self._faces: dict[int, object] = {}
+        #: The panel band, painted from the cells and laid over the art: the one
+        #: part of the grid that lands on top of a sprite. Kept until a row of it
+        #: is written, because the panels are still between animations.
+        self._band = None
+        self._band_rows: tuple[int, ...] | None = None
+        self._band_cell = 0
         #: One transparent surface to wash the room with, kept and refilled: a
         #: landed blow throws a colour over everything for a few frames.
         self._overlay = None
@@ -202,8 +208,18 @@ class SdlArena(Screen):
         # squares, the frame and the letters are glyphs, and every other cell in
         # these rows stays clear -- so the hero is covered by the menu where the
         # menu is, and stands in front of the panel's empty room where it is not.
-        band = paint(app.grid, app.font, None, (first, last))
-        surface.blit(band, (0, first * app.font.cell_h))
+        # ``band_rows`` and not ``rows``: the arena's own row count is still
+        # needed below, and this shadowed it -- which the wound row found out.
+        band_rows = tuple(app.grid.row_signature[first:last])
+        if (
+            self._band is None
+            or band_rows != self._band_rows
+            or self._band_cell != app.font.cell_w
+        ):
+            self._band = paint(app.grid, app.font, None, (first, last))
+            self._band_rows = band_rows
+            self._band_cell = app.font.cell_w
+        surface.blit(self._band, (0, first * app.font.cell_h))
         # The hero's own row of wounds, and only now: it is painted on the plate,
         # and the plate is the panel this band has just put down. Drawn before the
         # band, it was a row of symbols painted over and hidden by the panel it

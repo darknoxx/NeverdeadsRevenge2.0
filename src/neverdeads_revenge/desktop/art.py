@@ -14,6 +14,7 @@ loud here: the game says what a thing is, the painter says how it lands.
 
 from __future__ import annotations
 
+import functools
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -83,6 +84,18 @@ def size(name: str) -> tuple[int, int] | None:
     wide a picture is is a fact about the picture. Eight bytes of PNG -- the
     signature, the chunk header, then width and height, big-endian -- and both
     front ends get the same answer without either of them being involved.
+    """
+    return _size_in(name)
+
+
+@functools.lru_cache(maxsize=None)
+def _size_in(name: str) -> tuple[int, int] | None:
+    """The header read, once per picture.
+
+    Every call is a file open, and the arena asks per figure per frame -- ten
+    opens a frame for numbers that cannot change, since the art ships with the
+    game. Cached here rather than at the caller because every caller has the same
+    right to the same answer.
     """
     address = path(name)
     try:
