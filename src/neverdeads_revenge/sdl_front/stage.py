@@ -103,6 +103,9 @@ class Stage:
         #: is four megapixels and scaling that per frame is a crawl.
         self._fitted: dict[tuple[int, int], object] = {}
         self._lamp: object | None = None
+        #: The pictures at the sizes a *pose* asks for: the room has two depths,
+        #: so there are two of these per figure and they are made once.
+        self._scaled: dict[tuple[str, float], object] = {}
 
     # -- the art ------------------------------------------------------------
     def tile(self, name: str):
@@ -282,7 +285,9 @@ class Stage:
         return (int(field["cell_w"]), int(field["cell_h"]))
 
     # -- what is standing on it ---------------------------------------------
-    def health(self, surface, figures, font, shown, hero, fades) -> None:
+    def health(
+        self, surface, figures, font, shown, hero, fades, scales=None, poses=None
+    ) -> None:
         """The stripe over every monster's head, where its wounds are worn too.
 
         It was under the feet, on the floor -- and on a floor made of a *painting*
@@ -306,7 +311,12 @@ class Stage:
             total = max(1, figure.actor.max_hp)
             shown_hp = shown.get(id(figure.actor), figure.actor.stats.hp)
             ratio = max(0.0, min(1.0, shown_hp / total))
-            left, top, width, height = bar_box(figure, font)
+            left, top, width, height = bar_box(
+                figure,
+                font,
+                (scales or {}).get(id(figure.actor), 1.0),
+                (poses or {}).get(id(figure.actor)),
+            )
             pygame.draw.rect(surface, _rgb("grey19"), (left, top, width, height))
             filled = round(width * ratio)
             if filled:
@@ -314,7 +324,7 @@ class Stage:
                     surface, _rgb(_bar_colour(ratio)), (left, top, filled, height)
                 )
 
-    def shadow(self, surface, figure, font, fade: float) -> None:
+    def shadow(self, surface, figure, font, fade: float, pose=None) -> None:
         """A pool of ground under a figure, soft at the rim.
 
         Drawn rather than written into the grid, because a shadow is the one thing
@@ -335,10 +345,13 @@ class Stage:
         pool = self._pool()
         scaled = pygame.transform.smoothscale(pool, (round(width), round(height)))
         scaled.set_alpha(round(255 * fade))
-        centre_y = round(figure.row * font.cell_h - 1)
+        # A shadow under the *drawn* figure: a monster that has lunged at the hero
+        # leaves no pool behind it on the floor it came from.
+        centre_y = round((pose[1] if pose is not None else figure.row * font.cell_h) - 1)
+        centre_x = pose[0] if pose is not None else figure.cx
         surface.blit(
             scaled,
-            (round(figure.cx - width / 2.0), round(centre_y - height / 2.0)),
+            (round(centre_x - width / 2.0), round(centre_y - height / 2.0)),
         )
 
     def placement(self, width: int, height: int, floor_px: float):
@@ -514,22 +527,49 @@ class Stage:
             self._shadow = pool
         return self._shadow
 
-    def figure(self, figure):
-        """A figure's picture, loaded -- and nothing else.
+    def figure(self, figure, scale: float = 1.0):
+        """A figure's picture, loaded -- and, when a pose asks, resized.
 
-        Deliberately dumb: *where* a figure stands is the arena's arithmetic and
-        moves every frame (it breathes, it is shoved, it lunges), so this hands
-        back the picture and lets the screen put it down. A painted figure is
-        never scaled -- a painter's figure through a nearest-neighbour resize looks
-        like a mistake -- and ``None`` means the sheets have nothing, which is the
-        arena's cue to leave the grid's own letter standing.
+        Deliberately dumb about *where*: a figure stands in the arena's arithmetic
+        and moves every frame (it breathes, it is shoved, it lunges), so this hands
+        back the picture and lets the screen put it down.
+
+        ``scale`` is the pose's, and it is the room's *depth*: a hero crossing the
+        room to strike is drawn at half, because he is further away, and a monster
+        that has come to the hero at the size it was exported at. One ratio, used
+        in both directions -- a half and a double, and never a fraction in between,
+        because a painter's figure through a fractional resize looks like a
+        mistake. Both are made once and kept, so the blink a blow is made of costs
+        a cached blit.
+
+        ``None`` means the sheets have nothing, which is the arena's cue to leave
+        the grid's own letter standing.
         """
+        import pygame
+
         if figure.art is None:
             return None
-        return load(figure.art)
+        image = load(figure.art)
+        if image is None:
+            return None
+        if scale == 1.0:
+            return image
+        key = (figure.art, round(scale, 3))
+        if key not in self._scaled:
+            size = (
+                max(1, round(image.get_width() * scale)),
+                max(1, round(image.get_height() * scale)),
+            )
+            if scale < 1.0:
+                # A box of four pixels into one keeps more of the drawing than a
+                # pick of one in four; an upscale is the other way round.
+                self._scaled[key] = pygame.transform.smoothscale(image, size)
+            else:
+                self._scaled[key] = pygame.transform.scale(image, size)
+        return self._scaled[key]
 
 
-def bar_box(figure, font) -> tuple[int, int, int, int]:
+def bar_box(figure, font, scale: float = 1.0, pose=None) -> tuple[int, int, int, int]:
     """Where a monster's bar goes: over its head, as wide as its own footprint.
 
     Measured off the *picture's* height and not the figure's nominal size, because
@@ -543,9 +583,21 @@ def bar_box(figure, font) -> tuple[int, int, int, int]:
     width = cells * font.cell_w
     height = font.cell_h // 2
     measured = art_size(figure.art) if figure.art is not None else None
-    sprite_h = measured[1] if measured is not None else font.cell_h * 3
-    left = round(figure.cx - width / 2.0)
-    top = round(figure.row * font.cell_h - THICKNESS - sprite_h - height - 8)
+    # Measured as it is *drawn*: a monster that has come close is twice as tall,
+    # and a bar placed over the size it has at home would be a bar through its
+    # chest.
+    sprite_h = (
+        measured[1] * scale if measured is not None else font.cell_h * 3
+    )
+    if pose is not None:
+        # Where it is *drawn* this frame: a monster that has come close has its
+        # bar over its head at the hero's end of the room, not over the spot it
+        # left.
+        cx, baseline = pose[0], pose[1]
+    else:
+        cx, baseline = figure.cx, figure.row * font.cell_h - THICKNESS
+    left = round(cx - width / 2.0)
+    top = round(baseline - sprite_h - height - 8)
     return left, top, width, height
 
 

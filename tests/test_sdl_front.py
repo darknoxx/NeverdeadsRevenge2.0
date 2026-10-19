@@ -2644,10 +2644,10 @@ def test_the_panels_are_painted_over_the_hero_and_not_under_him():
 
     kept = SdlArena._figure
 
-    def without_him(self, surface, app_, figure, figures, fade):
+    def without_him(self, surface, app_, figure, figures, fade, pose=None):
         if figure.actor is hero:
             return
-        return kept(self, surface, app_, figure, figures, fade)
+        return kept(self, surface, app_, figure, figures, fade, pose)
 
     SdlArena._figure = without_him
     try:

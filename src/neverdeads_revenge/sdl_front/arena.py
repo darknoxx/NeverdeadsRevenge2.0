@@ -163,6 +163,16 @@ class SdlArena(Screen):
         field = self.arena._field(cols, rows, font.cell_w, font.cell_h)
         areas = self.arena._areas(cols, rows)
         fades = {id(one.actor): self.arena._fade(id(one.actor)) for one in figures}
+        # Every figure's pose once, before anything is drawn: the bars need to know
+        # how big a monster is being drawn, and they go over the figures. A pose is
+        # where, how solid *and* how deep -- see ``_pose``.
+        poses = {
+            id(one.actor): self._pose(
+                one, figures, fades[id(one.actor)], font.cell_w, font.cell_h
+            )
+            for one in figures
+        }
+        scales = {key: pose[3] for key, pose in poses.items()}
         if not self.backdrop:
             # No painting: the room this game ships -- the flagstones and the
             # three planes of wall. With one, the room is already on the frame:
@@ -182,15 +192,31 @@ class SdlArena(Screen):
                 float(self.arena._floor_row(cols, rows) * app.font.cell_h),
             )
         self._stage.health(
-            surface, figures, font, self.arena._shown, self.battle.hero, fades
+            surface,
+            figures,
+            font,
+            self.arena._shown,
+            self.battle.hero,
+            fades,
+            scales,
+            poses,
         )
-        self._wounds(surface, app, figures, fades)
+        self._wounds(surface, app, figures, fades, scales, poses)
         # The shadows first: they live on the floor, so a figure standing on one
         # stands on it rather than carrying it around.
         for figure in figures:
-            self._stage.shadow(surface, figure, font, fades[id(figure.actor)])
+            self._stage.shadow(
+                surface, figure, font, fades[id(figure.actor)], poses[id(figure.actor)]
+            )
         for figure in self._ordered(figures):
-            self._figure(surface, app, figure, figures, fades[id(figure.actor)])
+            self._figure(
+                surface,
+                app,
+                figure,
+                figures,
+                fades[id(figure.actor)],
+                poses[id(figure.actor)],
+            )
         # The panels again, over whoever is standing in front of them: the plate
         # the hero's feet are in, and the list of the five when it is open. Painted
         # from the grid -- which is under the art and has to be, or the room would
@@ -232,18 +258,20 @@ class SdlArena(Screen):
         middle = [f for f in figures if f not in behind and f not in front]
         return [*behind, *middle, *front]
 
-    def _figure(self, surface, app, figure, figures, fade: float) -> None:
-        """One figure: where its strike put it, and how solid it is right now."""
+    def _figure(self, surface, app, figure, figures, fade: float, pose=None) -> None:
+        """One figure: where its strike put it, how solid, and how big."""
         if fade <= 0.0 or figure.art is None:
             return
         import pygame
 
-        image = self._stage.figure(figure)
+        if pose is None:
+            pose = self._pose(
+                figure, figures, fade, app.font.cell_w, app.font.cell_h
+            )
+        cx, baseline, opacity, scale = pose
+        image = self._stage.figure(figure, scale)
         if image is None:
             return
-        cx, baseline, opacity = self._pose(
-            figure, figures, fade, app.font.cell_w, app.font.cell_h
-        )
         opacity = max(0.0, min(1.0, opacity))
         if opacity < 1.0:
             image = image.copy()
@@ -267,7 +295,7 @@ class SdlArena(Screen):
 
     def _pose(
         self, figure, figures, fade: float, cell_w: int, cell_h: int
-    ) -> tuple[int, int, float]:
+    ) -> tuple[int, int, float, float]:
         """Where a figure is and how solid, this frame.
 
         The port of the Qt build's own geometry, asked of the same helpers: the
@@ -283,12 +311,13 @@ class SdlArena(Screen):
         home = round(figure.row * cell_h - THICKNESS)
         home -= self.arena._knockback(figure, cell_h)
         cx, baseline, opacity = figure.cx, home - raise_px, 1.0
+        scale = 1.0
         pose = self.arena._strike_pose(figure, figures, home, cell_w, cell_h)
         if pose is not None:
-            cx, baseline, opacity = pose
+            cx, baseline, opacity, scale = pose
         else:
             cx += self.arena._jolt(figure)
-        return cx, baseline, opacity * fade
+        return cx, baseline, opacity * fade, scale
 
     def _arrow(self, surface, app, figure) -> None:
         """The blade over the chosen one -- the menus' marker, standing up.
@@ -355,7 +384,7 @@ class SdlArena(Screen):
             for column in range(x0, x0 + width):
                 buffer.cells[row][column] = Cell()
 
-    def _wounds(self, surface, app, figures, fades) -> None:
+    def _wounds(self, surface, app, figures, fades, scales=None, poses=None) -> None:
         """What is eating each monster, at the end of its bar.
 
         The room used to say this with a light around the figure, and a light
@@ -366,7 +395,12 @@ class SdlArena(Screen):
         for figure in figures:
             if figure.actor is self.battle.hero or fades[id(figure.actor)] < 1.0:
                 continue
-            left, top, width, height = bar_box(figure, font)
+            left, top, width, height = bar_box(
+                figure,
+                font,
+                (scales or {}).get(id(figure.actor), 1.0),
+                (poses or {}).get(id(figure.actor)),
+            )
             self._wound_row(
                 surface,
                 app,

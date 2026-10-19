@@ -772,8 +772,8 @@ class BattleScreen(Screen):
         home: int,
         cell_w: int,
         cell_h: int,
-    ) -> tuple[int, int, float] | None:
-        """Where a striker is and how solid, or ``None`` if it is standing still.
+    ) -> tuple[int, int, float, float] | None:
+        """Where a striker is, how solid, and *how big* -- ``None`` if standing still.
 
         The blow is a blink: the striker goes out where it stands, comes back in
         beside whatever it is hitting, and is gone again before the beat that
@@ -781,7 +781,22 @@ class BattleScreen(Screen):
         a walk, and a monster that walked over would make every round twice as
         long as the blow it holds -- but the eye reads the two places as one
         movement, which is the whole trick.
+
+        And the two places are at two *depths*: the hero's row is the front of the
+        room and the monsters' row is the far half of it, so a figure that crosses
+        the room is drawn at the size the place it stands in has. The scale jumps
+        exactly where the figure is invisible -- out at one end and not yet in at
+        the other -- so the jump is never seen; what is seen is a hero who is
+        smaller where he is further away, and a monster who is bigger where it has
+        come close. The installed pictures are the *front* size and the *far*
+        size, which is why one of them halves and the other doubles.
         """
+        #: A front-of-the-room figure, drawn where the monsters stand, is half its
+        #: own size; a monster drawn where the hero stands is at the size it was
+        #: exported at. It is one ratio -- the room's two depths -- and it is used
+        #: in both directions.
+        far = 0.5
+        near = 2.0
         strike = self._strikes.get(id(figure.actor))
         if strike is None:
             return None
@@ -794,24 +809,29 @@ class BattleScreen(Screen):
         near_x, near_y = self._beside_target(
             figure, target_id, figures, home, cell_w, cell_h
         )
+        # Who is crossing the room, and so which size it is drawn at over there:
+        # the hero and his shadow stand in the front and go far; a monster stands
+        # far and comes to the front.
+        at_home = figure.actor is self.battle.hero or figure.actor is self.state.atritas
+        over_there = far if at_home else near
         if look in ("shadow", "trail", "orb"):
             # None of these moves the hero. The shadow is a second figure going
             # instead of him, the trail is where he *is* -- a step so quick that
             # the room cannot follow it -- and the orb is *thrown*: he stands
             # still and the dark does the travelling.
-            return figure.cx, home, 1.0
+            return figure.cx, home, 1.0, 1.0
         if look == "dissolve":
             # Giving in: he is not in the room for the middle of it.
-            return figure.cx, home, 0.10 if 0.22 < progress < 0.78 else 1.0
+            return figure.cx, home, 0.10 if 0.22 < progress < 0.78 else 1.0, 1.0
         if progress < 0.20:  # out, where it stands
-            return figure.cx, home, 1.0 - progress / 0.20
+            return figure.cx, home, 1.0 - progress / 0.20, 1.0
         if progress < 0.34:  # in, beside the one being hit
-            return near_x, near_y, (progress - 0.20) / 0.14
+            return near_x, near_y, (progress - 0.20) / 0.14, over_there
         if progress < 0.70:  # the blow itself
-            return near_x, near_y, 1.0
+            return near_x, near_y, 1.0, over_there
         if progress < 0.84:  # out again, over there
-            return near_x, near_y, 1.0 - (progress - 0.70) / 0.14
-        return figure.cx, home, (progress - 0.84) / 0.16  # back where it belongs
+            return near_x, near_y, 1.0 - (progress - 0.70) / 0.14, over_there
+        return figure.cx, home, (progress - 0.84) / 0.16, 1.0  # back home
 
     @staticmethod
     def _look(flair: str) -> str:
