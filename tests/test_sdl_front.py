@@ -3030,3 +3030,22 @@ def test_the_order_strip_is_reserved_before_the_panels():
         assert layout["plate"][2] >= 21, f"{cols} columns squeezed the plate"
         assert layout["commands"][2] == layout["plate"][2]
         assert layout["order"][0] + strip <= cols
+
+
+def test_the_prologue_fits_its_own_box_at_every_grid():
+    """The title and the closing line are wrapped now, and not truncated.
+
+    Both were written as one line each and *cut* to the box, which nobody saw on a
+    wide grid because both of them fit there -- 53 characters and 43 -- and
+    everybody would see on a narrow one: a handheld's grid is sixty-odd columns,
+    and the title lost its last four words to the box's edge. So every line the
+    page is made of has to fit inside it, at every grid the game claims to
+    support.
+    """
+    from neverdeads_revenge.desktop.screens.prologue import PrologueScreen
+
+    screen = PrologueScreen()
+    for cols in (62, 65, 70, 80, 96, 128):
+        width = min(cols - 8, 66)
+        for text, _style in screen._page(width):
+            assert len(text) <= width - 8, f"{cols} columns clipped {text!r}"

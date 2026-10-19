@@ -52,13 +52,22 @@ class PrologueScreen(Screen):
     # -- what is on the page -------------------------------------------------
     def _page(self, width: int) -> list[tuple[str, str]]:
         """The story, wrapped, as ``(text, style)`` -- title, prose, and the one
-        line it is meant to leave a reader with."""
-        lines: list[tuple[str, str]] = [(PROLOGUE_TITLE, f"bold {PURPLE}")]
+        line it is meant to leave a reader with.
+
+        The title and the closing line are wrapped like the prose, which they were
+        not: they were written as one line each and *truncated* to the box, which
+        nobody saw on a wide grid because both of them fit -- 53 characters and 43
+        -- and everybody would see on a narrow one. A handheld's grid is sixty-odd
+        columns, and the title lost its last four words there.
+        """
+        lines: list[tuple[str, str]] = [
+            (piece, f"bold {PURPLE}") for piece in wrap(PROLOGUE_TITLE, width - 10)
+        ]
         for paragraph in PROLOGUE:
             lines.append(("", ""))
             lines.extend((piece, BONE) for piece in wrap(paragraph, width - 10))
         lines.append(("", ""))
-        lines.append((PROLOGUE_HINT, "dim"))
+        lines.extend((piece, "dim") for piece in wrap(PROLOGUE_HINT, width - 10))
         return lines
 
     def _window(self, app) -> tuple[int, int]:
