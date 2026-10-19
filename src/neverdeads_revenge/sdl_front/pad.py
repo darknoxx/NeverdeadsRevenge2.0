@@ -51,7 +51,11 @@ BUTTONS: dict[int, str] = {
     2: "q",  # X -- quaff
     3: "i",  # Y -- the pack
     4: "select",  # Select -- the pause menu
-    6: "start",  # Start -- the hero's page, and "done" in a name
+    # Start pauses too, and not the hero's page: on a handheld the one button a
+    # thumb reaches for when it wants the game to *stop* is Start, and a page
+    # that opens instead is a page that has to be closed before the game can be
+    # left. The sheet is one line away in the pause menu.
+    6: "select",
     7: "f",  # L3 -- the ultimate
     8: "f",  # R3 -- the ultimate (either stick click)
     9: "r",  # L1 -- the borrowed hour

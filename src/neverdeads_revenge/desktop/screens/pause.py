@@ -30,12 +30,17 @@ class PauseScreen(Screen):
             ("q", "QUIT TO TITLE"),
             ("m", f"SOUND: {'on' if not app.sfx.muted else 'off'}"),
         ]
+        # The sheet and the legend are on the keys c and l in the dungeon, and a
+        # handheld has no c -- so they are here, where every player can reach
+        # them with a d-pad.
+        items.insert(2, ("t", "THE SHEET"))
+        items.insert(3, ("g", "THE LEGEND"))
         if getattr(app, "joysticks", None):
             # The bench, and only when there is something to bench. On a desktop
             # with no pad plugged in it would be a line answering a question
             # nobody asked, and a menu line that does nothing is a line that
             # teaches a player to distrust the menu.
-            items.insert(2, ("p", "THE PAD"))
+            items.insert(4, ("p", "THE PAD"))
         return items
 
     def draw(self, buffer, app) -> None:
@@ -64,7 +69,7 @@ class PauseScreen(Screen):
         if name in ("escape", "r"):
             app.pop()
             return True
-        if name in ("s", "q", "m", "c", "p"):
+        if name in ("s", "q", "m", "c", "p", "t", "g"):
             self._choose(name, app)
             return True
         return True
@@ -77,6 +82,16 @@ class PauseScreen(Screen):
             from .menus import HelpScreen
 
             app.push(HelpScreen())
+        elif key == "t":
+            from .menus import CharacterScreen
+
+            if app.run is not None:
+                app.push(CharacterScreen(app.run))
+        elif key == "g":
+            from .menus import LegendScreen
+
+            if app.run is not None:
+                app.push(LegendScreen(app.run))
         elif key == "p":
             # What the pad actually sends. Here rather than only on the command
             # line because a handheld has no command line: this is the only door

@@ -137,45 +137,93 @@ class GameOverScreen(Screen):
 
 
 class NameEntryScreen(Screen):
-    """Five slots for the scoreboard."""
+    """Five slots for the scoreboard, *chosen* rather than typed.
+
+    A keyboard is not a thing a handheld has, and the platform's own one covers
+    half the screen and turns a five-letter board into a typing lesson. So the
+    alphabet is laid out and the name is picked: the d-pad walks it, A takes a
+    letter, B takes one back, and R1 (space) keeps the name. A keyboard still
+    types, because a desktop is a desk.
+
+    This is the handheld fork's screen, and it is here for the reason it existed
+    there: the same five slots, the same board, and a thumb can do it.
+    """
 
     modal = True
-    #: The platform's own keyboard, please. A desktop has one; a phone has to be
-    #: asked, and this is the ask.
-    wants_text = True
+
+    #: Six by six in reading order: letters first, then digits.
+    ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    COLUMNS = 6
 
     def __init__(self, score: int, previous: str = "", on_done=None) -> None:
         self.score = score
         self.name = clean_name(previous)
         self.on_done = on_done
+        self.cursor = 0
 
     def draw(self, buffer, app) -> None:
+        rows = (len(self.ALPHABET) + self.COLUMNS - 1) // self.COLUMNS
         width = 40
-        height = 9
+        height = rows + 8
         x, y = (buffer.cols - width) // 2, (buffer.rows - height) // 2
-        box(buffer, x, y, width, height, title="ENTER YOUR NAME", border=BLOOD, fill=True)
-        buffer.text(x + 3, y + 2, f"for a score of {self.score}", parse_style(ASH))
+        box(buffer, x, y, width, height, title="YOUR NAME", border=BLOOD, fill=True)
+        buffer.text(x + 3, y + 1, f"for a score of {self.score}", parse_style(ASH))
+
         cells = []
-        for i in range(SLOTS):
-            char = self.name[i] if i < len(self.name) else "_"
+        for index in range(SLOTS):
+            char = self.name[index] if index < len(self.name) else "_"
             cells.append(f" {char} ")
-        buffer.text(x + 3, y + 4, " ".join(cells), parse_style(f"bold {PURPLE}"))
+        buffer.text(x + 3, y + 3, " ".join(cells), parse_style(f"bold {PURPLE}"))
+
+        for index, char in enumerate(self.ALPHABET):
+            row, column = divmod(index, self.COLUMNS)
+            chosen = index == self.cursor
+            buffer.text(
+                x + 3 + column * 4,
+                y + 5 + row,
+                f"[{char}]" if chosen else f" {char} ",
+                parse_style(f"bold {BONE}" if chosen else ASH),
+            )
+
         rule(buffer, x + 1, y + height - 2, width - 2, ASH)
         buffer.text(
             x + 3,
             y + height - 1,
-            "letters and digits   backspace   enter to keep",
+            "arrows pick   enter take   space keep",
             parse_style(ASH),
         )
 
     def key(self, name, event, app) -> bool:
         if event.isAutoRepeat():
             return True
-        if name in ("enter", "return", "escape"):
+        if name in ("left", "h", "a"):
+            self.cursor = (self.cursor - 1) % len(self.ALPHABET)
+            return True
+        if name in ("right", "d"):
+            self.cursor = (self.cursor + 1) % len(self.ALPHABET)
+            return True
+        if name in ("up", "k", "w"):
+            self.cursor = (self.cursor - self.COLUMNS) % len(self.ALPHABET)
+            return True
+        if name in ("down", "j", "s"):
+            self.cursor = (self.cursor + self.COLUMNS) % len(self.ALPHABET)
+            return True
+        if name in ("enter", "return"):
+            if len(self.name) < SLOTS:
+                self.name += self.ALPHABET[self.cursor]
+            else:
+                self.finish(app, self.name)
+            return True
+        if name in ("space", "start"):
             self.finish(app, self.name or "???")
             return True
-        if name in ("backspace", "delete"):
-            self.name = self.name[:-1]
+        if name in ("escape", "backspace", "delete"):
+            if self.name:
+                self.name = self.name[:-1]
+            else:
+                # B with nothing in it is still a way out: a player who does not
+                # want their name on the board must not be trapped by the board.
+                self.finish(app, "???")
             return True
         char = clean_name(event.text() or "")
         if char and len(self.name) < SLOTS:

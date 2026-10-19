@@ -286,9 +286,40 @@ def _drain(sfx: Sfx) -> None:
 
 
 # -- a machine without a library ---------------------------------------------
-def test_a_machine_without_the_library_is_silent_and_harmless(_libraryless):
-    """The common case, and the one that has to be perfect: most machines
-    running a terminal game have nothing to play a sound with."""
+def test_a_machine_without_miniaudio_speaks_through_the_mixer(_libraryless):
+    """The engine is chosen by what is there, and the game keeps speaking names.
+
+    There is no Android wheel of miniaudio, and every APK this game ships already
+    contains pygame's mixer -- SDL2_mixer is a dependency of the pygame recipe. So
+    a machine without the library plays through it: same sound names, same wavs,
+    and the ring buffer untouched, because the mixer is the ring.
+    """
+    sfx = Sfx()
+
+    if not sfx.available:  # pragma: no cover - a machine with no sound card at all
+        pytest.skip("this machine has no mixer either")
+
+    assert sfx._mixer is not None and sfx._mixer.ok
+    assert sfx._device is None, "miniaudio was opened on a machine without it"
+    sfx.play("hit")
+    sfx.play("no-such-sound")
+    _drain(sfx)
+    sfx.close()
+    assert sfx._ring.pending_frames() == 0, "the camera played through the ring"
+
+
+def test_a_machine_with_neither_is_silent_and_harmless(_libraryless, monkeypatch):
+    """The other half, and the one that has to be perfect: silence is not a crash.
+
+    A machine with no library *and* no mixer -- a bare Linux box, a CI container --
+    loses the sound and nothing else: ``play`` returns, the worker drains, and the
+    game goes on.
+    """
+    import pygame
+
+    monkeypatch.setattr(pygame.mixer, "init", lambda *a, **k: (_ for _ in ()).throw(pygame.error("no device")))
+    monkeypatch.setattr(pygame.mixer, "get_init", lambda: None)
+
     sfx = Sfx()
 
     assert not sfx.available

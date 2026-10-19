@@ -364,12 +364,19 @@ class SdlArena(Screen):
         cells still had their floor. Clearing is not writing a word, so it is the
         one place that writes a cell outright.
         """
-        from ..desktop.pattern import Cell
+        from ..desktop.theme import Style
 
+        blank = Style()
         x0, y0, width, height = self.arena._areas(buffer.cols, buffer.rows)["ground"]
         for row in range(y0, y0 + height):
             for column in range(x0, x0 + width):
-                buffer.cells[row][column] = Cell()
+                # In place and with one shared blank: a ``Cell()`` per square was
+                # five hundred allocations a frame, and a Style per square would
+                # be five hundred more.
+                cell = buffer.cells[row][column]
+                cell.char = " "
+                cell.style = blank
+        buffer.touch(y0, y0 + height)
 
     def _wounds(self, surface, app, figures, fades) -> None:
         """What is eating each monster, at the end of its bar.

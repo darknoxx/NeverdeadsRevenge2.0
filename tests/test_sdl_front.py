@@ -3164,38 +3164,79 @@ def test_a_phone_that_leaves_writes_the_run_down_and_comes_back():
     assert app._running is False, "terminating did not close the loop"
 
 
-def test_a_phone_s_keyboard_is_asked_for_and_its_text_arrives(monkeypatch):
-    """Text, on a platform whose keyboard has to be asked for.
+def test_a_name_is_picked_with_the_pad_and_never_needs_a_keyboard():
+    """The scoreboard's name, chosen rather than typed.
 
-    A desktop's keyboard is always there, and a phone's is not: SDL starts the
-    platform's own input method when it is asked to, and the characters come back
-    as *text* events rather than as keycodes. So the ask goes out when a screen
-    that wants a name arrives on the stack and comes back off when it leaves --
-    and the characters reach the screen the same way a typed letter does. Without
-    it a handheld can only skip the scoreboard, and every run is named "???".
+    A phone's keyboard covers half the screen, and it was not wanted here: the
+    alphabet is laid out, the d-pad walks it, A takes a letter and B takes one
+    back. A keyboard still types -- a desktop is a desk -- but nothing *asks* for
+    one, and a player with only a pad can always finish.
     """
     font, _ = _sdl()
-    import pygame
-
     from neverdeads_revenge.desktop.screens.game_over import NameEntryScreen
     from neverdeads_revenge.sdl_front.app import SdlApp
 
-    asked: list[str] = []
-    monkeypatch.setattr(pygame.key, "start_text_input", lambda: asked.append("on"))
-    monkeypatch.setattr(pygame.key, "stop_text_input", lambda: asked.append("off"))
+    app = SdlApp(seed=3, no_sound=True)
+    app.push(NameEntryScreen(120, ""))
+    screen = app.screens[-1]
+    assert getattr(screen, "wants_text", False) is False
+
+    # The d-pad walks the alphabet; A takes what the cursor is on.
+    assert screen.ALPHABET[screen.cursor] == "A"
+    app.key("enter")
+    assert screen.name == "A"
+    app.key("right")
+    app.key("enter")
+    assert screen.name == "AB"
+
+    # B takes one back, and with nothing left it is a way out, not a trap.
+    app.key("backspace")
+    assert screen.name == "A"
+    app.key("escape")
+    app.key("escape")
+    assert type(app.screens[-1]).__name__ != "NameEntryScreen", "an empty name trapped the player"
+
+
+def test_erasing_everything_is_a_held_button_on_a_pad(monkeypatch):
+    """The word, or the hold: a handheld has letters for neither.
+
+    On a desktop DELETE is typed, and the six letters are the whole safety. A pad
+    has no letters, so the same decision is a *hold* -- the fill is the time the
+    button is down, and a tap banks nothing, exactly as the prologue and the tally
+    already work.
+    """
+    import time
+
+    font, _ = _sdl()
+    from neverdeads_revenge.desktop.screens.dialogs import DeleteProgressScreen
+    from neverdeads_revenge.sdl_front.app import KeyPress, PAD_HOLD_DELAY, SdlApp
+
+    # The hold's fill is wall-clock time, so the test owns the clock: a second of
+    # holding is not a second of waiting.
+    clock = {"now": 1000.0}
+    monkeypatch.setattr(time, "monotonic", lambda: clock["now"])
 
     app = SdlApp(seed=3, no_sound=True)
-    app.push(NameEntryScreen(120, "AB"))
-    assert asked == ["on"], "the phone's keyboard was never asked for"
-
-    # A character, the way a phone sends one: text and no keycode.
-    app.feed(pygame.event.Event(pygame.TEXTINPUT, {"text": "c"}))
+    done: list[bool] = []
+    app.push(DeleteProgressScreen(on_done=done.append))
     screen = app.screens[-1]
-    assert screen.name == "ABC", f"the character did not arrive: {screen.name!r}"
+    assert getattr(screen, "wants_text", False) is False
 
-    # And the keyboard goes away again with the screen that wanted it.
+    # A tap decides nothing.
     app.key("enter")
-    assert asked[-1] == "off", "the keyboard was left up"
+    screen.key_up("enter", KeyPress(False, ""), app)
+    assert done == [], "a tap erased everything"
+
+    # A hold does: the pad's stream, fed by the app, for longer than the hold.
+    app.key("enter")
+    app._buttons_down.add(0)
+    app._poll_pad(clock["now"])
+    for _ in range(40):
+        clock["now"] += 0.05
+        app._poll_pad(clock["now"])
+        if done:
+            break
+    assert done == [True], "holding enter did not erase anything"
 
 
 def test_the_first_window_a_phone_gets_has_the_last_word_on_the_canvas(monkeypatch):

@@ -129,8 +129,7 @@ def test_the_shoulders_are_nine_and_ten_because_android_numbers_them():
     assert BUTTONS[9] == "r", "L1 is the borrowed hour"
     assert BUTTONS[10] == "space", "R1 waits"
     assert BUTTONS[7] == BUTTONS[8] == "f", "either stick click is the ultimate"
-    assert BUTTONS[6] == "start"
-    assert BUTTONS[4] == "select"
+    assert BUTTONS[4] == BUTTONS[6] == "select", "Select and Start both pause"
     # And the PC numbering, said out loud: 4 is *not* the left shoulder here, and
     # 5 -- which a PC would call the right one -- is not a button at all.
     assert BUTTONS[4] != "r"

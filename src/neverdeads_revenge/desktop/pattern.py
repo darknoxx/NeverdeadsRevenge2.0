@@ -96,6 +96,19 @@ class PatternBuffer:
             self.signature = (self.signature * 31 + stamp) & 0xFFFFFFFF
             self.row_signature[y] = (self.row_signature[y] * 31 + stamp) & 0xFFFFFFFF
 
+    def touch(self, first: int = 0, last: int | None = None) -> None:
+        """Say that cells were written *without* ``put``.
+
+        One place does it -- the arena takes its own floor cells back out, and the
+        whole point of that is that ``put`` would keep a background the cell no
+        longer wants -- and the signature has to know, or the frame cache would
+        serve a picture of the cells from before the clearing.
+        """
+        last = self.rows if last is None else last
+        for row in range(max(0, first), min(self.rows, last)):
+            self.row_signature[row] = (self.row_signature[row] * 31 + 1) & 0xFFFFFFFF
+        self.signature = (self.signature * 31 + 1) & 0xFFFFFFFF
+
     def text(self, x: int, y: int, string: str, style: Style | None = None) -> int:
         """Write ``string`` starting at ``x``. Returns the next free column.
 

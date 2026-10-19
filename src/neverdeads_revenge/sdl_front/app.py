@@ -224,9 +224,6 @@ class SdlApp:
         self._app_background = getattr(pygame, "APP_WILLENTERBACKGROUND", -1)
         self._app_foreground = getattr(pygame, "APP_DIDENTERFOREGROUND", -1)
         self._app_terminating = getattr(pygame, "APP_TERMINATING", -1)
-        #: Whether the platform's own keyboard has been asked for. See
-        #: ``_text_input``: a phone has none until it is.
-        self._text_wanted = False
         #: Whether SDL's own renderer presents the frame. On Android it must: a
         #: plain window surface is copied to the screen *in software* on every
         #: flip, and that is the difference between a game and a slide show. A
@@ -380,27 +377,6 @@ class SdlApp:
         screen has to be a fresh one.
         """
         self._stale |= self._down
-        self._text_input()
-
-    def _text_input(self) -> None:
-        """Ask the platform for characters when the screen on top wants a name.
-
-        On a desktop a keyboard is always there and this changes nothing. On
-        Android there is no keyboard until it is *asked* for: SDL starts the
-        phone's own input method, the characters come back as text events, and
-        without this a name entry can only be skipped -- which is the difference
-        between a handheld that keeps a scoreboard and one that keeps "???".
-        """
-        import pygame
-
-        wants = bool(getattr(self.screens[-1], "wants_text", False))
-        if wants == self._text_wanted:
-            return
-        self._text_wanted = wants
-        if wants:
-            pygame.key.start_text_input()
-        else:
-            pygame.key.stop_text_input()
 
     def push(self, screen) -> None:
         self.screens.append(screen)
@@ -881,11 +857,6 @@ class SdlApp:
             # whatever it says, and the glass hears about it.
             self._fit()
             self.redraw()
-        elif event.type == pygame.TEXTINPUT:
-            # A phone's keyboard sends *characters*, not keys: SDL hands them over
-            # in their own event, and the screens that want a name read them from
-            # the event exactly as they read a typed letter.
-            self.key("", KeyPress(False, event.text), event.text)
         elif event.type == pygame.JOYBUTTONDOWN:
             self._pad_button(event.button, down=True)
         elif event.type == pygame.JOYBUTTONUP:
@@ -1017,6 +988,7 @@ class SdlApp:
             gap = max(1e-4, now - self._last_frame)
             self.frames = (self.frames * 9.0 + (1.0 / gap)) / 10.0
         self._last_frame = now
+        mark = time.perf_counter()
         screen = self.screens[-1]
         if getattr(screen, "busy", False) or getattr(screen, "animating", False):
             screen.step(dt, self)
@@ -1025,6 +997,10 @@ class SdlApp:
         # are turned into the stream the screens already answer, before the frame
         # that shows what they did.
         self._poll_pad(now)
+        # Between the clock and the frame: the fight's own playback, the effects
+        # and the pad. Booked because it is the one part of a frame the bench could
+        # not see, and on a device it was about a third of it.
+        self._note("logic", mark)
         self.redraw()
         self._report_timings(time.monotonic())
 
@@ -1667,7 +1643,7 @@ class SdlApp:
         key that types a character has that character for a name -- so this is the
         same rule it always was there.
         """
-        if not name and not text:
+        if not name:
             return False
         if self._glass_key(name):
             return True
