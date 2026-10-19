@@ -33,6 +33,7 @@ from ..desktop.screens.battle import (
     WALL_FAR,
     WALL_NEAR,
     BattleScreen,
+    art_scale,
 )
 from ..desktop.theme import parse_style
 from .paint import load
@@ -103,6 +104,10 @@ class Stage:
         #: is four megapixels and scaling that per frame is a crawl.
         self._fitted: dict[tuple[int, int], object] = {}
         self._lamp: object | None = None
+        #: The sprites, scaled for a grid whose cells are bigger than the ones the
+        #: sheets were cut for -- keyed by the picture and the multiple, because
+        #: there is one of each and a scale is not something to do every frame.
+        self._scaled: dict[tuple[str, int], object] = {}
 
     # -- the art ------------------------------------------------------------
     def tile(self, name: str):
@@ -514,19 +519,40 @@ class Stage:
             self._shadow = pool
         return self._shadow
 
-    def figure(self, figure):
-        """A figure's picture, loaded -- and nothing else.
+    def figure(self, figure, font):
+        """A figure's picture, loaded and drawn at this grid's own size.
 
-        Deliberately dumb: *where* a figure stands is the arena's arithmetic and
-        moves every frame (it breathes, it is shoved, it lunges), so this hands
-        back the picture and lets the screen put it down. A painted figure is
-        never scaled -- a painter's figure through a nearest-neighbour resize looks
-        like a mistake -- and ``None`` means the sheets have nothing, which is the
-        arena's cue to leave the grid's own letter standing.
+        Deliberately dumb about *where*: a figure stands in the arena's arithmetic
+        and moves every frame (it breathes, it is shoved, it lunges), so this hands
+        back the picture and lets the screen put it down.
+
+        What it is not dumb about is *how big*. The sheets are installed at the
+        size they are drawn for a ten-pixel cell, and a handheld's cells are twice
+        that: the same sprite drawn at its own pixels in a frame twice as tall is a
+        monster at half its relative size, with a hero lost in a room that grew
+        around him. So the picture is scaled by ``art_scale`` -- a whole multiple,
+        nearest-neighbour, made once and kept -- and ten-pixel cells answer 1,
+        which is the desktop drawing exactly what it drew before.
+
+        ``None`` means the sheets have nothing, which is the arena's cue to leave
+        the grid's own letter standing.
         """
         if figure.art is None:
             return None
-        return load(figure.art)
+        image = load(figure.art)
+        if image is None:
+            return None
+        scale = art_scale(font.cell_w)
+        if scale == 1:
+            return image
+        key = (figure.art, scale)
+        if key not in self._scaled:
+            import pygame
+
+            self._scaled[key] = pygame.transform.scale(
+                image, (image.get_width() * scale, image.get_height() * scale)
+            )
+        return self._scaled[key]
 
 
 def bar_box(figure, font) -> tuple[int, int, int, int]:
@@ -543,7 +569,13 @@ def bar_box(figure, font) -> tuple[int, int, int, int]:
     width = cells * font.cell_w
     height = font.cell_h // 2
     measured = art_size(figure.art) if figure.art is not None else None
-    sprite_h = measured[1] if measured is not None else font.cell_h * 3
+    # Measured as it will be *drawn*: the bar goes over the head of the sprite on
+    # this grid, and on a grid with twice the cells that sprite is twice as tall.
+    sprite_h = (
+        measured[1] * art_scale(font.cell_w)
+        if measured is not None
+        else font.cell_h * 3
+    )
     left = round(figure.cx - width / 2.0)
     top = round(figure.row * font.cell_h - THICKNESS - sprite_h - height - 8)
     return left, top, width, height

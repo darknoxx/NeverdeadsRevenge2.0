@@ -49,7 +49,7 @@ from ..render import log_style
 from ..theme import Colour, Style, parse_style
 from .base import Screen
 
-__all__ = ["BattleScreen", "Popup", "Staged"]
+__all__ = ["BattleScreen", "Popup", "Staged", "art_scale"]
 
 
 
@@ -148,6 +148,31 @@ ROWS: dict[int, tuple[tuple[float, float, float], ...]] = {
 #: is, and the furniture is the furniture.
 PANEL_ROWS = 7
 LOG_ROWS = 3
+
+#: The cell the sprites were installed for: ten pixels wide, twenty tall.
+#:
+#: The sheets are cut for this grid and every figure in the game is placed in
+#: *cells* -- a row is a row and a lane is a lane at any size. The picture is the
+#: one thing that does not follow the cell by itself, so it is scaled by the ratio
+#: of the cell it is standing in to this one.
+ART_CELL_W = 10
+
+
+def art_scale(cell_w: int) -> int:
+    """How much bigger a figure is drawn here than it was installed.
+
+    A whole multiple, and rounded rather than exact: a painter's figure through a
+    nearest-neighbour resize is a figure with one eye, and half a multiple is the
+    same mistake at a different size. Ten-pixel cells answer 1 -- the desktop's own
+    size, drawn as it always was -- and a handheld's twenty answer 2.
+
+    Without it a handheld draws the same *pixels* as a desktop in a frame twice as
+    tall, which is a ghoul at half its relative size and a hero lost in a room that
+    got bigger around him. With it the composition is the same and only the grid
+    differs, which is what every other thing in this game already did.
+    """
+    return max(1, round(cell_w / ART_CELL_W))
+
 
 #: The ORDER strip's own width, in cells, and the narrowest a panel is allowed to
 #: become to pay for it.
@@ -1872,11 +1897,16 @@ class BattleScreen(Screen):
         there is not: the letter that stands in for it is one cell of the grid,
         and the grid is what this is measured against. Nothing here needs a font,
         which is the point: a shadow belongs to the room and not to the painting.
+
+        And the picture is measured *as it will be drawn*: on a grid whose cells
+        are twice as wide, a sprite is drawn twice as big (see ``art_scale``), so a
+        ghoul is thirteen cells of shadow on a handheld and thirteen on a desktop
+        -- the same composition, which is the whole reason the scale exists.
         """
         measured = art_size(art) if art is not None else None
         if measured is None:
             return 2
-        return max(2, round(measured[0] / cell_w))
+        return max(2, round(measured[0] * art_scale(cell_w) / cell_w))
 
     def _figure_of(self, actor, app) -> Staged | None:
         cols, rows = self._dims(app)

@@ -75,7 +75,14 @@ class PygameCeRecipe(CompiledComponentsPythonRecipe):
     #: 2026.05 builds the target Python as 3.14, and Cython below 3.1 cannot
     #: compile against the 3.14 C-API, which is what p4a's own cython recipe is
     #: pinned to.
-    hostpython_prerequisites = ["cython==3.1.3"]
+    #:
+    #: ``setuptools`` is here for a smaller reason with a louder failure: Python
+    #: 3.12 does not bundle it any more, and p4a's host Python is built from
+    #: source without it, so ``setup.py`` -- the first line of it, ``from
+    #: setuptools import setup`` -- dies with ModuleNotFoundError. The target's
+    #: setuptools (in the recipe's ``depends``) does not help the host, which is
+    #: the one that runs setup.py.
+    hostpython_prerequisites = ["cython==3.1.3", "setuptools"]
     call_hostpython_via_targetpython = False  # because of setuptools
     install_in_hostpython = False
 

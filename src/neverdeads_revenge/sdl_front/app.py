@@ -79,6 +79,46 @@ PAD_HOLD_DELAY = 0.30
 #: wall-clock time, so this only sets how smoothly its bar moves.
 PAD_REPEAT_RATE = 0.05
 
+#: The face sizes a handheld is offered, as the *font's* pixel size.
+#:
+#: Not as a cell size, which would be a number that lies about the grid it
+#: produces: a cell is about half as wide as it is tall, so a face has to be
+#: measured to know what it makes. Measured at the device's own screen:
+#:
+#: ==========  =========  ============  =========================
+#: zoom        cell       grid          what it is
+#: ==========  =========  ============  =========================
+#: ``S``       17x34      72x31         the most room, smallest letters
+#: ``M``       20x41      62x26         the default: the painting at 1:1
+#: ``L``       24x48      51x22         the biggest letters, a tighter room
+#: ==========  =========  ============  =========================
+#:
+#: ``M`` is the default because of the *painting*: its floor edge is drawn at
+#: 55.56% of its height, the room's floor row lands at 53.8% of that grid, and
+#: that is the closest any of the three comes to showing the artwork at its own
+#: size -- 1.025, against 1.077 and 1.200. A painting upscaled is a painting gone
+#: soft, and on a 420 ppi panel that is the first thing a player sees.
+ZOOMS: dict[str, int] = {"S": 28, "M": 34, "L": 40}
+
+#: The zoom a handheld starts on, when nobody said otherwise.
+DEFAULT_ZOOM = "M"
+
+#: The handheld's screen, for the one thing that has to be known before a window
+#: exists: the grid. The platform is asked first -- it knows -- and this is what a
+#: platform that answers nonsense gets.
+SCREEN = (1240, 1080)
+
+
+def on_android() -> bool:
+    """Whether this process is running inside a python-for-android package.
+
+    p4a sets ``ANDROID_ARGUMENT`` (and ``ANDROID_PRIVATE``) before the app starts,
+    and a desktop sets neither, so this is the honest test for "there is no
+    command line here" -- which is the whole reason the handheld's canvas and its
+    save directory are decided rather than asked for.
+    """
+    return bool(os.environ.get("ANDROID_ARGUMENT"))
+
 
 class KeyPress:
     """A key press, in the shape the screens already ask for.
@@ -116,6 +156,7 @@ class SdlApp:
         fps: bool = False,
         timings: bool = False,
         sniff: bool = False,
+        zoom: str | None = None,
         backdrop: bool = True,
     ) -> None:
         import pygame
@@ -160,10 +201,38 @@ class SdlApp:
         self._pad_walk_last = 0.0
         self._pad_hold_from: float | None = None
         self._pad_hold_last = 0.0
-        self.font = SdlFont(str(FONT))
+        #: Android's own lifecycle, by number. pygame names these three and a
+        #: desktop never sends one; -1 is a type SDL never uses, so on a desktop
+        #: the comparisons stay false and nothing has to be guarded twice.
+        self._app_background = getattr(pygame, "APP_WILLENTERBACKGROUND", -1)
+        self._app_foreground = getattr(pygame, "APP_DIDENTERFOREGROUND", -1)
+        self._app_terminating = getattr(pygame, "APP_TERMINATING", -1)
+        #: Whether the platform's own keyboard has been asked for. See
+        #: ``_text_input``: a phone has none until it is.
+        self._text_wanted = False
+        #: The face, and with it the *canvas*. A handheld chooses both -- the
+        #: screen is fixed, the face is picked for it, and the grid follows from
+        #: the two -- which is the whole difference from the desktop, where the
+        #: grid is derived from the window every time the window moves.
+        #:
+        #: On Android the choice is made here without being asked for, because
+        #: there is no command line on a handheld to pass a flag to.
+        if zoom is None and on_android():
+            zoom = DEFAULT_ZOOM
+        self.zoom = zoom
+        pixel = ZOOMS[zoom] if zoom is not None else 16
+        self.font = SdlFont(str(FONT), pixel)
         #: The same smaller face the Qt build uses for the sidebar and the log:
         #: one size down, which is the one place a mixed size pays for itself.
-        self.font_small = SdlFont(str(FONT), SMALL_PIXELS)
+        #: Scaled with the big one -- a handheld's log in a desktop's small face
+        #: would be the one thing on the screen nobody could read.
+        self.font_small = SdlFont(
+            str(FONT),
+            SMALL_PIXELS if zoom is None else max(8, round(pixel * SMALL_PIXELS / 16)),
+        )
+        self._pinned: tuple[int, int] | None = (
+            self._handheld_grid() if zoom is not None else None
+        )
         self.progress = load_meta()
         #: The glass: the same settings the Qt build reads out of the same file,
         #: so a player who turned the scanlines off keeps them off. The shader and
@@ -192,7 +261,17 @@ class SdlApp:
         #: blank grid and never has to ask whose turn it is.
         from ..desktop.pattern import PatternBuffer
 
-        self.grid = PatternBuffer(cols, rows, self.font)
+        # A pinned canvas is the device's, and the device's alone: the window may
+        # be a preview of it at half size on a laptop, but the grid is the one the
+        # screen will be drawn at. The floor below is what the *derived* path
+        # needs -- a window that fit fewer cells than this would not be a smaller
+        # game but a broken one -- and a chosen grid is not derived from anything.
+        if self._pinned is not None:
+            self.cols, self.rows = self._pinned
+        else:
+            self.cols = max(MIN_COLS, cols)
+            self.rows = max(MIN_ROWS, rows)
+        self.grid = PatternBuffer(self.cols, self.rows, self.font)
         #: Whether the arena is one painted room or the game's own tiles. The
         #: reference build has no painting, so this is a dial for looking at art.
         self.backdrop = backdrop
@@ -213,8 +292,6 @@ class SdlApp:
             from ..desktop.screens.title import TitleScreen
 
             self.screens = [TitleScreen()]
-        self.cols = max(MIN_COLS, cols)
-        self.rows = max(MIN_ROWS, rows)
         self.effects = SdlEffects()
         #: The glass, which is the same object: a landed blow shakes the *frame*,
         #: and the frame is this application's own. The arena asks ``view.shake``
@@ -269,6 +346,27 @@ class SdlApp:
         screen has to be a fresh one.
         """
         self._stale |= self._down
+        self._text_input()
+
+    def _text_input(self) -> None:
+        """Ask the platform for characters when the screen on top wants a name.
+
+        On a desktop a keyboard is always there and this changes nothing. On
+        Android there is no keyboard until it is *asked* for: SDL starts the
+        phone's own input method, the characters come back as text events, and
+        without this a name entry can only be skipped -- which is the difference
+        between a handheld that keeps a scoreboard and one that keeps "???".
+        """
+        import pygame
+
+        wants = bool(getattr(self.screens[-1], "wants_text", False))
+        if wants == self._text_wanted:
+            return
+        self._text_wanted = wants
+        if wants:
+            pygame.key.start_text_input()
+        else:
+            pygame.key.stop_text_input()
 
     def push(self, screen) -> None:
         self.screens.append(screen)
@@ -541,6 +639,31 @@ class SdlApp:
             save_run(dump(self.run))
         self.return_to_title()
 
+    # -- the phone's own interruptions ---------------------------------------
+    def _suspend(self) -> None:
+        """The app is leaving the foreground: write the run down and stand down.
+
+        Android can take the process away without another word, and a run is forty
+        kilobytes of map. It goes into the same file "save and quit" writes, so
+        ``continue_run`` picks it up exactly as it would after a deliberate exit --
+        which is the whole difference between a handheld and a desktop here: a
+        desktop that closes has been asked, and a phone has not.
+        """
+        from ..game.savegame import dump
+        from ..persistence import save_run
+
+        if self.run is not None:
+            try:
+                save_run(dump(self.run))
+            except OSError:
+                # A save that cannot be written is not a reason to die on the way
+                # out: the process is going to be taken away anyway.
+                pass
+
+    def _resume(self) -> None:
+        """Back in front: repaint what was underneath."""
+        self.redraw()
+
     def quit(self) -> None:
         """Close the window: the loop stops at the end of this frame."""
         self._running = False
@@ -681,6 +804,16 @@ class SdlApp:
             note(event, self)
         if event.type == pygame.QUIT:
             self.quit()
+        elif event.type == self._app_background:
+            # Android is about to put us in the background, and it may take the
+            # process away without another word. A run is forty kilobytes of map,
+            # and it is written down now rather than hoped for later.
+            self._suspend()
+        elif event.type == self._app_foreground:
+            self._resume()
+        elif event.type == self._app_terminating:
+            self._suspend()
+            self.quit()
         elif event.type == pygame.KEYDOWN:
             text = typed(event)
             name = name_of(event)
@@ -714,6 +847,11 @@ class SdlApp:
             # whatever it says, and the glass hears about it.
             self._fit()
             self.redraw()
+        elif event.type == pygame.TEXTINPUT:
+            # A phone's keyboard sends *characters*, not keys: SDL hands them over
+            # in their own event, and the screens that want a name read them from
+            # the event exactly as they read a typed letter.
+            self.key("", KeyPress(False, event.text), event.text)
         elif event.type == pygame.JOYBUTTONDOWN:
             self._pad_button(event.button, down=True)
         elif event.type == pygame.JOYBUTTONUP:
@@ -1071,6 +1209,41 @@ class SdlApp:
         target = max(1, round(width / (TARGET_COLS * self.font.cell_w)))
         return max(1, min(target, ceiling))
 
+    def _screen_size(self) -> tuple[int, int]:
+        """The screen this will be drawn on, asked before there is a window.
+
+        The canvas has to be known *before* the window exists -- the window is
+        made from it -- so the platform is asked directly. A platform that answers
+        nothing usable (no display yet, or a size no grid fits in) gets the
+        handheld's own screen, which is what this is for.
+        """
+        import pygame
+
+        if pygame.display.get_init():
+            try:
+                sizes = pygame.display.get_desktop_sizes()
+            except pygame.error:  # pragma: no cover - a driver without one
+                sizes = []
+            if sizes:
+                width, height = sizes[0]
+                if width >= 640 and height >= 480:
+                    return int(width), int(height)
+        return SCREEN
+
+    def _handheld_grid(self) -> tuple[int, int]:
+        """The canvas for a handheld: the screen, the face, and the cells they make.
+
+        Chosen once, from the *screen*, and left alone from then on. On a device
+        the window is the screen and never moves; on a laptop this is a preview of
+        the device, so the window is scaled and the grid stays the device's -- and
+        `--scale 0.5` is how a desktop looks at what the handheld will do.
+        """
+        width, height = self._screen_size()
+        return (
+            max(1, width // self.font.cell_w),
+            max(1, height // self.font.cell_h),
+        )
+
     def _grid_size(self, width: int, height: int) -> tuple[int, int]:
         """How many cells fit in a window of this size, at that scale.
 
@@ -1079,7 +1252,12 @@ class SdlApp:
         idea of how much room there is would draw a different game at the same
         size. At 960x540 it comes out at the 96x27 both front ends start with;
         at 2560x1440 it comes out at 128x36, which is a full screen and no bars.
+
+        A *chosen* canvas is not derived from anything, so this answers the choice
+        and the window has no say in it.
         """
+        if self._pinned is not None:
+            return self._pinned
         scale = self._scale_for(width, height)
         cols = max(MIN_COLS, width // (self.font.cell_w * scale))
         rows = max(MIN_ROWS, height // (self.font.cell_h * scale))
@@ -1152,6 +1330,12 @@ class SdlApp:
             f"canvas        {self.cols}x{self.rows} cells "
             f"= {self.cols * self.font.cell_w}x{self.rows * self.font.cell_h} px",
             f"scale setting {self.scale}",
+            # A handheld's canvas is chosen rather than derived, so the three
+            # things that chose it are worth saying out loud: which zoom, which
+            # face, and which of the two renderers drew it.
+            f"zoom          {self.zoom or '-'}  face {self.font.pixel_size}px  "
+            f"drawn by {self.font.renderer}",
+            f"screen        {self._screen_size()}",
             f"grid if full screen at that window  {grid[0]}x{grid[1]}",
         ]
 
@@ -1253,7 +1437,9 @@ class SdlApp:
             return
         # The grid comes from the window, the way the Qt build's does: whatever
         # is left over after the biggest whole-number scale becomes *cells* and
-        # not black bars.
+        # not black bars. A chosen canvas is the exception and answers itself --
+        # which is what makes the window on a laptop a *preview* of the device
+        # rather than a different game at a different size.
         cols, rows = self._grid_size(width, height)
         if (cols, rows) != (self.cols, self.rows):
             self.cols, self.rows = cols, rows
@@ -1301,8 +1487,15 @@ class SdlApp:
 
     # -- the keys -----------------------------------------------------------
     def key(self, name: str, event=None, text: str = "") -> bool:
-        """Hand a key to the top screen. Returns whether it was used."""
-        if not name:
+        """Hand a key to the top screen. Returns whether it was used.
+
+        A key with no *name* but with text is not nothing: a phone's keyboard does
+        not send keycodes, it sends characters, and a name entry reads them the way
+        it always read a typed letter. On a desktop the two arrive together -- a
+        key that types a character has that character for a name -- so this is the
+        same rule it always was there.
+        """
+        if not name and not text:
             return False
         if self._glass_key(name):
             return True

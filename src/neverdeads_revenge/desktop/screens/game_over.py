@@ -140,6 +140,9 @@ class NameEntryScreen(Screen):
     """Five slots for the scoreboard."""
 
     modal = True
+    #: The platform's own keyboard, please. A desktop has one; a phone has to be
+    #: asked, and this is the ask.
+    wants_text = True
 
     def __init__(self, score: int, previous: str = "", on_done=None) -> None:
         self.score = score

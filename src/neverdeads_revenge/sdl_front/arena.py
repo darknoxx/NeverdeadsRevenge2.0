@@ -238,7 +238,7 @@ class SdlArena(Screen):
             return
         import pygame
 
-        image = self._stage.figure(figure)
+        image = self._stage.figure(figure, app.font)
         if image is None:
             return
         cx, baseline, opacity = self._pose(

@@ -1,5 +1,6 @@
 # The virtualenv is built per machine, never committed.
 .venv/
+.venv-android/
 
 # Bytecode.
 __pycache__/

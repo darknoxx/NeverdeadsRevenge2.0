@@ -179,6 +179,10 @@ class DeleteProgressScreen(_Dialog):
             f"Type DELETE to be sure:   {self.typed or '_'}"
         )
 
+    #: The platform's own keyboard, please -- the same ask the name entry makes,
+    #: for the same reason: DELETE has to be typed.
+    wants_text = True
+
     def key(self, name, event, app) -> bool:
         if event.isAutoRepeat():
             return True

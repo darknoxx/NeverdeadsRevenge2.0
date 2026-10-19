@@ -3049,3 +3049,155 @@ def test_the_prologue_fits_its_own_box_at_every_grid():
         width = min(cols - 8, 66)
         for text, _style in screen._page(width):
             assert len(text) <= width - 8, f"{cols} columns clipped {text!r}"
+
+
+def test_a_handheld_s_canvas_is_chosen_from_the_screen_and_not_the_window():
+    """The grid a device gets, and why it is not derived from the window.
+
+    A desktop derives its grid from the window every time the window moves, which
+    is right for a desktop: the room fills whatever it is given. A handheld's
+    screen never moves, and deriving the grid there would be wrong twice over --
+    at 1240x1080 with a sixteen-pixel face the window division lands on 124x54
+    cells, and 124 columns of the game's furniture in a frame whose rows are twice
+    what the composition was tuned for.
+
+    So the canvas is *chosen*: the screen, the face, and the cells they make. The
+    numbers here are the device's own -- a 1240x1080 panel at zoom M comes out at
+    62x26, which is the same twenty-seven-ish rows the desktop plays in, with the
+    painting shown at 1.025 of its own size rather than 1.4.
+    """
+    font, _ = _sdl()
+    from neverdeads_revenge.sdl_front.app import SCREEN, SdlApp, ZOOMS
+    from neverdeads_revenge.sdl_front.font import SdlFont
+
+    app = SdlApp(seed=3, no_sound=True, zoom="M")
+    # The screen the device will report, and the face the zoom chose: the grid is
+    # the two of them, so both are set here and the canvas asked for again -- the
+    # one made in the constructor came from whatever screen this machine's dummy
+    # driver claims.
+    app._screen_size = lambda: SCREEN
+    app.font = SdlFont(FONT, ZOOMS["M"])
+    app._pinned = app._handheld_grid()
+    cols, rows = app._pinned
+    assert (cols, rows) == (62, 26), f"the handheld grid came out {cols}x{rows}"
+    assert (cols * app.font.cell_w, rows * app.font.cell_h) == (1240, 1066)
+
+    # And the window has no say in it: a preview at half size is the same game.
+    assert app._grid_size(620, 533) == (62, 26)
+    assert app._grid_size(1920, 1080) == (62, 26)
+
+
+def test_the_desktop_s_grid_is_still_derived_from_its_window():
+    """The other half: a desktop is untouched by any of this.
+
+    The derivation is the Qt build's rule, number for number, and the reason the
+    two front ends ever agreed about the game. A canvas that is *not* chosen has
+    to keep answering from the window -- 96x27 at 960x540 and 128x36 at
+    2560x1440 -- or every window on every desk moves.
+    """
+    font, _ = _sdl()
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3, no_sound=True)
+    assert app._pinned is None, "a desktop pinned its canvas"
+    assert app._grid_size(960, 540) == (96, 27)
+    assert app._grid_size(2560, 1440) == (128, 36)
+
+
+def test_a_sprite_grows_with_the_cell_so_the_composition_survives():
+    """The one thing that does not follow the grid by itself: the picture.
+
+    Everything in this game is placed in *cells* -- a row is a row and a lane is a
+    lane at any size -- and the sheets are installed at the size they were drawn
+    for a ten-pixel cell. A frame at the device's resolution has twenty-pixel
+    cells, so the same sprite drawn at its own pixels is a ghoul at half its
+    relative size in a room that grew around it: the composition of a handheld
+    would not be the composition of a desktop.
+
+    So the picture is scaled by a whole multiple of that ratio, and the test that
+    matters is the one about *cells*: a figure's footprint in the grid is the same
+    number on both -- thirteen cells of ghoul -- because that is what the shadow,
+    the health bar and the hero's clearance are all measured against.
+    """
+    font, _ = _sdl()
+    from neverdeads_revenge.desktop.screens.battle import BattleScreen, art_scale
+
+    assert art_scale(10) == 1, "the desktop's own cell draws what it always drew"
+    assert art_scale(20) == 2
+    assert art_scale(19) == 2, "a multiple is rounded, never a fraction"
+
+    art = "sprites/ghoul.png"
+    narrow = BattleScreen._span(art, 10)
+    wide = BattleScreen._span(art, 20)
+    assert narrow == wide, f"{narrow} cells of shadow became {wide}"
+
+
+def test_a_phone_that_leaves_writes_the_run_down_and_comes_back():
+    """Android's three lifecycle events, and what they do to a run.
+
+    A desktop that closes has been *asked* -- the player clicked the X -- and a
+    phone has not: ``WILLENTERBACKGROUND`` arrives with no promise of another
+    word, and the process may be taken away while the player is in a fight. A run
+    is forty kilobytes of map, so it goes into the same file "save and quit"
+    writes, and continuing afterwards picks it up exactly as it would after a
+    deliberate exit. Coming back repaints what was underneath.
+    """
+    import pytest
+
+    font, _ = _sdl()
+    import pygame
+
+    if not hasattr(pygame, "APP_WILLENTERBACKGROUND"):
+        pytest.skip("this pygame has no Android lifecycle events")
+    from neverdeads_revenge.persistence import load_run
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3, no_sound=True)
+    app.prologue_seen = True
+    app.begin_run("noxx")
+    assert app.run is not None
+
+    app.feed(pygame.event.Event(pygame.APP_WILLENTERBACKGROUND))
+    saved = load_run()
+    assert saved is not None, "the run was not written down on the way out"
+
+    app.feed(pygame.event.Event(pygame.APP_DIDENTERFOREGROUND))
+    assert app.run is not None, "coming back lost the run"
+    assert app.screens, "coming back lost the screen"
+
+    app.feed(pygame.event.Event(pygame.APP_TERMINATING))
+    assert app._running is False, "terminating did not close the loop"
+
+
+def test_a_phone_s_keyboard_is_asked_for_and_its_text_arrives(monkeypatch):
+    """Text, on a platform whose keyboard has to be asked for.
+
+    A desktop's keyboard is always there, and a phone's is not: SDL starts the
+    platform's own input method when it is asked to, and the characters come back
+    as *text* events rather than as keycodes. So the ask goes out when a screen
+    that wants a name arrives on the stack and comes back off when it leaves --
+    and the characters reach the screen the same way a typed letter does. Without
+    it a handheld can only skip the scoreboard, and every run is named "???".
+    """
+    font, _ = _sdl()
+    import pygame
+
+    from neverdeads_revenge.desktop.screens.game_over import NameEntryScreen
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    asked: list[str] = []
+    monkeypatch.setattr(pygame.key, "start_text_input", lambda: asked.append("on"))
+    monkeypatch.setattr(pygame.key, "stop_text_input", lambda: asked.append("off"))
+
+    app = SdlApp(seed=3, no_sound=True)
+    app.push(NameEntryScreen(120, "AB"))
+    assert asked == ["on"], "the phone's keyboard was never asked for"
+
+    # A character, the way a phone sends one: text and no keycode.
+    app.feed(pygame.event.Event(pygame.TEXTINPUT, {"text": "c"}))
+    screen = app.screens[-1]
+    assert screen.name == "ABC", f"the character did not arrive: {screen.name!r}"
+
+    # And the keyboard goes away again with the screen that wanted it.
+    app.key("enter")
+    assert asked[-1] == "off", "the keyboard was left up"
