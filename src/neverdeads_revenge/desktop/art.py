@@ -23,10 +23,12 @@ __all__ = [
     "SPRITES_DIR",
     "STATUS_DIR",
     "TILES_DIR",
+    "WEAPONS_DIR",
     "Placed",
     "exists",
     "path",
     "size",
+    "weapon_icon",
 ]
 
 #: The art that travels with the game, beside the fonts and the sounds.
@@ -37,6 +39,9 @@ ART_ROOT = Path(__file__).resolve().parent
 SPRITES_DIR = ART_ROOT / "sprites"
 PORTRAITS_DIR = SPRITES_DIR / "portraits"
 STATUS_DIR = SPRITES_DIR / "status"
+#: The blades: a picture per item key, for the card that says what was just
+#: picked up and the sheet that says what is being carried.
+WEAPONS_DIR = SPRITES_DIR / "weapons"
 
 #: And the stone the rooms are made of.
 TILES_DIR = ART_ROOT / "tiles"
@@ -58,6 +63,26 @@ class Placed:
     centre: float
     bottom: float
     height: int
+
+
+#: The picture of a blade that has not been painted yet: a frame and a question
+#: mark. The screens ask for it themselves rather than letting the card open with
+#: a hole in it -- a card that promises a picture and shows a blank band is a card
+#: that lied.
+PLACEHOLDER = "sprites/weapons/_placeholder.png"
+
+
+def weapon_icon(key: str) -> str | None:
+    """The picture of a blade, by the item's key; the placeholder if there is none.
+
+    The blades are being painted one at a time, so this is a question with three
+    answers: the blade's own picture, the placeholder, or nothing at all when even
+    the placeholder is missing (a checkout without the art still draws the game).
+    """
+    painted = f"sprites/weapons/{key}.png"
+    if exists(painted):
+        return painted
+    return PLACEHOLDER if exists(PLACEHOLDER) else None
 
 
 def path(name: str) -> Path:

@@ -56,6 +56,16 @@ class _Dialog(Screen):
     title = ""
     hint = ""
 
+    #: How many rows a picture takes at the top of the box. Six of a twenty-pixel
+    #: row is a blade at the size it was painted -- 120 pixels -- so the card shows
+    #: the drawing rather than a thumbnail of it.
+    PICTURE_ROWS = 6
+
+    #: What the box shows above its words, when it has something to show. Only the
+    #: card for a picked-up blade does: the name and the numbers are the game
+    #: talking, and the picture is what the dark actually handed over.
+    picture: str | None = None
+
     def __init__(self, on_done=None) -> None:
         self.on_done = on_done
 
@@ -65,13 +75,43 @@ class _Dialog(Screen):
     def draw(self, buffer, app) -> None:
         width = min(buffer.cols - 6, 66)
         body = wrap(self._body(), width - 6)
-        height = min(buffer.rows - 2, len(body) + 6)
+        lead = self.PICTURE_ROWS if self.picture is not None else 0
+        height = min(buffer.rows - 2, len(body) + 6 + lead)
         x, y = (buffer.cols - width) // 2, (buffer.rows - height) // 2
         box(buffer, x, y, width, height, title=self.title, border=BLOOD, fill=True)
-        for i, line in enumerate(body[: height - 4]):
-            buffer.text(x + 3, y + 2 + i, line, parse_style(BONE))
+        for i, line in enumerate(body[: height - 4 - lead]):
+            buffer.text(x + 3, y + 2 + lead + i, line, parse_style(BONE))
         rule(buffer, x + 1, y + height - 2, width - 2, ASH)
         buffer.text(x + 3, y + height - 1, self.hint[: width - 6], parse_style(ASH))
+
+    def _frame(self, cols: int, rows: int) -> tuple[int, int, int, int]:
+        """The box, in cells: the same sums ``draw`` makes, so ``art`` agrees with it.
+
+        Two passes read this geometry -- the grid pass that lays the words out and
+        the picture pass that puts the drawing above them -- and a picture that
+        disagreed with the box would sit in the title or on the border.
+        """
+        width = min(cols - 6, 66)
+        body = wrap(self._body(), width - 6)
+        lead = self.PICTURE_ROWS if self.picture is not None else 0
+        height = min(rows - 2, len(body) + 6 + lead)
+        return (cols - width) // 2, (rows - height) // 2, width, height
+
+    def art(self, app) -> list:
+        """The picture above the words, if the dialog has one."""
+        if self.picture is None:
+            return []
+        from ..art import Placed
+
+        x, y, width, _height = self._frame(app.cols, app.rows)
+        cell_w, cell_h = app.font.cell_w, app.font.cell_h
+        # Centred in the box and standing on the line above the first of the
+        # body's rows, which is what the reserved rows were left for.
+        centre = (x + width / 2) * cell_w
+        bottom = (y + 1 + self.PICTURE_ROWS) * cell_h - 3
+        return [
+            Placed(self.picture, centre, bottom, self.PICTURE_ROWS * cell_h - 6)
+        ]
 
     def finish(self, app, value) -> None:
         app.pop()
@@ -271,11 +311,16 @@ class InfoScreen(_Dialog):
     and losing it.
     """
 
-    def __init__(self, title: str, name: str, text: str) -> None:
+    def __init__(
+        self, title: str, name: str, text: str, picture: str | None = None
+    ) -> None:
         super().__init__()
         self.title = title
         self._name = name
         self._text = text
+        # The blade's own drawing when there is one: the card is where a player
+        # first meets a weapon, and a weapon is a thing you recognise by sight.
+        self.picture = picture
         self.hint = "enter  back to the dark"
 
     def _body(self) -> str:

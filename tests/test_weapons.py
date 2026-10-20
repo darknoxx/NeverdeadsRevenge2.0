@@ -164,3 +164,28 @@ def test_the_patient_and_the_numb_are_the_sharpest_of_their_kind():
     assert patient.damage == poison.damage, "the long rot is a different wound"
     assert numb is not None and numb.speed_factor < chill.speed_factor
     assert numb.turns < chill.turns, "the deeper cold is also the shorter one"
+
+
+# -- what the card says ------------------------------------------------------
+def test_every_rule_blade_says_what_its_rule_does_and_what_it_costs():
+    """The card is where a blade is met, so the card may not lie by omission.
+
+    THE FIRST BLOW has no modifiers at all: a card built out of numbers alone
+    told the player it does nothing. And the numbers in the words are the ones
+    the fight reads -- seven, four and five live in ``actions``, and a sentence
+    that drifted away from them would be a rumour.
+    """
+    from neverdeads_revenge.game.actions import COWARD_EDGE, FIRST_BLOW, LEDGER_CAP
+    from neverdeads_revenge.game.shop import RULE_TEXT, describe_item
+    from neverdeads_revenge.world.items import ITEMS
+
+    for template in ITEMS.values():
+        if template.kind != "weapon" or not template.rule:
+            continue
+        assert template.rule in RULE_TEXT, f"{template.key} says nothing about its rule"
+        assert RULE_TEXT[template.rule] in describe_item(template)
+
+    assert str(FIRST_BLOW) in RULE_TEXT["first_blow"]
+    assert str(COWARD_EDGE) in RULE_TEXT["coward"]
+    assert str(LEDGER_CAP) in RULE_TEXT["ledger"]
+    assert "bleeding" in describe_item(ITEMS["blood_price"]), "the price is not a secret"

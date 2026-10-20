@@ -272,12 +272,34 @@ class SdlArena(Screen):
         image = self._stage.figure(figure, scale)
         if image is None:
             return
+        # The echo is the one figure that is not painted as itself: it wears the
+        # front of a hero and is drawn as that hero's shadow. The picture is the
+        # same one the sheet holds, multiplied dark -- one cache entry, like the
+        # half-size strike poses.
+        echo = getattr(figure.actor, "behaviour", "") == "echo"
+        if echo:
+            image = self._stage.silhouette(figure, scale)
+            if image is None:
+                return
         opacity = max(0.0, min(1.0, opacity))
         if opacity < 1.0:
             image = image.copy()
             image.set_alpha(round(255 * opacity))
         where = (round(cx - image.get_width() / 2), baseline - image.get_height())
-        surface.blit(image, where)
+        if echo:
+            # A pale copy of the same figure, a pixel or two out in four
+            # directions: the edge of the shadow, so that it reads as a figure
+            # even where the room behind it is black. Then the shadow itself,
+            # cut into bands and put back a little out of line.
+            halo = self._stage.ripple(figure, scale)
+            if halo is not None:
+                pale = halo.copy()
+                pale.set_alpha(round(255 * opacity * 0.30))
+                for dx, dy in ((-2, 0), (2, 0), (0, -2), (0, 2)):
+                    surface.blit(pale, (where[0] + dx, where[1] + dy))
+            self._ripple(surface, image, where)
+        else:
+            surface.blit(image, where)
         # And the flash of a blow that has just landed: the same figure, in the
         # trick's own colour, for the fifth of a second the jolt lasts.
         hurt = self.arena._hurts.get(id(figure.actor))
@@ -292,6 +314,26 @@ class SdlArena(Screen):
         )
         flash.set_alpha(round(255 * opacity * (1.0 - age / JOLT) * 0.85))
         surface.blit(flash, where)
+
+    def _ripple(self, surface, image, where) -> None:
+        """The echo, drawn as a thing that is not quite here.
+
+        The silhouette goes down in a handful of horizontal bands, each a couple
+        of pixels to one side, the wave running up the figure: not a sprite so
+        much as something seen through water. No shader, no second copy, and it
+        never touches a pixel of the picture itself -- the bands are cut from the
+        same surface and put back a little out of line.
+        """
+        band = max(6, image.get_height() // 16)
+        phase = self.arena._clock * 3.0
+        width, height = image.get_size()
+        for y in range(0, height, band):
+            rows = min(band, height - y)
+            slip = round(math.sin(phase + y * 0.12) * 3)
+            surface.blit(
+                image.subsurface((0, y, width, rows)),
+                (where[0] + slip, where[1] + y),
+            )
 
     def _pose(
         self, figure, figures, fade: float, cell_w: int, cell_h: int

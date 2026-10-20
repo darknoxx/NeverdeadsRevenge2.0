@@ -259,6 +259,10 @@ class Actor:
     stolen: int = 0
     #: Which NPC this is, by key. ``None`` for everything that is not a person.
     npc: str | None = None
+    #: A picture of its own, when its name is not the file. One actor has it:
+    #: the echo wears the *front* of the hero whose run it is, because it walks
+    #: towards the player rather than away.
+    art: str | None = None
     #: Cells entered since the run started. A run total, like ``total_turns``,
     #: and a statistic rather than a score input: the score rewards time, and
     #: walking further is the opposite of that.
@@ -954,11 +958,15 @@ ENEMIES: dict[str, EnemyTemplate] = {
         color="#8f4f5f",
         # It wants the purse and not the blood, and it leaves when it has what it
         # came for. The gold it carries is what it took from somebody.
+        # It is not a fight, it is a *purse*: it takes a great deal of killing and
+        # it is not worth the killing, which is the choice. Plenty of health so
+        # that chasing it is a decision and not a reflex, and a purse worth the
+        # chase when it does go down.
         behaviour="thief",
-        stats=Stats(max_hp=12, hp=12, speed=1.45, damage=(3, 5), evasion=2),
-        gold=(7, 12),
+        stats=Stats(max_hp=60, hp=60, speed=1.45, damage=(3, 5), evasion=2),
+        gold=(30, 45),
         min_depth=2,
-        weight=1.2,
+        weight=0.45,
         weight_growth=1.10,
     ),
     "echo": EnemyTemplate(
@@ -969,7 +977,7 @@ ENEMIES: dict[str, EnemyTemplate] = {
         # A hero out of the chronicle, with the numbers of the run that got
         # furthest. It is *built* at spawn from a score entry; this is the frame.
         behaviour="echo",
-        min_depth=4,
+        min_depth=6,
         stats=Stats(
             max_hp=40, hp=40, speed=1.25, damage=(8, 11), accuracy=1, armor=1, evasion=1
         ),

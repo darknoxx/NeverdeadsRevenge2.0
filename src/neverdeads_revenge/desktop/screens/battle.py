@@ -150,6 +150,11 @@ ROWS: dict[int, tuple[tuple[float, float, float], ...]] = {
     3: ((-0.30, 1.00, -1.0), (-0.065, 0.88, -0.75), (0.30, 1.13, -1.0)),
 }
 
+#: Where the echo stands, in rows behind the hero and in lane: close enough that
+#: its bar is on the frame, far enough that it is not standing inside him.
+ECHO_STEP = 2
+ECHO_LANE = -0.18
+
 #: How tall the panels and the log are, in rows, at *every* grid. Two numbers and
 #: not a ladder of them: what the window does to the grid is how much floor there
 #: is, and the furniture is the furniture.
@@ -1795,7 +1800,22 @@ class BattleScreen(Screen):
         for index, enemy in enumerate(monsters):
             lane, depth, lift = places[min(index, len(places) - 1)]
             size = round(MONSTER_SIZES[min(index, len(MONSTER_SIZES) - 1)] * scale)
-            art = _picture(enemy.name)
+            # The echo is the one monster drawn at the hero's own size, because
+            # it *is* the hero -- a shade of the run that got furthest, wearing
+            # its face. So it is staged where the hero is staged: on his line,
+            # a step behind him. Deeper into the room and its bar would be over
+            # the top of the frame, because the bar follows the picture; closer
+            # and it would be standing inside him, which is a shadow nobody sees.
+            echo = getattr(enemy, "behaviour", "") == "echo"
+            # Its own picture when its name is not the file: the echo wears the
+            # front of a hero, and the file is a portrait, not a monster.
+            art = enemy.art or _picture(enemy.name)
+            if echo:
+                # The lane beside the hero rather than the one it was given: at
+                # the hero's height, the middle lane is behind his head, and a
+                # shadow the hero is standing in front of is a shadow nobody
+                # sees.
+                lane = ECHO_LANE
             cx = (centre + round(lane * width) + 1) * cell_w
             # Standing over the hero is the one place a monster may not be: he is
             # the near figure and the plate is his home, and on a short frame -- a
@@ -1813,9 +1833,13 @@ class BattleScreen(Screen):
                     colour=enemy.color,
                     size=size,
                     cx=cx,
-                    row=min(
-                        floor_here,
-                        max(highest, self._row_for(depth, lift, y0, height)),
+                    row=(
+                        hero_row - ECHO_STEP
+                        if echo
+                        else min(
+                            floor_here,
+                            max(highest, self._row_for(depth, lift, y0, height)),
+                        )
                     ),
                     cells=self._span(art, cell_w),
                     chosen=enemy is marked,

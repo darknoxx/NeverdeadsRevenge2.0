@@ -457,6 +457,22 @@ class Offer:
 
 
 
+#: What a blade's *rule* does, in one clause, for the sheet and the card.
+#:
+#: The modifiers say what every blow carries; a rule is what a blade does that a
+#: number cannot say. THE FIRST BLOW has no modifiers at all, so a card that read
+#: only the numbers would tell the player it does nothing -- which is the one
+#: thing a card must never do. The numbers here are the ones the fight reads:
+#: ``actions.FIRST_BLOW`` and its neighbours.
+RULE_TEXT: dict[str, str] = {
+    "first_blow": f"+{7} on the first blow of a fight",
+    "coward": f"+{4} while you are above half your blood",
+    "ledger": f"+1 per kill this floor, to +{5}",
+    "debtor": "takes a coin for every kill",
+    "spread_burn": "the burning passes on when it kills",
+}
+
+
 def describe_item(template: ItemTemplate) -> str:
     """A short line for what an item does, as the shop says it.
 
@@ -487,6 +503,14 @@ def describe_item(template: ItemTemplate) -> str:
             described.append(status.name)
     if template.thorns:
         described.append(f"thorns {template.thorns}")
+    # What the rule does, and what the blade takes out of the one holding it.
+    # Both are prices the player pays at the swing, so both belong on the card.
+    if template.rule in RULE_TEXT:
+        described.append(RULE_TEXT[template.rule])
+    for key in template.self_inflicts:
+        status = status_by_key(key)
+        if status is not None:
+            described.append(f"leaves you {status.name}")
 
     return ", ".join(described) if described else "does nothing in particular"
 

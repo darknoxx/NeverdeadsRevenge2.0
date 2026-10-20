@@ -45,6 +45,12 @@ PORTRAITS_OUT = OUT / "portraits"
 #: says "burning" and the table says "burn".
 STATUS_OUT = OUT / "status"
 
+#: And the blades, one picture each, in a folder of their own: an item is not a
+#: figure, and the shop and the card ask for a *picture of a thing* rather than a
+#: view of an actor. Named for the item's key, because that is what the card has
+#: in hand when it wants to show what was just picked up.
+WEAPONS_OUT = OUT / "weapons"
+
 #: How much smaller a model is installed than it was exported.
 #:
 #: The monsters come at twice the size the room uses. A *whole* multiple, so
@@ -102,6 +108,46 @@ PORTRAITS: dict[str, tuple[str, float]] = {
 #: ``export name -> the status key the game asks for``. `maul` has no export of
 #: its own and shares the bleeding one, exactly as it shares the shape its tick
 #: makes -- a deep wound and a wound are the same wound, one of them deeper.
+#: ``export -> (the item key the game asks for, the scale)``. The blades are
+#: painted at the size the card draws them, so they are only trimmed. Still being
+#: painted: a key that is not here gets the placeholder, which is why this table
+#: can grow one file at a time.
+WEAPONS: dict[str, tuple[str, float]] = {
+    "the_hummingbird.png": ("hummingbird.png", 1.0),
+    "the_frostbite.png": ("frostbite.png", 1.0),
+    "the_pyre.png": ("pyre.png", 1.0),
+    "the_marksman.png": ("marksman.png", 1.0),
+    "the_gambler.png": ("gambler.png", 1.0),
+    "the_patient.png": ("patient.png", 1.0),
+    "the_numb.png": ("numbing.png", 1.0),
+    "the_runed_edge.png": ("edge.png", 1.0),
+    "the_last_argument.png": ("argument.png", 1.0),
+    "grave_iron.png": ("grave.png", 1.0),
+    "the_blood_price.png": ("blood_price.png", 1.0),
+    "the_ash_kiss.png": ("kiss.png", 1.0),
+    "the_thunderclap.png": ("thunder.png", 1.0),
+    "the_depthless.png": ("depthless.png", 1.0),
+}
+
+
+#: And one picture for the blades that have none yet. Drawn here rather than
+#: handed over, because it is not art: it is the shape of a promise -- a frame and
+#: a question mark, in the same ash the rest of the game is written in.
+def write_placeholder(target: Path) -> None:
+    import pygame
+
+    face = pygame.font.Font(str(HERE / "src" / "neverdeads_revenge" / "desktop"
+                                 / "fonts" / "DejaVuSansMono-Bold.ttf"), 64)
+    size = 120
+    image = pygame.Surface((size, size), pygame.SRCALPHA)
+    pygame.draw.rect(image, (70, 70, 78), image.get_rect().inflate(-10, -10),
+                     width=2, border_radius=8)
+    mark = face.render("?", True, (128, 128, 138))
+    image.blit(mark, mark.get_rect(center=(size // 2, size // 2)))
+    target.parent.mkdir(parents=True, exist_ok=True)
+    pygame.image.save(image, str(target))
+
+
 STATUS_SYMBOLS: dict[str, str] = {
     "status_bleed.png": "bleed.png",
     "status_poison.png": "poison.png",
@@ -155,6 +201,7 @@ def main(argv: list[str] | None = None) -> int:
     for table, under, into in (
         (EXPORTS, "", OUT),
         (PORTRAITS, "", PORTRAITS_OUT),
+        (WEAPONS, "weapons", WEAPONS_OUT),
     ):
         into.mkdir(parents=True, exist_ok=True)
         for export, (name, scale) in table.items():
@@ -176,6 +223,9 @@ def main(argv: list[str] | None = None) -> int:
                 continue
             shutil.copyfile(origin, STATUS_OUT / name)
             print(f"{export:26s} -> status/{name}")
+    # The one picture that is made here rather than handed over: the card's
+    # placeholder for a blade that has not been painted yet.
+    write_placeholder(WEAPONS_OUT / "_placeholder.png")
     if missing:
         print(f"missing: {', '.join(missing)}")
         return 1

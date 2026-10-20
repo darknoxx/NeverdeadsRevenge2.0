@@ -13,6 +13,7 @@ from neverdeads_revenge.game.lore import PAGE_COUNT, numeral
 from neverdeads_revenge.game.shop import ShopError, WILD_OFFERS, build_stock, buy, describe_item
 from neverdeads_revenge.world.items import ITEMS
 
+from ..art import Placed, weapon_icon
 from ..chrome import ASH, BONE, BLOOD, PURPLE, box, menu, rule
 from ..theme import parse_style
 from .base import Screen
@@ -34,6 +35,11 @@ class _Panel(Screen):
     title = ""
     hint = "↑↓ scroll   esc close"
 
+    #: Cells kept free on the left of the body, for a picture that stands beside
+    #: the list. Zero for every panel that has nothing to show: the sheet is the
+    #: only one, and it is where a blade's drawing belongs.
+    gutter = 0
+
     def __init__(self) -> None:
         self.offset = 0
         # The list's size and the visible window, as of the last draw: the
@@ -53,8 +59,10 @@ class _Panel(Screen):
         window = height - 4
         self._body_size = (len(body), window)
         self.offset = max(0, min(self.offset, max(0, len(body) - window)))
+        left = x + 3 + self.gutter
+        room = width - 6 - self.gutter
         for i, (text, style) in enumerate(body[self.offset : self.offset + window]):
-            buffer.text(x + 3, y + 2 + i, text[: width - 6], parse_style(style))
+            buffer.text(left, y + 2 + i, text[:room], parse_style(style))
         rule(buffer, x + 1, y + height - 2, width - 2, ASH)
         more = "  ▼" if self.offset + window < len(body) else ""
         buffer.text(x + 3, y + height - 1, (self.hint + more)[: width - 6], parse_style(ASH))
@@ -250,6 +258,33 @@ class CharacterScreen(_Panel):
 
     title = "THE HERO"
 
+    #: The blade's drawing stands in this margin, and the words move over for it.
+    #: Thirteen cells is one blade at 1:1 and no wider: the sheet is the narrowest
+    #: thing in the game and every cell of it is a rule the player is reading.
+    gutter = 13
+    PICTURE_ROWS = 6
+
+    def art(self, app) -> list[Placed]:
+        """What the hero is holding, drawn beside the list that names it.
+
+        One picture, not three: the weapon is the thing with a face in this game.
+        A coat or an amulet with a picture of its own would earn a place here the
+        day it is painted, and not before.
+        """
+        item = self.state.player.equipment.get("weapon")
+        if item is None:
+            return []
+        icon = weapon_icon(item.item_id)
+        if icon is None:
+            return []
+        width = min(app.cols - 4, 74)
+        height = min(app.rows - 2, 26)
+        x, y = (app.cols - width) // 2, (app.rows - height) // 2
+        cell_w, cell_h = app.font.cell_w, app.font.cell_h
+        centre = (x + 3 + self.gutter / 2) * cell_w
+        bottom = (y + 2 + self.PICTURE_ROWS) * cell_h
+        return [Placed(icon, centre, bottom, self.PICTURE_ROWS * cell_h - 8)]
+
     def __init__(self, state) -> None:
         super().__init__()
         self.state = state
@@ -261,7 +296,7 @@ class CharacterScreen(_Panel):
         from .dialogs import wrap
 
         cols = app.cells[0]
-        room = max(16, min(cols - 4, 74) - 6 - 10)
+        room = max(16, min(cols - 4, 74) - 6 - self.gutter - 10)
         return wrap(text, room)
 
     def lines(self, app) -> list[tuple[str, str]]:

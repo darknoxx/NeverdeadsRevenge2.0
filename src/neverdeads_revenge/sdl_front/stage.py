@@ -105,7 +105,8 @@ class Stage:
         self._lamp: object | None = None
         #: The pictures at the sizes a *pose* asks for: the room has two depths,
         #: so there are two of these per figure and they are made once.
-        self._scaled: dict[tuple[str, float], object] = {}
+        #: Keyed by (art, scale) and, for the echo, which tint of it.
+        self._scaled: dict[tuple, object] = {}
 
     # -- the art ------------------------------------------------------------
     def tile(self, name: str):
@@ -566,6 +567,42 @@ class Stage:
                 self._scaled[key] = pygame.transform.smoothscale(image, size)
             else:
                 self._scaled[key] = pygame.transform.scale(image, size)
+        return self._scaled[key]
+
+    #: The echo is a hero's *front* multiplied down to a shadow. Dark, and still
+    #: holding the shape of whoever the run was -- which is the whole of what it
+    #: is: the thing that came back wearing your face.
+    SHADOW = (46, 50, 70, 255)
+
+    #: And the ripple around it: the same picture in a cold pale colour, so what
+    #: drifts beside the silhouette reads as *that* figure and not a smear.
+    RIPPLE = (138, 166, 214, 255)
+
+    def silhouette(self, figure, scale: float = 1.0):
+        """The figure as a shadow -- the echo's own version of the picture."""
+        return self._tinted(figure, scale, self.SHADOW, "shadow")
+
+    def ripple(self, figure, scale: float = 1.0):
+        """The pale copy the arena drifts beside it, a few pixels either way."""
+        return self._tinted(figure, scale, self.RIPPLE, "ripple")
+
+    def _tinted(self, figure, scale: float, colour: tuple, label: str):
+        """One picture, one colour multiplied into it, made once and kept.
+
+        ``BLEND_RGBA_MULT`` rather than a plain fill: what comes out is the
+        drawing *in* that colour, edges and all, and not a coloured rectangle
+        where a figure used to be. The alpha is the sheet's own either way.
+        """
+        import pygame
+
+        image = self.figure(figure, scale)
+        if image is None:
+            return None
+        key = (figure.art, round(scale, 3), label)
+        if key not in self._scaled:
+            tinted = image.copy()
+            tinted.fill(colour, special_flags=pygame.BLEND_RGBA_MULT)
+            self._scaled[key] = tinted
         return self._scaled[key]
 
 

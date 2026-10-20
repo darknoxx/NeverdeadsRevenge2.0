@@ -3079,3 +3079,114 @@ def test_a_summoned_shadow_stands_beside_the_hero():
     state.atritas = None
     figures = arena._figures(app.cols, app.rows, app.font)
     assert all(figure.actor.name != "atritas" for figure in figures)
+
+
+def test_the_echo_wears_the_best_runs_face_and_what_it_was_carrying():
+    """The chronicle's best run, come back: its name, its hero's front, its gear.
+
+    Three things are the echo and all three come off the board. It answers to the
+    name on it, it wears the *front* of the hero whose run it was -- so it walks
+    towards the player rather than away, which is what makes it a shade and not a
+    stranger -- and it fights with that run's blade and coat, because a record
+    that remembered only a number would be a number.
+    """
+    from neverdeads_revenge.game.actors import ENEMIES, make_enemy, scale_template
+    from neverdeads_revenge.persistence import ScoreEntry
+    from neverdeads_revenge.sdl_front.app import dress_the_echo
+    from neverdeads_revenge.world.items import ITEMS
+
+    echo = make_enemy(ENEMIES["echo"], (0, 0))
+    best = ScoreEntry(
+        name="MIRA",
+        score=900,
+        depth=9,
+        hero="yeti",
+        won=False,
+        weapon="grave",
+        armour="warden",
+    )
+    dress_the_echo([echo], [best])
+
+    base = scale_template(ENEMIES["echo"], 9).stats
+    assert echo.name == "MIRA"
+    assert echo.art == "sprites/portraits/Yeti.png"
+    assert echo.stats.damage == (
+        base.damage[0] + ITEMS["grave"].modifiers.damage,
+        base.damage[1] + ITEMS["grave"].modifiers.damage,
+    )
+    assert echo.stats.armor == base.armor + ITEMS["warden"].modifiers.armor
+
+
+def test_an_empty_chronicle_leaves_the_echo_as_it_was_found():
+    from neverdeads_revenge.game.actors import ENEMIES, make_enemy
+    from neverdeads_revenge.sdl_front.app import dress_the_echo
+
+    echo = make_enemy(ENEMIES["echo"], (0, 0))
+    dress_the_echo([echo], [])
+
+    assert echo.art is None, "there is no face to wear"
+    assert echo.name == "one who did not come back"
+
+
+def test_a_painted_blade_has_a_picture_and_an_unpainted_one_has_the_placeholder():
+    """Blades are being painted one at a time, and the card says which is which.
+
+    The picture is the blade's own when it exists; when it does not, the card is
+    not allowed to open with a hole in it -- a frame and a question mark are the
+    honest answer.
+    """
+    from neverdeads_revenge.desktop.art import exists, weapon_icon
+
+    painted = weapon_icon("hummingbird")
+    assert painted == "sprites/weapons/hummingbird.png"
+    assert exists(painted)
+
+    empty = weapon_icon("first_blow")
+    assert empty == "sprites/weapons/_placeholder.png"
+    assert exists(empty)
+
+
+def test_the_weapon_card_stands_the_blade_above_its_name():
+    """The card a pick-up opens: the drawing first, then the name and the rule."""
+    from neverdeads_revenge.desktop.art import weapon_icon
+    from neverdeads_revenge.desktop.screens.dialogs import InfoScreen
+    from neverdeads_revenge.game.shop import describe_item
+    from neverdeads_revenge.sdl_front.app import SdlApp
+    from neverdeads_revenge.world.items import ITEMS
+
+    app = SdlApp(seed=3)
+    card = InfoScreen(
+        "A WEAPON",
+        "the hummingbird",
+        describe_item(ITEMS["hummingbird"]),
+        picture=weapon_icon("hummingbird"),
+    )
+    pieces = card.art(app)
+
+    assert [piece.art for piece in pieces] == ["sprites/weapons/hummingbird.png"]
+    # And it is over the words: the picture's foot is above the first body row,
+    # which is the row the name is written on.
+    x, y, _width, _height = card._frame(app.cols, app.rows)
+    assert pieces[0].bottom < (y + 2 + card.PICTURE_ROWS) * app.font.cell_h
+
+    plain = InfoScreen("A CURSE", "the grey", "it costs you something")
+    assert plain.art(app) == [], "a card with no picture must not invent one"
+
+
+def test_the_sheet_stands_the_equipped_blade_beside_the_numbers():
+    from neverdeads_revenge.desktop.art import weapon_icon
+    from neverdeads_revenge.desktop.screens.menus import CharacterScreen
+    from neverdeads_revenge.game.actors import HEROES
+    from neverdeads_revenge.game.state import start_run
+    from neverdeads_revenge.sdl_front.app import SdlApp
+    from neverdeads_revenge.world.items import ITEMS, make_item
+
+    app = SdlApp(seed=3)
+    state = start_run(HEROES["noxx"], 3)
+    sheet = CharacterScreen(state)
+
+    assert sheet.gutter > 0, "the words were given no room to move over"
+    assert sheet.art(app) == [], "an empty hand has no picture"
+
+    state.player.equipment["weapon"] = make_item(ITEMS["hummingbird"])
+    assert [piece.art for piece in sheet.art(app)] == [weapon_icon("hummingbird")]

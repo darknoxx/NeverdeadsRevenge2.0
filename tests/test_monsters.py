@@ -132,3 +132,26 @@ def test_the_echo_waits_for_the_deep_floors_and_never_takes_a_walk():
 
     deep = {pick_enemy_template(Rng(seed), 6).key for seed in range(400)}
     assert "echo" in deep, "the boss never comes at all"
+
+
+# -- the picker ------------------------------------------------------------
+def test_the_picker_is_a_purse_worth_catching_and_not_worth_the_chase():
+    """More gold, far more health, and much rarer than it was.
+
+    The picker is not a fight, it is a decision: forty-five coins is a run's
+    economy, and sixty health is three turns of standing still while the rest of
+    the room closes. Both numbers are the choice, so both are held here -- and so
+    is the rarity, because a purse that turns up as often as a ghoul is a purse
+    and not a decision at all.
+    """
+    picker = ENEMIES["picker"]
+
+    assert picker.gold[1] >= 25, "chasing it is not worth the turns"
+    assert picker.stats.max_hp >= 50, "it dies before the choice is made"
+
+    shallow = [
+        template.weight
+        for template in ENEMIES.values()
+        if template.weight and template.key != "picker" and template.min_depth <= 2
+    ]
+    assert picker.weight < min(shallow), "the purse is as common as the monsters"

@@ -75,6 +75,48 @@ class KeyPress:
         return self._text
 
 
+def dress_the_echo(enemies, scores) -> None:
+    """The run that got furthest, worn by the echo.
+
+    The chronicle remembers a name, a hero and what that run was carrying, and
+    the echo is all three come back: it answers to the name on the board, it
+    wears the *front* of the hero whose run it is -- so it walks towards the
+    player rather than away, which is the whole difference between a shade and a
+    stranger -- and it fights with the blade and the coat of that run, because a
+    record that only remembered a number would be a number.
+
+    A function of its own rather than four paragraphs inside the encounter: the
+    dressing is a rule about the chronicle, and the call site is about a fight.
+    """
+    from ..game.actors import ENEMIES, HEROES, scale_template
+    from ..world.items import ITEMS
+
+    if not scores:
+        return
+    best = scores[0]
+    for enemy in enemies:
+        if enemy.behaviour != "echo":
+            continue
+        enemy.name = best.name
+        enemy.stats = scale_template(ENEMIES["echo"], max(6, best.depth)).stats
+        hero = HEROES.get(best.hero)
+        if hero is not None:
+            # The hero's own front, at the size heroes are drawn: it is not a
+            # monster wearing a hero's face, it is the run itself, come back.
+            # The arena stages it where it stages the hero, for that reason.
+            enemy.art = f"sprites/portraits/{hero.name}.png"
+        weapon = ITEMS.get(best.weapon)
+        if weapon is not None and weapon.slot == "weapon":
+            m = weapon.modifiers
+            low, high = enemy.stats.damage
+            enemy.stats.damage = (low + m.damage, high + m.damage)
+            enemy.stats.crit_chance = min(1.0, enemy.stats.crit_chance + m.crit_chance)
+        coat = ITEMS.get(best.armour)
+        if coat is not None and coat.slot == "armour":
+            enemy.stats.armor += coat.modifiers.armor
+            enemy.stats.evasion += coat.modifiers.evasion
+
+
 class SdlApp:
     """A window, a stack of screens, and the run they are about."""
 
@@ -323,21 +365,10 @@ class SdlApp:
         # it is set, and a fight that is asked for twice would be two fights.
         self.run.encounter = None
         enemies = encounter_around(self.run, trigger)
-        # THE ONE WHO DID NOT COME BACK. The chronicle's best run puts its name on
-        # the echo and fights with the numbers it got furthest with: a hero's
+        # THE ONE WHO DID NOT COME BACK. The chronicle's best run puts its name
+        # on the echo and fights with the numbers it got furthest with: a hero's
         # record is the only thing in this dungeon that has ever beaten him.
-        scores = getattr(self.progress, "scores", ())
-        if scores:
-            best = scores[0]
-            for enemy in enemies:
-                if enemy.behaviour != "echo":
-                    continue
-                from ..game.actors import ENEMIES, scale_template
-
-                enemy.name = best.name
-                enemy.stats = scale_template(
-                    ENEMIES["echo"], max(4, best.depth)
-                ).stats
+        dress_the_echo(enemies, getattr(self.progress, "scores", ()))
         battle = Battle(self.run, enemies)
         self.push(SdlTurning(trigger, battle))
         return True
@@ -448,6 +479,12 @@ class SdlApp:
         from ..core.rng import Rng
         from ..game.state import RunState
 
+        gear = state.player.equipment
+
+        def key(slot: str) -> str:
+            item = gear.get(slot)
+            return item.item_id if item is not None else ""
+
         self.progress.record_run(
             depth=state.depth,
             score=state.score,
@@ -456,6 +493,9 @@ class SdlApp:
             won=state.run_state is RunState.ESCAPED,
             name=name,
             hero=state.hero.key,
+            # What the run was carrying: the echo wears it.
+            weapon=key("weapon"),
+            armour=key("armour"),
         )
         self.progress.reroll_wilds(Rng(random.SystemRandom().randrange(2**32)))
         self.save_progress()

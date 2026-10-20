@@ -53,6 +53,10 @@ class ScoreEntry:
     depth: int
     hero: str
     won: bool
+    #: What the run was carrying when it ended, by item key. The echo wears it:
+    #: it is the only thing in the dungeon that fights with what *you* had.
+    weapon: str = ""
+    armour: str = ""
 
     @property
     def outcome(self) -> str:
@@ -121,6 +125,8 @@ class MetaProgress:
         won: bool = False,
         name: str = "",
         hero: str = "",
+        weapon: str = "",
+        armour: str = "",
     ) -> None:
         """Fold a finished run into the lifetime totals and the scoreboard.
 
@@ -141,7 +147,15 @@ class MetaProgress:
             return
         self.last_name = name
         self.scores.append(
-            ScoreEntry(name=name, score=score, depth=depth, hero=hero, won=won)
+            ScoreEntry(
+                name=name,
+                score=score,
+                depth=depth,
+                hero=hero,
+                won=won,
+                weapon=weapon,
+                armour=armour,
+            )
         )
         self.scores.sort(key=lambda entry: entry.score, reverse=True)
         del self.scores[SCOREBOARD_SIZE:]
@@ -265,6 +279,8 @@ def load_meta(path: Path | None = None) -> MetaProgress:
                     name=str(entry.get("name", "?")),
                     score=int(entry.get("score", 0)),
                     depth=int(entry.get("depth", 1)),
+                    weapon=str(entry.get("weapon", "")),
+                    armour=str(entry.get("armour", "")),
                     hero=str(entry.get("hero", "noxx")),
                     won=bool(entry.get("won", False)),
                 )

@@ -202,6 +202,7 @@ class GameScreen(Screen):
         from neverdeads_revenge.game.shop import describe_item
         from neverdeads_revenge.world.items import ITEMS
 
+        from ..art import weapon_icon
         from .dialogs import InfoScreen
 
         run = self.state
@@ -232,6 +233,14 @@ class GameScreen(Screen):
                     f"{article} {template.kind.upper()}",
                     item.name,
                     describe_item(template),
+                    # A blade has a picture, or the placeholder that says it is
+                    # still being painted. A coat is not painted at all, and a
+                    # card with an empty frame on it would only be in the way.
+                    picture=(
+                        weapon_icon(template.key)
+                        if template.kind == "weapon"
+                        else None
+                    ),
                 )
             )
 

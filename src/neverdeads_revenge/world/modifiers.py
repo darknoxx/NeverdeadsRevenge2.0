@@ -70,5 +70,6 @@ _DESCRIPTIONS: tuple[tuple[str, str, str], ...] = (
     ("accuracy", "accuracy", "d"),
     ("evasion", "evasion", "d"),
     ("armor", "armour", "d"),
+    ("pierce", "armour pierced", "d"),
     ("speed", "speed", ".2f"),
 )
