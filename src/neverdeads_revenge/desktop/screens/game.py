@@ -238,13 +238,18 @@ class GameScreen(Screen):
         from neverdeads_revenge.game.shop import describe_item
         from neverdeads_revenge.world.items import ITEMS
 
+        from ..art import curse_icon, gift_icon
         from .dialogs import InfoScreen
 
         run = self.state
         for key in sorted(run.gifts - gifts_before):
             gift = gift_by_key(key)
             if gift is not None:
-                app.push(InfoScreen("A GIFT", gift.name, gift.blurb))
+                app.push(
+                    InfoScreen(
+                        "A GIFT", gift.name, gift.blurb, picture=gift_icon(key)
+                    )
+                )
         for curse in run.curses:
             if curse.key in curse_keys_before:
                 continue
@@ -254,7 +259,9 @@ class GameScreen(Screen):
             extra = ", ".join(curse.modifiers.describe())
             if extra:
                 text = f"{text}. {extra}."
-            app.push(InfoScreen("A CURSE", curse.name, text))
+            app.push(
+                InfoScreen("A CURSE", curse.name, text, picture=curse_icon(curse.key))
+            )
         for slot, item in run.player.equipment.items():
             worn = equipment_before.get(slot)
             if worn is not None and worn.item_id == item.item_id:

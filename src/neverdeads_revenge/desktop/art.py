@@ -28,6 +28,8 @@ __all__ = [
     "Placed",
     "exists",
     "path",
+    "curse_icon",
+    "gift_icon",
     "item_icon",
     "size",
     "weapon_icon",
@@ -91,9 +93,27 @@ def weapon_icon(key: str) -> str | None:
 
 #: The coat and the amulet are drawn one apiece for now: the picture belongs to
 #: the *kind* until every coat has a face of its own. Named the way the exports
-#: came, which is why the amulet's name is spelled the way it is.
+#: came, which is why the amulet's name is spelled the way it is. The curse and
+#: the gift are the same deal: one drawing each, for the page that announces them.
 ARMOUR_ART = "sprites/items/armor.png"
 AMULET_ART = "sprites/items/amulett.png"
+CURSE_ART = "sprites/items/curse.png"
+GIFT_ART = "sprites/items/gift.png"
+
+
+def _own_or_shared(key: str, shared: str | None) -> str | None:
+    """An item's own drawing when it has one, the kind's drawing until then.
+
+    One rule for everything in that folder, so the day a coat or a curse is
+    painted on its own, dropping ``hide.png`` or ``greed.png`` beside the shared
+    ones is the whole change -- no table to edit and no code to remember.
+    """
+    painted = f"sprites/items/{key}.png"
+    if exists(painted):
+        return painted
+    if shared is not None and exists(shared):
+        return shared
+    return None
 
 
 def item_icon(template) -> str | None:
@@ -107,15 +127,18 @@ def item_icon(template) -> str | None:
     """
     if template.kind == "weapon":
         return weapon_icon(template.key)
-    # Anything with a drawing of its own wins over the kind's: the day a coat is
-    # painted on its own, dropping ``hide.png`` in the folder is the whole change.
-    painted = f"sprites/items/{template.key}.png"
-    if exists(painted):
-        return painted
     shared = {"armour": ARMOUR_ART, "amulet": AMULET_ART}.get(template.kind)
-    if shared is not None:
-        return shared if exists(shared) else None
-    return None
+    return _own_or_shared(template.key, shared)
+
+
+def curse_icon(key: str) -> str | None:
+    """The page that announces a curse: its own drawing, or the curse's."""
+    return _own_or_shared(key, CURSE_ART)
+
+
+def gift_icon(key: str) -> str | None:
+    """And the same for a gift."""
+    return _own_or_shared(key, GIFT_ART)
 
 
 def path(name: str) -> Path:

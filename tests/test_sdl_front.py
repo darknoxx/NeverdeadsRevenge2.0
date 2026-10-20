@@ -3322,3 +3322,29 @@ def test_a_card_is_a_window_and_the_floor_stays_visible_around_it():
     assert (corner.char, corner.style) == floor_cell, (
         "the dialog cleared the room behind it"
     )
+
+
+def test_every_curse_and_gift_has_a_page_with_a_picture():
+    """The two things that are not items get a drawing as well.
+
+    A curse and a gift are announced on the same sort of card as a blade, and a
+    card that opens on a blank band is a card that lied. They share one drawing
+    each for now -- the page is about *what happened*, not which of the thirteen
+    it was -- and an entry with a picture of its own wins over the shared one,
+    the same rule the coats follow.
+    """
+    from neverdeads_revenge.desktop.art import curse_icon, exists, gift_icon
+    from neverdeads_revenge.game.curses import CURSES
+    from neverdeads_revenge.game.gifts import GIFTS
+
+    for curse in CURSES.values():
+        icon = curse_icon(curse.key)
+        assert icon is not None and exists(icon), f"no picture for {curse.key}"
+    for gift in GIFTS.values():
+        icon = gift_icon(gift.key)
+        assert icon is not None and exists(icon), f"no picture for {gift.key}"
+
+    from neverdeads_revenge.desktop.art import CURSE_ART, GIFT_ART
+
+    assert curse_icon(CURSES["wither"].key) == CURSE_ART
+    assert gift_icon(GIFTS["long_reach"].key) == GIFT_ART

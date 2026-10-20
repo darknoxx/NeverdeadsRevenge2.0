@@ -164,6 +164,11 @@ ITEMS: dict[str, tuple[str, float]] = {
     "gallows_road.png": ("gallows_road.png", 1.0),
     "armor.png": ("armor.png", 1.0),
     "amulett.png": ("amulett.png", 1.0),
+    # And one of each for the two things that are not items at all: a curse and
+    # a gift. They are shown on the page that announces them, and they share the
+    # drawing for now, exactly as the coats do.
+    "curse.png": ("curse.png", 1.0),
+    "gift.png": ("gift.png", 1.0),
 }
 
 
