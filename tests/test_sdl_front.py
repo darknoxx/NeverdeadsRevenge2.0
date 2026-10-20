@@ -3141,9 +3141,40 @@ def test_a_painted_blade_has_a_picture_and_an_unpainted_one_has_the_placeholder(
     assert painted == "sprites/weapons/hummingbird.png"
     assert exists(painted)
 
-    empty = weapon_icon("first_blow")
+    # Nothing that is in the game lacks a sheet any more, so the placeholder is
+    # held by a name that is not in the game at all: the next blade added without
+    # a drawing gets it, and that is what this is for.
+    empty = weapon_icon("no_such_blade")
     assert empty == "sprites/weapons/_placeholder.png"
     assert exists(empty)
+
+
+def test_every_thing_that_can_be_picked_up_has_a_picture():
+    """The card is where a thing is met, so nothing may open with a blank band.
+
+    A blade has its own sheet; a bottle has one named for its key; and the coats
+    and the amulets share the kind's drawing for now -- one coat's face is still
+    one coat's face, and that is the deal the picture makes.
+    """
+    from neverdeads_revenge.desktop.art import exists, item_icon
+    from neverdeads_revenge.world.items import ITEMS
+
+    missing = []
+    for key, template in ITEMS.items():
+        if template.kind in ("coin", "page", "chest"):
+            continue
+        icon = item_icon(template)
+        if icon is None or not exists(icon):
+            missing.append(key)
+    assert missing == [], f"no picture for {missing}"
+
+    # And the shared ones are shared, not a copy per item.
+    from neverdeads_revenge.desktop.art import AMULET_ART, ARMOUR_ART
+
+    assert item_icon(ITEMS["hide"]) == ARMOUR_ART
+    assert item_icon(ITEMS["warden"]) == ARMOUR_ART
+    assert item_icon(ITEMS["ember"]) == AMULET_ART
+    assert item_icon(ITEMS["potion"]) == "sprites/items/potion.png"
 
 
 def test_the_weapon_card_stands_the_blade_above_its_name():
@@ -3220,3 +3251,30 @@ def test_a_mimic_chest_opens_into_the_fight_on_the_same_keypress():
         "the lid waited for a third keypress"
     )
     assert run.curses == [], "the lid charged a curse"
+
+
+def test_a_bottle_picked_up_opens_its_own_card():
+    """Everything the floor hands over gets a page, not only the blades.
+
+    A potion is not worn, so the equipment loop never saw it: the pack grew and
+    the log said one line that scrolled away in four turns. The card is the same
+    card the blades get -- picture, name, what it does -- because a bottle is a
+    thing you recognise by sight too.
+    """
+    from neverdeads_revenge.desktop.screens.dialogs import InfoScreen
+    from neverdeads_revenge.sdl_front.app import SdlApp
+    from neverdeads_revenge.world.items import ITEMS, make_item
+
+    app = SdlApp(seed=3)
+    app.key("enter")
+    app.key("enter")
+    app.key("escape")  # the prologue, skipped
+    run = app.run
+    run.dungeon_map.items[run.player.position] = make_item(ITEMS["potion"])
+
+    app.key("enter")  # pick it up
+
+    card = app.screens[-1]
+    assert isinstance(card, InfoScreen), "the bottle was picked up without a page"
+    assert card.picture == "sprites/items/potion.png"
+    assert run.inventory, "the card came without the item"

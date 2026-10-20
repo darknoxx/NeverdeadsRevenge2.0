@@ -51,6 +51,11 @@ STATUS_OUT = OUT / "status"
 #: in hand when it wants to show what was just picked up.
 WEAPONS_OUT = OUT / "weapons"
 
+#: And the things that are not blades: the bottles, the coats and the amulets.
+#: The coats and amulets share one drawing each for now -- the picture is the
+#: *kind* until every coat has a face of its own.
+ITEMS_OUT = OUT / "items"
+
 #: How much smaller a model is installed than it was exported.
 #:
 #: The monsters come at twice the size the room uses. A *whole* multiple, so
@@ -113,6 +118,13 @@ PORTRAITS: dict[str, tuple[str, float]] = {
 #: painted: a key that is not here gets the placeholder, which is why this table
 #: can grow one file at a time.
 WEAPONS: dict[str, tuple[str, float]] = {
+    "the_rusted_tooth.png": ("tooth.png", 1.0),
+    "the_grey_bite.png": ("bite.png", 1.0),
+    "the_long_hunger.png": ("hunger.png", 1.0),
+    "the_heavy_sorrow.png": ("sorrow.png", 1.0),
+    "the_thin_wound.png": ("wound.png", 1.0),
+    "the_slow_rot.png": ("rot.png", 1.0),
+    "the_winters_tooth.png": ("winter.png", 1.0),
     "the_hummingbird.png": ("hummingbird.png", 1.0),
     "the_frostbite.png": ("frostbite.png", 1.0),
     "the_pyre.png": ("pyre.png", 1.0),
@@ -124,9 +136,34 @@ WEAPONS: dict[str, tuple[str, float]] = {
     "the_last_argument.png": ("argument.png", 1.0),
     "grave_iron.png": ("grave.png", 1.0),
     "the_blood_price.png": ("blood_price.png", 1.0),
+    "the_first_blow.png": ("first_blow.png", 1.0),
+    "the_cowards_edge.png": ("coward.png", 1.0),
+    "the_needle.png": ("needle.png", 1.0),
+    "the_reapers_ledger.png": ("ledger.png", 1.0),
+    # The export spells it "deptor", and the export is what gets shipped; the
+    # game's own key is the word for somebody who owes.
+    "the_deptor.png": ("debtor.png", 1.0),
     "the_ash_kiss.png": ("kiss.png", 1.0),
     "the_thunderclap.png": ("thunder.png", 1.0),
     "the_depthless.png": ("depthless.png", 1.0),
+}
+
+
+#: ``export -> (the game's own file name, the scale)`` for everything that is not
+#: a blade: the two draughts, the five strange bottles, one coat and one amulet.
+#: Named for the *kind* where the drawing is the kind's, so a coat with no face of
+#: its own asks for the coat's picture and not for a file per item.
+ITEMS: dict[str, tuple[str, float]] = {
+    "potion.png": ("potion.png", 1.0),
+    # "elixier" is how the export is spelled; the game's key is "elixir".
+    "elixier.png": ("elixir.png", 1.0),
+    "thin_veil.png": ("thin_veil.png", 1.0),
+    "kindled_breath.png": ("kindled_breath.png", 1.0),
+    "short_crown.png": ("short_crown.png", 1.0),
+    "carrion_tongue.png": ("carrion_tongue.png", 1.0),
+    "gallows_road.png": ("gallows_road.png", 1.0),
+    "armor.png": ("armor.png", 1.0),
+    "amulett.png": ("amulett.png", 1.0),
 }
 
 
@@ -202,6 +239,7 @@ def main(argv: list[str] | None = None) -> int:
         (EXPORTS, "", OUT),
         (PORTRAITS, "", PORTRAITS_OUT),
         (WEAPONS, "weapons", WEAPONS_OUT),
+        (ITEMS, "items", ITEMS_OUT),
     ):
         into.mkdir(parents=True, exist_ok=True)
         for export, (name, scale) in table.items():

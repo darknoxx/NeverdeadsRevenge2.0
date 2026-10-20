@@ -40,6 +40,17 @@ ULTIMATE_SOUND: dict[str, str] = {
     "walkyrion": "dark_bell",
 }
 
+#: What a card calls what was just picked up. The kind is the game's own word for
+#: it, and a bottle is a draught and not a potion -- "A STRANGE" was never a
+#: sentence.
+CARD_TITLES: dict[str, str] = {
+    "weapon": "A WEAPON",
+    "armour": "AN ARMOUR",
+    "amulet": "AN AMULET",
+    "draught": "A DRAUGHT",
+    "strange": "A STRANGE BOTTLE",
+}
+
 __all__ = ["GameScreen", "REWIND"]
 
 
@@ -139,6 +150,7 @@ class GameScreen(Screen):
         curses = len(run.curses)
         curse_keys = {curse.key for curse in run.curses}
         equipment = dict(run.player.equipment)
+        carried = list(run.inventory)
         ultimate_ready = run.ultimate_available
 
         result = perform_action(run, action)
@@ -187,9 +199,33 @@ class GameScreen(Screen):
             gifts,
             curse_keys,
             equipment,
+            carried,
         )
 
-    def _announce(self, app, gifts_before, curse_keys_before, equipment_before) -> None:
+    def _card(self, app, template, name: str) -> None:
+        """One page for one thing: what it is called, what it does, what it looks like."""
+        from neverdeads_revenge.game.shop import describe_item
+
+        from ..art import item_icon
+        from .dialogs import InfoScreen
+
+        app.push(
+            InfoScreen(
+                CARD_TITLES.get(template.kind, "A THING"),
+                name,
+                describe_item(template),
+                picture=item_icon(template),
+            )
+        )
+
+    def _announce(
+        self,
+        app,
+        gifts_before,
+        curse_keys_before,
+        equipment_before,
+        carried_before=(),
+    ) -> None:
         """Read out what just arrived: the pickup dialog.
 
         The log scrolls in four turns and the sidebar is decoration, so a thing
@@ -202,7 +238,6 @@ class GameScreen(Screen):
         from neverdeads_revenge.game.shop import describe_item
         from neverdeads_revenge.world.items import ITEMS
 
-        from ..art import weapon_icon
         from .dialogs import InfoScreen
 
         run = self.state
@@ -227,22 +262,18 @@ class GameScreen(Screen):
             template = ITEMS.get(item.item_id)
             if template is None:
                 continue
-            article = "AN" if template.kind in ("armour", "amulet") else "A"
-            app.push(
-                InfoScreen(
-                    f"{article} {template.kind.upper()}",
-                    item.name,
-                    describe_item(template),
-                    # A blade has a picture, or the placeholder that says it is
-                    # still being painted. A coat is not painted at all, and a
-                    # card with an empty frame on it would only be in the way.
-                    picture=(
-                        weapon_icon(template.key)
-                        if template.kind == "weapon"
-                        else None
-                    ),
-                )
-            )
+            self._card(app, template, item.name)
+        # And the pack: a bottle is not worn, so the equipment loop above never
+        # sees one, and a potion that said nothing about itself was a potion the
+        # player had to remember the colour of.
+        seen = {id(one) for one in carried_before}
+        for item in run.inventory:
+            if id(item) in seen:
+                continue
+            template = ITEMS.get(item.item_id)
+            if template is None:
+                continue
+            self._card(app, template, item.name)
 
     def _effects(self, app, hp, gold, gifts, curses, level_before) -> None:
         """The moving pixels: what just happened, thrown at the screen.
@@ -325,6 +356,7 @@ class GameScreen(Screen):
         gifts_before = set(run.gifts)
         curse_keys_before = {curse.key for curse in run.curses}
         equipment_before = dict(run.player.equipment)
+        carried_before = list(run.inventory)
         level_before = run.level
         result = perform_action(run, action)
         app.play_after((len(run.log), run.depth, run.level))
@@ -350,6 +382,7 @@ class GameScreen(Screen):
             gifts_before,
             curse_keys_before,
             equipment_before,
+            carried_before,
         )
 
     def _file_pages(self, app) -> None:

@@ -101,17 +101,22 @@ class _Dialog(Screen):
         """The picture above the words, if the dialog has one."""
         if self.picture is None:
             return []
-        from ..art import Placed
+        from ..art import Placed, size
 
         x, y, width, _height = self._frame(app.cols, app.rows)
         cell_w, cell_h = app.font.cell_w, app.font.cell_h
+        # Never bigger than it was painted: the rows are sized for a blade, and a
+        # bottle is a smaller thing than a blade. A picture stretched to fill the
+        # frame it was given is a picture that looks resampled.
+        height = self.PICTURE_ROWS * cell_h - 6
+        measured = size(self.picture)
+        if measured is not None:
+            height = min(height, measured[1])
         # Centred in the box and standing on the line above the first of the
         # body's rows, which is what the reserved rows were left for.
         centre = (x + width / 2) * cell_w
         bottom = (y + 1 + self.PICTURE_ROWS) * cell_h - 3
-        return [
-            Placed(self.picture, centre, bottom, self.PICTURE_ROWS * cell_h - 6)
-        ]
+        return [Placed(self.picture, centre, bottom, height)]
 
     def finish(self, app, value) -> None:
         app.pop()

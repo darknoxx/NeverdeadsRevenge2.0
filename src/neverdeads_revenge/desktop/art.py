@@ -23,10 +23,12 @@ __all__ = [
     "SPRITES_DIR",
     "STATUS_DIR",
     "TILES_DIR",
+    "ITEMS_DIR",
     "WEAPONS_DIR",
     "Placed",
     "exists",
     "path",
+    "item_icon",
     "size",
     "weapon_icon",
 ]
@@ -42,6 +44,8 @@ STATUS_DIR = SPRITES_DIR / "status"
 #: The blades: a picture per item key, for the card that says what was just
 #: picked up and the sheet that says what is being carried.
 WEAPONS_DIR = SPRITES_DIR / "weapons"
+#: And everything that is not a blade: the bottles, the coats and the amulets.
+ITEMS_DIR = SPRITES_DIR / "items"
 
 #: And the stone the rooms are made of.
 TILES_DIR = ART_ROOT / "tiles"
@@ -83,6 +87,35 @@ def weapon_icon(key: str) -> str | None:
     if exists(painted):
         return painted
     return PLACEHOLDER if exists(PLACEHOLDER) else None
+
+
+#: The coat and the amulet are drawn one apiece for now: the picture belongs to
+#: the *kind* until every coat has a face of its own. Named the way the exports
+#: came, which is why the amulet's name is spelled the way it is.
+ARMOUR_ART = "sprites/items/armor.png"
+AMULET_ART = "sprites/items/amulett.png"
+
+
+def item_icon(template) -> str | None:
+    """The picture of a thing that can be picked up, by its template.
+
+    Three answers, in order of how much the drawing belongs to the item: a blade
+    has its own sheet (or the placeholder, until one is painted); a coat or an
+    amulet has the kind's drawing, because those are one picture for now; and a
+    bottle has its own, named for its key. ``None`` when there is nothing to
+    show, which the card reads as "no picture" and not as a broken one.
+    """
+    if template.kind == "weapon":
+        return weapon_icon(template.key)
+    # Anything with a drawing of its own wins over the kind's: the day a coat is
+    # painted on its own, dropping ``hide.png`` in the folder is the whole change.
+    painted = f"sprites/items/{template.key}.png"
+    if exists(painted):
+        return painted
+    shared = {"armour": ARMOUR_ART, "amulet": AMULET_ART}.get(template.kind)
+    if shared is not None:
+        return shared if exists(shared) else None
+    return None
 
 
 def path(name: str) -> Path:
