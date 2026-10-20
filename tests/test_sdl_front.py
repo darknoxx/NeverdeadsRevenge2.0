@@ -2173,7 +2173,13 @@ def test_the_grid_comes_from_the_window_like_the_qt_build(monkeypatch):
         assert app._scale_for(*size) == scale, size
         assert app._grid_size(*size) == grid, size
 
-    # And the picture really does fill it: 128 cells at two pixels is 2560.
+    # And the picture really does fill it: 128 cells at two pixels is 2560. The
+    # display is faked as well as the window: the fit asks for a *window* only
+    # when there is a display surface, and on a Windows runner this test runs in
+    # a worker where nothing has opened one yet -- the same test then measured
+    # the 96x27 the app was born with.
+    monkeypatch.setattr(pygame.display, "get_init", lambda: True)
+    monkeypatch.setattr(pygame.display, "get_surface", lambda: object())
     monkeypatch.setattr(pygame.display, "get_window_size", lambda: (2560, 1440))
     app._fit()
     assert (app.cols, app.rows) == (128, 36), "the grid did not follow the window"
