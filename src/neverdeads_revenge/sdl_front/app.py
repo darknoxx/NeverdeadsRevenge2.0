@@ -749,7 +749,16 @@ class SdlApp:
         # see-through ghost of the fight behind it.
         start = 0
         for index, screen in enumerate(self.screens):
-            if getattr(screen, "modal", False):
+            if not getattr(screen, "modal", False):
+                continue
+            # A dialog is a window and lets the floor show through it. A *room*
+            # is not: paint lands after the grid, so a painted floor under a box
+            # would be painted over the box and the dialog would vanish. Those
+            # stay solid, which is what they have always done.
+            painted = any(
+                hasattr(below, "paint_over") for below in self.screens[start:index]
+            )
+            if getattr(screen, "opaque", True) or painted:
                 start = index
         for screen in self.screens[start:]:
             screen.draw(self.grid, self)

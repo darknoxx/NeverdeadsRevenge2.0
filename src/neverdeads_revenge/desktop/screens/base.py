@@ -23,6 +23,13 @@ class Screen:
     #: the title and the game are not.
     modal = False
 
+    #: Whether a modal *covers* the stack below it. A panel that fills the screen
+    #: -- the menus, the roster -- is a room of its own and hides what is under
+    #: it; a dialog is a box, and the floor it is standing on stays visible
+    #: around it, which is what the terminal build did by dimming a modal's
+    #: background instead of clearing it.
+    opaque = True
+
     def draw(self, buffer: PatternBuffer, app) -> None:
         """Draw into ``buffer``. Called top of stack last."""
         raise NotImplementedError

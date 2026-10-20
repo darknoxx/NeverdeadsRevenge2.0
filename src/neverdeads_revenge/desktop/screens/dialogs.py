@@ -8,6 +8,9 @@ dialog opened by a held enter cannot be answered by the same hold.
 
 from __future__ import annotations
 
+import math
+
+from ..art import size
 from ..chrome import ASH, BONE, BLOOD, box, rule
 from ..theme import parse_style
 from .base import Screen
@@ -50,21 +53,35 @@ def wrap(text: str, width: int) -> list[str]:
 
 
 class _Dialog(Screen):
-    """A centred box with a title, a body and a hint."""
+    """A centred box with a title, a body and a hint.
+
+    A dialog is a *window*, not a room: it draws its own box and leaves the floor
+    around it alone, because a card is something the player reads while they are
+    still standing somewhere. The menus are the room; this is not.
+    """
 
     modal = True
+    #: And it does not cover what is under it. The exception is a room that
+    #: paints in pixels -- the arena, the turning -- where the paint lands after
+    #: the grid and would cover the box; the app keeps those dialogs solid.
+    opaque = False
+
     title = ""
     hint = ""
 
-    #: How many rows a picture takes at the top of the box. Six of a twenty-pixel
-    #: row is a blade at the size it was painted -- 120 pixels -- so the card shows
-    #: the drawing rather than a thumbnail of it.
+    #: The rows a picture may take at the top of the box: six of a twenty-pixel
+    #: row is a blade at the size it was painted, so the card shows the drawing
+    #: rather than a thumbnail of it.
     PICTURE_ROWS = 6
 
-    #: What the box shows above its words, when it has something to show. Only the
-    #: card for a picked-up blade does: the name and the numbers are the game
-    #: talking, and the picture is what the dark actually handed over.
+    #: What the box shows above its words, when it has something to show.
     picture: str | None = None
+
+    #: Whether the box is fitted to what it holds, and its lines centred. The
+    #: cards are: six lines in a frame built for thirty is a card that looks like
+    #: an empty room. A question is not -- a paragraph wants the room to say
+    #: itself, and a centred paragraph is a poem.
+    FITTED = False
 
     def __init__(self, on_done=None) -> None:
         self.on_done = on_done
@@ -72,51 +89,97 @@ class _Dialog(Screen):
     def _body(self) -> str:
         return ""
 
-    def draw(self, buffer, app) -> None:
-        width = min(buffer.cols - 6, 66)
+    # -- the geometry, in one place -----------------------------------------
+    @staticmethod
+    def _cell(buffer) -> tuple[int, int]:
+        """How wide a cell is, for a pass that has to know: ten by twenty.
+
+        The grid is drawn by an application that has a face; a frame built in a
+        test may not, and the reference cell is what the game is laid out for.
+        """
+        font = getattr(buffer, "font", None)
+        return (getattr(font, "cell_w", 10), getattr(font, "cell_h", 20))
+
+    def _picture_height(self, cell_h: int) -> int:
+        """How tall the drawing is in pixels: never bigger than it was painted.
+
+        The rows are sized for a blade, and a bottle is a smaller thing than a
+        blade. A picture stretched to fill the frame it was given looks
+        resampled, which is the one thing the sheets are drawn to avoid.
+        """
+        height = self.PICTURE_ROWS * cell_h - 6
+        measured = size(self.picture) if self.picture is not None else None
+        if measured is not None:
+            height = min(height, measured[1])
+        return height
+
+    def _picture_rows(self, cell_h: int) -> int:
+        """And how many rows of the box that takes, rounded up."""
+        if self.picture is None:
+            return 0
+        return max(1, math.ceil((self._picture_height(cell_h) + 4) / cell_h))
+
+    def _frame(
+        self, cols: int, rows: int, cell_w: int = 10, cell_h: int = 20
+    ) -> tuple[int, int, int, int]:
+        """The box, in cells: the same sums ``draw`` makes, so ``art`` agrees.
+
+        Two passes read this geometry -- the grid pass that lays the words out
+        and the picture pass that puts the drawing above them -- and a picture
+        that disagreed with the box would sit in the title or on the border.
+        """
+        lead = self._picture_rows(cell_h)
+        padded = 4 if self.FITTED else 6
+        if self.FITTED:
+            # Wide enough for the longest line it will hold, and for the title
+            # and the hint, and not a cell more.
+            widest = max(
+                [len(line) for line in self._body().split("\n")]
+                + [len(self.title) + 2, len(self.hint), 16]
+            )
+            if self.picture is not None:
+                measured = size(self.picture)
+                if measured is not None:
+                    widest = max(widest, math.ceil(measured[0] / cell_w))
+            width = max(16, min(cols - 6, 66, widest + 6))
+        else:
+            width = min(cols - 6, 66)
         body = wrap(self._body(), width - 6)
-        lead = self.PICTURE_ROWS if self.picture is not None else 0
-        height = min(buffer.rows - 2, len(body) + 6 + lead)
-        x, y = (buffer.cols - width) // 2, (buffer.rows - height) // 2
+        height = min(rows - 2, len(body) + padded + lead)
+        return (cols - width) // 2, (rows - height) // 2, width, height
+
+    def draw(self, buffer, app) -> None:
+        cell_w, cell_h = self._cell(buffer)
+        x, y, width, height = self._frame(buffer.cols, buffer.rows, cell_w, cell_h)
+        body = wrap(self._body(), width - 6)
+        lead = self._picture_rows(cell_h)
         box(buffer, x, y, width, height, title=self.title, border=BLOOD, fill=True)
         for i, line in enumerate(body[: height - 4 - lead]):
-            buffer.text(x + 3, y + 2 + lead + i, line, parse_style(BONE))
+            at = x + 3
+            if self.FITTED:
+                at = x + max(2, (width - len(line)) // 2)
+            buffer.text(at, y + 2 + lead + i, line, parse_style(BONE))
         rule(buffer, x + 1, y + height - 2, width - 2, ASH)
-        buffer.text(x + 3, y + height - 1, self.hint[: width - 6], parse_style(ASH))
-
-    def _frame(self, cols: int, rows: int) -> tuple[int, int, int, int]:
-        """The box, in cells: the same sums ``draw`` makes, so ``art`` agrees with it.
-
-        Two passes read this geometry -- the grid pass that lays the words out and
-        the picture pass that puts the drawing above them -- and a picture that
-        disagreed with the box would sit in the title or on the border.
-        """
-        width = min(cols - 6, 66)
-        body = wrap(self._body(), width - 6)
-        lead = self.PICTURE_ROWS if self.picture is not None else 0
-        height = min(rows - 2, len(body) + 6 + lead)
-        return (cols - width) // 2, (rows - height) // 2, width, height
+        hint = self.hint[: width - 6]
+        at = x + 3
+        if self.FITTED:
+            at = x + max(2, (width - len(hint)) // 2)
+        buffer.text(at, y + height - 1, hint, parse_style(ASH))
 
     def art(self, app) -> list:
         """The picture above the words, if the dialog has one."""
         if self.picture is None:
             return []
-        from ..art import Placed, size
+        from ..art import Placed
 
-        x, y, width, _height = self._frame(app.cols, app.rows)
         cell_w, cell_h = app.font.cell_w, app.font.cell_h
-        # Never bigger than it was painted: the rows are sized for a blade, and a
-        # bottle is a smaller thing than a blade. A picture stretched to fill the
-        # frame it was given is a picture that looks resampled.
-        height = self.PICTURE_ROWS * cell_h - 6
-        measured = size(self.picture)
-        if measured is not None:
-            height = min(height, measured[1])
+        x, y, width, _height = self._frame(app.cols, app.rows, cell_w, cell_h)
+        lead = self._picture_rows(cell_h)
         # Centred in the box and standing on the line above the first of the
         # body's rows, which is what the reserved rows were left for.
         centre = (x + width / 2) * cell_w
-        bottom = (y + 1 + self.PICTURE_ROWS) * cell_h - 3
-        return [Placed(self.picture, centre, bottom, height)]
+        bottom = (y + 1 + lead) * cell_h - 2
+        return [Placed(self.picture, centre, bottom, self._picture_height(cell_h))]
 
     def finish(self, app, value) -> None:
         app.pop()
@@ -316,6 +379,8 @@ class InfoScreen(_Dialog):
     and losing it.
     """
 
+    FITTED = True
+
     def __init__(
         self, title: str, name: str, text: str, picture: str | None = None
     ) -> None:
@@ -326,7 +391,9 @@ class InfoScreen(_Dialog):
         # The blade's own drawing when there is one: the card is where a player
         # first meets a weapon, and a weapon is a thing you recognise by sight.
         self.picture = picture
-        self.hint = "enter  back to the dark"
+        # Short, because the card is fitted to its contents and a long hint
+        # would be the widest thing in it.
+        self.hint = "enter  back"
 
     def _body(self) -> str:
         return f"{self._name}\n\n{self._text}"

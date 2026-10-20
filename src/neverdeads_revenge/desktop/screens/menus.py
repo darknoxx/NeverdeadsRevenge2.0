@@ -35,10 +35,11 @@ class _Panel(Screen):
     title = ""
     hint = "↑↓ scroll   esc close"
 
-    #: Cells kept free on the left of the body, for a picture that stands beside
-    #: the list. Zero for every panel that has nothing to show: the sheet is the
-    #: only one, and it is where a blade's drawing belongs.
+    #: Cells kept free beside the body, for a picture that stands next to the
+    #: list: one margin on each side, zero for every panel that has nothing to
+    #: show. The sheet is the only one, and its blade stands on the right.
     gutter = 0
+    gutter_right = 0
 
     def __init__(self) -> None:
         self.offset = 0
@@ -60,7 +61,7 @@ class _Panel(Screen):
         self._body_size = (len(body), window)
         self.offset = max(0, min(self.offset, max(0, len(body) - window)))
         left = x + 3 + self.gutter
-        room = width - 6 - self.gutter
+        room = width - 6 - self.gutter - self.gutter_right
         for i, (text, style) in enumerate(body[self.offset : self.offset + window]):
             buffer.text(left, y + 2 + i, text[:room], parse_style(style))
         rule(buffer, x + 1, y + height - 2, width - 2, ASH)
@@ -258,10 +259,11 @@ class CharacterScreen(_Panel):
 
     title = "THE HERO"
 
-    #: The blade's drawing stands in this margin, and the words move over for it.
-    #: Thirteen cells is one blade at 1:1 and no wider: the sheet is the narrowest
-    #: thing in the game and every cell of it is a rule the player is reading.
-    gutter = 13
+    #: The blade's drawing stands in this margin, on the right and out of the way
+    #: of the first thing the eye reads -- the name and the numbers. Thirteen
+    #: cells is one blade at 1:1 and no wider: the sheet is the narrowest thing
+    #: in the game, and every cell of it is a rule the player is reading.
+    gutter_right = 13
     PICTURE_ROWS = 6
 
     def art(self, app) -> list[Placed]:
@@ -281,7 +283,7 @@ class CharacterScreen(_Panel):
         height = min(app.rows - 2, 26)
         x, y = (app.cols - width) // 2, (app.rows - height) // 2
         cell_w, cell_h = app.font.cell_w, app.font.cell_h
-        centre = (x + 3 + self.gutter / 2) * cell_w
+        centre = (x + width - 3 - self.gutter_right / 2) * cell_w
         bottom = (y + 2 + self.PICTURE_ROWS) * cell_h
         return [Placed(icon, centre, bottom, self.PICTURE_ROWS * cell_h - 8)]
 
@@ -296,7 +298,7 @@ class CharacterScreen(_Panel):
         from .dialogs import wrap
 
         cols = app.cells[0]
-        room = max(16, min(cols - 4, 74) - 6 - self.gutter - 10)
+        room = max(16, min(cols - 4, 74) - 6 - self.gutter - self.gutter_right - 10)
         return wrap(text, room)
 
     def lines(self, app) -> list[tuple[str, str]]:

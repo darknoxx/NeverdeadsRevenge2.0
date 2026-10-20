@@ -3197,8 +3197,13 @@ def test_the_weapon_card_stands_the_blade_above_its_name():
     assert [piece.art for piece in pieces] == ["sprites/weapons/hummingbird.png"]
     # And it is over the words: the picture's foot is above the first body row,
     # which is the row the name is written on.
-    x, y, _width, _height = card._frame(app.cols, app.rows)
-    assert pieces[0].bottom < (y + 2 + card.PICTURE_ROWS) * app.font.cell_h
+    cell_w, cell_h = app.font.cell_w, app.font.cell_h
+    x, y, width, _height = card._frame(app.cols, app.rows, cell_w, cell_h)
+    lead = card._picture_rows(cell_h)
+    assert pieces[0].bottom <= (y + 2 + lead) * cell_h
+    # And the box is fitted to what it holds, not built for the widest card there
+    # could be: a blade's name and one line of numbers is a small card.
+    assert width < 66, "the card did not fit itself to its contents"
 
     plain = InfoScreen("A CURSE", "the grey", "it costs you something")
     assert plain.art(app) == [], "a card with no picture must not invent one"
@@ -3216,7 +3221,7 @@ def test_the_sheet_stands_the_equipped_blade_beside_the_numbers():
     state = start_run(HEROES["noxx"], 3)
     sheet = CharacterScreen(state)
 
-    assert sheet.gutter > 0, "the words were given no room to move over"
+    assert sheet.gutter_right > 0, "the words were given no room to move over"
     assert sheet.art(app) == [], "an empty hand has no picture"
 
     state.player.equipment["weapon"] = make_item(ITEMS["hummingbird"])
@@ -3278,3 +3283,42 @@ def test_a_bottle_picked_up_opens_its_own_card():
     assert isinstance(card, InfoScreen), "the bottle was picked up without a page"
     assert card.picture == "sprites/items/potion.png"
     assert run.inventory, "the card came without the item"
+
+
+def test_a_card_is_a_window_and_the_floor_stays_visible_around_it():
+    """A dialog does not black out the room: the player is still standing in it.
+
+    The terminal build dimmed a modal's background and never cleared what was
+    under it; the first version of this port rooted the whole stack at the
+    topmost modal, so a card about a bottle replaced the floor with black. The
+    box is a box: everything outside it belongs to the map.
+    """
+    from neverdeads_revenge.desktop.art import item_icon
+    from neverdeads_revenge.desktop.screens.dialogs import InfoScreen
+    from neverdeads_revenge.game.shop import describe_item
+    from neverdeads_revenge.sdl_front.app import SdlApp
+    from neverdeads_revenge.world.items import ITEMS
+
+    app = SdlApp(seed=3)
+    app.key("enter")
+    app.key("enter")
+    app.key("escape")  # the prologue, skipped
+    app.redraw()
+    floor = app.grid.cells[0][0]
+    floor_cell = (floor.char, floor.style)
+
+    template = ITEMS["potion"]
+    card = InfoScreen(
+        "A DRAUGHT",
+        "potion",
+        describe_item(template),
+        picture=item_icon(template),
+    )
+    app.push(card)
+    app.redraw()
+
+    # A corner of the frame is outside the box, and it is still the floor.
+    corner = app.grid.cells[0][0]
+    assert (corner.char, corner.style) == floor_cell, (
+        "the dialog cleared the room behind it"
+    )
