@@ -3190,3 +3190,33 @@ def test_the_sheet_stands_the_equipped_blade_beside_the_numbers():
 
     state.player.equipment["weapon"] = make_item(ITEMS["hummingbird"])
     assert [piece.art for piece in sheet.art(app)] == [weapon_icon("hummingbird")]
+
+
+def test_a_mimic_chest_opens_into_the_fight_on_the_same_keypress():
+    """The lid is an ambush, not a page. Enter opens the chest and the room turns.
+
+    A curse note between the two made the mimic read as a chest that had gone
+    wrong: the player paid a price they were never shown, then had to press the
+    key again to meet the thing that took it. There is no price and no page --
+    the answer that lifts the lid is the answer that starts the fight.
+    """
+    from neverdeads_revenge.desktop.screens.dialogs import ChestScreen
+    from neverdeads_revenge.sdl_front.app import SdlApp
+    from neverdeads_revenge.sdl_front.turning import SdlTurning
+    from neverdeads_revenge.world.items import make_chest
+
+    app = SdlApp(seed=3)
+    app.key("enter")
+    app.key("enter")
+    app.key("escape")  # the prologue, skipped
+    run = app.run
+    run.dungeon_map.items[run.player.position] = make_chest("rot", None, mimic=True)
+
+    app.key("enter")  # the chest asks
+    assert isinstance(app.screens[-1], ChestScreen), "the chest did not ask"
+
+    app.key("enter")  # and this one opens it
+    assert isinstance(app.screens[-1], SdlTurning), (
+        "the lid waited for a third keypress"
+    )
+    assert run.curses == [], "the lid charged a curse"

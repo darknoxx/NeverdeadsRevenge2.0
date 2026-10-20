@@ -320,11 +320,28 @@ class GameScreen(Screen):
         app.play("chest_open")
         action = Action.OPEN_CHEST if answer == OPEN else Action.TAKE_FAME
         run = self.state
+        hp = run.player.hp
+        gold = run.gold
         gifts_before = set(run.gifts)
         curse_keys_before = {curse.key for curse in run.curses}
         equipment_before = dict(run.player.equipment)
+        level_before = run.level
         result = perform_action(run, action)
         app.play_after((len(run.log), run.depth, run.level))
+        if run.encounter is not None:
+            # THE LID. The chest was a jaw, and the answer that lifted the lid is
+            # the answer that starts the fight: the floor hands it over here, on
+            # the same keypress. Nothing is said about a curse that was never
+            # charged, and there is no page to dismiss before the room turns.
+            self._pending = (
+                hp,
+                gold,
+                gifts_before,
+                len(curse_keys_before),
+                level_before,
+            )
+            app.open_encounter()
+            return
         if result.died or result.escaped:
             self._game_over(app, won=result.escaped)
             return

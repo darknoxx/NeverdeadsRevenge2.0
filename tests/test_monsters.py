@@ -120,6 +120,33 @@ def test_a_mimic_chest_is_a_jaw():
     assert state.encounter is not None, "the lid did not bite"
     assert state.encounter.behaviour == "mimic"
     assert state.encounter.name == "lid"
+    # It is a monster encounter and not a bargain: nothing was ever on offer, so
+    # nothing is charged. A curse here read as the chest's price and made the
+    # jaw look like a chest that had simply gone wrong.
+    assert state.curses == [], "the lid charged a price it never named"
+
+
+def test_the_wager_opens_the_same_lid_and_pays_no_fame_for_it():
+    """`f` opens the lid exactly as `enter` does: the jaw does not take wagers.
+
+    Without this the fame answer was a way to make a mimic chest vanish for free
+    -- no curse, no fight, no sword -- which is the one answer to a chest that
+    should never be the safe one.
+    """
+    from neverdeads_revenge.game.actions import Action, perform_action
+    from neverdeads_revenge.world.items import make_chest
+
+    state = _run()
+    state.dungeon_map.items[state.player.position] = make_chest(
+        "rot", None, mimic=True
+    )
+    fame = state.fame
+
+    perform_action(state, Action.TAKE_FAME)
+
+    assert state.encounter is not None and state.encounter.name == "lid"
+    assert state.curses == [], "the lid charged a price it never named"
+    assert state.fame == fame, "there was no courage in it, and no coin"
 
 
 # -- the echo --------------------------------------------------------------

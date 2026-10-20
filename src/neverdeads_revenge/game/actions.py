@@ -1347,6 +1347,27 @@ def _cleanse(state: GameState) -> ActionResult:
     return ActionResult(consumed_turn=False, acted=False)
 
 
+def _the_lid_bites(state: GameState, chest) -> bool:
+    """Whether that was a chest at all -- THE LID, and the fight starts now.
+
+    A mimic is not a price, it is an encounter: the player asked for a reward and
+    the reward had teeth. So it takes no curse, hands over no contents, and
+    leaves nothing to read -- the lid is lifted and the thing is already in the
+    room. The front end reads ``state.encounter`` the moment the answer is given,
+    which is what makes the arena open on the same keypress that lifted it.
+    """
+    if not getattr(chest, "mimic", False):
+        return False
+
+    from .actors import ENEMIES, make_enemy, scale_template
+
+    lid = make_enemy(scale_template(ENEMIES["lid"], state.depth), state.player.position)
+    state.enemies.append(lid)
+    state.encounter = lid
+    state.say("The lid is a jaw, and it has been patient.", LogKind.BAD)
+    return True
+
+
 def _open_chest(state: GameState) -> ActionResult:
     """Prise open the chest underfoot: the reward, and the bill.
 
@@ -1358,6 +1379,10 @@ def _open_chest(state: GameState) -> ActionResult:
         return ActionResult(consumed_turn=False, acted=False)
 
     state.dungeon_map.remove_item(state.player.position)
+    if _the_lid_bites(state, chest):
+        # No curse and no contents: what was under the lid was the lid.
+        return ActionResult(consumed_turn=False, acted=False)
+
     state.say("The lid gives, and something in the dark takes note.", LogKind.SYSTEM)
 
     curse = curse_by_key(chest.curse)
@@ -1373,20 +1398,6 @@ def _open_chest(state: GameState) -> ActionResult:
         )
     elif curse is not None:
         state.add_curse(curse)
-
-    if chest.mimic:
-        # THE LID. The price was paid and the lid was a jaw: it was never a chest,
-        # it was a thing wearing one. The fight starts with it already at the door,
-        # and no contents change hands.
-        from .actors import ENEMIES, make_enemy, scale_template
-
-        lid = make_enemy(
-            scale_template(ENEMIES["lid"], state.depth), state.player.position
-        )
-        state.enemies.append(lid)
-        state.encounter = lid
-        state.say("The lid is a jaw, and it has been patient.", LogKind.BAD)
-        return ActionResult(consumed_turn=False, acted=False)
 
     if chest.gift is not None:
         state.gifts.add(chest.gift)
@@ -1889,6 +1900,10 @@ def _take_fame(state: GameState) -> ActionResult:
         return ActionResult(consumed_turn=False, acted=False)
 
     state.dungeon_map.remove_item(state.player.position)
+    if _the_lid_bites(state, chest):
+        # The wager opens the lid too, and the lid does not care what was
+        # wagered: the same jaw, and no curse, because there was never a price.
+        return ActionResult(consumed_turn=False, acted=False)
 
     curse = curse_by_key(chest.curse)
     new_price = curse is not None and not any(
