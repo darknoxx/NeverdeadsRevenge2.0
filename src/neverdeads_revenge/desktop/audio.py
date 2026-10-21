@@ -126,11 +126,16 @@ DEBUG_ENV = "NEVERDEADS_REVENGE_SOUND_LOG"
 #: Measured, not guessed: it is the volume of the mixing buffer the device has
 #: not played yet, in seconds. And with mixing it is a *net* rather than a
 #: policy: two sounds in one turn play on top of each other, so the buffer's
-#: length is bounded by the longest clip in the game (``death.wav``, 640ms) and
-#: 800ms is headroom over a case that should not be reachable. It exists so
-#: that a bug in the mixer cannot turn into a fight that is three seconds
-#: behind itself.
-MAX_BACKLOG = 0.80
+#: length is **the longest clip still playing**, not the sum of everything
+#: queued -- which is why this limit has to sit *above* the longest clip in the
+#: pack (``dark_bell.wav``, 950ms) instead of below it. At 800ms every sound
+#: queued while a bell or a level-up was ringing was dropped, and the one that
+#: went missing most often was the fight's own sting: the letter came at the
+#: camera in silence. A test holds this above the longest sound.
+#:
+#: What it is for: a device that stops draining must not turn a fight into a
+#: queue three seconds behind itself.
+MAX_BACKLOG = 1.20
 
 #: How many failures in a row before the game gives up on sound.
 #:
@@ -272,6 +277,10 @@ LOUDNESS: dict[LogKind, int] = {
 #: and swallowing it because a fight was in progress would be the one case where
 #: the fix is worse than the problem.
 URGENT: frozenset[str] = frozenset({
+    # The fight's own sting: the one sound whose *absence* is the moment
+    # disappearing, because the letter is coming at the camera and nothing else
+    # is happening. It plays before the room has any other noise to hide in.
+    "enemy_spawn",
     "level_up",
     "skill_unlocked",
     "death_game_over",

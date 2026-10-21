@@ -685,3 +685,39 @@ def test_the_cursor_is_quieter_than_the_choice_it_makes():
     )
     # And not *nothing*: a move nobody hears is a cursor that feels broken.
     assert move > confirm - 12.0, f"the cursor is inaudible at {move:.1f}dB"
+
+
+def test_the_backlog_limit_is_longer_than_the_longest_sound():
+    """A limit below the longest clip drops every sound that lands during it.
+
+    With mixing the buffer's length is the longest clip still playing, not the
+    sum of the queue -- so at 800ms the pack's 950ms bell (and the 870ms death,
+    and the 780ms level-up) each silenced everything queued behind them. The
+    fight's sting was the one players noticed: the letter came at the camera and
+    made no noise.
+    """
+    longest = 0.0
+    longest_name = ""
+    for path in SOUNDS_DIR.glob("*.wav"):
+        with wave.open(str(path), "rb") as handle:
+            seconds = handle.getnframes() / handle.getframerate()
+        if seconds > longest:
+            longest, longest_name = seconds, path.name
+
+    assert audio.MAX_BACKLOG > longest, (
+        f"{longest_name} ({longest:.2f}s) is longer than the backlog limit "
+        f"({audio.MAX_BACKLOG:.2f}s): every sound during it is dropped"
+    )
+
+
+def test_a_short_sound_lands_on_top_of_a_long_one(devices, monkeypatch):
+    """The sting during a bell, which is what the limit above was about."""
+    sfx = Sfx()
+    sfx._close_stream()  # nothing draining, so the ring keeps what is put in it
+    sfx._ring.add(b"\x00\x00" * int(RATE * 0.9))
+    notes: list[str] = []
+    monkeypatch.setattr(sfx, "_note", notes.append)
+
+    sfx._play_now("enemy_spawn")
+
+    assert any("PLAY enemy_spawn" in line for line in notes), notes
