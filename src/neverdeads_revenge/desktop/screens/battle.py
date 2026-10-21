@@ -38,7 +38,12 @@ from ...game.battle import (
     Said,
     Struck,
 )
-from ...game.specials import SPECIALS, Special, special_by_key
+from ...game.specials import (
+    FRIENDS_LIKE_THESE,
+    SPECIALS,
+    Special,
+    special_by_key,
+)
 from ...game.statuses import status_by_key
 from ...game.state import LogKind
 from ..art import exists as art_exists
@@ -207,6 +212,14 @@ STAGE_LIFT = 1
 #: monsters scale with their depth.
 MONSTER_SIZES = (62, 52, 46)
 HERO_SIZE = 88
+#: FRIENDS LIKE THESE: how long the shadow is seen over the monsters -- one
+#: second and a bit, rising and fading -- and how far he rises, in pixels. While
+#: he is out, Noxx is drawn without him, because the thing that lives in him is
+#: standing somewhere else.
+DRIFT_LIFE = 1.1
+DRIFT_RISE = 86
+DRIFT_SCALE = 0.65
+
 #: The arrow over the one the choice is on.
 ARROW = "▼"
 #: What a blow's word is painted in -- the flash a struck figure wears. Green for
@@ -685,6 +698,10 @@ class BattleScreen(Screen):
         self._clock = 0.0
         #: Who is mid-strike: ``id(attacker) -> (id(target), when it began)``.
         self._strikes: dict[int, tuple[int, float]] = {}
+        #: The shadow out over the monsters: ``(art, x, bottom, when)`` per enemy
+        #: the trick opened. Not a particle -- it is a *sprite*, drawn by the
+        #: pixel pass, and it is what the wound it left behind looks like.
+        self._drift: list[tuple[str, float, float, float]] = []
         #: Who was struck: when the blow inside their strike lands, and the
         #: colour the trick that landed it is painted in.
         self._hurts: dict[int, tuple[float, str, str]] = {}
@@ -1189,6 +1206,12 @@ class BattleScreen(Screen):
             self._hitstop = max(0.0, self._hitstop - dt)
             return
         self._clock += dt
+        if self._drift:
+            # Gone once they have faded: a run of forty fights must not carry
+            # forty ghosts.
+            self._drift = [
+                one for one in self._drift if self._clock - one[3] < DRIFT_LIFE
+            ]
         if self._wash is not None and not self._wash.spent and self._clock >= self._wash.when:
             # The blow landed inside this frame, so the room stops for the next
             # few: the hitstop is spent *at* the impact and not at the swing.
@@ -1401,6 +1424,26 @@ class BattleScreen(Screen):
             self._flourish = (event.flair, self._clock)
             look = self._look(event.flair)
             self._self = (look, FLAIR_COLOURS.get(event.flair, "#ffffff"), self._clock)
+            if event.flair == FRIENDS_LIKE_THESE:
+                # One shadow over each of them, leaving the wound behind. Placed
+                # from the staging rather than from the log: the thing has to come
+                # out of *their* squares.
+                art = "sprites/atritas.png"
+                if art_exists(art):
+                    for enemy in self.battle.living_enemies():
+                        figure = self._figure_of(enemy, app)
+                        if figure is None:
+                            continue
+                        self._drift.append(
+                            (
+                                art,
+                                float(figure.cx),
+                                float(
+                                    figure.row * app.font.cell_h - THICKNESS
+                                ),
+                                self._clock,
+                            )
+                        )
             point = self._point_of(event.actor, app)
             if point is not None:
                 app.effects.spark(
@@ -1870,6 +1913,12 @@ class BattleScreen(Screen):
         hero = self.battle.hero
         size = round(HERO_SIZE * scale)
         art = _picture(hero.name)
+        if hero.name == "Noxx" and self.shadow_is_out():
+            # The thing that lives in him is over the monsters; the body it lives
+            # in is drawn without it until it comes back.
+            bare = _picture("noxx_noatritas")
+            if art_exists(bare):
+                art = bare
         staged.append(
             Staged(
                 actor=hero,
@@ -1955,6 +2004,12 @@ class BattleScreen(Screen):
         if measured is None:
             return 2
         return max(2, round(measured[0] / cell_w))
+
+    def shadow_is_out(self) -> bool:
+        """Whether a FRIENDS LIKE THESE shadow is still out over the room."""
+        return any(
+            self._clock - when < DRIFT_LIFE for _art, _x, _y, when in self._drift
+        )
 
     def _figure_of(self, actor, app) -> Staged | None:
         cols, rows = self._dims(app)

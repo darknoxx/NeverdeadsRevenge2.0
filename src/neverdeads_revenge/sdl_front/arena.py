@@ -47,6 +47,9 @@ from ..desktop.screens.battle import (
     STATUS_ROW_DOWN,
     STATUS_ROW_IN,
     STATUS_SLOT,
+    DRIFT_LIFE,
+    DRIFT_RISE,
+    DRIFT_SCALE,
     THICKNESS,
     WALL_FAR,
     WALL_NEAR,
@@ -88,6 +91,8 @@ class SdlArena(Screen):
         #: One transparent surface to wash the room with, kept and refilled: a
         #: landed blow throws a colour over everything for a few frames.
         self._overlay = None
+        #: The shadow at the size it drifts at, made once per picture.
+        self._drift_faces: dict[str, object] = {}
 
     def paper(self, cols: int, rows: int, font):
         """The whole frame's paper, when the room is a painting.
@@ -219,6 +224,10 @@ class SdlArena(Screen):
                 fades[id(figure.actor)],
                 poses[id(figure.actor)],
             )
+        # FRIENDS LIKE THESE: the shadow out over the monsters, rising and fading.
+        # After the figures and before the numbers -- it is what the wound looks
+        # like, and a number over it is still the number that has to be read.
+        self._the_shadow_out(surface)
         # The panels again, over whoever is standing in front of them: the plate
         # the hero's feet are in, and the list of the five when it is open. Painted
         # from the grid -- which is under the art and has to be, or the room would
@@ -245,6 +254,47 @@ class SdlArena(Screen):
         if self.arena.verdict is not None:
             self._verdict(surface, font, cols, rows)
         self._wash(surface)
+
+    def _the_shadow_out(self, surface) -> None:
+        """Atritas over each enemy he opened, one beat after the trick landed.
+
+        The sprite is the arena's own -- he is a *figure*, not a spark -- so it is
+        scaled once and drawn with the fade in its alpha: up and gone in a little
+        over a second, which is long enough to read and short enough to be part of
+        the blow rather than a scene of its own.
+        """
+        import pygame
+
+        for art, x, bottom, when in self.arena._drift:
+            age = self.arena._clock - when
+            if not (0.0 <= age <= DRIFT_LIFE):
+                continue
+            image = self._drift_faces.get(art)
+            if image is None and art not in self._drift_faces:
+                loaded = load(art)
+                if loaded is None:
+                    self._drift_faces[art] = None
+                else:
+                    size = (
+                        max(1, round(loaded.get_width() * DRIFT_SCALE)),
+                        max(1, round(loaded.get_height() * DRIFT_SCALE)),
+                    )
+                    self._drift_faces[art] = pygame.transform.smoothscale(
+                        loaded, size
+                    )
+                image = self._drift_faces.get(art)
+            if image is None:
+                continue
+            share = age / DRIFT_LIFE
+            ghost = image.copy()
+            ghost.set_alpha(round(255 * (1.0 - share) * 0.85))
+            surface.blit(
+                ghost,
+                (
+                    round(x - ghost.get_width() / 2),
+                    round(bottom - ghost.get_height() - share * DRIFT_RISE),
+                ),
+            )
 
     def _ordered(self, figures) -> list:
         """Who is drawn in which order: a striker over what it is hitting.
