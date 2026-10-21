@@ -629,6 +629,11 @@ def _drop_coins(state: GameState, enemy: Actor) -> None:
     value = max(
         1, round(state.rng.between(low, high) * state.coin_factor * scale)
     )
+    if enemy.stolen:
+        # THE PICKER carries what it took. Kill it and the purse is whole again
+        # -- its own coin *and* yours -- which is the whole of why chasing it is
+        # worth the turns. Let it leave and the difference is what it cost.
+        value += round(enemy.stolen * state.coin_factor)
     _scatter_coins(state, enemy.position, value)
 
 
@@ -2576,9 +2581,16 @@ def resolve_enemy_attack(
             # whole of the fight.
             inflict(state, attacker, attacker.self_inflicts)
         if attacker.behaviour == "thief" and state.gold:
-            # THE PICKER: it wants the purse, not the blood. One or two coins a
-            # blow, and it remembers what it took -- that is what it leaves with.
-            taken = min(state.gold, state.rng.between(1, 2))
+            # THE PICKER: it wants the purse, not the blood. A *share* of what it
+            # is carrying a blow -- so the theft grows with the floor the way its
+            # purse does, and a hero who trades blows with it for a whole fight
+            # has paid for a potion by the time it is done. It remembers every
+            # coin: that is what it leaves with, and what it drops if it dies.
+            low, high = attacker.gold
+            taken = min(
+                state.gold,
+                state.rng.between(max(2, low // 8), max(3, high // 5)),
+            )
             state.gold -= taken
             attacker.stolen += taken
             state.say(
