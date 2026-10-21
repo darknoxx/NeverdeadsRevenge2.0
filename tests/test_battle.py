@@ -317,7 +317,10 @@ def test_a_mouthful_in_the_arena_is_the_rooms_turn_and_not_the_floors():
     assert any("drink the potion" in line for line in lines(events))
     assert state.player.stats.hp > 5, "the potion mended nothing"
     assert state.encounter is None, "the floor handed over a fight mid-fight"
-    assert state.total_turns == turns_before, "the mouthful ticked the run's clock"
+    # The clock moves exactly once -- the arena's own turn for the command --
+    # and the *floor* does not get a phase out of it. It used to not move at all,
+    # which made every fight free and the speed score a lie.
+    assert state.total_turns == turns_before + 1, "the mouthful was free"
     assert not battle.over, "one mouthful finished a fight"
 
 
@@ -1467,3 +1470,59 @@ def test_borrowed_armour_goes_back_when_the_room_is_done():
     battle._close_the_fight()
 
     assert battle.hero.stats.armor == before, "the ice came home with him"
+
+
+def test_every_command_in_a_fight_costs_a_turn():
+    """A fight is not free. One hero command is one turn, as one step is one turn.
+
+    Without this a whole encounter cost nothing: ``KILL_SCORE`` is calibrated
+    against "a fight costs fifty to ninety points", the speed bonus counted a
+    run that fought everything as if it had walked straight to the stairs, and
+    the patience amulet -- better the longer a fight runs -- never grew.
+    """
+    battle = duel("noxx", 5)
+    run_before = battle.state.total_turns
+    floor_before = battle.state.turn
+
+    commands = 0
+    for _ in range(3):
+        if battle.over:
+            break
+        battle.choose(ATTACK, battle.enemies[0])
+        commands += 1
+
+    assert commands == 3, "the duel ended too early to measure"
+    assert battle.state.total_turns == run_before + 3, "a command was free"
+    assert battle.state.turn == floor_before + 3, "the floor clock did not move"
+
+
+def test_a_wound_in_the_arena_runs_on_the_heros_turn_whatever_the_monsters_speed():
+    """Statuses tick once per hero turn, not once per victim turn.
+
+    The room has one clock and it is his. That is what makes a status build a
+    *speed* build: a quicker hero takes more turns, and every wound he has
+    opened runs on each of them. A wound on a slow monster must therefore tick as
+    often as a wound on a quick one -- the old rule, per victim turn, would make
+    the quick one bleed four times as often inside the same round.
+    """
+    from neverdeads_revenge.game.statuses import STATUSES
+
+    battle = duel("noxx", 5, count=2)
+    slow, quick = battle.enemies
+    slow.stats.speed, quick.stats.speed = 0.4, 4.0
+    for one in (slow, quick):
+        one.stats.max_hp = one.stats.hp = 999
+        one.statuses["bleed"] = 8
+        one.status_stacks["bleed"] = 1
+
+    # Aim at the quick one, so everything the slow one loses is the wound.
+    for _ in range(3):
+        if battle.over:
+            break
+        battle.choose(ATTACK, quick)
+
+    expected = 999 - 3 * STATUSES["bleed"].damage
+    assert slow.stats.hp == expected, (
+        f"the slow one bled to {slow.stats.hp}, not {expected} -- the wound "
+        "followed the monster's turns instead of the hero's"
+    )

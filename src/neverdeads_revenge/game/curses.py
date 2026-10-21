@@ -94,7 +94,7 @@ CURSES: dict[str, Curse] = {
     "frail": Curse(
         key="frail",
         name="FRAIL",
-        price="two points of armour, gone",
+        price="two points of protection, gone -- armour or blood",
         modifiers=Modifiers(armor=-2),
     ),
     "heavy": Curse(

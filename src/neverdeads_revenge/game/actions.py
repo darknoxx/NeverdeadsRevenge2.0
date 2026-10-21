@@ -202,11 +202,14 @@ def _the(name: str) -> str:
 def tick_statuses(state: GameState, actor: Actor) -> None:
     """Run whatever a blow left behind, at the start of the actor's own turn.
 
-    Counted in the *victim's* turns, which is what makes a poison mean different
-    things to different monsters: eight turns is a long time for a ghoul and not
-    very long at all for something quick. The decrement comes first so that the
-    last turn still hurts -- a status that expires before it bites is a status
-    that lied about its length.
+    On the floor this is the victim's turn, so a poison means different things to
+    different monsters: eight turns is a long time for a ghoul and not very long
+    at all for something quick. In the arena the whole room runs on the hero's
+    turn instead -- ``Battle._lapse`` calls this for everybody once per round --
+    which is what makes a status build a speed build.
+
+    The decrement comes first so that the last turn still hurts -- a status that
+    expires before it bites is a status that lied about its length.
     """
     if not actor.statuses:
         return
@@ -1066,11 +1069,14 @@ def resolve_player_attack(
     # has to remember whether there has been one. The flag is cleared on every
     # descent, with the monsters it belonged to.
     first = not target.struck
-    # The blade's own rule, read here: *first* and the hero's blood are facts
-    # about this moment, and the weapon is only where the rule is written down.
+    # The blade's own rule, though, is about the *fight* and not about the
+    # monster: THE FIRST BLOW says "of a fight", and a room of three used to pay
+    # its seven three times. A swing that misses spends nothing -- the flag is
+    # set on a blow that lands.
+    opening = not state.first_blow_spent
     # Only on a swing *with* the blade: a trick is not the weapon, and a trick
     # that inherited THE FIRST BLOW's seven was the sword casting the spell.
-    bonus_flat = bonus + (_weapon_rule_bonus(state, first) if wield else 0)
+    bonus_flat = bonus + (_weapon_rule_bonus(state, opening) if wield else 0)
     # Three gifts load the blow itself. The charge and the debt are read here and
     # spent below, and only on a *landing* blow -- a swing that missed was not
     # the blow either of them was waiting for, which is the rule the patient
@@ -1157,6 +1163,7 @@ def resolve_player_attack(
             # specials carry their own fire already.
             inflict(state, target, ("burn",))
     if wield and outcome.hit:
+        state.first_blow_spent = True
         weapon = state.player.equipment.get("weapon")
         if weapon is not None and weapon.self_inflicts:
             # THE BLOOD PRICE: the blow costs the hand that swings it, on every
@@ -1902,9 +1909,10 @@ def _take_fame(state: GameState) -> ActionResult:
     """Take the curse, and the promise with it.
 
     The third answer to a chest, and the only one that trades *now* for *later*:
-    the price is paid, the thing inside is left where it lies, and what the
-    player gets instead is a bigger number at the end of the run. The score is
-    the board and the board is the only fame there is, which is the joke.
+    the price is paid and the thing inside is *lost* -- the chest goes with it --
+    and what the player gets instead is a bigger number at the end of the run.
+    The score is the board and the board is the only fame there is, which is the
+    joke.
 
     There is no ceiling on it and there does not need to be one -- a chest is
     only ever placed for a curse the player has not already paid, so the

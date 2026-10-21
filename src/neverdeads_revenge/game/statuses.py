@@ -13,9 +13,15 @@ eight turns, one a turn. The first is for a fight you are standing in; the secon
 is for a fight you are leaving. A weapon that does one is not a weapon that does
 the other, and a player who has both has a reason to think about which to swing.
 
-Counted in the victim's turns, not the attacker's. A ghoul that acts every other
-turn must not bleed at the player's rate, and this is the same rule the borrowed
-face already uses for the turn after a kill.
+Counted in **turns, and a turn means the clock the wound is running on**. On the
+floor that is the victim's own turn -- a ghoul that acts every other turn must
+not bleed at the player's rate. In the arena it is the *hero's* turn, once per
+round for everybody: the room has one clock and it is his.
+
+That asymmetry is deliberate. It makes a status build a *speed* build -- more of
+the hero's turns is more ticks of every wound he has opened, which is the whole
+reason to carry a blade that cuts instead of one that hits -- while the floor
+keeps the older, slower rule the map's own queue is built on.
 
 The table lives in ``game/`` and knows nothing about the world: it says what a
 status *is*, and ``actions.py`` says when it runs.

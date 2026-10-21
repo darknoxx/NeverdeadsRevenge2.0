@@ -2644,3 +2644,23 @@ def test_fame_survives_a_save_and_an_old_save_does_not_have_it():
     payload = dump(state)
     payload.pop("fame")
     assert load(payload).fame == 0
+
+
+def test_frail_bites_a_hero_who_never_wore_armour():
+    """The curse takes two points of protection, and armour cannot go below none.
+
+    For a hero with no armour at all -- Noxx -- FRAIL used to be a no-op: the
+    damage maths clamped at zero and the wraith's touch did nothing. Below zero
+    is protection that is not there, and the blow lands that much harder.
+    """
+    from neverdeads_revenge.game.actors import NOXX
+    from neverdeads_revenge.game.curses import CURSES
+    from neverdeads_revenge.game.state import start_run
+
+    state = start_run(NOXX, seed=3)
+    assert state.player.armor == 0, "Noxx was supposed to have no coat"
+
+    state.add_curse(CURSES["frail"])
+
+    assert state.player.armor == -2
+    assert state.player.hurt(5) == 7, "the curse did nothing to an unarmoured hero"

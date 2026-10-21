@@ -93,7 +93,10 @@ def dress_the_echo(enemies, scores) -> None:
 
     if not scores:
         return
-    best = scores[0]
+    # The board is sorted by *score*, and the echo is the run that got
+    # **furthest**: a shallow run that found two chests could outscore a deep one
+    # and the echo would wear the wrong face. Depth first, score to break a tie.
+    best = max(scores, key=lambda entry: (entry.depth, entry.score))
     for enemy in enemies:
         if enemy.behaviour != "echo":
             continue
@@ -111,10 +114,17 @@ def dress_the_echo(enemies, scores) -> None:
             low, high = enemy.stats.damage
             enemy.stats.damage = (low + m.damage, high + m.damage)
             enemy.stats.crit_chance = min(1.0, enemy.stats.crit_chance + m.crit_chance)
+            # Not only the numbers: a blade that opens a wound still opens one in
+            # the hands of a shade. Pierce is the one that cannot be copied --
+            # ``Actor.pierce`` is the player's own property -- and it is left out
+            # rather than pretended.
+            enemy.inflicts = tuple(weapon.inflicts)
+            enemy.self_inflicts = tuple(weapon.self_inflicts)
         coat = ITEMS.get(best.armour)
         if coat is not None and coat.slot == "armour":
             enemy.stats.armor += coat.modifiers.armor
             enemy.stats.evasion += coat.modifiers.evasion
+            enemy.thorns = coat.thorns
 
 
 class SdlApp:

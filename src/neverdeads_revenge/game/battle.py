@@ -339,6 +339,10 @@ class Battle:
         self.over = False
         self.won = False
         self.escaped = False
+        #: The first landing blow of the fight is a fact about the *fight*, not
+        #: about each monster: THE FIRST BLOW says "of a fight" and paid seven
+        #: once per target, so a room of three paid it three times.
+        state.first_blow_spent = False
         #: Whether the round is standing still, waiting on the hero. The one
         #: piece of bookkeeping that makes a *round* out of everybody's turns:
         #: the hero's command is the command of his place in it, and the round
@@ -472,6 +476,13 @@ class Battle:
             return events
         self._hero_up = False
         self._turns.append(self.hero)
+        # And the clock. A fight used to be *free*: no turn, no time, no score --
+        # which made killing score-positive and the speed bonus a lie, because
+        # ``KILL_SCORE`` is calibrated against "a fight costs fifty to ninety
+        # points" and it cost nothing at all. One hero command is one turn here,
+        # exactly as one step is one turn on the floor.
+        self.state.turn += 1
+        self.state.total_turns += 1
         #: BETWEEN BLOWS: until the end of this round, nothing finds the hero.
         self._unseen = False
         #: THE HOARFROST: until the end of this round, whoever lands a blow on him
@@ -1346,8 +1357,14 @@ class Battle:
         lives where closing happens. Inventing a second reading of it for the
         arena would be two opinions about one word.
         """
-        if (attacker.behaviour == "thief" and attacker.stolen
-                and attacker.stats.hp * 2 < attacker.stats.max_hp):
+        # And it leaves when there is nothing left to take: with an empty purse
+        # it can never set ``stolen``, so the old rule kept it in the room until
+        # one of the two died -- a purse with nothing in it, fought to the death.
+        if (
+            attacker.behaviour == "thief"
+            and (attacker.stolen or not self.state.gold)
+            and attacker.stats.hp * 2 < attacker.stats.max_hp
+        ):
             # THE PICKER leaves when it has something to leave with, and it does
             # not wait to be killed for it. The coins are gone; the room is
             # quieter.

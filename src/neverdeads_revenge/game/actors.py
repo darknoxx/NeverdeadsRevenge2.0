@@ -101,7 +101,15 @@ class Stats:
         rather than around. THE NEEDLE carries it, and a coat that is ignored in
         part is the answer a ghoul's plating asks for.
         """
-        amount = max(0, amount - max(0, self.armor + bonus_armor - pierce))
+        # No clamp at zero on the *armour itself*: FRAIL takes two points off, and
+        # for a hero who never had two the curse used to do nothing at all. Below
+        # zero it is protection that is not there, and the blow lands that much
+        # harder. Pierce, though, only ever takes armour *away* -- a needle that
+        # went through a coat must not add damage to a hero who had none.
+        protection = self.armor + bonus_armor
+        if protection > 0:
+            protection = max(0, protection - pierce)
+        amount = max(0, amount - protection)
         self.hp = max(0, self.hp - amount)
         return amount
 
@@ -920,8 +928,10 @@ ENEMIES: dict[str, EnemyTemplate] = {
         name="hush",
         glyph="h",
         color="#8a8a8a",
-        # While it lives the dark does not *pay*: no kill point a turn, no point
-        # a kill. A hero is his tricks, and this takes them away without touching
+        # While it lives the dark does not *pay*: the arena's one kill point a
+        # turn stops coming in. There is no point a kill in this game, and the
+        # old sentence promised one. It does not touch health, which is the
+        # whole of what it is: a hero is his tricks. A hero is his tricks, and this takes them away without touching
         # his health -- the fight nobody has practised.
         behaviour="hush",
         stats=Stats(max_hp=14, hp=14, speed=1.15, damage=(4, 6), evasion=2),

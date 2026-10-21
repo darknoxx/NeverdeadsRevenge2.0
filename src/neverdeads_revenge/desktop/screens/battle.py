@@ -979,10 +979,13 @@ class BattleScreen(Screen):
             # with a price -- everything still standing gets a blow at the hero's
             # back -- and a key that walks out for nothing would make every
             # encounter in the dungeon optional.
-            self.lines = [
-                *self.lines,
-                Said("The only way out of this is through it.", LogKind.PLAIN),
-            ][-LOG_LINES:]
+            if not event.isAutoRepeat():
+                # Once per press: a held key used to write the same line sixty
+                # times and push everything else out of the log.
+                self.lines = [
+                    *self.lines,
+                    Said("The only way out of this is through it.", LogKind.PLAIN),
+                ][-LOG_LINES:]
             return True
         if self.busy:
             # The fight is talking. It will not be interrupted mid-sentence, or

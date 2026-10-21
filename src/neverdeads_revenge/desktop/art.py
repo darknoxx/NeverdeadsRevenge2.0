@@ -156,6 +156,12 @@ def exists(name: str) -> bool:
     return path(name).exists()
 
 
+#: The sizes already read, by path. The answer is a fact about a file that never
+#: changes under a running game, and this is asked per *frame* -- a full read of a
+#: half-megabyte backdrop sixty times a second was a millisecond nobody needed.
+_SIZES: dict[Path, tuple[int, int]] = {}
+
+
 def size(name: str) -> tuple[int, int] | None:
     """How big that piece of art is in pixels, or ``None`` if it cannot be read.
 
@@ -164,15 +170,24 @@ def size(name: str) -> tuple[int, int] | None:
     wide a picture is is a fact about the picture. Eight bytes of PNG -- the
     signature, the chunk header, then width and height, big-endian -- and both
     front ends get the same answer without either of them being involved.
+
+    Twenty-four bytes and a cache: the old version read the *whole file* to look
+    at its first twenty-four, and it is called from the per-frame path.
     """
     address = path(name)
+    known = _SIZES.get(address)
+    if known is not None:
+        return known
     try:
-        header = address.read_bytes()[:24]
+        with address.open("rb") as handle:
+            header = handle.read(24)
     except OSError:
         return None
     if len(header) < 24 or header[:8] != b"\x89PNG\r\n\x1a\n":
         return None
-    return (
+    measured = (
         int.from_bytes(header[16:20], "big"),
         int.from_bytes(header[20:24], "big"),
     )
+    _SIZES[address] = measured
+    return measured

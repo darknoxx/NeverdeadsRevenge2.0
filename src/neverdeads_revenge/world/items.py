@@ -676,8 +676,9 @@ ITEMS: dict[str, ItemTemplate] = {
         kind="weapon",
         slot="weapon",
         # The strongest cheap steel in the game, and it takes a cut for every
-        # blow: five now, and a wound of your own that keeps opening.
-        modifiers=Modifiers(damage=5),
+        # blow. Six and not five: at five it was THE LAST ARGUMENT with a
+        # wound and no armour, which is a downside and not a choice.
+        modifiers=Modifiers(damage=6),
         self_inflicts=("bleed",),
         chest_only=True,
         weight_growth=1.15,

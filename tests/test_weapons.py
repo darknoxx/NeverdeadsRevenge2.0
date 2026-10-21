@@ -72,6 +72,31 @@ def test_the_first_blow_is_worth_seven_once():
     assert damages["rule"][1] == damages["plain"][1], "the blade paid out twice"
 
 
+def test_the_first_blow_is_paid_once_per_fight_and_not_once_per_monster():
+    """A room of three used to pay the seven three times.
+
+    The card says "the first blow of a fight"; the flag it reads was the target's,
+    so every monster in the room was somebody's first. Two runs of one seed, the
+    rule against the same blade with the rule taken off, and two *different*
+    targets: only the first blow is seven apart.
+    """
+    plain = replace(ITEMS["first_blow"], rule="")
+    damages: dict[str, tuple[int, int]] = {}
+    for label, template in (("plain", plain), ("rule", ITEMS["first_blow"])):
+        state = _run()
+        state.player.equipment["weapon"] = template
+        first, second = state.enemies[0], state.enemies[1]
+        for target in (first, second):
+            target.stats.max_hp = target.stats.hp = 999
+        damages[label] = (
+            resolve_player_attack(state, first).damage,
+            resolve_player_attack(state, second).damage,
+        )
+
+    assert damages["rule"][0] == damages["plain"][0] + 7, damages
+    assert damages["rule"][1] == damages["plain"][1], "a second monster got a first blow"
+
+
 # -- the coward's edge -------------------------------------------------------
 def test_the_cowards_edge_is_worth_four_only_above_half():
     state = _run()

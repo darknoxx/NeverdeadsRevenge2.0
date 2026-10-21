@@ -193,6 +193,9 @@ class GameState:
     #: count never comes back down; this one is emptied every descent, because a
     #: ledger is a page and a page is a floor.
     floor_kills: int = 0
+    #: Whether the weapon's *first blow* rule has been paid this fight. A fact
+    #: about the fight and not about each monster, which is what the blade says.
+    first_blow_spent: bool = False
     #: What the run has taught the hero so far. Derived from ``kills`` by
     #: :func:`~neverdeads_revenge.game.levels.level_for`; kept as a field only so
     #: the moment it changes can be noticed and written into the log.
@@ -951,6 +954,7 @@ class GameState:
         # And the note a blade's trick found: "every blow after" is about this
         # room, like the revenge it used to be mistaken for.
         self.player.note_bonus = 0
+        self.first_blow_spent = False
 
         # The rest of the per-floor bookkeeping. Momentum is a charge built up on
         # this floor and spent on it; the debt is owed for wounds taken here; the
@@ -1330,10 +1334,12 @@ def _apply_wilds(state: GameState, keys) -> None:
         if key == "blind_box":
             # Deliberately the *whole* table, not the floor's own: the box is
             # the wildcard that can pay out something from the deep. Chest-only
-            # pieces carry a default weight of 1.0, so roughly one box in five
-            # is a strong-tier piece -- which is why it costs near what the
-            # wager's good face does. Change this to a floor-weighted roll and
-            # the box becomes a mop; note it if you tune it.
+            # pieces carry a default weight of 1.0, and they add up to 27 of the
+            # table's 89.3 -- so **three boxes in ten** hold a strong-tier piece,
+            # not the one in five this comment used to claim. That is why it
+            # costs near what the wager's good face does. Change this to a
+            # floor-weighted roll and the box becomes a mop; note it if you tune
+            # it.
             template = state.rng.choice_weighted(
                 [(t, t.weight) for t in ITEMS.values()]
             )
