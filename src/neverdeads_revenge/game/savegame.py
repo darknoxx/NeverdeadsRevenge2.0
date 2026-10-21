@@ -186,6 +186,7 @@ def dump(state: GameState) -> dict:
         "total_turns": state.total_turns,
         "run_state": _encode(state.run_state),
         "kills": state.kills,
+        "floor_kills": state.floor_kills,
         "level": state.level,
         "kill_points": state.kill_points,
         "revenge_stacks": state.revenge_stacks,
@@ -195,6 +196,10 @@ def dump(state: GameState) -> dict:
         "gold": state.gold,
         "fame": state.fame,
         "sight_bonus": state.sight_bonus,
+        "sight_penalty": state.sight_penalty,
+        "ravaging": state.ravaging,
+        "floor_draughts": sorted(state.floor_draughts),
+        "death_squares": [list(pos) for pos in sorted(state.death_squares)],
         "coin_multiplier": state.coin_multiplier,
         "enemy_hp_multiplier": state.enemy_hp_multiplier,
         "extra_lives": state.extra_lives,
@@ -259,6 +264,10 @@ def load(payload: dict) -> GameState:
         state.total_turns = payload["total_turns"]
         state.run_state = _decode(payload["run_state"])
         state.kills = payload["kills"]
+        # ``get`` for the floor's own counters, like the rest: each starts at
+        # nothing, so a save written before the field existed resumes with an
+        # empty floor rather than refusing to open.
+        state.floor_kills = int(payload.get("floor_kills", 0))
         state.level = payload["level"]
         # A save from before the purse: filled rather than empty, because the
         # alternative is a run that opens with its tricks unaffordable.
@@ -273,6 +282,12 @@ def load(payload: dict) -> GameState:
         # before there was such a thing still resumes -- it simply has none.
         state.fame = payload.get("fame", 0)
         state.sight_bonus = payload["sight_bonus"]
+        state.sight_penalty = int(payload.get("sight_penalty", 0))
+        state.ravaging = bool(payload.get("ravaging", False))
+        state.floor_draughts = {str(key) for key in payload.get("floor_draughts", [])}
+        state.death_squares = {
+            (int(pos[0]), int(pos[1])) for pos in payload.get("death_squares", [])
+        }
         state.coin_multiplier = payload["coin_multiplier"]
         state.enemy_hp_multiplier = payload["enemy_hp_multiplier"]
         state.extra_lives = payload["extra_lives"]

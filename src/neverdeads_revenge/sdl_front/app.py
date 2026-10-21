@@ -497,7 +497,7 @@ class SdlApp:
             weapon=key("weapon"),
             armour=key("armour"),
         )
-        self.progress.reroll_wilds(Rng(random.SystemRandom().randrange(2**32)))
+        self.progress.reroll_shelves(Rng(random.SystemRandom().randrange(2**32)))
         self.save_progress()
         return self.progress.best_score
 
@@ -760,7 +760,17 @@ class SdlApp:
             )
             if getattr(screen, "opaque", True) or painted:
                 start = index
-        for screen in self.screens[start:]:
+        top = len(self.screens) - 1
+        for index, screen in enumerate(self.screens[start:], start):
+            # A dialog under a dialog is waiting its turn: only the topmost one
+            # is drawn, so three cards pushed by one announcement are three
+            # cards read in turn instead of three boxes on top of each other.
+            if (
+                index != top
+                and getattr(screen, "modal", False)
+                and not getattr(screen, "opaque", True)
+            ):
+                continue
             screen.draw(self.grid, self)
         mark = self._note("cells", mark)
         # A screen may bring its own paper: the arena's painted room goes *under*

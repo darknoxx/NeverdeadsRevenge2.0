@@ -161,7 +161,9 @@ class NameEntryScreen(Screen):
         buffer.text(
             x + 3,
             y + height - 1,
-            "letters and digits   backspace   enter to keep",
+            # Short enough for the box: the old line ran through the border and
+            # out of the frame by eleven characters.
+            "letters   backspace   enter keeps",
             parse_style(ASH),
         )
 

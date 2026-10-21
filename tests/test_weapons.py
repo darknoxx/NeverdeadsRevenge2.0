@@ -138,8 +138,17 @@ def test_the_ash_kiss_passes_the_fire_to_another_of_them():
     """A kill passes the burn on -- to *one* of them, and not to the corpse."""
     from neverdeads_revenge.game.actions import _on_death
 
+    from neverdeads_revenge.world.tiles import Tile
+
     state = _run()
     _wield(state, "kiss")
+    # The fire passes within the room and not across the map, so the test makes
+    # a room: three of them on cleared ground beside the hero.
+    for index, one in enumerate(state.enemies):
+        pos = (state.player.position[0] + 1 + index, state.player.position[1])
+        state.dungeon_map.set_tile(pos, Tile.FLOOR)
+        one.position = pos
+    state.refresh_vision()
     dying = state.enemies[0]
 
     _on_death(state, dying)

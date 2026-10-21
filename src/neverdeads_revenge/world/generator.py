@@ -631,7 +631,13 @@ def _scatter_loot(
         # twice the rule.
         gifts = rng.shuffled(list(gift_keys))
         for key in keys[: chest_count(depth)]:
-            holding_a_gift = bool(gifts) and rng.chance(GIFT_CHANCE)
+            # The lid is rolled first: a chest that is a jaw cannot also be a
+            # present, and a gift put inside one was destroyed with the lid
+            # rather than handed over.
+            mimic = rng.chance(MIMIC_CHANCE)
+            holding_a_gift = (
+                not mimic and bool(gifts) and rng.chance(GIFT_CHANCE)
+            )
             to_place.append(
                 make_chest(
                     key,
@@ -639,7 +645,7 @@ def _scatter_loot(
                         rng, depth, filled_slots
                     ),
                     gift=gifts.pop() if holding_a_gift else None,
-                    mimic=rng.chance(MIMIC_CHANCE),
+                    mimic=mimic,
                 )
             )
     # The chronicle, torn up and scattered. Drawn without replacement from what

@@ -37,7 +37,7 @@ from neverdeads_revenge.world.items import ITEMS
 def shop(gold: int = 0, **wilds) -> MetaProgress:
     """A progress with coin in it and a shelf to look at."""
     progress = MetaProgress(gold=gold)
-    progress.reroll_wilds(Rng(11))
+    progress.reroll_shelves(Rng(11))
     return progress
 
 
@@ -681,3 +681,30 @@ def test_the_pack_shelf_line_gets_dearer_as_it_is_bought():
     # and once it is maxed it is offered as taken, not as another slot
     offers = {offer.key: offer for offer in build_stock(progress)}
     assert offers["pack"].maxed, "a maxed pack still sold a slot"
+
+
+def test_the_amulet_shelf_shows_four_and_turns_between_runs():
+    """Four at a time, and a different four after the next run.
+
+    Eleven amulets on one shelf was a catalogue: every visit had the same list,
+    and the only question was what you could afford. A rotating shelf of four is
+    a shop that has what it has today -- and its own dice, so it does not always
+    turn with the wilds.
+    """
+    from neverdeads_revenge.game.shop import AMULET_SLOTS, AMULETS_FOR_SALE, build_stock
+    from neverdeads_revenge.core.rng import Rng
+
+    progress = MetaProgress()
+    progress.reroll_shelves(Rng(11))
+
+    priced = {item.key for item in AMULETS_FOR_SALE}
+    assert len(progress.amulet_stock) == AMULET_SLOTS
+    assert len(set(progress.amulet_stock)) == AMULET_SLOTS, "the same amulet twice"
+    assert set(progress.amulet_stock) <= priced, "something that is not for sale"
+
+    on_the_shelf = [o for o in build_stock(progress) if o.section == "AMULETS"]
+    assert len(on_the_shelf) == AMULET_SLOTS
+
+    before = list(progress.amulet_stock)
+    progress.reroll_shelves(Rng(12))
+    assert progress.amulet_stock != before, "the shelf did not turn"

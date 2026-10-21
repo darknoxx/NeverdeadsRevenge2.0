@@ -57,6 +57,18 @@ def a_busy_run() -> GameState:
     state.blood_debt = 5
     state.waits_in_a_row = 2
     state.salt_ward = 1
+    # The floor's own bookkeeping: the ledger blade counts kills here, the rules
+    # the strange bottles laid, the squares where things died, the window a
+    # fortress took out of the hero's sight -- and the flag that says the hero is
+    # in the last breath. None of them used to survive a save.
+    state.floor_kills = 4
+    state.ravaging = True
+    state.sight_penalty = 2
+    state.floor_draughts = {"thin_veil", "short_crown"}
+    state.death_squares = {
+        (state.player.position[0] + 2, state.player.position[1]),
+        (state.player.position[0], state.player.position[1] + 2),
+    }
     state.trail = {(state.player.position[0] - 1, state.player.position[1]): 5}
     state.helped = {(state.player.position[0] + 1, state.player.position[1])}
     state.npcs = [make_npc(NPCS["tally"], state.player.position)]

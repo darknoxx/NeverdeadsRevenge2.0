@@ -48,6 +48,8 @@ from ..desktop.screens.battle import (
     STATUS_ROW_IN,
     STATUS_SLOT,
     THICKNESS,
+    WALL_FAR,
+    WALL_NEAR,
     BattleScreen,
     Popup,
 )

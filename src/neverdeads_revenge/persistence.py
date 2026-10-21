@@ -88,6 +88,10 @@ class MetaProgress:
     wilds: list[str] = field(default_factory=list)
     #: The two wild offers currently on the shelf. Re-rolled after every run.
     wild_stock: list[str] = field(default_factory=list)
+    #: The four amulets currently on the shelf, by key. Re-rolled after every
+    #: run, on its own dice -- a shelf that always turned with the wilds would be
+    #: one rotation with two windows.
+    amulet_stock: list[str] = field(default_factory=list)
     #: Which pages of the chronicle have been found, by number.
     #:
     #: A list rather than a set, because the save is JSON and a set is not --
@@ -160,15 +164,18 @@ class MetaProgress:
         self.scores.sort(key=lambda entry: entry.score, reverse=True)
         del self.scores[SCOREBOARD_SIZE:]
 
-    def reroll_wilds(self, rng) -> None:
-        """Put two new offers on the rotating shelf.
+    def reroll_shelves(self, rng) -> None:
+        """Put new offers on the two rotating shelves: the wilds and the amulets.
 
-        Called after every run, which is what makes the shelf worth walking past:
-        the fixed stock is always there, and the interesting things are not.
+        Called after every run, which is what makes the shelves worth walking
+        past: the fixed stock is always there, and the interesting things are
+        not. One call and not two, because a rotation that only happened for one
+        of them is a shelf that quietly stopped moving.
         """
-        from .game.shop import roll_wild_stock
+        from .game.shop import roll_amulet_stock, roll_wild_stock
 
         self.wild_stock = roll_wild_stock(rng)
+        self.amulet_stock = roll_amulet_stock(rng)
 
 
 # -- storage ---------------------------------------------------------------
@@ -292,6 +299,7 @@ def load_meta(path: Path | None = None) -> MetaProgress:
             pending=[str(key) for key in raw.get("pending", [])],
             wilds=[str(key) for key in raw.get("wilds", [])],
             wild_stock=[str(key) for key in raw.get("wild_stock", [])],
+            amulet_stock=[str(key) for key in raw.get("amulet_stock", [])],
             pages=[int(number) for number in raw.get("pages", [])],
             runs_started=int(raw.get("runs_started", 0)),
             runs_won=int(raw.get("runs_won", 0)),

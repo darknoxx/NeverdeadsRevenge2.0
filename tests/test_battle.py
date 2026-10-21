@@ -1389,11 +1389,19 @@ def test_the_bells_throw_sends_them_to_the_back():
 
 def test_the_true_note_makes_every_blow_after_it_hit_harder():
     battle = duel("walkyrion", 5)
-    before = battle.hero.damage_bonus
+    before = battle.hero.damage_range
 
     battle.choose(SPECIAL, battle.enemies[0], special=TRUE_NOTE)
 
-    assert battle.hero.damage_bonus > before, "the note was found and lost again"
+    assert battle.hero.damage_range > before, "the note was found and lost again"
+    # And it survives a kill: REVENGE rewrites its own bonus on every one, and
+    # the note used to share that field and be erased by the next monster that
+    # died. Asked after a death, because that is where it went wrong.
+    noting = battle.hero.damage_range
+    from neverdeads_revenge.game.combat import apply_revenge
+
+    apply_revenge(battle.hero, 1)
+    assert battle.hero.damage_range >= noting, "a kill ate the note"
 
 
 def test_the_echoing_cut_is_heard_three_times():
@@ -1428,3 +1436,34 @@ def test_the_shattered_bell_takes_everyone_and_the_floor():
         battle.state.kill_points
         <= battle.state.kill_points_max - special_by_key(SHATTERED_BELL).cost + 1
     ), "the bell was not paid for"
+
+
+def test_a_shadow_that_leaves_the_room_hands_the_floor_back():
+    """The one exit that came out without closing the door.
+
+    A fight that ends by any other road clears ``in_fight``; the fleeting shadow
+    did not, so the floor behind it stood still for the rest of the run.
+    """
+    battle = duel("noxx", 8)
+
+    battle.choose(SPECIAL, battle.enemies[0], special=FLEETING_SHADOW)
+
+    assert battle.escaped, "the shadow did not leave"
+    assert battle.state.in_fight is False, "the floor never moved again"
+
+
+def test_borrowed_armour_goes_back_when_the_room_is_done():
+    """THE STILLNESS lends armour for the fight and takes it back after it.
+
+    It used to be added to the hero's own stat and never given back, so a Yeti
+    who set his feet twice carried the ice down every floor of the run.
+    """
+    battle = duel("yeti", 8)
+    before = battle.hero.stats.armor
+
+    battle.choose(SPECIAL, battle.enemies[0], special=STILLNESS)
+    assert battle.hero.stats.armor > before, "setting his feet raised nothing"
+
+    battle._close_the_fight()
+
+    assert battle.hero.stats.armor == before, "the ice came home with him"

@@ -910,10 +910,20 @@ class GameState:
             # THE CRAWL. They arrive at this floor's own free ground rather than
             # at their old coordinates, because the old coordinates belong to a
             # floor that no longer exists.
+            # *Free* is the word that was missing: the spawn points already hold
+            # this floor's own monsters, so the ones that followed shared a tile
+            # with a stranger.
+            taken = {
+                self.player.position,
+                floor.stairs_down,
+                *floor.springs,
+                *(pos for pos, _key in floor.npcs),
+                *(enemy.position for enemy in self.enemies),
+            }
             free = [
                 pos
-                for pos in floor.spawn_points
-                if self.dungeon_map.is_walkable(pos)
+                for pos in self.dungeon_map.walkable_positions()
+                if pos not in taken
             ]
             for enemy in following:
                 if not free:
@@ -938,6 +948,9 @@ class GameState:
         # needing to know which that is.
         self.revenge_stacks = 0
         apply_revenge(self.player, 0)
+        # And the note a blade's trick found: "every blow after" is about this
+        # room, like the revenge it used to be mistaken for.
+        self.player.note_bonus = 0
 
         # The rest of the per-floor bookkeeping. Momentum is a charge built up on
         # this floor and spent on it; the debt is owed for wounds taken here; the
@@ -1279,9 +1292,14 @@ def _the(name: str) -> str:
 
 
 def _receive(state: GameState, template) -> None:
-    """Put an item where it belongs: draughts in the pack, the rest worn."""
+    """Put an item where it belongs: what has no slot in the pack, the rest worn.
+
+    The test is the *slot* and not the kind: a strange draught is not a draught
+    and has no slot either, and the old test dropped the blind box's bottles into
+    ``equipment[None]``, where nothing could ever find them again.
+    """
     item = make_item(template)
-    if template.kind == "draught":
+    if template.slot is None:
         state.inventory.append(item)
     else:
         state.player.equipment[template.slot] = item

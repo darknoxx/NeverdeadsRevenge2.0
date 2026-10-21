@@ -182,3 +182,25 @@ def test_the_picker_is_a_purse_worth_catching_and_not_worth_the_chase():
         if template.weight and template.key != "picker" and template.min_depth <= 2
     ]
     assert picker.weight < min(shallow), "the purse is as common as the monsters"
+
+
+def test_the_lid_is_in_the_queue_and_not_only_in_the_room():
+    """A mimic that is not scheduled can never take a turn.
+
+    Fleeing the ambush used to leave the lid standing on the floor forever: it
+    was in ``enemies`` but never in the queue, so the floor had a jaw on it that
+    could not move.
+    """
+    from neverdeads_revenge.game.actions import Action, perform_action
+    from neverdeads_revenge.world.items import make_chest
+
+    state = _run()
+    state.dungeon_map.items[state.player.position] = make_chest(
+        "rot", None, mimic=True
+    )
+
+    perform_action(state, Action.OPEN_CHEST)
+
+    lid = state.encounter
+    assert lid is not None and lid.name == "lid"
+    assert lid in state.turn_queue, "the lid was never scheduled"

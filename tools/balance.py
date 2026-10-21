@@ -129,7 +129,13 @@ class Run:
 
     @property
     def died(self) -> bool:
-        return not self.escaped
+        """Whether the run ended because the hero did.
+
+        Not ``not escaped``: a run the bot abandoned (stuck, capped) says nothing
+        about the game's difficulty, and counting those as deaths quietly pulled
+        every death rate towards the floor.
+        """
+        return not self.escaped and not self.stuck and not self.capped
 
 
 def _towards(state, target) -> Action:
@@ -199,7 +205,11 @@ def fight_out(state, fight, spend: bool = False) -> int:
         if not living:
             break
         hurt = state.player.hp / state.player.max_hp < DRINK_BELOW
-        if hurt and any(item.heal for item in state.inventory):
+        if (
+            hurt
+            and not state.draughts_forbidden
+            and any(item.heal for item in state.inventory)
+        ):
             fight.choose(ITEM)
             continue
         chosen = None
@@ -212,6 +222,12 @@ def fight_out(state, fight, spend: bool = False) -> int:
         else:
             fight.choose(SPECIAL, living[0], special=chosen.key)
             spent += 1
+    if not fight.over:
+        # The cap fired: the bot walks away from a fight it could not finish.
+        # Leaving ``in_fight`` set would freeze the floor for the rest of the
+        # run, which is not a stalemate the *game* has, only this bot.
+        fight.over = True
+        fight._close_the_fight()
     return spent
 
 
@@ -374,7 +390,14 @@ def _explore(state, can_afford_a_wash: bool, seek_chests: bool = False) -> Actio
                 abs(enemy.position[1] - state.player.position[1]),
             ),
         )
-        return _towards(state, nearest.position)
+        # The *first step of the path*, not the monster's own square: this used
+        # to be ``_towards(state, nearest.position)``, which only ever answers a
+        # monster that is exactly one move away and otherwise says "wait" -- so a
+        # reachable ghoul across the room was waited out until the idle rule
+        # ended the run.
+        step = _bfs_step(state, [nearest.position])
+        if step is not None:
+            return _towards(state, step)
     return Action.WAIT
 
 

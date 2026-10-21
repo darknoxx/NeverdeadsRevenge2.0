@@ -267,7 +267,7 @@ YETI_SPECIALS: tuple[Special, ...] = (
     Special(
         key=STILLNESS,
         cost=6,
-        effect="half damage, +2 armour this round",
+        effect="half damage this round, +2 armour for the fight",
         needs_target=False,
         name="THE STILLNESS",
         blurb="he sets his feet, and the ice does not care what hits it",

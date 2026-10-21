@@ -53,6 +53,8 @@ __all__ = [
     "build_stock",
     "buy",
     "describe_item",
+    "AMULET_SLOTS",
+    "roll_amulet_stock",
     "roll_wild_stock",
     "loadout_from",
 ]
@@ -305,6 +307,12 @@ GEAR: tuple[ShopItem, ...] = (
     # The best thing that lies on a floor, sold rather than waited for.
     ShopItem("rune_plate", 170),
 )
+
+#: How many amulets are on the shelf at once. The rest are in the back, and the
+#: shelf in the back rotates: four is few enough that a visit is a look at what
+#: is there *today* rather than a catalogue, and enough that there is usually
+#: one worth the coin.
+AMULET_SLOTS = 4
 
 #: Amulets. All of them, priced by how much they change a run rather than by how
 #: rare they are -- the weak ones can be found lying about, so the shop selling
@@ -579,7 +587,14 @@ def build_stock(progress) -> list[Offer]:
             )
         )
 
-    for item in AMULETS_FOR_SALE:
+    # Four of them, and which four is the shelf's business: ``amulet_stock`` is
+    # rerolled after every run. A catalogue of eleven is a spreadsheet; four is
+    # a shop that has what it has.
+    priced = {item.key: item for item in AMULETS_FOR_SALE}
+    for key in getattr(progress, "amulet_stock", ()):
+        item = priced.get(key)
+        if item is None:
+            continue
         template = item.template
         offers.append(
             Offer(
@@ -647,6 +662,17 @@ def build_stock(progress) -> list[Offer]:
         )
 
     return offers
+
+
+def roll_amulet_stock(rng: Rng) -> list[str]:
+    """Four amulets off the shelf in the back, without repeating one.
+
+    Its own roll and its own dice, so the shelf is not a function of what the
+    wilds happened to be: two rotations that always moved together would be one
+    rotation with two windows.
+    """
+    keys = [item.key for item in AMULETS_FOR_SALE]
+    return rng.shuffled(keys)[:AMULET_SLOTS]
 
 
 def roll_wild_stock(rng: Rng) -> list[str]:

@@ -273,6 +273,9 @@ class Actor:
     speed_bonus: float = 0.0
     armor_bonus: int = 0
     damage_bonus: int = 0
+    #: Flat damage from a trick that found the note the blade is for. Its own
+    #: field rather than ``damage_bonus``, which REVENGE rewrites on every kill.
+    note_bonus: int = 0
     crit_bonus: float = 0.0
     #: What this actor is wearing, by slot. Only the player ever fills it, but
     #: it lives here because that is where the effective stats are computed and
@@ -409,7 +412,12 @@ class Actor:
     def damage_range(self) -> tuple[int, int]:
         """The damage roll before the dice, bonuses included."""
         low, high = self.stats.damage
-        bonus = self.damage_bonus + self.modifiers.damage + self.passive_damage
+        bonus = (
+            self.damage_bonus
+            + self.note_bonus
+            + self.modifiers.damage
+            + self.passive_damage
+        )
         return (low + bonus, high + bonus)
 
     def damage_roll(self, rng, spread: float = 1.0) -> int:

@@ -1426,13 +1426,10 @@ class BattleScreen(Screen):
                 if event.escaped
                 else "YOU DIED"
             )
-            app.play(
-                "quest_complete"
-                if event.won
-                else "dash_roll"
-                if event.escaped
-                else "death_game_over"
-            )
+            # A death is scored once, by the summary that follows it: playing it
+            # here too gave the arena's deaths a doubled sting.
+            if event.won or event.escaped:
+                app.play("quest_complete" if event.won else "dash_roll")
             if not event.won and not event.escaped:
                 # The run ended in here. The arena steps out of the way first:
                 # the summary is about the run, and the run is what is standing

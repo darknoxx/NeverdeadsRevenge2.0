@@ -1040,3 +1040,32 @@ def test_the_floor_can_hold_two_springs_down_where_the_curses_pile_up():
         if len(built.springs) >= 2:
             found += 1
     assert found > 0, "twenty-four floors at depth five held no double spring"
+
+
+def test_the_blind_box_can_hand_over_a_strange_bottle():
+    """A bottle with no slot belongs in the pack, not in ``equipment[None]``."""
+    from neverdeads_revenge.game.actors import HEROES
+    from neverdeads_revenge.game.state import _receive, start_run
+    from neverdeads_revenge.world.items import ITEMS
+
+    state = start_run(HEROES["noxx"], 5)
+    _receive(state, ITEMS["thin_veil"])
+
+    assert [item.item_id for item in state.inventory] == ["thin_veil"]
+    assert None not in state.player.equipment
+
+
+def test_drinking_from_the_pack_costs_a_turn_like_the_quick_key():
+    from neverdeads_revenge.game.actions import drink
+    from neverdeads_revenge.game.actors import HEROES
+    from neverdeads_revenge.game.state import start_run
+    from neverdeads_revenge.world.items import ITEMS, make_item
+
+    state = start_run(HEROES["noxx"], 5)
+    state.inventory.append(make_item(ITEMS["potion"]))
+    state.player.stats.hp = 10
+    before = state.total_turns
+
+    drink(state, "potion")
+
+    assert state.total_turns == before + 1, "the bottle was free"

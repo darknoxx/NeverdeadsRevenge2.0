@@ -321,6 +321,11 @@ class Battle:
         self.enemies = list(enemies)
         #: Whether the hero has his feet set, which lasts one round.
         self._guarded = False
+        #: Armour lent by a trick for the length of the fight, and taken back
+        #: when the room is done. Kept as a number to subtract rather than added
+        #: to the hero's own stat: a stat that is never given back is not a
+        #: trick, it is an upgrade the player did not pay for.
+        self._round_armour = 0
         #: When each combatant is next up, in the same kind of units the
         #: dungeon's own queue uses: every turn costs ``1 / speed``, so a quick
         #: hero's turns come round sooner and he simply gets more of them. A
@@ -865,6 +870,9 @@ class Battle:
         self.over = True
         self.escaped = True
         self.won = False
+        # Every way out of a fight hands the floor its turns back, this one too:
+        # without it the dungeon stayed frozen behind a fight that had ended.
+        self._close_the_fight()
         events.append(Over(won=False, escaped=True))
 
     def _special_devouring_darkness(self, target: Actor | None, events: list[Event]) -> None:
@@ -1065,6 +1073,7 @@ class Battle:
         """He sets his feet: half of everything that lands, and the ice under it."""
         self._guarded = True
         self.state.player.stats.armor += STILLNESS_ARMOUR
+        self._round_armour += STILLNESS_ARMOUR
         before = len(self.state.log)
         self.state.say("You set your feet, and the ice does not care.", LogKind.GOOD)
         self._splice(before, events)
@@ -1078,7 +1087,9 @@ class Battle:
         doubled, and this round the blows are halved against the ice.
         """
         player = self.state.player
-        player.stats.armor += max(2, player.stats.armor)
+        lent = max(2, player.stats.armor)
+        player.stats.armor += lent
+        self._round_armour += lent
         self._guarded = True
         before = len(self.state.log)
         self.state.say("You build the Frozen Fortress.", LogKind.GOOD)
@@ -1126,7 +1137,10 @@ class Battle:
 
     def _special_true_note(self, target: Actor | None, events: list[Event]) -> None:
         """He finds the note the sword is for, and keeps it: every blow after."""
-        self.state.player.damage_bonus += TRUE_NOTE_DAMAGE
+        # Its own field: ``damage_bonus`` is REVENGE's, and a kill rewrites it
+        # (``apply_revenge`` sets rather than adds). The note was being erased by
+        # the next monster that died.
+        self.state.player.note_bonus += TRUE_NOTE_DAMAGE
         before = len(self.state.log)
         self.state.say("You find the note the sword is for.", LogKind.GOOD)
         self._splice(before, events)
@@ -1395,6 +1409,10 @@ class Battle:
         and a fight that went out without coming back through here would leave a
         floor that never moves again.
         """
+        if self._round_armour:
+            # A fight that ends mid-round still gives the borrowed armour back.
+            self.state.player.stats.armor -= self._round_armour
+            self._round_armour = 0
         self.state.in_fight = False
 
     # -- plumbing -----------------------------------------------------------

@@ -428,12 +428,12 @@ class ShopScreen(Screen):
         # One roll, here, fills it; afterwards the rotation owns itself. The
         # dice are session dice, the same shape record_run uses: this choice
         # must not ride on the run's seed.
-        if not app.progress.wild_stock:
+        if not app.progress.wild_stock or not app.progress.amulet_stock:
             import random
 
             from neverdeads_revenge.core.rng import Rng
 
-            app.progress.reroll_wilds(Rng(random.SystemRandom().randrange(2**32)))
+            app.progress.reroll_shelves(Rng(random.SystemRandom().randrange(2**32)))
             app.save_progress()
         self.offers = build_stock(app.progress)
         self.index = max(0, min(self.index, len(self.offers) - 1))

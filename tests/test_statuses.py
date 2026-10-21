@@ -205,3 +205,28 @@ def test_a_plain_blade_is_described_exactly_as_it_was_before():
 
     assert describe_item(ITEMS["tooth"]) == "+1 damage"
     assert describe_item(ITEMS["edge"]) == "+4 damage, +10% crit"
+
+
+def test_the_last_tick_of_a_wound_is_worth_every_stack_it_had():
+    """A three-stack bleed deals its three stacks on the turn it runs out too.
+
+    It used to deal six, six, then two: the stacks were popped before the last
+    tick was counted, and the wound that had been deepest on the turn before was
+    a scratch on the turn it ended.
+    """
+    state = start_run(NOXX, seed=3)
+    enemy = _enemy(state)
+    enemy.stats.hp = 999
+    before = enemy.hp
+
+    from neverdeads_revenge.game.statuses import STATUSES
+
+    inflict(state, enemy, ("bleed", "bleed", "bleed"))
+    dealt = []
+    while enemy.statuses.get("bleed"):
+        hp = enemy.hp
+        tick_statuses(state, enemy)
+        dealt.append(hp - enemy.hp)
+
+    assert dealt == [STATUSES["bleed"].damage * 3] * 3, dealt
+    assert before - enemy.hp == sum(dealt)

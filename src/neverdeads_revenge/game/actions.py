@@ -218,6 +218,10 @@ def tick_statuses(state: GameState, actor: Actor) -> None:
             actor.status_stacks.pop(key, None)
             continue
 
+        # Read before the decrement: the last tick of a wound is worth as many
+        # stacks as the wound *had*, and popping the stacks first made a
+        # three-stack bleed deal six, six, then two.
+        stacks = max(1, actor.status_stacks.get(key, 1))
         actor.statuses[key] -= 1
         if actor.statuses[key] <= 0:
             del actor.statuses[key]
@@ -230,7 +234,7 @@ def tick_statuses(state: GameState, actor: Actor) -> None:
         # three of them is that three times. It is the only thing a stack means,
         # which is what makes the number on the badge and the number in the log
         # the same number.
-        dealt = status.damage * max(1, actor.status_stacks.get(key, 1))
+        dealt = status.damage * stacks
         actor.stats.hp = max(0, actor.stats.hp - dealt)
         state.hits.append(actor.position)
         if actor.is_player:
@@ -436,8 +440,14 @@ def _on_death(state: GameState, enemy: Actor) -> None:
         state.gold = max(0, state.gold - 1)
         state.say("The debtor takes a coin.", LogKind.BAD)
     elif rule == "spread_burn":
+        # Only what the hero can see: the state's enemy list is the whole floor,
+        # and the fire used to jump to something on the other side of the map.
         others = [
-            one for one in state.enemies if one is not enemy and one.stats.alive
+            one
+            for one in state.enemies
+            if one is not enemy
+            and one.stats.alive
+            and state.dungeon_map.is_visible(one.position)
         ]
         if others:
             victim = state.rng.pick(others)
@@ -1058,7 +1068,9 @@ def resolve_player_attack(
     first = not target.struck
     # The blade's own rule, read here: *first* and the hero's blood are facts
     # about this moment, and the weapon is only where the rule is written down.
-    bonus_flat = bonus + _weapon_rule_bonus(state, first)
+    # Only on a swing *with* the blade: a trick is not the weapon, and a trick
+    # that inherited THE FIRST BLOW's seven was the sword casting the spell.
+    bonus_flat = bonus + (_weapon_rule_bonus(state, first) if wield else 0)
     # Three gifts load the blow itself. The charge and the debt are read here and
     # spent below, and only on a *landing* blow -- a swing that missed was not
     # the blow either of them was waiting for, which is the rule the patient
@@ -1126,13 +1138,6 @@ def resolve_player_attack(
         if first and state.has_gift("open_wound"):
             opening += ("bleed",)
         inflict(state, target, opening)
-        if wield:
-            weapon = state.player.equipment.get("weapon")
-            if weapon is not None and weapon.self_inflicts:
-                # THE BLOOD PRICE: the blow costs the hand that swings it, and
-                # only on a blow *with the blade* -- the same rule the blade's own
-                # statuses keep, because a trick is not the weapon.
-                inflict(state, state.player, weapon.self_inflicts)
         if outcome.crit and state.bleed_on_crit:
             # BLEEDING EDGE. A lucky blow opens a wound as deep as the bloodline
             # is: one stack, two, three -- the ceiling the wounds have. It used
@@ -1151,6 +1156,14 @@ def resolve_player_attack(
             # bloodlines keep: what the hero swings is the weapon, and his
             # specials carry their own fire already.
             inflict(state, target, ("burn",))
+    if wield and outcome.hit:
+        weapon = state.player.equipment.get("weapon")
+        if weapon is not None and weapon.self_inflicts:
+            # THE BLOOD PRICE: the blow costs the hand that swings it, on every
+            # blow it *lands* -- the killing one included. It used to sit inside
+            # "and it did not kill", which meant the blade was free exactly when
+            # it mattered most.
+            inflict(state, state.player, weapon.self_inflicts)
     if outcome.killed:
         _remove_corpse(state, target)
         return outcome
@@ -1363,6 +1376,9 @@ def _the_lid_bites(state: GameState, chest) -> bool:
 
     lid = make_enemy(scale_template(ENEMIES["lid"], state.depth), state.player.position)
     state.enemies.append(lid)
+    # In the queue as well as in the room: a lid that is not in the queue can
+    # never take a turn, so fleeing the ambush left it standing there forever.
+    state.turn_queue.add(lid)
     state.encounter = lid
     state.say("The lid is a jaw, and it has been patient.", LogKind.BAD)
     return True
@@ -2112,13 +2128,26 @@ def _quaff(state: GameState) -> ActionResult:
         else min(healing, key=lambda i: i.heal)
     )
 
+    _swallow(state, item)
+    _after_a_draught(state)
+    return _outcome(state, consumed_turn=True, acted=True)
+
+
+def _swallow(state: GameState, item) -> int:
+    """One bottle, out of the pack and down: what it mends, and what spills.
+
+    The whole of a draught that heals, in one place, because there are two ways
+    to drink one -- the quick key and the pack's own list -- and the second used
+    to skip the second mouth, the mirror and the turn.
+    """
+    player = state.player
     state.inventory.remove(item)
     amount = max(1, round(item.heal * state.heal_scale))
     healed = player.stats.heal(amount)
     state.say(f"You drink the {item.name} and recover {healed}.", LogKind.GOOD)
     if amount < item.heal:
         state.say(
-            f"It should have been more. The curse takes its share.",
+            "It should have been more. The curse takes its share.",
             LogKind.BAD,
         )
     elif healed < amount:
@@ -2139,26 +2168,30 @@ def _quaff(state: GameState) -> ActionResult:
                 f"Its power spills past the wound; {spare} is lost.",
                 LogKind.PLAIN,
             )
+    return healed
 
+
+def _after_a_draught(state: GameState) -> None:
+    """What answers a swallowed bottle, and the turn it costs.
+
+    Drinking takes a turn, so it is not a free action in the middle of a fight
+    and monsters get their answer -- the *floor's* answer, which is the right one
+    when the floor is where the drinking happened. In the arena the answer is the
+    room's own queue and the turn is the arena's to spend, so the dungeon's clock
+    is left alone: ticking it here as well counted one mouthful twice in the run's
+    own turn count, and ran the floor's phase in the middle of a fight.
+    """
     if state.has_wild("mirror_of_hunger"):
         _wake_something(state)
 
     if state.has_gift("nothing_wasted"):
         _shatter(state)
 
-    # Drinking takes a turn, so it is not a free action in the middle of a fight
-    # and monsters get their answer -- the *floor's* answer, which is the right
-    # one when the floor is where the drinking happened. In the arena the answer
-    # is the room's own queue and the turn is the arena's to spend, so the
-    # dungeon's clock is left alone: ticking it here as well counted one mouthful
-    # twice in the run's own turn count, and ran the floor's phase in the middle
-    # of a fight.
     if not state.in_fight:
         state.turn += 1
         state.total_turns += 1
         advance_world(state)
         state.refresh_vision()
-    return _outcome(state, consumed_turn=True, acted=True)
 
 
 def _shatter(state: GameState) -> None:
@@ -2313,11 +2346,12 @@ def drink(state: GameState, item_id: str) -> str:
         return "Your mouth is closed to it. Nothing you drink stays down."
 
     template = ITEMS.get(item.item_id)
-    state.inventory.remove(item)
 
     if template is not None and template.draught:
+        state.inventory.remove(item)
         draught = draught_by_key(template.draught)
         state.floor_draughts.add(template.draught)
+        _after_a_draught(state)
         if draught is not None:
             state.say(
                 f"You drink {_the(item.name)}. {draught.blurb.capitalize()} -- "
@@ -2327,9 +2361,8 @@ def drink(state: GameState, item_id: str) -> str:
             return f"{draught.name}: {draught.blurb}."
         return f"You drink the {item.name}."
 
-    amount = max(1, round((template.heal if template else 0) * state.heal_scale))
-    healed = state.player.stats.heal(amount)
-    state.say(f"You drink {_the(item.name)} and recover {healed}.", LogKind.GOOD)
+    healed = _swallow(state, item)
+    _after_a_draught(state)
     return f"You drink {_the(item.name)} and recover {healed}."
 
 
@@ -2541,10 +2574,14 @@ def resolve_enemy_attack(
         inflict(state, attacker, ("chill",))
         state.say(f"The cold comes off you onto the {attacker.name}.", LogKind.GOOD)
 
-    if outcome.hit and state.has_passive("mirror"):
+    if outcome.hit and state.has_passive("mirror") and attacker.stats.alive:
         # Whatever struck you wears it. Two points is small against a deep-floor
         # monster and is not meant to be the answer -- it is meant to make a
         # crowd of small things into a decision.
+        #
+        # ``alive`` and not merely hit: the thorns above may have killed it
+        # already, and a corpse that dies a second time is a second corpse -- one
+        # that pays its kill twice and then raises on the way out of the list.
         back = attacker.stats.reflect(MIRROR_REFLECTION)
         if back:
             state.hits.append(attacker.position)
