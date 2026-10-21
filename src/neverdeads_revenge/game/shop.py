@@ -87,6 +87,11 @@ class MetaUpgrade:
     damage: int = 0
     #: Crit chance per stack, as a fraction.
     crit: float = 0.0
+    #: What a draught is worth per stack, as a fraction of what it says on the
+    #: tin. Multiplied in with the curses and the amulets, so it meets them the
+    #: way they meet each other: FAMINE still takes its half, and the cellar
+    #: makes what is left go further.
+    heal: float = 0.0
     #: A *bloodline*: the upgrade works only for this hero, and the shop says
     #: which. ``None`` for the ones every hero carries.
     hero: str | None = None
@@ -122,6 +127,8 @@ class MetaUpgrade:
             parts.append(f"{self.damage * stacks:+d} damage")
         if self.crit:
             parts.append(f"{self.crit * stacks:+.0%} crit")
+        if self.heal:
+            parts.append(f"{self.heal * stacks:+.0%} draught healing")
         if self.note_for is not None:
             parts.append(self.note_for(stacks))
         return ", ".join(parts)
@@ -168,6 +175,25 @@ META_UPGRADES: dict[str, MetaUpgrade] = {
         description="you have learned where the soft parts are",
         price=180,
         crit=0.05,
+        max_stacks=3,
+    ),
+    "cellar": MetaUpgrade(
+        key="cellar",
+        name="Cellar",
+        description="the bottles under the house have had longer to work",
+        # The fourth of the small permanent axes, and the first that touches the
+        # *supply* rather than the hero: everything the shop sold until now made
+        # the body, the blade or the pack better, and nothing made the medicine
+        # better. Priced beside the whetstone and under the edge, and by the
+        # same arithmetic: a potion is eight, so fifteen per cent is a little
+        # over one point a bottle at the first stack and nearly four at the
+        # third, which is a run's worth of blood over a long descent.
+        # One coin over the dearest single-run bargain on the rotating shelf:
+        # a thing you keep has to cost more than a thing you rent, and the
+        # test that says so is older than this row.
+        price=130,
+        price_step=60,
+        heal=0.15,
         max_stacks=3,
     ),
     "lantern": MetaUpgrade(
@@ -261,10 +287,11 @@ class ShopItem:
 
 
 #: Draughts. The cheapest thing the shop sells and the one it sells most of.
-#: Prices, and the shape of the grind. A run banks 50-115 coin, so the full
-#: permanent set at 1040 is twelve to eighteen runs -- which is the number the
-#: whole shop is tuned around. Cheap enough that every run buys something;
-#: expensive enough that the wall is what you are buying your way through.
+#: Prices, and the shape of the grind. A run banks 50-115 coin, so a full
+#: ladder -- every stack of every permanent upgrade -- is many dozens of runs,
+#: and the shop is tuned around the *first* few: cheap enough that every run
+#: buys something, expensive enough that the wall is what you are buying your
+#: way through.
 SUPPLIES: tuple[ShopItem, ...] = (
     ShopItem("potion", 30),
     ShopItem("elixir", 60),

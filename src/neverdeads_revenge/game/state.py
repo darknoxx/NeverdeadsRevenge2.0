@@ -355,6 +355,9 @@ class GameState:
     # the save file what a wild offer does.
     #: Extra sight on top of the base radius, from the lantern upgrade.
     sight_bonus: int = 0
+    #: How much further a draught goes, from the cellar upgrade: a fraction, and
+    #: multiplied into :attr:`heal_scale` where the curses and amulets meet.
+    heal_bonus: float = 0.0
     #: What a dropped coin is multiplied by: the pact and greed both touch it.
     coin_multiplier: float = 1.0
     #: What every monster's health is multiplied by. Greed's catch.
@@ -589,6 +592,9 @@ class GameState:
             scale *= 1.5
         if self.has_wild("mirror_of_hunger"):
             scale *= 1.5
+        # And the cellar, which is the shop's side of the same promise: a bottle
+        # bought from a merchant who has kept it longer.
+        scale *= 1.0 + self.heal_bonus
         return scale
 
     @property
@@ -1239,6 +1245,8 @@ def _apply_upgrades(state: GameState, upgrades: dict[str, int]) -> None:
             state.sight_bonus += upgrade.sight * stacks
         if upgrade.pack_slots:
             state.pack_capacity += upgrade.pack_slots * stacks
+        if upgrade.heal:
+            state.heal_bonus += upgrade.heal * stacks
         if upgrade.damage:
             player.stats.damage = (
                 player.stats.damage[0] + upgrade.damage * stacks,

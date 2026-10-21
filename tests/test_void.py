@@ -863,6 +863,40 @@ def test_the_shop_sells_damage_and_crit_now():
     assert abs(state.player.stats.crit_chance - 0.35) < 1e-9
 
 
+def test_the_shop_sells_a_bottle_that_goes_further():
+    """The fourth small axis, and the first that touches the *supply*.
+
+    Everything the shop sold until now made the body, the blade, the eye or the
+    pack better. The cellar makes what you drink better, which is the other half
+    of the same question -- and it is priced beside the whetstone because it is
+    worth about one: a potion is eight, and fifteen per cent a stack is a little
+    over a point a bottle, multiplied into the same figure the curses and the
+    amulets touch.
+    """
+    from neverdeads_revenge.game.actions import drink
+    from neverdeads_revenge.game.actors import HEROES
+    from neverdeads_revenge.game.shop import META_UPGRADES
+    from neverdeads_revenge.game.state import start_run
+    from neverdeads_revenge.world.items import ITEMS, make_item
+
+    cellar = META_UPGRADES["cellar"]
+    assert cellar.heal == 0.15 and cellar.max_stacks == 3
+    assert [cellar.price_at(i) for i in range(3)] == [130, 190, 250]
+    assert "draught healing" in cellar.effect(1)
+
+    plain = start_run(HEROES["noxx"], 5)
+    deep = start_run(HEROES["noxx"], 5, upgrades={"cellar": 3})
+    assert plain.heal_scale == 1.0, "an empty cellar changes nothing"
+    assert abs(deep.heal_scale - 1.45) < 1e-9
+
+    # A potion is eight. Three cellars make it twelve.
+    for state, expected in ((plain, 8), (deep, 12)):
+        state.player.stats.hp = 1
+        state.inventory.append(make_item(ITEMS["potion"]))
+        drink(state, "potion")
+        assert state.player.stats.hp == 1 + expected
+
+
 def test_the_ladders_climb_and_the_caps_are_where_they_were_said_to_be():
     from neverdeads_revenge.game.shop import META_UPGRADES
 
