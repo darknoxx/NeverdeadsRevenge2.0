@@ -3451,3 +3451,44 @@ def test_what_the_shadow_kills_goes_black_and_down():
     arena.arena._clock += 2.0
     arena.arena.step(0.0, app)
     assert arena.arena._sinking == []
+
+
+def test_the_cursor_is_a_promise_about_who_the_attack_is_for():
+    """A crowd attack marks every monster; a single one marks one; a buff none.
+
+    Golden Sun's manners, and they are worth copying: before the turn is spent,
+    the floor already says who takes it. One arrow for a cut, three for a quake,
+    and none for a trick that only touches the hero -- a cursor over a monster
+    that the attack was never going to read is a promise the fight breaks.
+    """
+    from neverdeads_revenge.game.actors import ENEMIES, HEROES, make_enemy
+    from neverdeads_revenge.game.battle import Battle
+    from neverdeads_revenge.game.state import start_run
+    from neverdeads_revenge.sdl_front.app import SdlApp
+    from neverdeads_revenge.sdl_front.arena import SdlArena
+
+    app = SdlApp(seed=3, no_sound=True)
+    state = start_run(HEROES["yeti"], 3, ultimate_level=7)
+    state.level = 8
+    state.kill_points = 40
+    foes = [
+        make_enemy(ENEMIES[key], state.player.position)
+        for key in ("ghoul", "viper", "bone")
+    ]
+    state.enemies = foes
+    arena = SdlArena(Battle(state, foes), backdrop=True)
+    app.screens = [arena]
+
+    def marked(key: str) -> list[bool]:
+        arena.arena.picking = True
+        kit = arena.battle.learned()
+        arena.arena.special = next(i for i, s in enumerate(kit) if s.key == key)
+        return [
+            figure.chosen
+            for figure in arena.arena._figures(app.cols, app.rows, app.font)
+            if figure.actor is not state.player
+        ]
+
+    assert marked("quake") == [True, True, True], "the quake marked a crowd wrong"
+    assert marked("rime").count(True) == 1, "a single cut marked more than one"
+    assert marked("stillness") == [False, False, False], "a self-buff marked somebody"

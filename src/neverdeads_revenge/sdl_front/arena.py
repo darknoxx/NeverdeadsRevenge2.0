@@ -457,9 +457,10 @@ class SdlArena(Screen):
 
         It hangs above the figure rather than beside it, because beside a figure
         is where the next monster is: an arrow that means "this one" has to point
-        at the one it means. It only exists while something is being aimed -- it
-        marks the *question*, and there is no question on the floor until a trick
-        has asked one -- and it breathes, one pixel either way, because a marker
+        at the one it means. It is out while something is being aimed -- it marks
+        the *question*, and there is no question on the floor until a trick has
+        asked one -- or over *all* of them at once when the chosen trick is one
+        that hits the room. It breathes, one pixel either way, because a marker
         that stands as still as everything under it is a marker to hunt for.
         """
         face = self._face(app.font.path, max(16, figure.size // 2))

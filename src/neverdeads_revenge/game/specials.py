@@ -132,6 +132,11 @@ class Special:
     #: player walk an arrow to a monster for one of those would be asking a
     #: question whose answer it was never going to read.
     needs_target: bool = True
+    #: Whether it hits *everyone* standing. ``needs_target`` says whether the
+    #: player has to walk an arrow to somebody; this says how many take it, and
+    #: the arena draws its marker over all of them while one of these is chosen
+    #: -- the cursor is a promise about who the attack is for.
+    all_enemies: bool = False
 
 
 #: The five, in the order a fight offers them: the small honest ones first, and
@@ -192,6 +197,7 @@ SPECIALS: tuple[Special, ...] = (
         name="PAINT THE WALLS RED",
         blurb="the room is the canvas, and the paint is theirs",
         level=6,
+        all_enemies=True,
     ),
     Special(
         key=BETWEEN_BLOWS,
@@ -265,6 +271,7 @@ YETI_SPECIALS: tuple[Special, ...] = (
         name="THE QUAKE",
         blurb="he puts the mountain into the floor, and the floor answers",
         level=7,
+        all_enemies=True,
     ),
     Special(
         key=LONG_WINTER,
@@ -275,6 +282,7 @@ YETI_SPECIALS: tuple[Special, ...] = (
         name="THE LONG WINTER",
         blurb="the cold comes in and stays; the legs are the first to go",
         level=8,
+        all_enemies=True,
     ),
 )
 
@@ -300,6 +308,7 @@ WALKYRION_SPECIALS: tuple[Special, ...] = (
         name="THE OVERTURE",
         blurb="the first bar is for everyone in the room",
         level=3,
+        all_enemies=True,
     ),
     Special(
         key=BELLS_THROW,
@@ -347,6 +356,7 @@ WALKYRION_SPECIALS: tuple[Special, ...] = (
         name="THE SILENCE AFTER",
         blurb="he stops playing, and the room has lost its place",
         level=8,
+        all_enemies=True,
     ),
 )
 
@@ -426,6 +436,7 @@ INFERNO_SPECIALS: tuple[Special, ...] = (
         name="THE ROUNDHOUSE",
         blurb="he turns once, and the room is in the way",
         level=6,
+        all_enemies=True,
     ),
 )
 

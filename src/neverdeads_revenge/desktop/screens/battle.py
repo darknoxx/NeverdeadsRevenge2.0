@@ -1846,6 +1846,15 @@ class BattleScreen(Screen):
         # *question*, and there is no question on the floor until a trick has
         # asked one.
         marked = living[self.target % len(living)] if self.aiming and living else None
+        # And the crowd: a trick that hits the room puts the marker over every
+        # one of them while it is chosen, before a single arrow is walked. The
+        # cursor is a promise about who takes it, and "everybody" is a promise
+        # one arrow cannot make.
+        crowd = self.crowd_chosen()
+        if marked is None and crowd is False and self.single_chosen() and living:
+            # A single-target trick being looked at, before the arrow is walked:
+            # one cursor, on the one it would go to if it were confirmed now.
+            marked = living[self.target % len(living)]
         scale = 1.35 if width >= 120 else 1.0
         # The room's floor, in rows: the band's own foot, or -- when the room is a
         # Where the hero will stand, in rows -- the monsters are kept off his head
@@ -1917,7 +1926,7 @@ class BattleScreen(Screen):
                         )
                     ),
                     cells=self._span(art, cell_w),
-                    chosen=enemy is marked,
+                    chosen=enemy is marked or crowd,
                     art=art,
                     phase=index * 1.9,
                 )
@@ -2035,6 +2044,32 @@ class BattleScreen(Screen):
         return any(
             self._clock - when < DRIFT_LIFE for _art, _x, _y, when in self._drift
         )
+
+    def single_chosen(self) -> bool:
+        """Whether the attack being looked at is one that goes to *one* monster."""
+        if not self.picking:
+            return False
+        specials = self.battle.learned()
+        if not specials:
+            return False
+        chosen = specials[min(self.special, len(specials) - 1)]
+        return chosen.needs_target and self.battle.special_available(chosen)
+
+    def crowd_chosen(self) -> bool:
+        """Whether the attack being looked at is one that hits everybody.
+
+        Read off the list while it is open: the highlighted trick, if it is an
+        ``all_enemies`` one and he can pay for it. The area's own kind of cursor
+        then goes over every living monster, the way a spell that says "all"
+        does in the games this one learned its manners from.
+        """
+        if not self.picking:
+            return False
+        specials = self.battle.learned()
+        if not specials:
+            return False
+        chosen = specials[min(self.special, len(specials) - 1)]
+        return chosen.all_enemies and self.battle.special_available(chosen)
 
     def _figure_of(self, actor, app) -> Staged | None:
         cols, rows = self._dims(app)
