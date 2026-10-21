@@ -184,6 +184,10 @@ class ActionResult:
     prompt_kind: str = "chest"
     #: Set when the prompt is somebody talking, so the dialog can title itself.
     speaker: str = ""
+    #: Set when the game *refused* something the player asked for -- a full pack,
+    #: a bottle that is not there. The log says why in words; the front end says
+    #: it in the one language an eye on the map does not read, and beeps.
+    denied: bool = False
 
 
 # -- helpers ---------------------------------------------------------------
@@ -1990,7 +1994,9 @@ def _pick_up(state: GameState) -> ActionResult:
             f"sells more.",
             LogKind.PLAIN,
         )
-        return ActionResult(consumed_turn=False, acted=False)
+        # Refused, and said so out loud: the item did not move, and a player
+        # looking at the map rather than the log needs to hear that.
+        return ActionResult(consumed_turn=False, acted=False, denied=True)
 
     state.dungeon_map.remove_item(state.player.position)
 

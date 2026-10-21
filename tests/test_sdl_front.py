@@ -3354,3 +3354,30 @@ def test_every_curse_and_gift_has_a_page_with_a_picture():
 
     assert curse_icon(CURSES["wither"].key) == CURSE_ART
     assert gift_icon(GIFTS["long_reach"].key) == GIFT_ART
+
+
+def test_a_full_pack_refuses_a_pickup_out_loud():
+    """The item stays on the floor, the log says why, and the ear hears it.
+
+    A pickup that silently does nothing is indistinguishable from a key that did
+    not register: the player presses again, then again, and walks away believing
+    the game is broken. ``error_locked`` is the game's own "no".
+    """
+    from neverdeads_revenge.sdl_front.app import SdlApp
+    from neverdeads_revenge.world.items import ITEMS, make_item
+
+    app = SdlApp(seed=3)
+    app.key("enter")
+    app.key("enter")
+    app.key("escape")  # the prologue, skipped
+    run = app.run
+    while len(run.inventory) < run.pack_capacity:
+        run.inventory.append(make_item(ITEMS["potion"]))
+    run.dungeon_map.items[run.player.position] = make_item(ITEMS["potion"])
+    full = len(run.inventory)
+
+    app.key("enter")
+
+    assert len(run.inventory) == full, "the pack took one more"
+    assert run.dungeon_map.item_at(run.player.position) is not None, "the potion moved"
+    assert app.played[-1] == "error_locked", f"the refusal was silent: {app.played[-3:]}"

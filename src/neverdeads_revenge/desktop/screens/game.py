@@ -72,6 +72,16 @@ class GameScreen(Screen):
         #: it left, the level it paid. Kept here rather than on the state because
         #: it is a *view* of two moments, not a rule about either.
         self._pending: tuple | None = None
+        #: Whether the key being handled was refused. Read by ``key_sound``, so
+        #: the refusal beeps instead of clicking.
+        self._denied = False
+
+    def key_sound(self, name: str) -> str | None:
+        """The sound this press makes: a refusal has one, a click has another."""
+        if self._denied:
+            self._denied = False
+            return "error_locked"
+        return super().key_sound(name)
 
     # -- drawing ------------------------------------------------------------
     def draw(self, buffer, app) -> None:
@@ -154,6 +164,11 @@ class GameScreen(Screen):
         ultimate_ready = run.ultimate_available
 
         result = perform_action(run, action)
+        # A refusal is its own sound and not also a click: the log says *why*,
+        # and the ear is on the map rather than on the fourth line of the log --
+        # a pickup that silently did nothing reads as a broken key. Played by
+        # ``key_sound`` with every other press, so one press is one sound.
+        self._denied = result.denied
         if (
             run.encounter is not None
             and run.encounter.behaviour == "kindly"
