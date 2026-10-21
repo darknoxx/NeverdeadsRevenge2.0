@@ -1056,8 +1056,19 @@ def loot_count(depth: int) -> int:
     Raised by one when the floors went to eleven monsters: the bot runs died to
     *numbers*, not to blows, and one draught against twelve bodies is a floor
     that only pays in blood.
+
+    Raised again when the seven new monsters moved in -- a briar that answers
+    every blow, a thing that bleeds itself, a picker worth chasing through two
+    fights. The floors got more expensive without getting more generous, and a
+    run that ends on the third floor never meets most of them.
+
+    The first floor is left as it was: it is the floor that teaches. From the
+    second on, a bottle more every other floor and two more at the ceiling --
+    measured over 160 bot runs, which went from 3.36 to 3.51 floors deep without
+    the turn cap starting to fire. More than that and the floors stop being
+    floors: at six bottles a hero can drink his way through anything.
     """
-    return min(2 + depth // 3, 5)
+    return min(2 + depth // 2, 6)
 
 
 def strange_count(depth: int) -> int:

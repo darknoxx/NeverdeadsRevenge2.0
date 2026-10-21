@@ -830,6 +830,11 @@ def test_a_floor_holds_medicine_and_curiosities_apart():
     for depth in (1, 5, 10):
         assert strange_count(depth) >= 1
         assert loot_count(depth) >= 2
+    # And the floors got more medicine when the new monsters moved in -- from
+    # the second floor, where they start, and up to a ceiling of six.
+    assert loot_count(1) == 2, "the floor that teaches is unchanged"
+    assert loot_count(2) > loot_count(1), "the second floor did not get easier"
+    assert loot_count(10) == 6, "the ceiling moved further than it should"
     strange = [t for t in ITEMS.values() if t.kind == "strange"]
     assert len(strange) == 5
     assert all(t.heal == 0 and t.draught for t in strange), "a strange bottle heals"
