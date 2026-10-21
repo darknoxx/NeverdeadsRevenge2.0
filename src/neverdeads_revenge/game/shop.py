@@ -89,6 +89,10 @@ class MetaUpgrade:
     damage: int = 0
     #: Crit chance per stack, as a fraction.
     crit: float = 0.0
+    #: Kill points the purse holds, per stack. The only upgrade that buys
+    #: *options* rather than numbers: one more point is one more trick in the
+    #: same purse, not a bigger blow.
+    kp: int = 0
     #: What a draught is worth per stack, as a fraction of what it says on the
     #: tin. Multiplied in with the curses and the amulets, so it meets them the
     #: way they meet each other: FAMINE still takes its half, and the cellar
@@ -129,6 +133,8 @@ class MetaUpgrade:
             parts.append(f"{self.damage * stacks:+d} damage")
         if self.crit:
             parts.append(f"{self.crit * stacks:+.0%} crit")
+        if self.kp:
+            parts.append(f"{self.kp * stacks:+d} kill points")
         if self.heal:
             parts.append(f"{self.heal * stacks:+.0%} draught healing")
         if self.note_for is not None:
@@ -205,6 +211,22 @@ META_UPGRADES: dict[str, MetaUpgrade] = {
         price=180,
         sight=1,
         max_stacks=1,
+    ),
+    "focus": MetaUpgrade(
+        key="focus",
+        name="Focus",
+        description="the purse holds one more trick",
+        # The dearest ceiling in the game is ten, and the shop sells up to five
+        # more: a hero who has bought all of it holds fifteen, which is one big
+        # trick and a small one. Priced under the whetstone at the first step
+        # because it buys no damage at all -- it buys the *choice* of which trick
+        # to spend a turn on.
+        # One coin over the dearest single-run bargain, like the cellar: a thing
+        # you keep has to cost more than a thing you rent.
+        price=130,
+        price_step=50,
+        kp=1,
+        max_stacks=5,
     ),
     "pack": MetaUpgrade(
         key="pack",
@@ -323,6 +345,13 @@ AMULET_SLOTS = 4
 #: worth buying anyway.
 AMULETS_FOR_SALE: tuple[ShopItem, ...] = (
     ShopItem("wayfarer", 90),
+    # The four that deepen a wound. Priced low because they are worth nothing
+    # at all to a hero who has no status to leave: what they buy is a build,
+    # and a build is bought one piece at a time.
+    ShopItem("red_seam", 120),
+    ShopItem("green_kiss", 120),
+    ShopItem("bellows", 130),
+    ShopItem("thin_ice", 120),
     ShopItem("coin_hand", 100),
     ShopItem("ember", 110),
     ShopItem("marrow", 120),

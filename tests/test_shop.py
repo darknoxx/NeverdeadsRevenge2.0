@@ -588,10 +588,10 @@ def test_the_permanent_set_is_a_grind_and_not_a_wall():
     full = sum(
         ladder(upgrade) for upgrade in META_UPGRADES.values() if not upgrade.wild
     )
-    # Everything: the five-step ladders and all four bloodlines. About forty
-    # good runs -- that is the *everything* price, not the price of a hero
-    # that can play.
-    assert 4000 <= full <= 8000, f"the permanent set costs {full}"
+    # Everything: the five-step ladders and all four bloodlines. Sixty to a
+    # hundred good runs -- that is the *everything* price, not the price of a
+    # hero that can play.
+    assert 4000 <= full <= 9000, f"the permanent set costs {full}"
 
     # What a new player actually saves for: health, a blade, room, a light.
     core = sum(
@@ -708,3 +708,23 @@ def test_the_amulet_shelf_shows_four_and_turns_between_runs():
     before = list(progress.amulet_stock)
     progress.reroll_shelves(Rng(12))
     assert progress.amulet_stock != before, "the shelf did not turn"
+
+
+def test_focus_widens_the_purse_one_point_at_a_time():
+    """The only upgrade that buys *options*: one more point is one more trick.
+
+    Five stacks and no more -- fifteen points is the biggest purse the game can
+    build, which is one big trick and a small one.
+    """
+    from neverdeads_revenge.game.actors import HEROES
+    from neverdeads_revenge.game.shop import META_UPGRADES
+    from neverdeads_revenge.game.state import start_run
+
+    focus = META_UPGRADES["focus"]
+    assert focus.kp == 1 and focus.max_stacks == 5
+    assert "+1 kill points" in focus.effect(1) or "kill points" in focus.effect(1)
+
+    plain = start_run(HEROES["noxx"], 5)
+    wider = start_run(HEROES["noxx"], 5, upgrades={"focus": 5})
+
+    assert wider.kill_points_max == plain.kill_points_max + 5

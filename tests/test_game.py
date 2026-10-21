@@ -1200,27 +1200,27 @@ def _alight(seed: int = 3):
     return state
 
 
-def test_the_ravaging_fire_takes_his_purse_down_to_three():
-    """The only ask in the game that *takes*, and it takes his whole kit.
+def test_the_floor_still_burns_and_the_price_is_the_shared_one():
+    """Inferno's fire is what he *buys*; the price is what every ultimate costs.
 
-    Three points is one jab and then nothing -- the cheapest trick he has, once,
-    for the rest of the floor. For a hero whose tricks run from two to twelve,
-    lighting the floor is spending every one of them on one gesture, and it is
-    paid the moment he makes it rather than over the turns after: a cap he could
-    walk around holding twelve points under would be a cap that never bit.
+    The three-point purse he used to pay was his own private tax -- the only
+    hero paying in kill points -- while Noxx bled and Yeti was blinded. All four
+    pay the same now: five points, for the rest of the run, and the floor keeps
+    burning because that is what the ask bought.
     """
-    from neverdeads_revenge.game.levels import RAVAGING_POINTS
+    from neverdeads_revenge.game.levels import SACRIFICED_KILL_POINTS
 
     state = start_run(INFERNO, seed=3)
     state.level = 7
-    state.kill_points = 12
-    assert state.kill_points_max == 12
+    state.kill_points = 10
+    assert state.kill_points_max == 10
 
     perform_action(state, Action.ULTIMATE)
 
     assert state.ravaging, "the floor did not catch"
-    assert state.kill_points_max == RAVAGING_POINTS, "the purse did not shrink"
-    assert state.kill_points <= RAVAGING_POINTS, "the cap did not bite"
+    assert state.sacrificed, "the price was not paid"
+    assert state.kill_points_max == SACRIFICED_KILL_POINTS, "the purse did not shrink"
+    assert state.kill_points <= SACRIFICED_KILL_POINTS, "the cap did not bite"
     assert not state.ultimate_available, "it asked twice"
     assert state.total_turns, "it was free"
 

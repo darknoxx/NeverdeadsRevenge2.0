@@ -39,14 +39,12 @@ from .combat import apply_revenge, attack
 from .curses import TOUCH_CURSES, CURSES, curse_by_key
 from .draughts import draught_by_key
 from .difficulty import (
-    ATRITAS_DRAIN_EVERY,
     ATRITAS_HUNT_RADIUS,
     ATRITAS_KILL_HEAL,
     ATRITAS_RADIUS,
     ATRITAS_SWING_EVERY,
     ATRITAS_TURNS,
     BELL_RADIUS,
-    FORTRESS_SIGHT_PENALTY,
     FORTRESS_TURNS,
 )
 from .gifts import gift_by_key
@@ -270,6 +268,7 @@ def inflict(
     *,
     turns_bonus: int = 0,
     stacks: int | None = None,
+    source: Actor | None = None,
 ) -> None:
     """Leave something running on whoever was just hit.
 
@@ -283,6 +282,11 @@ def inflict(
     that says how deep a crit's wound is, and the trick that says *three*. It
     sets the depth rather than adding to it, because "how deep" is the sentence
     those two are written in.
+
+    ``source`` is who caused it, and it exists for one rule: the amulets that
+    deepen a *particular* wound. They work on what the hero leaves in somebody
+    else -- a monster's own self-bleed and a curse's price are not the hero's
+    doing, and neither is a wound he takes himself.
     """
     if not keys or not target.stats.alive:
         return
@@ -295,11 +299,24 @@ def inflict(
         target.statuses[key] = max(
             target.statuses.get(key, 0), status.turns + turns_bonus
         )
+        deepens = (
+            1
+            if source is not None
+            and source.is_player
+            and target is not source
+            and state.status_depth_bonus(key)
+            else 0
+        )
         if stacks is not None:
-            target.status_stacks[key] = max(1, min(STACK_LIMIT, stacks))
+            depth = stacks
         elif status.stackable:
-            was = target.status_stacks.get(key, 0)
-            target.status_stacks[key] = min(STACK_LIMIT, was + 1)
+            depth = target.status_stacks.get(key, 0) + 1
+        else:
+            # A wound that does not take a second cut keeps the depth it has: a
+            # second dose of the same poison is not a deeper one, and the amulet
+            # below is the only thing that makes it deeper.
+            depth = max(1, target.status_stacks.get(key, 1))
+        target.status_stacks[key] = max(1, min(STACK_LIMIT, depth + deepens))
         if not fresh:
             continue
         if target.is_player:
@@ -458,7 +475,7 @@ def _on_death(state: GameState, enemy: Actor) -> None:
         ]
         if others:
             victim = state.rng.pick(others)
-            inflict(state, victim, ("burn",))
+            inflict(state, victim, ("burn",), source=state.player)
             state.say(f"The fire takes the {victim.name}.", LogKind.GOOD)
 
     # THE TITHE. The one price that argues with the score, which now pays for
@@ -1147,14 +1164,20 @@ def resolve_player_attack(
             opening += ("burn",)
         if first and state.has_gift("open_wound"):
             opening += ("bleed",)
-        inflict(state, target, opening)
+        inflict(state, target, opening, source=state.player)
         if outcome.crit and state.bleed_on_crit:
             # BLEEDING EDGE. A lucky blow opens a wound as deep as the bloodline
             # is: one stack, two, three -- the ceiling the wounds have. It used
             # to make the wound *last* longer, which was the same ladder told in
             # the other currency; the depth is the one a player can see, because
             # it is the number on the badge.
-            inflict(state, target, ("bleed",), stacks=state.bleed_on_crit)
+            inflict(
+                state,
+                target,
+                ("bleed",),
+                stacks=state.bleed_on_crit,
+                source=state.player,
+            )
         if state.pushback_chance and state.rng.chance(state.pushback_chance):
             # RING OF THE BELL. Walkyrion's blows throw what they land on --
             # the same shove the dead weight amulet buys, on a coin.
@@ -1589,8 +1612,8 @@ def _build_fortress(state: GameState) -> ActionResult:
     """Yeti raises the Frozen Fortress: a wall of ice with twice his blood in
     it, which everything on the floor would rather bite than him.
 
-    The price is the sight it takes: the cold closes the dark in to five
-    paces, and the floor goes white around the wall while it stands.
+    The wall is the whole of it. The sight it used to cost was a second price
+    only one hero paid; the ask is paid out of the purse now, like every other.
     """
     spot = _ultimate_spot(state)
     if spot is None:
@@ -1603,7 +1626,6 @@ def _build_fortress(state: GameState) -> ActionResult:
     health = max(1, state.player.stats.hp * 2)
     state.fortress = make_fortress(spot, health)
     state.fortress_turns_left = FORTRESS_TURNS
-    state.sight_penalty = FORTRESS_SIGHT_PENALTY
 
     state.say("You build the Frozen Fortress.", LogKind.GOOD)
     state.say(
@@ -1682,29 +1704,32 @@ def _ravaging_fire(state: GameState) -> ActionResult:
     Every fight on it starts with everything in it already on fire -- not the
     monsters standing there *now*, which would make this a bomb, but every one
     of them that ever reaches him, which is what a fire on a floor actually is.
-    And his own purse holds three points: one jab, and then nothing, for the
-    rest of the floor. For a hero whose kit runs from two points to twelve that
-    is his whole repertoire spent on one gesture, paid at the moment he makes
-    it rather than over the turns that follow.
 
-    What it does *not* do is stop him swinging. The free attack is still free,
-    which is what keeps a hero with no armour and thirty-four hit points able to
-    keep going down a floor he has just bankrupted himself on.
+    The three-point purse it used to cost is gone with the other three prices:
+    the ask is paid in the same five points every hero pays now, and this one
+    keeps its fire -- the floor burns because that is what he *bought*.
     """
     state.ravaging = True
     state.ultimate_available = False
-    # Paid on the way out and not over the floor: a cap the hero walks around
-    # holding twelve points under would be a cap that never bit.
-    state.kill_points = min(state.kill_points, state.kill_points_max)
     state.say("You put everything you have into the floor.", LogKind.SYSTEM)
     state.say("It catches, and it keeps catching.", LogKind.GOOD)
     return _spend_the_turn(state)
 
 
 def _spend_the_turn(state: GameState) -> ActionResult:
-    """The tail every ultimate shares: the beat, the answering world, and the
-    eyes. Its own function because the three casts were each growing a copy of
-    it, and the copies had already started to drift."""
+    """The tail every ultimate shares: the price, the beat, the answering world.
+
+    The price is the same for all four, and it is the only one they have now:
+    the purse holds five points for the rest of the run. It used to be four
+    different prices -- a slow bleed, a narrowed sight, a burning floor that
+    bankrupted one hero in particular -- which meant four rules to learn and one
+    hero paying in a currency the others never touched.
+
+    Paid *here* and not over the turns that follow: a cap the hero has to walk
+    around while holding more would be a cap that never bit.
+    """
+    state.sacrificed = True
+    state.kill_points = min(state.kill_points, state.kill_points_max)
     state.turn += 1
     state.total_turns += 1
     advance_world(state)
@@ -1759,9 +1784,8 @@ def _advance_atritas(
     could ever reach.
 
     Every swing aims at what stands close to Noxx -- the promise was that it
-    attacks *around* him -- and every second beat of the stay is the
-    summoner's own blood, floored at one so the dark spends him and never
-    spends him out.
+    attacks *around* him. The price of the ask is not here any more: it is the
+    purse, paid once when the ultimate is used, and it is the same for all four.
 
     ``swing_every`` is the cadence, and the arena passes one: a fight is five to
     nine rounds while the stay is forty turns, so the floor's every-sixth beat
@@ -1775,11 +1799,6 @@ def _advance_atritas(
 
     hero = state.player
     age = ATRITAS_TURNS - state.atritas_turns_left
-
-    # THE PRICE.
-    if age and age % ATRITAS_DRAIN_EVERY == 0 and hero.stats.hp > 1:
-        hero.stats.hp -= 1
-        state.say("The void takes its toll: one heart's worth.", LogKind.DAMAGE)
 
     # THE ASSISTANCE.
     struck: Actor | None = None

@@ -372,7 +372,7 @@ class Battle:
             # the floor when he lit it, but every one of them that ever comes at
             # him while it burns.
             for enemy in self.enemies:
-                inflict(state, enemy, ("burn",))
+                inflict(state, enemy, ("burn",), source=state.player)
 
     # -- what the hero is offered -------------------------------------------
     def commands(self) -> list[str]:
@@ -857,7 +857,7 @@ class Battle:
         # hit -- the *tricks* were not, which is the inconsistency this closes.
         if outcome.hit and enemy.stats.alive:
             before = len(self.state.log)
-            inflict(self.state, enemy, ("poison",))
+            inflict(self.state, enemy, ("poison",), source=self.hero)
             self._splice(before, events)
 
     def _special_orb_of_ptamera(self, target: Actor | None, events: list[Event]) -> None:
@@ -936,7 +936,13 @@ class Battle:
         for enemy in self.living_enemies():
             before = len(self.state.log)
             self.state.say(f"Something in the {enemy.name} opens.", LogKind.GOOD)
-            inflict(self.state, enemy, (DEEP_BLEED,), stacks=STACK_LIMIT)
+            inflict(
+                self.state,
+                enemy,
+                (DEEP_BLEED,),
+                stacks=STACK_LIMIT,
+                source=self.hero,
+            )
             self._splice(before, events)
 
     def _special_open_vein(self, target: Actor | None, events: list[Event]) -> None:
@@ -947,7 +953,10 @@ class Battle:
         outcome = self._blow(enemy, events, flair=OPEN_VEIN)
         if outcome.hit and enemy.stats.alive:
             before = len(self.state.log)
-            inflict(self.state, enemy, ("bleed",))
+            # Two stacks and not one: the vein is the *cut that will not close*,
+            # and a blade that opens it for the same single wound every other
+            # blade leaves was the cheapest sentence in Noxx's kit.
+            inflict(self.state, enemy, ("bleed",), stacks=2, source=self.hero)
             self._splice(before, events)
 
     def _special_between_blows(self, target: Actor | None, events: list[Event]) -> None:
@@ -1009,7 +1018,7 @@ class Battle:
             )
             if outcome.hit and enemy.stats.alive:
                 before = len(self.state.log)
-                inflict(self.state, enemy, ("chill",))
+                inflict(self.state, enemy, ("chill",), source=self.hero)
                 self._splice(before, events)
 
     def _special_overture(self, target: Actor | None, events: list[Event]) -> None:
@@ -1068,7 +1077,7 @@ class Battle:
         outcome = self._blow(enemy, events, flair=RIME)
         if outcome.hit and enemy.stats.alive:
             before = len(self.state.log)
-            inflict(self.state, enemy, ("chill",))
+            inflict(self.state, enemy, ("chill",), source=self.hero)
             self._splice(before, events)
 
     def _special_hoarfrost(self, target: Actor | None, events: list[Event]) -> None:
@@ -1178,7 +1187,7 @@ class Battle:
         )
         if outcome.hit and enemy.stats.alive:
             before = len(self.state.log)
-            inflict(self.state, enemy, ("bleed",))
+            inflict(self.state, enemy, ("bleed",), source=self.hero)
             self._splice(before, events)
 
     def _special_ember_fist(self, target: Actor | None, events: list[Event]) -> None:
@@ -1199,7 +1208,7 @@ class Battle:
         )
         if outcome.hit and enemy.stats.alive:
             before = len(self.state.log)
-            inflict(self.state, enemy, ("burn",))
+            inflict(self.state, enemy, ("burn",), source=self.hero)
             self._splice(before, events)
 
     def _special_headbutt(self, target: Actor | None, events: list[Event]) -> None:
@@ -1329,7 +1338,7 @@ class Battle:
         )
         if self._frost and outcome is not None and outcome.hit and not outcome.killed:
             # THE HOARFROST: the cold comes off him onto whatever touched him.
-            inflict(self.state, attacker, ("chill",))
+            inflict(self.state, attacker, ("chill",), source=self.hero)
             self.state.say(
                 f"The cold comes off him onto the {attacker.name}.", LogKind.GOOD
             )

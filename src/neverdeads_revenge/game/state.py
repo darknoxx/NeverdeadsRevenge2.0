@@ -40,7 +40,11 @@ from .actors import (
     scale_template,
 )
 from .combat import apply_revenge
-from .levels import RAVAGING_POINTS, kill_points_for, kills_to_next
+from .levels import (
+    SACRIFICED_KILL_POINTS,
+    kill_points_for,
+    kills_to_next,
+)
 from .curses import CURSES, Curse
 from .difficulty import (
     ATRITAS_VIEW,
@@ -314,6 +318,10 @@ class GameState:
     #: fight on this floor start with everything in it already burning, and hold
     #: his purse at three points for as long as it lasts.
     ravaging: bool = False
+    #: Whether an ultimate has been given into this run. One shared price: the
+    #: purse holds five points for the rest of it, and the shop cannot buy them
+    #: back. See :data:`levels.SACRIFICED_KILL_POINTS`.
+    sacrificed: bool = False
     #: Yeti's bastion, while it stands. Same shape of life as the shadow: not
     #: an enemy, not in the queue, kept by its own clock -- and the one thing
     #: on the floor every monster would rather bite than the hero.
@@ -361,6 +369,10 @@ class GameState:
     #: How much further a draught goes, from the cellar upgrade: a fraction, and
     #: multiplied into :attr:`heal_scale` where the curses and amulets meet.
     heal_bonus: float = 0.0
+    #: Extra kill points the purse holds, from the Focus upgrade. Added to the
+    #: level's ceiling, and *not* to the sacrificed one: a hero who has given
+    #: himself to a floor's ask does not get to buy his tricks back.
+    kill_points_bonus: int = 0
     #: What a dropped coin is multiplied by: the pact and greed both touch it.
     coin_multiplier: float = 1.0
     #: What every monster's health is multiplied by. Greed's catch.
@@ -572,9 +584,11 @@ class GameState:
         bar, the list of tricks and the arithmetic all read the same small
         number -- a cap any of the three could disagree about is not a cap.
         """
-        if self.ravaging:
-            return min(RAVAGING_POINTS, kill_points_for(self.level))
-        return kill_points_for(self.level)
+        if self.sacrificed:
+            # The one price every ultimate shares: five points, whatever the level
+            # and whatever the shop sold. The ask is paid in tricks.
+            return SACRIFICED_KILL_POINTS
+        return kill_points_for(self.level) + self.kill_points_bonus
 
     @property
     def heal_scale(self) -> float:
@@ -620,6 +634,18 @@ class GameState:
         """
         worn = self.player.equipment.get("amulet")
         return worn.amulet if worn is not None else None
+
+    def status_depth_bonus(self, key: str) -> int:
+        """How much deeper the worn amulet makes one wound, in stacks.
+
+        One for the four amulets that are each about a single status, none for
+        everything else -- and the cap is the wound's own, applied where the
+        stack is written.
+        """
+        from .amulets import amulet_by_key
+
+        passive = amulet_by_key(self.amulet)
+        return 1 if passive is not None and passive.status == key else 0
 
     def has_passive(self, key: str) -> bool:
         """Whether the worn amulet is this one."""
@@ -1264,6 +1290,8 @@ def _apply_upgrades(state: GameState, upgrades: dict[str, int]) -> None:
             state.pack_capacity += upgrade.pack_slots * stacks
         if upgrade.heal:
             state.heal_bonus += upgrade.heal * stacks
+        if upgrade.kp:
+            state.kill_points_bonus += upgrade.kp * stacks
         if upgrade.damage:
             player.stats.damage = (
                 player.stats.damage[0] + upgrade.damage * stacks,

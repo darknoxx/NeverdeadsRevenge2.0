@@ -227,32 +227,7 @@ def _move_towards(target, source):
 
 
 # -- the price -------------------------------------------------------------------
-def test_the_drain_spend_health_but_never_the_last():
-    """One health every second beat of the stay, floored at one: the dark
-    cannot kill its summoner, because the ask was a cost, not a bet."""
-    state = _run(ultimate_level=1)
 
-    perform_action(state, Action.ULTIMATE)
-    state.player.stats.hp = 5
-
-    _wait(state, ATRITAS_TURNS)
-
-    assert state.player.stats.hp == 1, "the drain fell below one"
-    assert state.atritas is None and not state.over
-
-
-def test_the_drain_happens_on_its_beat():
-    state = _run(ultimate_level=1)
-
-    perform_action(state, Action.ULTIMATE)
-    state.player.stats.hp = 3
-    # The cast's own tick is age zero, so the drain's first beat is the
-    # eighth wait after it.
-
-    _wait(state, 7)
-    assert state.player.stats.hp == 3
-    _wait(state, 1)
-    assert state.player.stats.hp == 2
 
 
 # -- the assistance ---------------------------------------------------------------
@@ -390,13 +365,21 @@ def test_the_fortress_keeps_three_paces_of_its_own_weather():
     assert state.dungeon_map.is_visible(fortress.position)
 
 
-def test_the_fortress_takes_five_paces_of_sight():
+def test_the_fortress_takes_no_sight_any_more():
+    """The wall used to cost five paces of eyes -- a price only Yeti paid.
+
+    The ask is paid out of the purse now, the same five points every hero pays,
+    so the fortress costs nothing of his sight.
+    """
+    from neverdeads_revenge.game.levels import SACRIFICED_KILL_POINTS
+
     state = _yeti_run()
     before = state.sight_radius
 
     perform_action(state, Action.ULTIMATE)
 
-    assert state.sight_radius == max(1, before - 5)
+    assert state.sight_radius == before, "the wall took his eyes"
+    assert state.sacrificed and state.kill_points_max == SACRIFICED_KILL_POINTS
 
 
 def test_everything_prefers_the_ice_to_the_hero():
@@ -406,9 +389,7 @@ def test_everything_prefers_the_ice_to_the_hero():
     fortress = state.fortress
     assert fortress is not None
 
-    # A ghoul beside the wall on the side it can see -- the sight penalty is
-    # part of the fortress, and a monster that cannot see the ice cannot want
-    # it -- with Yeti out of reach.
+    # A ghoul beside the wall, with Yeti out of reach.
     from neverdeads_revenge.core.direction import direction_towards
 
     spot = direction_towards(fortress.position, state.player.position).step(
@@ -446,7 +427,7 @@ def test_the_fortress_melts_at_its_eighty_turns():
     _wait(state, FORTRESS_TURNS)
 
     assert state.fortress is None, "the wall overstayed"
-    assert state.sight_penalty == 0, "the cold never let go of the eyes"
+    assert state.sight_penalty == 0, "the wall touched his sight after all"
     assert any("thaws" in entry.text for entry in state.log)
 
 
@@ -1069,3 +1050,25 @@ def test_drinking_from_the_pack_costs_a_turn_like_the_quick_key():
     drink(state, "potion")
 
     assert state.total_turns == before + 1, "the bottle was free"
+
+
+def test_every_ultimate_pays_the_same_five_points():
+    """One price for all four, and it is the *purse*: five, for the rest of the run.
+
+    It used to be four different prices -- a slow bleed for Noxx, a narrowed
+    sight for Yeti, a burning floor that bankrupted Inferno -- which meant four
+    rules to learn and one hero paying in a currency the others never touched.
+    """
+    from neverdeads_revenge.game.levels import SACRIFICED_KILL_POINTS
+    from neverdeads_revenge.game.state import start_run
+
+    for hero in HEROES:
+        state = start_run(HEROES[hero], seed=3, ultimate_level=1)
+        state.level = 8
+        state.kill_points = state.kill_points_max
+
+        perform_action(state, Action.ULTIMATE)
+
+        assert state.sacrificed, f"{hero} did not pay"
+        assert state.kill_points_max == SACRIFICED_KILL_POINTS, hero
+        assert state.kill_points <= SACRIFICED_KILL_POINTS, hero

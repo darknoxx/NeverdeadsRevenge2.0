@@ -30,12 +30,13 @@ from .actors import Actor
 
 __all__ = [
     "Gain",
-    "RAVAGING_POINTS",
     "LEVEL_COSTS",
     "kills_for_level",
     "kills_to_next",
     "MAX_LEVEL",
     "KILL_POINTS",
+    "KILL_POINTS_CAP",
+    "SACRIFICED_KILL_POINTS",
     "kill_points_for",
     "level_for",
     "gains_for",
@@ -73,16 +74,12 @@ LEVEL_COSTS: tuple[int, ...] = (
 
 #: The level a run stops teaching at.
 #:
-#: Set at the ceiling rather than near it. A perfect clear is every monster on
-#: all ten floors, and there are ``sum(11 + depth for depth in 1..10)`` = 165 of
-#: them, which the flat curve used to buy at level 42. Forty-one is the last
-#: level a run can be *working toward*: the last few kills of a perfect clear
-#: have nothing left to teach, and they are only reachable by clearing every
-#: floor completely, which no measured run has ever come close to.
-#:
-#: It used to be twenty, which was a wall a thorough run could feel without ever
-#: being told it was there.
-MAX_LEVEL = 41
+#: Twenty, and that is measured: a perfect clear is every monster on all ten
+#: floors, ``sum(13 + 2 * depth for depth in 1..10)`` = 240 of them, and that
+#: buys level 18 on this curve. The ceiling sits just past what the dungeon can
+#: pay rather than twenty-one levels past it, which was a ladder whose top half
+#: no run could ever stand on.
+MAX_LEVEL = 20
 
 #: Kill points: what the tricks are paid from, by level.
 #:
@@ -94,25 +91,31 @@ MAX_LEVEL = 41
 #:
 #: The table is the ceiling; the purse fills by one at every turn of the hero's
 #: and to the brim on a level. So a level-2 hero can afford the knife twice in
-#: one fight, and the void -- the dark's own ask at level seven -- costs more
-#: than a level-seven hero can *hold*: it is a thing you save for, which is what
-#: an ultimate should be.
+#: one fight, and the dearest trick in the game costs ten: exactly the last
+#: ceiling. Past level seven the table is flat by design -- levels hand over
+#: stats and tricks, not a bigger purse. See :data:`KILL_POINTS_CAP`.
 KILL_POINTS: tuple[int, ...] = (
-    3, 4, 5, 6, 8, 10, 12, 14, 16, 18,  # levels one to ten
-    21, 24, 27, 30, 33, 36, 39, 42, 45, 48,
-    51, 54, 57, 60, 63, 66, 69, 72, 75, 78,
-    81, 84, 87, 90, 93, 96, 99, 102, 105, 108, 111,
+    3, 4, 5, 6, 8, 10, 12,  # levels one to seven
 )
 
-
-#: What a hero can hold while the floor is on fire: Inferno's own price.
+#: The purse never holds more than this, whatever the level.
 #:
-#: Three points is his *cheapest* trick and a half -- the jab, once, and then
-#: nothing -- and it lasts the whole floor. It is the only ultimate in the game
-#: that is paid for by taking part of the hero's own kit away rather than by
-#: spending something he has, and it is the only price that could possibly suit
-#: him: a fire he lights with everything he had left.
-RAVAGING_POINTS = 3
+#: Ten is the dearest trick in the game (THE QUAKE, THE RINGING CHORD), so the
+#: ceiling is "one big thing": a hero can hold the biggest trick he owns and
+#: nothing else, or two smaller ones, and never a war chest. It used to grow to
+#: 42 by level eighteen, which let a long fight chain four quakes -- a purse
+#: that big stops being a decision and becomes a stockpile.
+#:
+#: The shop sells up to five more, one at a time: a permanent widening of the
+#: purse, which is the only upgrade that buys *options* rather than numbers.
+KILL_POINTS_CAP = 10
+
+#: What the purse holds once a hero has given himself to an ultimate. Five: one
+#: trick of the middle price and nothing else. It is the *same* price for all
+#: four heroes -- a floor's ask costs the tricks you could have spent on it, not
+#: a blindfold or a slow bleed, and one shared price is one rule a player can
+#: learn once.
+SACRIFICED_KILL_POINTS = 5
 
 
 def kill_points_for(level: int) -> int:
@@ -122,7 +125,7 @@ def kill_points_for(level: int) -> int:
     last levels of a perfect clear are already beyond anything a run reaches,
     and a run that somehow got there should not find its tricks unaffordable.
     """
-    return KILL_POINTS[max(0, min(level, len(KILL_POINTS)) - 1)]
+    return min(KILL_POINTS_CAP, KILL_POINTS[max(0, min(level, len(KILL_POINTS)) - 1)])
 
 
 @dataclass(frozen=True, slots=True)

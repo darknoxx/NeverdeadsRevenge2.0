@@ -815,3 +815,48 @@ def test_the_mirror_teaches_like_any_other_kill():
     assert state.kills == kills_for_level(2)
     assert state.level == 2
     assert player.max_hp == before + 2
+
+
+# -- the four that deepen a wound ------------------------------------------
+def test_each_status_amulet_deepens_its_own_wound_and_no_other():
+    """One status each: red seam bleeds, green kiss poisons, bellows burns, thin ice chills.
+
+    One stack, and the wound's own ceiling of three stops it there. And only what
+    the hero leaves in somebody else -- a wound he *takes*, or a monster's own
+    self-inflicted one, is not his doing and does not get deeper.
+    """
+    from neverdeads_revenge.game.actions import inflict
+    from neverdeads_revenge.game.actors import ENEMIES, make_enemy
+
+    pairs = (
+        ("red_seam", "bleed"),
+        ("green_kiss", "poison"),
+        ("bellows", "burn"),
+        ("thin_ice", "chill"),
+    )
+    for amulet, status in pairs:
+        state = wearing(amulet)
+        foe = make_enemy(ENEMIES["ghoul"], state.player.position)
+
+        inflict(state, foe, (status,), source=state.player)
+        assert foe.status_stacks[status] == 2, f"{amulet} did not deepen the {status}"
+
+        inflict(state, foe, (status,), source=state.player)
+        inflict(state, foe, (status,), source=state.player)
+        assert foe.status_stacks[status] == 3, f"{amulet} went past the ceiling"
+
+        # His own wound, and a monster's own: the amulet is not in either.
+        inflict(state, state.player, (status,), source=state.player)
+        assert state.player.status_stacks[status] == 1, f"{amulet} deepened his own wound"
+
+
+def test_without_the_amulet_a_wound_is_one_stack():
+    from neverdeads_revenge.game.actions import inflict
+    from neverdeads_revenge.game.actors import ENEMIES, make_enemy
+
+    state = wearing()
+    foe = make_enemy(ENEMIES["ghoul"], state.player.position)
+
+    inflict(state, foe, ("poison",), source=state.player)
+
+    assert foe.status_stacks["poison"] == 1

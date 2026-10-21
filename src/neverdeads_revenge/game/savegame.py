@@ -189,6 +189,8 @@ def dump(state: GameState) -> dict:
         "floor_kills": state.floor_kills,
         "level": state.level,
         "kill_points": state.kill_points,
+        "kill_points_bonus": state.kill_points_bonus,
+        "sacrificed": state.sacrificed,
         "revenge_stacks": state.revenge_stacks,
         "floors_cleared": state.floors_cleared,
         "inventory": [_encode(item) for item in state.inventory],
@@ -272,6 +274,8 @@ def load(payload: dict) -> GameState:
         # A save from before the purse: filled rather than empty, because the
         # alternative is a run that opens with its tricks unaffordable.
         state.kill_points = payload.get("kill_points", kill_points_for(payload["level"]))
+        state.kill_points_bonus = int(payload.get("kill_points_bonus", 0))
+        state.sacrificed = bool(payload.get("sacrificed", False))
         state.revenge_stacks = payload["revenge_stacks"]
         state.floors_cleared = payload["floors_cleared"]
         state.inventory = [_decode(item) for item in payload["inventory"]]

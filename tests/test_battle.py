@@ -1067,6 +1067,7 @@ def test_the_open_vein_keeps_costing_him():
 
     battle.choose(SPECIAL, enemy, special=OPEN_VEIN)
     assert "bleed" in enemy.statuses, "the vein was opened and nothing ran"
+    assert enemy.status_stacks["bleed"] == 2, "the vein opened a scratch, not a vein"
 
     hp = enemy.stats.hp
     battle.choose(ATTACK, battle.living_enemies()[0])  # a round goes by: the wound does its work

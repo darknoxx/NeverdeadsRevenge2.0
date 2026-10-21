@@ -354,3 +354,27 @@ def test_the_walk_into_a_monster_still_works_after_a_level():
     assert state.kills == kills_for_level(2)
     assert state.level == 2
     assert state.player.alive
+
+
+def test_the_purse_stops_at_ten_whatever_the_level():
+    """Ten is the dearest trick in the game, so it is where the purse stops.
+
+    It used to climb to 42 by level eighteen, which let a long fight chain four
+    quakes: a stockpile instead of a decision. Past the ceiling, levels hand over
+    stats and tricks and no more points -- and the run's own ceiling is twenty,
+    which is two levels past what a perfect clear can pay for.
+    """
+    from neverdeads_revenge.game.levels import (
+        KILL_POINTS_CAP,
+        MAX_LEVEL,
+        kill_points_for,
+    )
+
+    assert KILL_POINTS_CAP == 10
+    assert MAX_LEVEL == 20
+    assert kill_points_for(1) == 3
+    assert kill_points_for(6) == KILL_POINTS_CAP
+    assert all(
+        kill_points_for(level) == KILL_POINTS_CAP
+        for level in range(6, MAX_LEVEL + 1)
+    )

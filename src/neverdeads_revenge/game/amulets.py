@@ -44,6 +44,10 @@ class Passive:
     #: 1 for the ones that turn up lying about, 2 for the strong tier that only
     #: comes out of a chest or the shop.
     tier: int = 1
+    #: The status this amulet deepens by one stack, or empty for the ones that
+    #: are not about a wound. Read where the stack is written: only what the
+    #: *hero* leaves in somebody else, and never past three.
+    status: str = ""
 
 
 AMULETS: dict[str, Passive] = {
@@ -70,6 +74,40 @@ AMULETS: dict[str, Passive] = {
         key="wayfarer",
         name="the wayfarer",
         blurb="you know the way out when you arrive",
+        tier=1,
+    ),
+    # -- the four that deepen a wound -------------------------------------
+    #
+    # One status each, and one stack each -- the ceiling is three, so an amulet
+    # and a second cut reach it and nothing goes past. They are the only amulets
+    # that make a *rule* deeper rather than a number bigger, which is why they
+    # are the ones a status build is actually built out of.
+    "red_seam": Passive(
+        key="red_seam",
+        name="the red seam",
+        blurb="every wound you open is one deeper",
+        status="bleed",
+        tier=1,
+    ),
+    "green_kiss": Passive(
+        key="green_kiss",
+        name="the green kiss",
+        blurb="every poison you leave is one deeper",
+        status="poison",
+        tier=1,
+    ),
+    "bellows": Passive(
+        key="bellows",
+        name="the bellows",
+        blurb="every fire you set is one deeper",
+        status="burn",
+        tier=1,
+    ),
+    "thin_ice": Passive(
+        key="thin_ice",
+        name="the thin ice",
+        blurb="every cold you leave is one deeper",
+        status="chill",
         tier=1,
     ),
     # -- out of the strong tier -------------------------------------------

@@ -18,7 +18,6 @@ from dataclasses import dataclass
 
 from neverdeads_revenge.game.actors import ActorKind
 from neverdeads_revenge.game.draughts import draught_by_key
-from neverdeads_revenge.game.levels import RAVAGING_POINTS
 from neverdeads_revenge.game.npcs import NPC_COLOR, NPC_GLYPH
 from neverdeads_revenge.game.state import GameState, LogKind
 from neverdeads_revenge.world.generator import ESCAPE_DEPTH
@@ -393,6 +392,16 @@ def sidebar_text(
         if y + small_cell_h <= bottom:
             out.append(Ink(text[:chars], text_x, y, colour.name()))
             y += small_cell_h + small_cell_h // 4
+        # And the price, in the smallest voice the sidebar owns: the ask is paid
+        # in kill points, and a price nobody is told is not a choice.
+        price = (
+            "the price is paid: 5 kill points"
+            if state.sacrificed
+            else "f  sacrifice your kill points for power"
+        )
+        if y + small_cell_h <= bottom:
+            out.append(Ink(price[:chars], text_x, y, "grey35"))
+            y += small_cell_h + small_cell_h // 4
     y += small_cell_h // 3  # air between the groups and the legend
     rule = None
     if y < bottom:
@@ -642,13 +651,9 @@ def _void_prompt(state: GameState, now: float) -> tuple[str, Colour] | None:
             Colour(*base),
         )
     if state.ravaging:
-        # The receipt, and the one number that matters while it burns: the fire
-        # does not run out and cannot be walked away from, so the line says what
-        # it costs him for the rest of the floor.
-        return (
-            f"the floor burns; {RAVAGING_POINTS} kill points",
-            Colour(*base),
-        )
+        # The receipt: the fire does not run out and cannot be walked away from,
+        # so the line says what is still true of the floor.
+        return ("the floor burns", Colour(*base))
     if state.atritas is not None or not state.ultimate_available:
         # Given: grey until the next floor says otherwise. The dead line is
         # the receipt, not an invitation.
