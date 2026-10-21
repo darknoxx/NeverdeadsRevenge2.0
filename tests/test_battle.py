@@ -1526,3 +1526,30 @@ def test_a_wound_in_the_arena_runs_on_the_heros_turn_whatever_the_monsters_speed
         f"the slow one bled to {slow.stats.hp}, not {expected} -- the wound "
         "followed the monster's turns instead of the hero's"
     )
+
+
+def test_the_void_fights_the_room_for_you():
+    """Atritas in a fight: one strike a round, on the nearest thing.
+
+    The dungeon's shadow swings every sixth beat because the floor is long; a
+    fight is five to nine rounds, so the same cadence would have him stand in the
+    room and swing at nothing -- which is what he did. In a room he takes his turn
+    with everybody else, and the screen is told whom he went for.
+    """
+    from neverdeads_revenge.game.actors import make_atritas
+
+    battle = duel("noxx", 5)
+    state = battle.state
+    state.atritas = make_atritas(state.player.position, state.level, state.depth)
+    state.atritas_turns_left = 40
+    for index, foe in enumerate(battle.enemies):
+        foe.position = (state.player.position[0] + 1 + index, state.player.position[1])
+        foe.stats.max_hp = foe.stats.hp = 999
+
+    events = battle.choose(ATTACK, battle.enemies[0])
+
+    from neverdeads_revenge.game.battle import ShadowStruck
+
+    struck = [event for event in events if isinstance(event, ShadowStruck)]
+    assert struck, "the shadow stood in the room and did nothing"
+    assert struck[0].actor in battle.enemies, "he went for somebody outside the room"

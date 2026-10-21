@@ -36,6 +36,7 @@ from ...game.battle import (
     Guarded,
     Over,
     Said,
+    ShadowStruck,
     Struck,
 )
 from ...game.specials import (
@@ -366,15 +367,11 @@ FLOOR_BONES = 45
 GONE_LIFE = 0.6
 #: How long a wall of ice stands in front of the hero after it is raised.
 WALL_LIFE = 1.2
-#: How long Atritas stands there after FRIENDS LIKE THESE has called him. Longer
-#: than a flourish, because he *is* the trick: a shadow the player never got a
-#: look at is a shadow the trick did not really have.
-SHADOW_LIFE = 1.3
-#: How far out of his own outline the shadow stands, in cells, and how wide the
-#: light behind him is. Far enough to read as a second figure: Noxx is petrol
-#: himself, so a petrol silhouette in his own place is a silhouette nobody sees.
-SHADOW_OFFSET = 2.6
-SHADOW_LIGHT = 4.6
+#: What a monster the shadow killed does: it goes black where it stands, sinks a
+#: little, and is gone. The room's ordinary death is a fade; the void's is a
+#: *sinking*, because the thing that killed it took it down rather than out.
+SINK_LIFE = 0.9
+SINK_DROP = 46
 #: How long a blow's own flourish lasts. Inside the beat that carries it, so the
 #: fight still reads one blow at a time -- but long enough to be *seen*, which is
 #: the whole point of fifteen tricks looking like fifteen tricks.
@@ -702,6 +699,11 @@ class BattleScreen(Screen):
         #: the trick opened. Not a particle -- it is a *sprite*, drawn by the
         #: pixel pass, and it is what the wound it left behind looks like.
         self._drift: list[tuple[str, float, float, float]] = []
+        #: What the shadow killed, on its way down: the figure it was, going
+        #: black and sinking. Kept apart from the room's ordinary fade because the
+        #: void takes a thing down rather than letting it go.
+        self._sinking: list[tuple[str, float, float, float]] = []
+        self._sinking_ids: set[int] = set()
         #: Who was struck: when the blow inside their strike lands, and the
         #: colour the trick that landed it is painted in.
         self._hurts: dict[int, tuple[float, str, str]] = {}
@@ -884,6 +886,10 @@ class BattleScreen(Screen):
         lying about, it lets the whole figure go. A dead monster is not a monster
         in half a light: it is one that was there and now is not.
         """
+        if actor_id in self._sinking_ids:
+            # The void's kill has its own way of leaving, and two of them at once
+            # would be one corpse drawn twice.
+            return 0.0
         when = self._dying.get(actor_id)
         if when is None:
             return 1.0
@@ -1212,6 +1218,12 @@ class BattleScreen(Screen):
             self._drift = [
                 one for one in self._drift if self._clock - one[3] < DRIFT_LIFE
             ]
+        if self._sinking:
+            self._sinking = [
+                one for one in self._sinking if self._clock - one[3] < SINK_LIFE
+            ]
+            if not self._sinking:
+                self._sinking_ids.clear()
         if self._wash is not None and not self._wash.spent and self._clock >= self._wash.when:
             # The blow landed inside this frame, so the room stops for the next
             # few: the hitstop is spent *at* the impact and not at the swing.
@@ -1415,6 +1427,30 @@ class BattleScreen(Screen):
                 self._late.append((self._clock + waits, event))
             else:
                 self.lines = [*self.lines, event][-LOG_LINES:]
+            return
+        if isinstance(event, ShadowStruck):
+            # The shadow went for somebody: the ghost over them, and -- if that
+            # was the end of them -- the body going black and down.
+            figure = self._figure_of(event.actor, app)
+            if figure is not None:
+                feet = float(figure.row * app.font.cell_h - THICKNESS)
+                bottom = feet
+                art = "sprites/atritas.png"
+                if art_exists(art):
+                    # *Above* them and not on them: the monster is going down
+                    # under the ghost's feet, and one sprite over another is one
+                    # of the two not being seen.
+                    measured = art_size(figure.art) if figure.art else None
+                    if measured is not None:
+                        bottom = feet - measured[1] - 4
+                    self._drift.append(
+                        (art, float(figure.cx), bottom, self._clock)
+                    )
+                if event.killed:
+                    self._sinking.append(
+                        (figure.art, float(figure.cx), bottom, self._clock)
+                    )
+                    self._sinking_ids.add(id(event.actor))
             return
         if isinstance(event, Flourish):
             status = status_by_key(event.flair)
@@ -1892,24 +1928,10 @@ class BattleScreen(Screen):
             )
         # Atritas, when the trick has called him: a figure beside the hero and on
         # his own row, because a shadow that stands in the hero's place is a
-        # silhouette nobody sees. He is not a target and never was -- he is what
-        # the trick *looks* like -- so he is staged and not counted.
-        shadow = self.battle.state.atritas
-        if shadow is not None:
-            shadow_art = _picture(shadow.name)
-            staged.append(
-                Staged(
-                    actor=shadow,
-                    glyph=shadow.glyph,
-                    colour=shadow.color,
-                    size=round(HERO_SIZE * scale),
-                    cx=(centre + 1 + SHADOW_OFFSET) * cell_w,
-                    row=y0 + height - 1 + HERO_DROP - STAGE_LIFT,
-                    cells=self._span(shadow_art, cell_w),
-                    art=shadow_art,
-                    phase=2.7,
-                )
-            )
+        # The shadow himself is not staged: he is not standing in the room, he is
+        # *moving through* it -- a sprite over whichever monster he went for, one
+        # strike at a time. A figure beside the hero was a shadow doing nothing,
+        # which is exactly what he looked like.
         hero = self.battle.hero
         size = round(HERO_SIZE * scale)
         art = _picture(hero.name)
@@ -2006,7 +2028,14 @@ class BattleScreen(Screen):
         return max(2, round(measured[0] / cell_w))
 
     def shadow_is_out(self) -> bool:
-        """Whether a FRIENDS LIKE THESE shadow is still out over the room."""
+        """Whether the thing that lives in Noxx is somewhere else.
+
+        Two ways that happens: a FRIENDS LIKE THESE ghost over the room, or the
+        void itself let out for forty turns. Either way the body stands without
+        its shadow, because the shadow is not in it.
+        """
+        if self.battle.state.atritas is not None:
+            return True
         return any(
             self._clock - when < DRIFT_LIFE for _art, _x, _y, when in self._drift
         )

@@ -1750,7 +1750,9 @@ def _ultimate_spot(state: GameState) -> Pos | None:
     return None
 
 
-def _advance_atritas(state: GameState) -> None:
+def _advance_atritas(
+    state: GameState, swing_every: int = ATRITAS_SWING_EVERY
+) -> Actor | None:
     """One beat of the shadow's life. Called from ``advance_world``, which is
     why it is in turns and not in seconds: the monsters it kills live in turns,
     and a shadow on a different clock from its prey would be a shadow nothing
@@ -1760,6 +1762,12 @@ def _advance_atritas(state: GameState) -> None:
     attacks *around* him -- and every second beat of the stay is the
     summoner's own blood, floored at one so the dark spends him and never
     spends him out.
+
+    ``swing_every`` is the cadence, and the arena passes one: a fight is five to
+    nine rounds while the stay is forty turns, so the floor's every-sixth beat
+    would have the shadow stand in the room and swing at nothing. Returns the
+    monster he went for, or ``None`` when this beat was not a swing -- the arena
+    paints that, and the floor has nothing to paint.
     """
     atritas = state.atritas
     if atritas is None or state.over:
@@ -1774,7 +1782,8 @@ def _advance_atritas(state: GameState) -> None:
         state.say("The void takes its toll: one heart's worth.", LogKind.DAMAGE)
 
     # THE ASSISTANCE.
-    if age % ATRITAS_SWING_EVERY == 3:
+    struck: Actor | None = None
+    if swing_every <= 1 or age % swing_every == 3:
         target = _shadow_prey(state, atritas)
         if target is not None:
             # THE BLINK. The dark does not walk to its prey -- it is simply
@@ -1782,6 +1791,7 @@ def _advance_atritas(state: GameState) -> None:
             # the shadow arrive where it strikes and never wonders whether
             # it worked.
             _place_beside(state, atritas, target)
+            struck = target
             outcome = attack(atritas, target, state.rng, spread=state.damage_spread)
             if outcome.hit:
                 state.hits.append(target.position)
@@ -1826,6 +1836,7 @@ def _advance_atritas(state: GameState) -> None:
             "everything you never saw.",
             LogKind.SYSTEM,
         )
+    return struck
 
 
 def _advance_fortress(state: GameState) -> None:

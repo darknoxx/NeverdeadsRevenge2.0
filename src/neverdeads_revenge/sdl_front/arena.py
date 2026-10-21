@@ -50,6 +50,8 @@ from ..desktop.screens.battle import (
     DRIFT_LIFE,
     DRIFT_RISE,
     DRIFT_SCALE,
+    SINK_DROP,
+    SINK_LIFE,
     THICKNESS,
     WALL_FAR,
     WALL_NEAR,
@@ -215,6 +217,9 @@ class SdlArena(Screen):
             self._stage.shadow(
                 surface, figure, font, fades[id(figure.actor)], poses[id(figure.actor)]
             )
+        # What the shadow took down, under the living: a corpse is a thing on the
+        # floor, and whoever walks past it walks in front of it.
+        self._the_fallen(surface)
         for figure in self._ordered(figures):
             self._figure(
                 surface,
@@ -254,6 +259,40 @@ class SdlArena(Screen):
         if self.arena.verdict is not None:
             self._verdict(surface, font, cols, rows)
         self._wash(surface)
+
+    def _the_fallen(self, surface) -> None:
+        """What Atritas killed, going black and down.
+
+        The room's own death is a fade -- the figure lets go. The void's is a
+        *sinking*: the shape stays, the colour goes, it slides down the screen and
+        is gone. It is the same sprite the monster had, so nothing new is loaded.
+        """
+        import pygame
+
+        for art, x, bottom, when in self.arena._sinking:
+            age = self.arena._clock - when
+            if not (0.0 <= age <= SINK_LIFE):
+                continue
+            image = load(art)
+            if image is None:
+                continue
+            share = age / SINK_LIFE
+            corpse = image.copy()
+            # Black comes on faster than the fade: the thing is *taken*, and a
+            # shape that keeps its colour for most of the fall reads as a monster
+            # standing in a darker room.
+            shade = round(255 * (1.0 - share) ** 1.6)
+            corpse.fill(
+                (shade, shade, shade, 255), special_flags=pygame.BLEND_RGBA_MULT
+            )
+            corpse.set_alpha(round(255 * (1.0 - share)))
+            surface.blit(
+                corpse,
+                (
+                    round(x - corpse.get_width() / 2),
+                    round(bottom - corpse.get_height() + share * SINK_DROP),
+                ),
+            )
 
     def _the_shadow_out(self, surface) -> None:
         """Atritas over each enemy he opened, one beat after the trick landed.

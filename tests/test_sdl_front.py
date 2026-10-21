@@ -3052,15 +3052,13 @@ def test_the_prologue_fits_its_own_box_at_every_grid():
             assert len(text) <= width - 8, f"{cols} columns clipped {text!r}"
 
 
-def test_a_summoned_shadow_stands_beside_the_hero():
-    """Atritas is a picture now, and a picture that is never staged is not one.
+def test_a_summoned_shadow_is_out_over_the_monsters_and_not_beside_the_hero():
+    """He is not a figure standing about: he goes from prey to prey.
 
-    The trick calls him and he *acts* for a few turns, but he is not a target and
-    never was: he is what the trick looks like. So he is staged beside the hero,
-    out of his own outline by the offset the arena's own constant names -- a
-    silhouette in the hero's place is a silhouette nobody sees -- and he carries
-    the new sheet, which is a model of his own since Noxx's back stopped having him
-    painted into it.
+    The old staging put him beside Noxx for the whole stay, where he did nothing --
+    which is exactly what he looked like. He is over whichever monster he went
+    for now, one strike at a time, so the room holds no standing shadow at all;
+    and while he is out of the hero, the hero is drawn from the sheet without him.
     """
     font, _ = _sdl()
     from neverdeads_revenge.game.actors import HEROES, make_atritas
@@ -3077,14 +3075,15 @@ def test_a_summoned_shadow_stands_beside_the_hero():
 
     figures = arena._figures(app.cols, app.rows, app.font)
     named = {figure.actor.name: figure for figure in figures}
-    assert "atritas" in named, "the shadow was called and never stood anywhere"
-    assert named["atritas"].art == "sprites/atritas.png"
-    assert named["atritas"].cx != named["Noxx"].cx, "the shadow stands in the hero's place"
+    assert "atritas" not in named, "the shadow is standing in the room again"
+    assert named["Noxx"].art == "sprites/noxx_noatritas.png", "Noxx kept a shadow that is out"
 
-    # And without the call he is not there at all: a summon is not scenery.
+    # And when the stay ends, the hero has his shadow back.
     state.atritas = None
     figures = arena._figures(app.cols, app.rows, app.font)
-    assert all(figure.actor.name != "atritas" for figure in figures)
+    named = {figure.actor.name: figure for figure in figures}
+    assert "atritas" not in named
+    assert named["Noxx"].art == "sprites/Noxx.png"
 
 
 def test_the_echo_wears_the_best_runs_face_and_what_it_was_carrying():
@@ -3424,3 +3423,31 @@ def test_friends_like_these_sends_the_shadow_out_and_takes_it_back():
 
     assert not arena.arena.shadow_is_out(), "the shadow never came back"
     assert hero_art() == "sprites/Noxx.png", "Noxx lost his shadow for good"
+
+
+def test_what_the_shadow_kills_goes_black_and_down():
+    """The void's kill is a sinking, and the room must not draw it twice."""
+    from neverdeads_revenge.game.actors import ENEMIES, HEROES, make_enemy
+    from neverdeads_revenge.game.battle import Battle, ShadowStruck
+    from neverdeads_revenge.game.state import start_run
+    from neverdeads_revenge.sdl_front.app import SdlApp
+    from neverdeads_revenge.sdl_front.arena import SdlArena
+
+    app = SdlApp(seed=3, no_sound=True)
+    state = start_run(HEROES["noxx"], 3)
+    foes = [make_enemy(ENEMIES["ghoul"], state.player.position)]
+    arena = SdlArena(Battle(state, foes), backdrop=True)
+    app.screens = [arena]
+    app.redraw()
+
+    dead = foes[0]
+    dead.stats.hp = 0
+    arena.arena._play(ShadowStruck(dead, killed=True), app)
+
+    assert len(arena.arena._sinking) == 1, "the body did not sink"
+    assert arena.arena._fade(id(dead)) == 0.0, "the room is drawing the corpse twice"
+
+    # And once it has sunk it is not carried about for the rest of the run.
+    arena.arena._clock += 2.0
+    arena.arena.step(0.0, app)
+    assert arena.arena._sinking == []

@@ -30,6 +30,7 @@ from neverdeads_revenge.core.direction import chebyshev
 from .actions import (
     STACK_LIMIT,
     Action,
+    _advance_atritas,
     inflict,
     perform_action,
     resolve_enemy_attack,
@@ -159,6 +160,20 @@ class Flourish:
 
 
 @dataclass(frozen=True, slots=True)
+class ShadowStruck:
+    """Atritas landed on somebody: the arena paints the shadow over them.
+
+    The shadow is not in the room's queue -- he is the *void's* creature and acts
+    on the round's own beat -- so a screen that only ever heard about ``Struck``
+    would have a shadow standing about doing nothing. This is the word it needs:
+    who he went for, and whether that was the end of them.
+    """
+
+    actor: Actor
+    killed: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class Guarded:
     """The hero set his feet: everything aimed at him this round is halved."""
 
@@ -174,7 +189,7 @@ class Over:
 
 
 #: Everything a fight can say to a screen.
-Event = Said | Struck | Flourish | Guarded | Over
+Event = Said | Struck | ShadowStruck | Flourish | Guarded | Over
 
 
 def open_fight(state: GameState, trigger: Actor | None = None) -> Battle | None:
@@ -604,6 +619,17 @@ class Battle:
                 # One flourish per wound, on the one it is happening *to* -- which
                 # for a status is anybody in the room, not the hero.
                 events.append(Flourish(actor, key))
+
+        # And the void's own creature, who is not in this queue and never was:
+        # on the floor he goes from prey to prey, and a room is only a smaller
+        # floor. One strike each round -- a fight is five to nine rounds against
+        # the map's forty turns, so the floor's cadence would have him swing at
+        # nothing at all.
+        struck = _advance_atritas(self.state, swing_every=1)
+        if struck is not None:
+            events.append(
+                ShadowStruck(struck, killed=not struck.stats.alive)
+            )
 
     def turns(self) -> list[Actor]:
         """Who took a turn in the round just resolved, in the order they took it.
