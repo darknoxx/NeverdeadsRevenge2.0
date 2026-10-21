@@ -916,8 +916,17 @@ ENEMIES: dict[str, EnemyTemplate] = {
         # It does not want a fight. It asks first -- see the encounter in the
         # screen, which is where the bargain lives. What it is when refused is
         # the worst thing the floor has, which is the price of refusing.
+        #
+        # Which is why it has the health it has. At twenty it died in two blows
+        # and refusing cost a tenth of a hero's blood -- less than the eight gold
+        # it asked for, so the bargain had no weight and the "choice" was one
+        # answer with a cheaper option printed beside it. Measured at depth 2,
+        # refusing cost Noxx 10 health and four turns; at thirty-six it costs 20
+        # and seven, which is about a third of him and more than a potion mends.
+        # The damage stays where it was: a long fight is the price, a burst is a
+        # death sentence for whoever had to refuse with an empty purse.
         behaviour="kindly",
-        stats=Stats(max_hp=20, hp=20, speed=0.95, damage=(6, 9), accuracy=2, armor=1),
+        stats=Stats(max_hp=36, hp=36, speed=0.95, damage=(6, 9), accuracy=2, armor=1),
         gold=(8, 12),
         min_depth=2,
         weight=0.9,
