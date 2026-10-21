@@ -41,7 +41,7 @@ from neverdeads_revenge.game.specials import (
     CHORD,
     DEVOURING_DARKNESS,
     FLEETING_SHADOW,
-    FRIENDS_LIKE_THESE,
+    PAINT_THE_WALLS_RED,
     BELLS_THROW,
     BETWEEN_BLOWS,
     ECHOING_CUT,
@@ -881,21 +881,21 @@ def test_the_roundhouse_takes_the_whole_room():
     ), "one of them was out of the spin"
 
 
-def test_friends_like_these_cuts_three_deep():
+def test_paint_the_walls_red_cuts_three_deep():
     """Atritas brings company, and the company is the deepest wound there is.
 
     The trick is the one that says *three* out loud: every monster in the room
     gets the deep bleeding at the full ceiling, which on three of them is the
     room ending before the floor runs dry.
     """
-    from neverdeads_revenge.game.specials import FRIENDS_LIKE_THESE
+    from neverdeads_revenge.game.specials import PAINT_THE_WALLS_RED
 
     battle = duel("noxx", 7, count=3)
     for enemy in battle.enemies:
         enemy.stats.hp = 9999
         enemy.stats.evasion = 0
 
-    battle.choose(SPECIAL, special=FRIENDS_LIKE_THESE)
+    battle.choose(SPECIAL, special=PAINT_THE_WALLS_RED)
 
     assert all("maul" in enemy.statuses for enemy in battle.enemies), (
         "something in the room was not opened"
@@ -937,14 +937,14 @@ def test_devouring_darkness_keeps_half_of_what_it_bites():
     assert any(isinstance(event, Flourish) for event in events), "nothing was shown"
 
 
-def test_friends_like_these_opens_all_of_them():
+def test_paint_the_walls_red_opens_all_of_them():
     """Atritas comes, and he does not come alone: every one of them is left
     bleeding *deeply* -- longer, because a wound refreshes and does not stack."""
     battle = levelled(6, count=3)
     for enemy in battle.enemies:
         enemy.stats.hp = 999
 
-    events = battle.choose(SPECIAL, None, special=FRIENDS_LIKE_THESE)
+    events = battle.choose(SPECIAL, None, special=PAINT_THE_WALLS_RED)
 
     assert all(DEEP_BLEED in enemy.statuses for enemy in battle.enemies), "someone was missed"
     # Heavier *and* longer than the vein's own cut: what it costs per turn is the
@@ -954,7 +954,7 @@ def test_friends_like_these_opens_all_of_them():
     assert deep.damage > vein.damage, "'heavy' costs no more than the vein's cut"
     assert deep.turns > vein.turns, "'heavy' does not last any longer either"
     assert any(
-        isinstance(event, Flourish) and event.flair == FRIENDS_LIKE_THESE
+        isinstance(event, Flourish) and event.flair == PAINT_THE_WALLS_RED
         for event in events
     ), "Atritas did not come"
 
@@ -1204,7 +1204,7 @@ def test_the_five_arrive_with_levels():
         FLEETING_SHADOW,
         DEVOURING_DARKNESS,
         OPEN_VEIN,
-        FRIENDS_LIKE_THESE,
+        PAINT_THE_WALLS_RED,
         BETWEEN_BLOWS,
     ]
     assert names_at(7) == [one.key for one in SPECIALS], "the void never arrived"

@@ -39,7 +39,7 @@ __all__ = [
     "ECHOING_CUT",
     "FIRST_NOTE",
     "FLEETING_SHADOW",
-    "FRIENDS_LIKE_THESE",
+    "PAINT_THE_WALLS_RED",
     "HOARFROST",
     "LEFT_HAND",
     "LONG_WINTER",
@@ -67,7 +67,7 @@ LEFT_HAND = "left_hand"
 ORB_OF_PTAMERA = "orb_of_ptamera"
 FLEETING_SHADOW = "fleeting_shadow"
 DEVOURING_DARKNESS = "devouring_darkness"
-FRIENDS_LIKE_THESE = "friends_like_these"
+PAINT_THE_WALLS_RED = "paint_the_walls_red"
 OPEN_VEIN = "open_vein"
 BETWEEN_BLOWS = "between_blows"
 VOID = "the_void"
@@ -189,13 +189,13 @@ SPECIALS: tuple[Special, ...] = (
         level=5,
     ),
     Special(
-        key=FRIENDS_LIKE_THESE,
+        key=PAINT_THE_WALLS_RED,
         cost=8,
-        effect="the shadow comes; all bleed badly",
+        effect="all of them: the deepest wound, three stacks",
         needs_target=False,
         look="shadow",
-        name="FRIENDS LIKE THESE",
-        blurb="atritas comes, and he does not come alone",
+        name="PAINT THE WALLS RED",
+        blurb="the room is the canvas, and the paint is theirs",
         level=6,
     ),
     Special(

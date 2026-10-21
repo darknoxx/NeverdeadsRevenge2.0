@@ -3382,7 +3382,7 @@ def test_a_full_pack_refuses_a_pickup_out_loud():
     assert app.played[-1] == "error_locked", f"the refusal was silent: {app.played[-3:]}"
 
 
-def test_friends_like_these_sends_the_shadow_out_and_takes_it_back():
+def test_paint_the_walls_red_sends_the_shadow_out_and_takes_it_back():
     """The trick's picture: Atritas over each monster, and Noxx without him.
 
     The wound is applied by the rules on the same beat -- what was missing was
@@ -3393,7 +3393,7 @@ def test_friends_like_these_sends_the_shadow_out_and_takes_it_back():
     from neverdeads_revenge.desktop.screens.battle import DRIFT_LIFE
     from neverdeads_revenge.game.actors import ENEMIES, HEROES, make_enemy
     from neverdeads_revenge.game.battle import Battle, Flourish
-    from neverdeads_revenge.game.specials import FRIENDS_LIKE_THESE
+    from neverdeads_revenge.game.specials import PAINT_THE_WALLS_RED
     from neverdeads_revenge.game.state import start_run
     from neverdeads_revenge.sdl_front.app import SdlApp
     from neverdeads_revenge.sdl_front.arena import SdlArena
@@ -3408,7 +3408,7 @@ def test_friends_like_these_sends_the_shadow_out_and_takes_it_back():
     app.screens = [arena]
     app.redraw()
 
-    arena.arena._play(Flourish(state.player, FRIENDS_LIKE_THESE), app)
+    arena.arena._play(Flourish(state.player, PAINT_THE_WALLS_RED), app)
 
     assert len(arena.arena._drift) == 3, "the shadow went out to nobody"
     assert arena.arena.shadow_is_out()

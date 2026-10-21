@@ -40,7 +40,7 @@ from ...game.battle import (
     Struck,
 )
 from ...game.specials import (
-    FRIENDS_LIKE_THESE,
+    PAINT_THE_WALLS_RED,
     SPECIALS,
     Special,
     special_by_key,
@@ -232,7 +232,7 @@ FLAIR_COLOURS: dict[str, str] = {
     "orb_of_ptamera": "#2ee6cf",
     "fleeting_shadow": "#8ff0e0",
     "devouring_darkness": "#a45cff",
-    "friends_like_these": "#2ee6cf",
+    "paint_the_walls_red": "#2ee6cf",
     "open_vein": "#d83a3a",
     "between_blows": "#b06bff",
     "the_void": "#e8ffff",
@@ -1460,7 +1460,7 @@ class BattleScreen(Screen):
             self._flourish = (event.flair, self._clock)
             look = self._look(event.flair)
             self._self = (look, FLAIR_COLOURS.get(event.flair, "#ffffff"), self._clock)
-            if event.flair == FRIENDS_LIKE_THESE:
+            if event.flair == PAINT_THE_WALLS_RED:
                 # One shadow over each of them, leaving the wound behind. Placed
                 # from the staging rather than from the log: the thing has to come
                 # out of *their* squares.

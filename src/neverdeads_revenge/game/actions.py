@@ -142,7 +142,7 @@ class Action(Enum):
     QUAFF = "quaff"
     INVENTORY = "inventory"
     #: The hero's ultimate. Once a floor, from a level, and different for every
-    #: hero: Noxx gives into the void, Yeti builds the Frozen Fortress,
+    #: hero: Noxx calls his friends, Yeti builds the Frozen Fortress,
     #: Walkyrion shatters the golden bell. Bound to `f`, because an ultimate is
     #: not a navigation verb and deserved a key of its own.
     ULTIMATE = "ultimate"
@@ -1576,7 +1576,7 @@ def _summon_void(state: GameState) -> ActionResult:
     # there, and a floor he leaves with the shadow's eyes should close back
     # over what he never saw for himself.
     state.void_sight = True
-    state.say("You give in to the void.", LogKind.BAD)
+    state.say("You call on your friends, and they come.", LogKind.BAD)
     state.say("Atritas rises from your dark and looks around.", LogKind.SYSTEM)
     state.say(
         "Every wall is glass -- for as long as he walks.",

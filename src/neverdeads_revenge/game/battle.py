@@ -54,7 +54,7 @@ from .specials import (
     ROUNDHOUSE,
     DEVOURING_DARKNESS,
     FLEETING_SHADOW,
-    FRIENDS_LIKE_THESE,
+    PAINT_THE_WALLS_RED,
     LONG_WINTER,
     BELLS_THROW,
     BETWEEN_BLOWS,
@@ -790,7 +790,7 @@ class Battle:
             ORB_OF_PTAMERA: self._special_orb_of_ptamera,
             FLEETING_SHADOW: self._special_fleeting_shadow,
             DEVOURING_DARKNESS: self._special_devouring_darkness,
-            FRIENDS_LIKE_THESE: self._special_friends_like_these,
+            PAINT_THE_WALLS_RED: self._special_paint_the_walls_red,
             OPEN_VEIN: self._special_open_vein,
             SNOW_BLIND: self._special_snow_blind,
             QUAKE: self._special_quake,
@@ -938,7 +938,7 @@ class Battle:
         self._splice(before, events)
         events.append(Flourish(self.hero, DEVOURING_DARKNESS))
 
-    def _special_friends_like_these(self, target: Actor | None, events: list[Event]) -> None:
+    def _special_paint_the_walls_red(self, target: Actor | None, events: list[Event]) -> None:
         """Atritas comes, and he does not come alone.
 
         On *every* one of them, and three wounds deep: the vein's own cut is a
@@ -949,7 +949,7 @@ class Battle:
         before = len(self.state.log)
         self.state.say("Atritas comes, and he does not come alone.", LogKind.SYSTEM)
         self._splice(before, events)
-        events.append(Flourish(self.hero, FRIENDS_LIKE_THESE))
+        events.append(Flourish(self.hero, PAINT_THE_WALLS_RED))
         for enemy in self.living_enemies():
             before = len(self.state.log)
             self.state.say(f"Something in the {enemy.name} opens.", LogKind.GOOD)

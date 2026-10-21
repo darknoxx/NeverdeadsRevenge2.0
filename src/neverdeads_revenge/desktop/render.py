@@ -579,7 +579,8 @@ def log_style(kind: LogKind) -> str:
 #: is said in. Noxx's petrol, Yeti's ice, Walkyrion's gold -- the colour of
 #: the thing the ask actually summons.
 ULTIMATE_PROMPTS: dict[str, tuple[str, tuple[int, int, int]]] = {
-    "noxx": ("give in to the void", (14, 111, 111)),
+    # Noxx's own: the friends he calls are the ones the room will remember.
+    "noxx": ("friends like these", (14, 111, 111)),
     "yeti": ("build the Frozen Fortress", (159, 227, 239)),
     "walkyrion": ("shatter the golden bell", (212, 175, 55)),
     "inferno": ("set the floor alight", (192, 32, 42)),
