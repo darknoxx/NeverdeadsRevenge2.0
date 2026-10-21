@@ -1952,6 +1952,10 @@ class BattleScreen(Screen):
                 glyph=hero.glyph,
                 colour=hero.color,
                 size=size,
+                # A trick that is only about him puts the cursor over *him*: the
+                # floor is where the fight says who a thing is for, and "this one"
+                # is an answer about the hero too.
+                chosen=self.self_chosen(),
                 cx=(centre + 1) * cell_w,
                 row=y0 + height - 1 + HERO_DROP - STAGE_LIFT,
                 cells=self._span(art, cell_w),
@@ -2043,6 +2047,20 @@ class BattleScreen(Screen):
             return True
         return any(
             self._clock - when < DRIFT_LIFE for _art, _x, _y, when in self._drift
+        )
+
+    def self_chosen(self) -> bool:
+        """Whether the attack being looked at is one that lands on the hero."""
+        if not self.picking:
+            return False
+        specials = self.battle.learned()
+        if not specials:
+            return False
+        chosen = specials[min(self.special, len(specials) - 1)]
+        return (
+            not chosen.needs_target
+            and not chosen.all_enemies
+            and self.battle.special_available(chosen)
         )
 
     def single_chosen(self) -> bool:

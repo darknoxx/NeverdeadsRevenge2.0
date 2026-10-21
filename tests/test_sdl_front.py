@@ -3492,3 +3492,11 @@ def test_the_cursor_is_a_promise_about_who_the_attack_is_for():
     assert marked("quake") == [True, True, True], "the quake marked a crowd wrong"
     assert marked("rime").count(True) == 1, "a single cut marked more than one"
     assert marked("stillness") == [False, False, False], "a self-buff marked somebody"
+
+    # ...and the self-buff marks the hero instead: the cursor is a promise about
+    # who it is for, and for a trick that only touches him the answer is *him*.
+    arenas = [
+        figure for figure in arena.arena._figures(app.cols, app.rows, app.font)
+        if figure.actor is state.player
+    ]
+    assert arenas and arenas[0].chosen, "a self-buff left the hero unmarked"
