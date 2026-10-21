@@ -227,7 +227,7 @@ ARROW = "▼"
 #: the dagger, petrol for the shadow, red for the vein, and the void's own pale
 #: light: the tricks are asked for in words and answered in colour.
 FLAIR_COLOURS: dict[str, str] = {
-    # Noxx: the dagger, the orb, the shadow, the vein, the step, the void.
+    # Noxx: the dagger, the orb, the shadow, the vein, the step, the red wall.
     "left_hand": "#5bd75b",
     "orb_of_ptamera": "#2ee6cf",
     "fleeting_shadow": "#8ff0e0",
@@ -235,8 +235,7 @@ FLAIR_COLOURS: dict[str, str] = {
     "paint_the_walls_red": "#2ee6cf",
     "open_vein": "#d83a3a",
     "between_blows": "#b06bff",
-    "the_void": "#e8ffff",
-    # Yeti: the mountain, the rime, the hoarfrost, the stillness, the wall.
+    # Yeti: the mountain, the blizzard, the quake, the winter, the cold.
     "avalanche": "#cfe8ff",
     "snow_blind": "#dff4ff",
     "quake": "#bcdcff",
@@ -244,8 +243,7 @@ FLAIR_COLOURS: dict[str, str] = {
     "rime": "#9fd8f5",
     "hoarfrost": "#bff0ff",
     "stillness": "#7fd4ff",
-    "frozen_fortress": "#dff4ff",
-    # Walkyrion: the note, the throw, the true note, the echo, the bell.
+    # Walkyrion: the note, the throw, the true note, the echo, the chord.
     "first_note": "#ffd34d",
     "overture": "#ffdd77",
     "ringing_chord": "#ffc21f",
@@ -253,7 +251,6 @@ FLAIR_COLOURS: dict[str, str] = {
     "bells_throw": "#ffc21f",
     "true_note": "#ffb000",
     "echoing_cut": "#ffe9a8",
-    "shattered_bell": "#fff3c4",
     # Inferno: the fists, and the fire that is the only rider he has.
     "jab": "#ffd9a8",
     "gut_punch": "#e0703f",
@@ -262,7 +259,6 @@ FLAIR_COLOURS: dict[str, str] = {
     "red_mist": "#ff3b1f",
     "haymaker": "#ffb066",
     "roundhouse": "#ff8c42",
-    "bonfire": "#ff5a1f",
 }
 #: What a *wound* looks like -- and this is not the colour of the blow that made
 #: it but the colour of what is happening to the one wearing it. A monster going

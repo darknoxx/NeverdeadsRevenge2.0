@@ -54,7 +54,6 @@ from ..game.specials import (
     ECHOING_CUT,
     FIRST_NOTE,
     FLEETING_SHADOW,
-    FORTRESS,
     PAINT_THE_WALLS_RED,
     GUT_PUNCH,
     HOARFROST,
@@ -66,12 +65,10 @@ from ..game.specials import (
     OVERTURE,
     QUAKE,
     RIME,
-    SHATTERED_BELL,
     SILENCE,
     SNOW_BLIND,
     STILLNESS,
     TRUE_NOTE,
-    VOID,
 )
 from ..game.state import LogKind
 
@@ -176,7 +173,6 @@ BY_SPECIAL: dict[str, str] = {
     OPEN_VEIN: "sword_heavy",
     PAINT_THE_WALLS_RED: "dark_impact",
     BETWEEN_BLOWS: "blade_clash",
-    VOID: "dark_cast",
     AVALANCHE: "ice_shatter",
     SNOW_BLIND: "ice_cast",
     RIME: "ice_cast",
@@ -184,7 +180,6 @@ BY_SPECIAL: dict[str, str] = {
     STILLNESS: "wind_cast",
     QUAKE: "blunt_impact",
     LONG_WINTER: "ice_shatter",
-    FORTRESS: "relic_resonance",
     FIRST_NOTE: "ritual_chime",
     OVERTURE: "light_cast",
     BELLS_THROW: "dark_bell",
@@ -192,7 +187,6 @@ BY_SPECIAL: dict[str, str] = {
     ECHOING_CUT: "sword_light",
     CHORD: "light_cast",
     SILENCE: "wind_cast",
-    SHATTERED_BELL: "dark_bell",
     JAB: "blunt_impact",
     GUT_PUNCH: "blunt_impact",
 }

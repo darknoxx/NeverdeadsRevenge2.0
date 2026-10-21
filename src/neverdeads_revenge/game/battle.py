@@ -43,7 +43,6 @@ from .combat import AttackOutcome
 from .statuses import status_by_key
 from .specials import (
     AVALANCHE,
-    BONFIRE,
     CHORD,
     EMBER_FIST,
     GUT_PUNCH,
@@ -67,13 +66,10 @@ from .specials import (
     OVERTURE,
     QUAKE,
     RIME,
-    SHATTERED_BELL,
     SILENCE,
     SNOW_BLIND,
     STILLNESS,
     TRUE_NOTE,
-    VOID,
-    FORTRESS,
     Special,
     learned_at,
     special_by_key,
@@ -268,15 +264,6 @@ ROUNDHOUSE_SCALE = 0.7
 #: The haymaker: a full extra blow on top of a blow, and the biggest number in
 #: the game. It is what the whole hero is: no rider, no wound, no second chance.
 HAYMAKER_SCALE = 2.0
-#: The bonfire: a full blow to *everything*, and the fire it leaves is the
-#: reason -- five turns of burning rather than the usual two, which on three
-#: monsters is forty-five damage nobody had to stand next to. A fifth of him
-#: goes into it: the only ultimate in the game with a second price, and the only
-#: hero in the game who would notice paying it.
-BONFIRE_SCALE = 1.0
-BONFIRE_BLOOD = 0.20
-BONFIRE_BURN = 3
-
 #: The orb of Ptamera is *loaded* and not promised: it hunts the throat without
 #: ever being certain of it, which is the one thing that tells it apart from the
 #: knife -- and the knife is the one that always crits.
@@ -799,17 +786,14 @@ class Battle:
             CHORD: self._special_ringing_chord,
             SILENCE: self._special_silence_after,
             BETWEEN_BLOWS: self._special_between_blows,
-            VOID: self._special_the_void,
             AVALANCHE: self._special_avalanche,
             RIME: self._special_rime,
             HOARFROST: self._special_hoarfrost,
             STILLNESS: self._special_stillness,
-            FORTRESS: self._special_frozen_fortress,
             FIRST_NOTE: self._special_first_note,
             BELLS_THROW: self._special_bells_throw,
             TRUE_NOTE: self._special_true_note,
             ECHOING_CUT: self._special_echoing_cut,
-            SHATTERED_BELL: self._special_shattered_bell,
             JAB: self._special_jab,
             GUT_PUNCH: self._special_gut_punch,
             EMBER_FIST: self._special_ember_fist,
@@ -817,7 +801,6 @@ class Battle:
             RED_MIST: self._special_red_mist,
             HAYMAKER: self._special_haymaker,
             ROUNDHOUSE: self._special_roundhouse,
-            BONFIRE: self._special_bonfire,
         }[special.key]
         run(target, events)
         # Paid on the way out, and only if it went off: a trick the fight refused
@@ -1070,18 +1053,7 @@ class Battle:
             if outcome.hit and enemy.stats.alive:
                 self._throw_back(enemy)
 
-    def _special_the_void(self, target: Actor | None, events: list[Event]) -> None:
-        """The dungeon's own ask, in the room: the dark answers, and everything
-        in front of him takes it at once."""
-        before = len(self.state.log)
-        self.state.say("The dark answers.", LogKind.SYSTEM)
-        self._splice(before, events)
-        for enemy in self.living_enemies():
-            if not self.hero.stats.alive:
-                break
-            self._blow(enemy, events, flair=VOID)
 
-    # -- Yeti: the glacier and the wall ------------------------------------
     def _special_avalanche(self, target: Actor | None, events: list[Event]) -> None:
         """The hammer, with the mountain behind it: slow, and it lands hard."""
         enemy = self._pick(target)
@@ -1116,25 +1088,7 @@ class Battle:
         self._splice(before, events)
         events.append(Flourish(self.hero, STILLNESS))
 
-    def _special_frozen_fortress(self, target: Actor | None, events: list[Event]) -> None:
-        """The wall with twice his blood in it, and the floor's whole teeth.
 
-        The dungeon's fortress is a thing on the *map* that everything would
-        rather bite; what fits in a room is what it is made of -- the armour is
-        doubled, and this round the blows are halved against the ice.
-        """
-        player = self.state.player
-        lent = max(2, player.stats.armor)
-        player.stats.armor += lent
-        self._round_armour += lent
-        self._guarded = True
-        before = len(self.state.log)
-        self.state.say("You build the Frozen Fortress.", LogKind.GOOD)
-        self.state.say("The floor spends its teeth on the ice.", LogKind.SYSTEM)
-        self._splice(before, events)
-        events.append(Flourish(self.hero, FORTRESS))
-
-    # -- Walkyrion: the note, and the bell ---------------------------------
     def _special_first_note(self, target: Actor | None, events: list[Event]) -> None:
         """One cut, and the note of it carries to whatever is behind him."""
         enemy = self._pick(target)
@@ -1309,35 +1263,6 @@ class Battle:
                 enemy, events, flair=ROUNDHOUSE, damage_scale=ROUNDHOUSE_SCALE
             )
 
-    def _special_bonfire(self, target: Actor | None, events: list[Event]) -> None:
-        """He builds it out of himself, and the room catches.
-
-        A full blow to everything, the same shape the void has, and then five
-        turns of fire on each of them -- which is the part a fist cannot do. A
-        third of him goes into it first, and it can be the last of him: for a
-        hero with thirty-four hit points that is the price of an ultimate, and
-        the only ultimate he could ever afford.
-        """
-        before = len(self.state.log)
-        self.state.say(
-            "He builds it out of himself, and the room catches.", LogKind.SYSTEM
-        )
-        self._splice(before, events)
-        self._in_his_blood(
-            max(1, round(self.state.player.stats.max_hp * BONFIRE_BLOOD)), events
-        )
-        if not self.hero.stats.alive:
-            return
-        for enemy in self.living_enemies():
-            if not self.hero.stats.alive:
-                break
-            outcome = self._blow(
-                enemy, events, flair=BONFIRE, damage_scale=BONFIRE_SCALE
-            )
-            if outcome.hit and enemy.stats.alive:
-                before = len(self.state.log)
-                inflict(self.state, enemy, ("burn",), turns_bonus=BONFIRE_BURN)
-                self._splice(before, events)
 
     def _in_his_blood(self, amount: int, events: list[Event]) -> None:
         """The price of a wild trick: his own health, and it can be all of it.
@@ -1355,17 +1280,6 @@ class Battle:
             self.state.say(f"It costs him {amount} of his own blood.", LogKind.BAD)
         self._splice(before, events)
 
-    def _special_shattered_bell(self, target: Actor | None, events: list[Event]) -> None:
-        """He shatters the bell, and the note goes down through the floor."""
-        before = len(self.state.log)
-        self.state.say("You shatter the golden bell.", LogKind.GOOD)
-        self.state.say("The note goes down through the floor.", LogKind.SYSTEM)
-        self._splice(before, events)
-        for enemy in self.living_enemies():
-            if not self.hero.stats.alive:
-                break
-            self._blow(enemy, events, flair=SHATTERED_BELL)
-            self._throw_back(enemy)
 
     def _pick(self, target: Actor | None) -> Actor | None:
         """The one being hit: the chosen one, or whoever is still standing."""

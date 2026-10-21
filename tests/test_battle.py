@@ -54,14 +54,11 @@ from neverdeads_revenge.game.specials import (
     OVERTURE,
     QUAKE,
     RIME,
-    SHATTERED_BELL,
     SILENCE,
     SNOW_BLIND,
     SPECIALS,
     STILLNESS,
     TRUE_NOTE,
-    VOID,
-    FORTRESS,
     special_by_key,
 )
 from neverdeads_revenge.game.state import start_run
@@ -197,41 +194,6 @@ def test_there_is_no_defend_verb_any_more():
 
     assert battle.commands() == [ATTACK, SPECIAL, ITEM, FLEE]
 
-
-def test_the_void_takes_everything_and_costs_everything():
-    """The hero's ask, in the arena: one blow on everybody, and the dearest
-    price in the book.
-
-    It is paid out of the purse like every other trick now -- one economy and not
-    two -- but at a price no hero of the level that *learns* it can hold: twelve
-    against a level-seven purse of eleven. The void is a thing you save up for,
-    which is what an ultimate should be and what "once a floor" only pretended.
-    """
-    state = run(ultimate_level=1)
-    state.level = 8
-    # A *legal* purse: the cap is what the game would hold, and the void costs
-    # twelve of it. A purse of 99 was a state the game cannot be in.
-    state.kill_points = state.kill_points_max
-    enemies = take(state, 3)
-    battle = Battle(state, enemies)
-    battle.begin()
-
-    events = battle.choose(SPECIAL, special=VOID)
-
-    hit = [blow for blow in strikes(events) if blow.actor is state.player]
-    assert [blow.target for blow in hit] == enemies, "the ask missed somebody"
-    assert {blow.flair for blow in hit} == {VOID}, "the blows wear no word"
-    # Paid, give or take the point that came back on the same turn: what matters
-    # is that it *came out of the purse* and not out of a floor's favour.
-    assert state.kill_points <= state.kill_points_max - special_by_key(VOID).cost + 1, (
-        "the purse did not pay"
-    )
-
-    # And the purse is the gate: empty it, and the dark has nothing left.
-    state.kill_points = 1
-    again = battle.choose(SPECIAL, special=VOID)
-    assert not strikes(again), "the dark answered with an empty purse"
-    assert any("kill points" in line for line in lines(again)), lines(again)
 
 
 def test_a_refused_verb_costs_nothing():
@@ -814,27 +776,17 @@ def test_infernos_hands_get_heavier_as_they_get_dearer():
     )
 
 
-def test_the_wildest_tricks_are_paid_in_his_own_blood():
-    """The headbutt and the bonfire cost health, and it can be the last of it.
+def test_the_headbutt_is_paid_for_in_his_own_blood():
+    """The one blow priced in the only currency the fight has not spent.
 
-    A cost that cannot finish him is not a cost -- the rule the tithe is written
-    under -- and blood is the only currency a hero with 34 hit points has that
-    the fight has not already spent. He is also the only hero whose *ultimate*
-    has a second price at all.
+    It can be the last of him: a cost that cannot finish a hero is not a cost.
     """
-    from neverdeads_revenge.game.specials import BONFIRE, HEADBUTT
+    from neverdeads_revenge.game.specials import HEADBUTT
 
     battle = _flat("inferno")
     full = battle.hero.stats.hp
     _dealt(battle, HEADBUTT)
     assert battle.hero.stats.hp < full, "the headbutt was free"
-
-    # And the fire takes more than he has, if he lights it with everything: it
-    # is a fifth of him, so five points is not enough to build it with.
-    spent = _flat("inferno")
-    spent.hero.stats.hp = 4
-    _dealt(spent, BONFIRE)
-    assert not spent.hero.stats.alive, "the bonfire did not take what it costs"
 
 
 def test_red_mist_hits_harder_the_worse_he_is_hurt():
@@ -848,24 +800,6 @@ def test_red_mist_hits_harder_the_worse_he_is_hurt():
 
     assert furious > calm, f"{furious} out of a dying man is not more than {calm}"
 
-
-def test_the_bonfire_burns_all_of_them_and_keeps_burning():
-    """A full blow to everything -- and the fire is the part a fist cannot do."""
-    from neverdeads_revenge.game.specials import BONFIRE
-    from neverdeads_revenge.game.statuses import STATUSES
-
-    battle = _flat("inferno", count=3)
-    before = [enemy.stats.hp for enemy in battle.enemies]
-    battle.choose(SPECIAL, battle.enemies[0], special=BONFIRE)
-
-    assert all(
-        enemy.stats.hp < was for enemy, was in zip(battle.enemies, before)
-    ), "something stood outside the fire"
-    for enemy in battle.enemies:
-        assert "burn" in enemy.statuses, f"{enemy.name} did not catch"
-        assert enemy.statuses["burn"] > STATUSES["burn"].turns, (
-            "the bonfire's fire lasts as long as an ember fist's"
-        )
 
 
 def test_the_roundhouse_takes_the_whole_room():
@@ -1030,14 +964,14 @@ def test_every_trick_is_affordable_at_the_level_that_learns_it():
             )
 
 
-def test_the_ultimate_is_the_dearest_thing_in_every_kit():
-    """The order of the prices is the order of the powers, at least at the top."""
+def test_every_trick_is_paid_for_and_none_is_free():
+    """An ultimate is the floor's now, not the fight's -- so what is left is a
+    kit of tricks, and every one of them has a price."""
     from neverdeads_revenge.game.specials import SPECIALS_BY_HERO
 
     for hero, kit in SPECIALS_BY_HERO.items():
-        ultimate = next(one for one in kit if one.uses_floor)
-        assert ultimate.cost == max(one.cost for one in kit), hero
         assert all(one.cost > 0 for one in kit), f"{hero} has a trick for free"
+        assert len({one.cost for one in kit}) > 1, f"{hero}'s tricks all cost the same"
 
 
 def test_a_miss_leaves_no_wound_behind():
@@ -1210,21 +1144,20 @@ def test_the_five_arrive_with_levels():
     assert names_at(7) == [one.key for one in SPECIALS], "the void never arrived"
 
 
-def test_only_the_void_costs_the_floor():
-    """The others are the fight's to spend; the void is the floor's.
+def test_the_tricks_come_back_and_the_floor_does_not():
+    """A new fight has the tricks back; the floor's ask is spent elsewhere.
 
-    A new fight has them back, because a trick learned is a trick to use -- and
-    the void is still gone, because that is the ask the dungeon prices.
+    The arena's list is a list of *tricks*. The ultimate is not one any more --
+    it belongs to the overworld -- so what a fight spends is the purse and
+    nothing else.
     """
     state = run(ultimate_level=7)
     state.level = 7
     first = Battle(state, take(state, 2))
     first.choose(SPECIAL, first.enemies[0], special=LEFT_HAND)
-    first.choose(SPECIAL, first.enemies[0], special=VOID)
 
     second = Battle(state, take(state, 2))
     assert second.special_available(special_by_key(LEFT_HAND)), "the knife did not come back"
-    assert not second.special_available(special_by_key(VOID)), "the void came back"
 
 
 def test_a_testrun_opens_the_whole_song():
@@ -1275,12 +1208,11 @@ def test_each_hero_has_their_own_kit():
         kit = duel(hero).specials()
         kits[hero] = {special.key for special in kit}
         assert len(kit) >= 5, f"{hero} has {len(kit)} tricks"
-        assert kit[0].key == first and kit[-1].uses_floor, (
-            f"{hero}'s kit is in the wrong order or has no ultimate"
-        )
-    # Eight each and none shared: a kit is a *character*, and a character whose
-    # moves are somebody else's is a coat of paint.
-    assert len(kits["noxx"]) == len(kits["yeti"]) == len(kits["walkyrion"]) == 8
+        assert kit[0].key == first, f"{hero}'s kit is in the wrong order"
+    # Seven each and none shared: a kit is a *character*, and a character whose
+    # moves are somebody else's is a coat of paint. (Seven and not eight: the
+    # ultimate is the overworld's, and the arena no longer lists it.)
+    assert len(kits["noxx"]) == len(kits["yeti"]) == len(kits["walkyrion"]) == 7
     assert not kits["noxx"] & kits["yeti"], "the two share a trick"
     assert not kits["noxx"] & kits["walkyrion"], "the two share a trick"
     assert not kits["yeti"] & kits["walkyrion"], "the two share a trick"
@@ -1348,21 +1280,6 @@ def test_the_stillness_raises_the_ice():
     assert battle.hero.armor > armor, "setting his feet raised nothing"
 
 
-def test_the_fortress_doubles_the_ice_and_costs_the_floor():
-    """His own ultimate: the wall with twice his blood in it, and the dearest
-    thing he owns."""
-    battle = duel("yeti", 1)
-    battle.state.level = 8
-    armor = battle.hero.stats.armor
-
-    battle.choose(SPECIAL, battle.enemies[0], special=FORTRESS)
-
-    assert battle.hero.stats.armor >= armor * 2, "the wall was made of paper"
-    assert (
-        battle.state.kill_points
-        <= battle.state.kill_points_max - special_by_key(FORTRESS).cost + 1
-    ), "the wall was not paid for"
-
 
 def test_the_bells_throw_sends_them_to_the_back():
     """The ring of it throws what it lands on: it acts after everyone who has
@@ -1421,24 +1338,6 @@ def test_the_echoing_cut_is_heard_three_times():
     hit = [one for one in strikes(events) if one.actor is battle.hero]
     assert len(hit) == 3, f"the echo was heard {len(hit)} times"
 
-
-def test_the_shattered_bell_takes_everyone_and_the_floor():
-    battle = duel("walkyrion", 1, count=3)
-    battle.state.level = 8
-    for enemy in battle.enemies:
-        enemy.stats.hp = 999
-    battle.hero.stats.accuracy = 99
-    for enemy in battle.enemies:
-        enemy.stats.evasion = 0
-
-    events = battle.choose(SPECIAL, battle.enemies[0], special=SHATTERED_BELL)
-
-    hit = [one for one in strikes(events) if one.actor is battle.hero]
-    assert len(hit) == 3, "the note did not go round"
-    assert (
-        battle.state.kill_points
-        <= battle.state.kill_points_max - special_by_key(SHATTERED_BELL).cost + 1
-    ), "the bell was not paid for"
 
 
 def test_a_shadow_that_leaves_the_room_hands_the_floor_back():
@@ -1528,28 +1427,3 @@ def test_a_wound_in_the_arena_runs_on_the_heros_turn_whatever_the_monsters_speed
     )
 
 
-def test_the_void_fights_the_room_for_you():
-    """Atritas in a fight: one strike a round, on the nearest thing.
-
-    The dungeon's shadow swings every sixth beat because the floor is long; a
-    fight is five to nine rounds, so the same cadence would have him stand in the
-    room and swing at nothing -- which is what he did. In a room he takes his turn
-    with everybody else, and the screen is told whom he went for.
-    """
-    from neverdeads_revenge.game.actors import make_atritas
-
-    battle = duel("noxx", 5)
-    state = battle.state
-    state.atritas = make_atritas(state.player.position, state.level, state.depth)
-    state.atritas_turns_left = 40
-    for index, foe in enumerate(battle.enemies):
-        foe.position = (state.player.position[0] + 1 + index, state.player.position[1])
-        foe.stats.max_hp = foe.stats.hp = 999
-
-    events = battle.choose(ATTACK, battle.enemies[0])
-
-    from neverdeads_revenge.game.battle import ShadowStruck
-
-    struck = [event for event in events if isinstance(event, ShadowStruck)]
-    assert struck, "the shadow stood in the room and did nothing"
-    assert struck[0].actor in battle.enemies, "he went for somebody outside the room"

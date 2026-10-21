@@ -1,11 +1,16 @@
-"""Noxx's own tricks: five ways to spend a turn that are his and no one else's.
+"""The heroes' own tricks: the ways to spend a turn that are theirs alone.
 
-Every hero's ask is one thing -- the dark answers -- and the shape it takes is
-the hero. Noxx is a shadowy assassin whose petrol-coloured shadow has a life of
-its own, whose right hand holds a rapier and whose left holds a green dagger, and
-these are the five that follow from that: the honest little knife, the shadow
-that goes on its own, a cut that will not close, a step so quick that nothing
-finds him, and finally the void itself.
+Nothing in here is an **ultimate**. An ultimate is the overworld's -- one ask
+per floor, bound to ``f``, and its effect walks into the fight with you (Atritas
+comes and helps, the wall stands, the floor burns). A trick is what the *room*
+offers: paid out of kill points, listed in the battle menu, and never once a
+floor.
+
+Every hero's kit has a shape, and the shape is the hero. Noxx is a shadowy
+assassin whose petrol-coloured shadow has a life of its own, whose right hand
+holds a rapier and whose left holds a green dagger: the honest little knife, the
+shadow that goes on its own, a cut that will not close, a step so quick that
+nothing finds him, and the room painted red with what he opened.
 
 Nothing here resolves anything. Each entry names *what* a special is and what it
 costs; `game/battle.py` runs them through the same blow every other attack in
@@ -26,7 +31,6 @@ __all__ = [
     "BELLS_THROW",
     "CHORD",
     "BETWEEN_BLOWS",
-    "BONFIRE",
     "DEVOURING_DARKNESS",
     "EMBER_FIST",
     "GUT_PUNCH",
@@ -47,7 +51,6 @@ __all__ = [
     "ORB_OF_PTAMERA",
     "OVERTURE",
     "RIME",
-    "SHATTERED_BELL",
     "SILENCE",
     "SNOW_BLIND",
     "SPECIALS",
@@ -55,7 +58,6 @@ __all__ = [
     "STILLNESS",
     "TRUE_NOTE",
     "QUAKE",
-    "VOID",
     "Special",
     "learned_at",
     "special_by_key",
@@ -70,7 +72,6 @@ DEVOURING_DARKNESS = "devouring_darkness"
 PAINT_THE_WALLS_RED = "paint_the_walls_red"
 OPEN_VEIN = "open_vein"
 BETWEEN_BLOWS = "between_blows"
-VOID = "the_void"
 AVALANCHE = "avalanche"
 SNOW_BLIND = "snow_blind"
 QUAKE = "quake"
@@ -78,7 +79,6 @@ LONG_WINTER = "long_winter"
 RIME = "rime"
 HOARFROST = "hoarfrost"
 STILLNESS = "stillness"
-FORTRESS = "frozen_fortress"
 FIRST_NOTE = "first_note"
 OVERTURE = "overture"
 CHORD = "ringing_chord"
@@ -86,7 +86,6 @@ SILENCE = "silence_after"
 BELLS_THROW = "bells_throw"
 TRUE_NOTE = "true_note"
 ECHOING_CUT = "echoing_cut"
-SHATTERED_BELL = "shattered_bell"
 JAB = "jab"
 GUT_PUNCH = "gut_punch"
 EMBER_FIST = "ember_fist"
@@ -94,7 +93,6 @@ HEADBUTT = "headbutt"
 RED_MIST = "red_mist"
 ROUNDHOUSE = "roundhouse"
 HAYMAKER = "haymaker"
-BONFIRE = "bonfire"
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,11 +115,8 @@ class Special:
     #: is the decision: the cheap wound twice, or the big thing once, or nothing
     #: and wait for the purse to fill. Priced against `levels.KILL_POINTS`, which
     #: is what a hero of the level that learns it can *hold* -- so a trick is
-    #: affordable the moment it arrives, and the ultimate is not.
+    #: affordable the moment it arrives.
     cost: int = 0
-    #: Whether the cost is the *floor* rather than the fight. Only the void is
-    #: that expensive, and it is the ask the dungeon already prices.
-    uses_floor: bool = False
     #: How it should *look*, for whoever is doing the showing. A look and not a
     #: colour, because a colour is not enough to tell fifteen tricks apart:
     #: ``"slash"`` cuts, ``"shatter"`` showers shards, ``"frost"`` leaves crystals,
@@ -207,19 +202,6 @@ SPECIALS: tuple[Special, ...] = (
         blurb="he is not where they swing, and the cut comes from behind",
         level=6,
     ),
-    Special(
-        key=VOID,
-        cost=12,
-        effect="all of them take it (floor)",
-        needs_target=False,
-        look="dissolve",
-        name="THE VOID",
-        blurb="he gives in, and everything in front of him takes it",
-        # The dungeon's own gate: the level the dark answers at, and the once-a-
-        # floor price. `--testrun` opens it early, exactly as it does on the map.
-        level=0,
-        uses_floor=True,
-    ),
 )
 
 #: Yeti, "the unmoved": slow as a glacier and about as easy to move, and
@@ -294,17 +276,6 @@ YETI_SPECIALS: tuple[Special, ...] = (
         blurb="the cold comes in and stays; the legs are the first to go",
         level=8,
     ),
-    Special(
-        key=FORTRESS,
-        cost=12,
-        effect="armour x2, blows halved (floor)",
-        needs_target=False,
-        name="THE FROZEN FORTRESS",
-        blurb="the wall with twice his blood in it, and the floor's whole teeth",
-        level=0,
-        uses_floor=True,
-        look="wall",
-    ),
 )
 
 #: Walkyrion, whose sword gives off a note and whose note throws what it lands
@@ -376,17 +347,6 @@ WALKYRION_SPECIALS: tuple[Special, ...] = (
         name="THE SILENCE AFTER",
         blurb="he stops playing, and the room has lost its place",
         level=8,
-    ),
-    Special(
-        key=SHATTERED_BELL,
-        cost=12,
-        effect="all of them, and thrown back",
-        needs_target=False,
-        look="wave",
-        name="THE SHATTERED BELL",
-        blurb="he shatters the bell, and the note goes down through the floor",
-        level=0,
-        uses_floor=True,
     ),
 )
 
@@ -467,22 +427,6 @@ INFERNO_SPECIALS: tuple[Special, ...] = (
         blurb="he turns once, and the room is in the way",
         level=6,
     ),
-    Special(
-        key=BONFIRE,
-        # The same full purse the other three ultimates ask, and then blood on
-        # top of it: his is the only ultimate in the game with a second price,
-        # and it is the only one that *is* paid in what he has least of.
-        cost=12,
-        effect="all of them burn, and keep (floor)",
-        needs_target=False,
-        look="burn",
-        name="THE BONFIRE",
-        blurb="he builds it out of himself, and there is a lot of him",
-        # The dark's own gate, like the void and the wall: the price is not on
-        # the list. His is blood, and it is taken in the trick.
-        uses_floor=True,
-        level=0,
-    ),
 )
 
 
@@ -510,16 +454,16 @@ def specials_for(hero_key: str) -> tuple[Special, ...]:
 def learned_at(special: Special, ultimate_level: int) -> int:
     """The level this trick arrives at, in a run where the dark answers at this one.
 
-    The floor's ask is the dark's own gate -- the level it answers at, which
-    ``--testrun`` moves down -- and every other trick is its own printed level,
-    capped by that same gate: a run the dark talks through has the whole kit
-    early, and one it does not has the kit at the levels it was written for.
+    Every trick is its own printed level, capped by the dark's gate -- the level
+    the *ultimate* answers at, which ``--testrun`` moves down: a run the dark
+    talks through has the whole kit early, and one it does not has the kit at the
+    levels it was written for.
 
     One function for it, because two callers need the answer and they must not
     disagree: the menu asks *what is on it*, and a level-up asks *what was just
     learned*.
     """
-    return ultimate_level if special.uses_floor else min(special.level, ultimate_level)
+    return min(special.level, ultimate_level)
 
 
 def special_by_key(key: str) -> Special | None:
