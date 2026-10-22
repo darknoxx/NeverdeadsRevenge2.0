@@ -2149,6 +2149,48 @@ def test_picking_coins_up_adds_them_to_the_purse():
     assert "coins" in state.log[-1].text
 
 
+def _free_step(state: GameState) -> tuple[Direction, tuple[int, int]]:
+    """A direction the hero can walk in, and where it leads."""
+    origin = state.player.position
+    for direction in Direction:
+        target = direction.step(origin)
+        if state.dungeon_map.is_walkable(target) and state.actor_at(target) is None:
+            return direction, target
+    raise AssertionError("the hero is walled in")
+
+
+def test_walking_over_coins_pockets_them_without_pressing_enter():
+    """A pile is not a decision, so the step that takes it is the only input."""
+    from neverdeads_revenge.world.items import make_coin
+
+    state = start_run(NOXX, seed=3)
+    direction, target = _free_step(state)
+    state.dungeon_map.add_item(target, make_coin(7))
+    gold_before, turns_before = state.gold, state.turn
+
+    perform_action(state, _action_for(direction))
+
+    assert state.player.position == target
+    assert state.gold == gold_before + 7
+    assert state.dungeon_map.item_at(target) is None
+    assert state.turn == turns_before + 1, "pocketing coin cost a turn"
+    assert any("coins" in entry.text for entry in state.log)
+
+
+def test_walking_over_a_draught_leaves_it_for_the_hand():
+    """Only coin walks itself into the purse; taking is still a choice."""
+    state = start_run(NOXX, seed=3)
+    direction, target = _free_step(state)
+    state.dungeon_map.add_item(target, make_item(ITEMS["potion"]))
+
+    perform_action(state, _action_for(direction))
+
+    assert state.player.position == target
+    assert state.dungeon_map.item_at(target) is not None
+    assert state.inventory == []
+    assert state.gold == 0
+
+
 def test_two_kills_in_the_same_spot_make_one_bigger_pile():
     """Otherwise the second pile silently overwrites the first."""
     from neverdeads_revenge.world.items import make_coin

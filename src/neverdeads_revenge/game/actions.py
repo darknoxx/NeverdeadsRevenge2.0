@@ -982,6 +982,7 @@ def _try_move(state: GameState, direction: Direction) -> tuple[bool, bool]:
     state.player.position = target
     state.player.steps += 1
     _after_step(state, origin, direction)
+    _collect_coin(state)
     _bleed(state)
     _knit(state)
     if state.has_draught("carrion_tongue") and target in state.death_squares:
@@ -1076,6 +1077,7 @@ def _through_stone(
     state.player.position = target
     state.player.steps += 1
     _after_step(state, origin, direction)
+    _collect_coin(state)
     state.player.stats.hp = max(0, state.player.stats.hp - HOLLOW_ROAD_COST)
     state.say(
         f"You push through the stone. {HOLLOW_ROAD_COST} of you stays in it.",
@@ -1087,6 +1089,24 @@ def _through_stone(
     _bleed(state)
     _knit(state)
     return True, True
+
+
+def _collect_coin(state: GameState) -> None:
+    """Coins underfoot go into the purse without a keypress.
+
+    A pile is not a decision -- there is nothing to weigh and nothing to leave
+    behind -- so pressing enter on one only ever did the obvious thing. Items
+    and pages stay on the floor, where taking them *is* a choice.
+
+    Called from the two places a step can land, beside the bleeding and the
+    knitting, so a step through stone pockets what lies on the far side too.
+    """
+    item = state.dungeon_map.item_at(state.player.position)
+    if item is None or item.kind != "coin":
+        return
+    state.dungeon_map.remove_item(state.player.position)
+    state.gold += item.gold
+    state.say(f"You pocket {item.gold} coins.", LogKind.COIN)
 
 
 def _knit(state: GameState) -> None:
