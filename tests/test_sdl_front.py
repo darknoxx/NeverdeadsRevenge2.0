@@ -1140,6 +1140,50 @@ def _page_text(screen, app, cols: int = 110, rows: int = 40) -> str:
     return "\n".join("".join((cell.char or " ") for cell in row) for row in buffer.cells)
 
 
+def test_the_word_on_the_title_fills_the_book_and_the_purse():
+    """``battle4ever``, typed where the menu is, with the confirmation a cheat
+    deserves -- and without the letters acting as menu shortcuts on the way."""
+    from neverdeads_revenge.game.actors import ENEMIES
+    from neverdeads_revenge.game.lore import PAGE_COUNT
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3, no_sound=True)
+    app.progress.gold = 0
+    app.progress.pages = []
+    app.progress.bestiary = []
+
+    for letter in "battle4ever":
+        app.key(letter)
+        assert type(app.screens[-1]).__name__ == "TitleScreen", (
+            "a letter of the cheat reached the menu: " + letter
+        )
+
+    assert app.progress.gold == 9999
+    assert app.progress.pages == list(range(1, PAGE_COUNT + 1))
+    assert app.progress.bestiary == sorted(ENEMIES)
+    assert "secret_found" in app.played, "the cheat was silent"
+    assert app.glass_note is not None, "the cheat said nothing on the frame"
+
+
+def test_a_key_that_stops_the_cheat_is_still_a_menu_key():
+    """The "a" in "battle4ever" must be swallowed, but a lone "a" is the
+    Almanac: the buffer only ever eats what is still the word."""
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3, no_sound=True)
+    app.key("a")
+    assert type(app.screens[-1]).__name__ == "AlmanacScreen", "a lone a was eaten"
+    app.key("escape")
+
+    for letter in "battle4eve":
+        app.key(letter)
+    app.key("a")  # no longer the cheat, so the menu gets it
+    assert type(app.screens[-1]).__name__ == "AlmanacScreen", (
+        "a broken cheat kept the keyboard"
+    )
+    assert app.progress.gold == 0, "a broken cheat still paid out"
+
+
 def test_the_almanac_is_two_books_in_one_cover():
     """The chronicle and the bestiary, one screen and two tabs."""
     from neverdeads_revenge.desktop.screens.almanac import AlmanacScreen

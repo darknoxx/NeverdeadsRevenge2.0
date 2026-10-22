@@ -175,6 +175,7 @@ def test_an_old_save_without_the_setting_means_the_sound_is_on(tmp_path: Path):
 
 # -- the test save -----------------------------------------------------------
 def test_a_test_save_fills_the_book_and_the_purse(tmp_path: Path):
+    from neverdeads_revenge.game.actors import ENEMIES
     from neverdeads_revenge.game.lore import PAGE_COUNT
     from neverdeads_revenge.persistence import TEST_GOLD, grant_test_save
 
@@ -186,6 +187,21 @@ def test_a_test_save_fills_the_book_and_the_purse(tmp_path: Path):
     loaded = load_meta(path)
     assert loaded.gold == TEST_GOLD
     assert loaded.pages == list(range(1, PAGE_COUNT + 1))
+    assert loaded.bestiary == sorted(ENEMIES), "the test save left the bestiary shut"
+
+
+def test_unlocking_everything_never_takes_gold_away():
+    """A cheat is a gift, not an exchange rate: a purse already past 9999 keeps
+    what it has."""
+    from neverdeads_revenge.persistence import unlock_everything
+
+    rich = MetaProgress(gold=12_000)
+    unlock_everything(rich)
+    assert rich.gold == 12_000
+
+    poor = MetaProgress()
+    unlock_everything(poor)
+    assert poor.gold == 9999
 
 
 def test_a_test_save_merges_rather_than_replaces(tmp_path: Path):

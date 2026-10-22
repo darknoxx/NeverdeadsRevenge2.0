@@ -34,6 +34,7 @@ __all__ = [
     "load_meta",
     "save_meta",
     "grant_test_save",
+    "unlock_everything",
     "TEST_GOLD",
 ]
 
@@ -342,6 +343,24 @@ def save_meta(progress: MetaProgress, path: Path | None = None) -> None:
 TEST_GOLD = 9999
 
 
+def unlock_everything(progress: MetaProgress) -> None:
+    """The whole book and a heavy purse: every page, every monster, 9999 coin.
+
+    One function for two doors -- ``--testrun`` and the word typed on the title
+    -- because a cheat that unlocked subtly less than the flag would be a bug
+    nobody could see: both would say "everything is open" and one of them would
+    be lying.
+
+    Gold is raised rather than assigned: a player who already has more than the
+    cheat carries is not punished for asking.
+    """
+    from .game.actors import ENEMIES
+
+    progress.gold = max(progress.gold, TEST_GOLD)
+    progress.pages = list(range(1, PAGE_COUNT + 1))
+    progress.bestiary = sorted(ENEMIES)
+
+
 def grant_test_save(path: Path | None = None) -> tuple[Path, Path | None]:
     """Fill the save for testing: every page of the chronicle, and a purse.
 
@@ -365,14 +384,9 @@ def grant_test_save(path: Path | None = None) -> tuple[Path, Path | None]:
             candidate.write_text(target.read_text(encoding="utf-8"), encoding="utf-8")
             backup = candidate
 
-    progress.gold = TEST_GOLD
-    progress.pages = list(range(1, PAGE_COUNT + 1))
-    # And every page of the Almanac, for the same reason: a test save that left
-    # the bestiary to be ground out by hand would be a test save for the part of
-    # the game that is not being tested.
-    from .game.actors import ENEMIES
-
-    progress.bestiary = sorted(ENEMIES)
+    # The same grant the cheat on the title screen makes, so the two doors into
+    # a full book cannot drift apart.
+    unlock_everything(progress)
     save_meta(progress, target)
     return target, backup
 

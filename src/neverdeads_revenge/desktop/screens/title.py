@@ -18,8 +18,18 @@ __all__ = ["TitleScreen"]
 class TitleScreen(Screen):
     """Where a run starts, and where one ends up."""
 
+    #: The word that opens the whole book, typed letter by letter on the title.
+    #: Never announced in the game: a cheat is something somebody tells you, not
+    #: something a menu advertises.
+    CHEAT = "battle4ever"
+
     def __init__(self) -> None:
         self.index = 0
+        #: How much of the word has been typed. Fed before the menu letters, and
+        #: only ever swallowing keys that are still a prefix -- "battle4ever"
+        #: contains an "a", and a cheat that opened the Almanac halfway through
+        #: would be a cheat that typed itself into a menu.
+        self._typed = ""
 
     def items(self, app) -> list[tuple[str, str]]:
         items = [("n", "NEW RUN")]
@@ -99,6 +109,8 @@ class TitleScreen(Screen):
         # past, and a key held *here* does not cycle the shelf.
         if event.isAutoRepeat():
             return True
+        if self._cheat(name, app):
+            return True
         items = self.items(app)
         # Strictly a line read sideways: left and right move it. Up and down say
         # nothing, which is the whole point of "only the keys a line understands"
@@ -125,6 +137,24 @@ class TitleScreen(Screen):
         if name == "escape":
             app.quit_requested()
             return True
+        return False
+
+    def _cheat(self, name: str, app) -> bool:
+        """Feed one key to the word. Returns whether the word ate it.
+
+        A matching key is swallowed so the letters cannot act as menu shortcuts
+        on the way past. A key that stops the match clears the buffer and is
+        answered by the menu as usual -- and a key that *starts* the word again
+        begins a fresh attempt, so a typo costs nothing but the typo.
+        """
+        candidate = self._typed + name
+        if self.CHEAT.startswith(candidate):
+            self._typed = candidate
+            if candidate == self.CHEAT:
+                self._typed = ""
+                app.run_cheat()
+            return True
+        self._typed = name if self.CHEAT.startswith(name) else ""
         return False
 
     def _choose(self, key: str, app) -> None:

@@ -317,6 +317,10 @@ python3 -m venv .venv
 ./ndr2 --battle-scene  # straight into a fight
 ```
 
+And without a flag: type **`battle4ever`** on the title screen. It grants exactly what
+`--testrun` grants -- 9999 coin, every page of the chronicle, every page of the bestiary -- saves
+it at once, and answers with a sound.
+
 ### The window
 
 The game is drawn by SDL and pygame. It was built twice for a while -- once on Qt

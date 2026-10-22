@@ -449,6 +449,21 @@ class SdlApp:
 
         self.push(ScoreboardScreen())
 
+    def run_cheat(self) -> None:
+        """The word typed on the title: the purse and the whole book at once.
+
+        The same grant as ``--testrun``, through the same function, so a cheat
+        and a flag that both claim "everything" cannot disagree about what that
+        is. Saved at once -- a cheat that has to be typed again after a crash is
+        a cheat with a chore attached.
+        """
+        from ..persistence import unlock_everything
+
+        unlock_everything(self.progress)
+        self.save_progress()
+        self.play("secret_found")
+        self._note_glass("CHEAT: 9999 coin, every page")
+
     def open_almanac(self) -> None:
         """The book: the chronicle and the bestiary, on one stack entry."""
         from ..desktop.screens.almanac import AlmanacScreen
