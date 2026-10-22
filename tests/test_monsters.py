@@ -321,9 +321,14 @@ def test_the_quiet_keeps_the_bottle_corked():
     quiet = _monster(state, "quiet", "quiet")
     battle = _battle(state, [quiet])
 
+    assert battle.drinks_refused, "the rule is not askable before the refusal"
+
     battle.choose("item")
 
     assert len(state.inventory) == 1, "the bottle was drunk anyway"
+
+    quiet.stats.hp = 0
+    assert not battle.drinks_refused, "the rule outlived the quiet"
 
 
 def test_the_unbroken_never_swings_and_gives_half_back():

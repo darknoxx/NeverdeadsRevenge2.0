@@ -571,6 +571,18 @@ class Battle:
             self._turns.append(actor)
             self._enemy_acts(actor, events)
 
+    @property
+    def drinks_refused(self) -> bool:
+        """Whether a quiet has the hero's mouth closed.
+
+        The rule as a question rather than as a refusal: a caller that has to
+        *ask* -- the bot does, before it picks the bottle -- must be able to get
+        the answer without spending a turn to be told no.
+        """
+        return any(
+            one.behaviour == "quiet" and one.stats.alive for one in self.enemies
+        )
+
     def _hushed_drink(self) -> bool:
         """Whether a quiet has the hero's mouth closed. Says so, and takes nothing."""
         quiet = next(

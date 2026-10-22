@@ -2,9 +2,9 @@
 """The measuring instrument.
 
 Not a test. A bot that plays the way a competent but unimaginative player does
--- kills what is beside it, drinks when hurt, picks up what is worth walking to,
-washes a curse off when it can afford to, and beelines for the exit otherwise --
-plus a report of what happened over a batch of seeds.
+-- kills what is worth killing first, drinks when hurt, picks up what is worth
+walking to, washes a curse off when it can afford to, and beelines for the exit
+otherwise -- plus a report of what happened over a batch of seeds.
 
 Every number in the README's balance tables came out of this. It lives in the
 repository rather than in somebody's scratch directory because a measurement
@@ -53,6 +53,25 @@ MOVES: dict[Action, tuple[int, int]] = {
 
 #: Drink when the health drops below this fraction of the maximum.
 DRINK_BELOW = 0.55
+
+#: Which monster the bot hits first, and why: the rules that are paid *per turn*
+#: the monster stands. A hush takes a kill point a round, a quiet takes the
+#: bottle, an eater takes the wounds off its friends, and a notary's bill is
+#: every kill already made on the floor. Everything not on this list is a body
+#: with numbers, and numbers are what swinging is for.
+#:
+#: The debt goes the other way round: its bill is handed to the *next* fight, so
+#: the cheapest way to settle it is last. A bot that swung at whatever stood
+#: nearest never found out either price -- and with a quiet in the room it could
+#: not drink at all, so it spent the fight pressing the bottle and gave up.
+FOCUS: dict[str, int] = {
+    "hush": 6,
+    "quiet": 5,
+    "eater": 4,
+    "notary": 3,
+    "picker": 2,
+    "debt": -4,
+}
 
 #: How many draughts the bot bothers to carry. Beyond this the detours cost more
 #: turns than the health is worth, which is a decision a player makes by feel.
@@ -182,13 +201,29 @@ def _bfs_step(state, goals) -> tuple[int, int] | None:
     return None
 
 
-def fight_out(state, fight, spend: bool = False) -> int:
+def _focus(living):
+    """Which of the living the bot hits this turn.
+
+    Highest claim first, and the weakest among equals -- finishing what is
+    already open rather than spreading the damage, which is the one piece of
+    tactics the bot is allowed to have.
+    """
+    return max(living, key=lambda one: (FOCUS.get(one.behaviour, 0), -one.hp))
+
+
+def fight_out(state, fight, spend: bool = False, focus: bool = True) -> int:
     """Play one fight the way the bot plays everything: competently, no ideas.
 
     Swing; drink when the wound is bad; and -- only if the caller asked for it --
     spend kill points on the *dearest* thing he can afford, which is what a player
     who wants the big numbers does. Off by default: the bot is the floor of what a
     player is, and the floor does not use its tricks.
+
+    ``focus`` is the one idea it *is* allowed, because it is not a trick of play
+    but an answer to a rule: some monsters cost the hero something every round
+    they stand, and a bot that swings at whatever is first in the room never
+    pays attention to which. Passing ``focus=False`` plays it the old way, so the
+    difference can be measured instead of argued about.
 
     This used to be the floor's own business: a monster was fought by walking into
     it, and the dungeon resolved the blow. The arena resolves them now, so a run
@@ -208,19 +243,21 @@ def fight_out(state, fight, spend: bool = False) -> int:
         if (
             hurt
             and not state.draughts_forbidden
+            and not fight.drinks_refused
             and any(item.heal for item in state.inventory)
         ):
             fight.choose(ITEM)
             continue
+        target = _focus(living) if focus else living[0]
         chosen = None
         if spend:
             affordable = [one for one in fight.learned() if fight.special_available(one)]
             if affordable:
                 chosen = max(affordable, key=lambda one: one.cost)
         if chosen is None:
-            fight.choose(ATTACK, living[0])
+            fight.choose(ATTACK, target)
         else:
-            fight.choose(SPECIAL, living[0], special=chosen.key)
+            fight.choose(SPECIAL, target, special=chosen.key)
             spent += 1
     if not fight.over:
         # The cap fired: the bot walks away from a fight it could not finish.
@@ -237,6 +274,7 @@ def play(
     loadout: Loadout | None = None,
     fame: bool = False,
     tricks: bool = False,
+    focus: bool = True,
 ) -> Run:
     """Play one run to its end and report what happened.
 
@@ -301,7 +339,7 @@ def play(
             fight = open_fight(state)
             if fight is not None:
                 run.fights += 1
-                run.tricks += fight_out(state, fight, spend=tricks)
+                run.tricks += fight_out(state, fight, spend=tricks, focus=focus)
         idle = 0 if state.total_turns != before_turns else idle + 1
         if idle > MAX_IDLE_TURNS:
             run.stuck = True
@@ -493,12 +531,14 @@ def batch(
     label: str = "",
     fame: bool = False,
     tricks: bool = False,
+    focus: bool = True,
 ) -> list[Run]:
     """Play ``seeds`` runs a hero and report them."""
     runs: list[Run] = []
     for hero in heroes:
         hero_runs = [
-            play(seed, hero, loadout, fame=fame, tricks=tricks) for seed in range(seeds)
+            play(seed, hero, loadout, fame=fame, tricks=tricks, focus=focus)
+            for seed in range(seeds)
         ]
         runs += hero_runs
         name = f"{hero}{label}"
@@ -527,6 +567,13 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="spend kill points on the dearest trick he can afford",
     )
+    parser.add_argument(
+        "--no-focus",
+        dest="focus",
+        action="store_false",
+        help="swing at whatever is first in the room, the way the bot used to, "
+        "so what focusing the rule-bearers is worth can be measured",
+    )
     args = parser.parse_args(argv)
 
     heroes = args.hero or list(HEROES)
@@ -538,9 +585,17 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"{args.seeds} seeds a hero, loadout: {args.loadout}"
         f"{', every chest taken for fame' if args.fame else ''}"
-        f"{', spending kill points' if args.tricks else ', swinging only'}\n"
+        f"{', spending kill points' if args.tricks else ', swinging only'}"
+        f"{', no focus' if not args.focus else ''}\n"
     )
-    runs = batch(heroes, args.seeds, loadout, fame=args.fame, tricks=args.tricks)
+    runs = batch(
+        heroes,
+        args.seeds,
+        loadout,
+        fame=args.fame,
+        tricks=args.tricks,
+        focus=args.focus,
+    )
 
     print()
     depths = Counter(run.depth for run in runs)
