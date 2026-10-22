@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from neverdeads_revenge.game.actions import drink, drop
 from neverdeads_revenge.game.gifts import gift_by_key
+from neverdeads_revenge.game.difficulty import ULTIMATE_LEVEL
 from neverdeads_revenge.game.lore import PAGE_COUNT, numeral
 from neverdeads_revenge.game.shop import ShopError, WILD_OFFERS, build_stock, buy, describe_item
 from neverdeads_revenge.world.items import ITEMS
@@ -135,7 +136,10 @@ class HelpScreen(_Panel):
             ("TAKE      enter  (loot, stairs, or speak)", BONE),
             ("DRINK     q      PACK  i      SHEET  c", BONE),
             ("LEGEND    l      REFERENCE  ?      HOUR  r", BONE),
-            ("ULTIMATE  f      (once a floor, from level 7)", BONE),
+            (
+                f"ULTIMATE  f      (once a floor, from level {ULTIMATE_LEVEL})",
+                BONE,
+            ),
             ("MENU      escape", BONE),
             ("", ""),
             ("THE GLASS", f"bold {PURPLE}"),

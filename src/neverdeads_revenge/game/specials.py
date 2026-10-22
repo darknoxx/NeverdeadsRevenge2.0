@@ -17,9 +17,9 @@ costs; `game/battle.py` runs them through the same blow every other attack in
 this game goes through, which is what keeps a special from being a second game
 hidden inside the first.
 
-The gates are levels, spread across the first three floors: kills teach one level
-each four of them, so the knife arrives on floor one, the orb and the shadow by
-the middle of floor two, the rest of them and the void by floor three.
+**One trick a level**, and that is a rule rather than a habit: seven tricks, the
+levels two to eight, so every level a run earns hands over exactly one new way to
+spend a turn. Two of them arriving together was a level that felt like a list.
 """
 
 from __future__ import annotations
@@ -171,15 +171,6 @@ SPECIALS: tuple[Special, ...] = (
         level=4,
     ),
     Special(
-        key=DEVOURING_DARKNESS,
-        cost=6,
-        effect="a bite; half the damage comes back",
-        look="drain",
-        name="DEVOURING DARKNESS",
-        blurb="it eats him, and he keeps what it ate",
-        level=5,
-    ),
-    Special(
         key=OPEN_VEIN,
         cost=4,
         effect="small cut, then 2 a turn for 3",
@@ -189,15 +180,13 @@ SPECIALS: tuple[Special, ...] = (
         level=5,
     ),
     Special(
-        key=PAINT_THE_WALLS_RED,
-        cost=8,
-        effect="all of them: the deepest wound, three stacks",
-        needs_target=False,
-        look="shadow",
-        name="PAINT THE WALLS RED",
-        blurb="the room is the canvas, and the paint is theirs",
+        key=DEVOURING_DARKNESS,
+        cost=6,
+        effect="a bite; half the damage comes back",
+        look="drain",
+        name="DEVOURING DARKNESS",
+        blurb="it eats him, and he keeps what it ate",
         level=6,
-        all_enemies=True,
     ),
     Special(
         key=BETWEEN_BLOWS,
@@ -206,7 +195,18 @@ SPECIALS: tuple[Special, ...] = (
         look="trail",
         name="BETWEEN BLOWS",
         blurb="he is not where they swing, and the cut comes from behind",
-        level=6,
+        level=7,
+    ),
+    Special(
+        key=PAINT_THE_WALLS_RED,
+        cost=8,
+        effect="all of them: the deepest wound, three stacks",
+        needs_target=False,
+        look="shadow",
+        name="PAINT THE WALLS RED",
+        blurb="the room is the canvas, and the paint is theirs",
+        level=8,
+        all_enemies=True,
     ),
 )
 
@@ -416,7 +416,7 @@ INFERNO_SPECIALS: tuple[Special, ...] = (
         look="aura",
         name="RED MIST",
         blurb="the red comes down and he stops counting",
-        level=5,
+        level=6,
     ),
     Special(
         key=HAYMAKER,
@@ -425,7 +425,7 @@ INFERNO_SPECIALS: tuple[Special, ...] = (
         look="shatter",
         name="THE HAYMAKER",
         blurb="the whole floor goes into it, and then so does the monster",
-        level=6,
+        level=7,
     ),
     Special(
         key=ROUNDHOUSE,
@@ -435,7 +435,7 @@ INFERNO_SPECIALS: tuple[Special, ...] = (
         look="wave",
         name="THE ROUNDHOUSE",
         blurb="he turns once, and the room is in the way",
-        level=6,
+        level=8,
         all_enemies=True,
     ),
 )

@@ -73,13 +73,15 @@ __all__ = [
 #: insists the ceiling is reached exactly on the last floor and not before.
 POTENCY_PER_FLOOR = 0.225
 
-#: The level the ultimates start answering at. Below it, the prompt in the
-#: sidebar reads grey and `f` refuses politely. Seven rather than ten after the
-#: bot runs: level ten is thirty-six kills, which is *clearing three floors*,
-#: and a promise nobody ever sees is not a promise. Seven is twenty-eight kills
-#: -- a good floor or two -- so the ask is part of a good run and not a
-#: trophy for a perfect one.
-ULTIMATE_LEVEL = 7
+#: The level the ultimates start answering at, and the level the trick ladder is
+#: capped by. Below it, the prompt in the sidebar reads grey and `f` refuses
+#: politely.
+#:
+#: Eight, and that is not a taste: the seven tricks arrive at the levels two to
+#: eight, one a level, so the gate sits at the *last* of them -- a run has its
+#: whole kit in hand on the level the dark first answers. Seven would have capped
+#: the last trick down onto the seventh level, which is a level handing over two.
+ULTIMATE_LEVEL = 8
 
 #: How long Atritas walks beside Noxx once summoned, in turns. Forty: the
 #: "few seconds" the promise names, said in the only currency the dungeon

@@ -1193,7 +1193,7 @@ def _alight(seed: int = 3):
     than a thing standing on it, so every test of it starts here.
     """
     state = start_run(INFERNO, seed=seed)
-    state.level = 7
+    state.level = 8
     state.kill_points = 12
     perform_action(state, Action.ULTIMATE)
     assert state.ravaging, "the floor did not catch"
@@ -1211,7 +1211,7 @@ def test_the_floor_still_burns_and_the_price_is_the_shared_one():
     from neverdeads_revenge.game.levels import SACRIFICED_KILL_POINTS
 
     state = start_run(INFERNO, seed=3)
-    state.level = 7
+    state.level = 8
     state.kill_points = 10
     assert state.kill_points_max == 10
 

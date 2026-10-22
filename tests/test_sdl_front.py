@@ -3468,7 +3468,7 @@ def test_the_cursor_is_a_promise_about_who_the_attack_is_for():
     from neverdeads_revenge.sdl_front.arena import SdlArena
 
     app = SdlApp(seed=3, no_sound=True)
-    state = start_run(HEROES["yeti"], 3, ultimate_level=7)
+    state = start_run(HEROES["yeti"], 3, ultimate_level=8)
     state.level = 8
     state.kill_points = 40
     foes = [

@@ -493,7 +493,7 @@ def test_a_fight_takes_whoever_is_standing_with_it():
 
 
 # -- the five tricks (M3) -----------------------------------------------------
-def levelled(level: int, count: int = 2, ultimate_level: int = 7):
+def levelled(level: int, count: int = 2, ultimate_level: int = 8):
     """A fight at a chosen level, with the dark answering where it really does.
 
     The void's gate is the dungeon's own -- the level the dark answers at -- so a
@@ -668,7 +668,7 @@ def test_the_orb_hunts_crits_without_promising_them():
             # A fresh *seed* every time as well as a fresh fight: the same seed
             # rolled the same two dice sixty times and the measurement said
             # nothing about the odds at all.
-            state = start_run(HEROES["noxx"], 1000 + index, ultimate_level=7)
+            state = start_run(HEROES["noxx"], 1000 + index, ultimate_level=8)
             state.level = 3
             battle = Battle(state, take(state, 1))
             enemy = battle.enemies[0]
@@ -806,7 +806,7 @@ def test_the_roundhouse_takes_the_whole_room():
     """One turn, and everything standing is in the way of it."""
     from neverdeads_revenge.game.specials import ROUNDHOUSE
 
-    battle = _flat("inferno", count=3)
+    battle = _flat("inferno", level=8, count=3)
     before = [enemy.stats.hp for enemy in battle.enemies]
     battle.choose(SPECIAL, battle.enemies[0], special=ROUNDHOUSE)
 
@@ -824,7 +824,7 @@ def test_paint_the_walls_red_cuts_three_deep():
     """
     from neverdeads_revenge.game.specials import PAINT_THE_WALLS_RED
 
-    battle = duel("noxx", 7, count=3)
+    battle = duel("noxx", 8, count=3)
     for enemy in battle.enemies:
         enemy.stats.hp = 9999
         enemy.stats.evasion = 0
@@ -842,7 +842,7 @@ def test_paint_the_walls_red_cuts_three_deep():
 def test_devouring_darkness_keeps_half_of_what_it_bites():
     """The steal: half of the damage, back to him -- and never nothing, because a
     mouthful of a mouthful is still a mouthful."""
-    battle = levelled(5)
+    battle = levelled(6)
     enemy = battle.enemies[0]
     enemy.stats.hp = 9999
     battle.hero.stats.hp = 1
@@ -874,7 +874,7 @@ def test_devouring_darkness_keeps_half_of_what_it_bites():
 def test_paint_the_walls_red_opens_all_of_them():
     """Atritas comes, and he does not come alone: every one of them is left
     bleeding *deeply* -- longer, because a wound refreshes and does not stack."""
-    battle = levelled(6, count=3)
+    battle = levelled(8, count=3)
     for enemy in battle.enemies:
         enemy.stats.hp = 999
 
@@ -1123,26 +1123,12 @@ def test_the_five_arrive_with_levels():
             special.key for special in SPECIALS if battle.special_available(special)
         ]
 
-    assert names_at(2) == [LEFT_HAND]
-    assert names_at(3) == [LEFT_HAND, ORB_OF_PTAMERA]
-    assert names_at(4) == [LEFT_HAND, ORB_OF_PTAMERA, FLEETING_SHADOW]
-    assert names_at(5) == [
-        LEFT_HAND,
-        ORB_OF_PTAMERA,
-        FLEETING_SHADOW,
-        DEVOURING_DARKNESS,
-        OPEN_VEIN,
-    ]
-    assert names_at(6) == [
-        LEFT_HAND,
-        ORB_OF_PTAMERA,
-        FLEETING_SHADOW,
-        DEVOURING_DARKNESS,
-        OPEN_VEIN,
-        PAINT_THE_WALLS_RED,
-        BETWEEN_BLOWS,
-    ]
-    assert names_at(7) == [one.key for one in SPECIALS], "the void never arrived"
+    # One name a level, two to eight, in the order the menu reads them.
+    for level, expected in enumerate(SPECIALS, start=2):
+        assert names_at(level) == [one.key for one in SPECIALS[: level - 1]], (
+            f"level {level} did not hand over exactly one more trick"
+        )
+    assert names_at(9) == [one.key for one in SPECIALS], "the kit stopped arriving"
 
 
 def test_the_tricks_come_back_and_the_floor_does_not():
@@ -1152,7 +1138,7 @@ def test_the_tricks_come_back_and_the_floor_does_not():
     it belongs to the overworld -- so what a fight spends is the purse and
     nothing else.
     """
-    state = run(ultimate_level=7)
+    state = run(ultimate_level=8)
     state.level = 7
     first = Battle(state, take(state, 2))
     first.choose(SPECIAL, first.enemies[0], special=LEFT_HAND)
@@ -1175,7 +1161,7 @@ def test_a_testrun_opens_the_whole_song():
         testing.special_available(special) for special in SPECIALS
     ), "a testrun left something locked"
 
-    ordinary = levelled(1, ultimate_level=7)
+    ordinary = levelled(1, ultimate_level=8)
     assert [
         special.key
         for special in SPECIALS
@@ -1186,7 +1172,7 @@ def test_a_testrun_opens_the_whole_song():
 # -- Yeti and Walkyrion (M3) --------------------------------------------------
 def duel(hero: str, level: int = 7, count: int = 2):
     """A fight as another hero, at a level where the whole kit is in hand."""
-    state = start_run(HEROES[hero], 1, ultimate_level=7)
+    state = start_run(HEROES[hero], 1, ultimate_level=8)
     state.level = level
     state.kill_points = 999
     return Battle(state, take(state, count))
@@ -1428,3 +1414,17 @@ def test_a_wound_in_the_arena_runs_on_the_heros_turn_whatever_the_monsters_speed
     )
 
 
+
+
+def test_every_level_teaches_exactly_one_trick():
+    """Seven tricks, the levels two to eight: one per level, in order.
+
+    A level that hands over two is a level that feels like a list, and the menu
+    reads bottom-up -- so the kit is ordered by the level it arrives at, and no
+    two names share one.
+    """
+    from neverdeads_revenge.game.specials import SPECIALS_BY_HERO
+
+    for hero, kit in SPECIALS_BY_HERO.items():
+        levels = [special.level for special in kit]
+        assert levels == list(range(2, 2 + len(kit))), f"{hero}: {levels}"
