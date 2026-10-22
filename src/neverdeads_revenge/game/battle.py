@@ -38,7 +38,7 @@ from .actions import (
     tick_statuses,
     ultimate_refusal,
 )
-from .actors import Actor
+from .actors import NOTARY_BILL, NOTARY_MINIMUM, Actor
 from .combat import AttackOutcome
 from .statuses import status_by_key
 from .specials import (
@@ -347,7 +347,7 @@ class Battle:
                 # THE NOTARY bills the floor: its health is what has already
                 # been killed on it. Read when the room opens, because that is
                 # when the bill is handed over.
-                bill = max(8, state.floor_kills * 4)
+                bill = max(NOTARY_MINIMUM, state.floor_kills * NOTARY_BILL)
                 enemy.stats.max_hp = bill
                 enemy.stats.hp = bill
         #: Whether the hero has his feet set, which lasts one round.

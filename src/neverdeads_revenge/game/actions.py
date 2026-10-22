@@ -28,6 +28,7 @@ from neverdeads_revenge.world.map import GroundItem
 from neverdeads_revenge.world.tiles import Tile
 
 from .actors import (
+    NOTARY_BILL,
     Actor,
     ActorKind,
     make_atritas,
@@ -461,7 +462,7 @@ def _one_death_answers(state: GameState, enemy: Actor) -> None:
         None,
     )
     if notary is not None:
-        fed = notary.stats.heal(4)
+        fed = notary.stats.heal(NOTARY_BILL)
         if fed:
             state.say(f"The {notary.name} writes it down. {fed}.", LogKind.BAD)
 

@@ -21,6 +21,8 @@ from .statuses import status_by_key
 
 __all__ = [
     "ATRITAS_PETROL",
+    "NOTARY_BILL",
+    "NOTARY_MINIMUM",
     "Stats",
     "ActorKind",
     "Actor",
@@ -43,6 +45,14 @@ __all__ = [
     "scale_template",
     "pick_enemy_template",
 ]
+
+
+#: THE NOTARY's bill: the health it opens the fight with, per kill already made
+#: on the floor, and what every further kill on that floor pays it. Raised with
+#: the body's own health, and for the same reason: a clerk that dies in one
+#: swing is a rule the player never has to answer.
+NOTARY_BILL = 6
+NOTARY_MINIMUM = 12
 
 
 @dataclass(slots=True)
@@ -993,8 +1003,12 @@ ENEMIES: dict[str, EnemyTemplate] = {
         # old sentence promised one. It does not touch health, which is the
         # whole of what it is: a hero is his tricks. A hero is his tricks, and this takes them away without touching
         # his health -- the fight nobody has practised.
+        #
+        # Twenty and not fourteen: at fourteen a heavy hero killed it with one
+        # swing, so half the roster never met the silence at all. The body is
+        # the clock the rule runs on, and a clock with one tick is no clock.
         behaviour="hush",
-        stats=Stats(max_hp=14, hp=14, speed=1.15, damage=(4, 6), evasion=2),
+        stats=Stats(max_hp=20, hp=20, speed=1.15, damage=(4, 6), evasion=2),
         gold=(4, 7),
         min_depth=2,
         weight=1.1,
@@ -1131,8 +1145,10 @@ ENEMIES: dict[str, EnemyTemplate] = {
         glyph="q",
         color="#6058e0",
         # The pack stays shut while it lives. It takes nothing but the answer.
+        # Twenty-two, for the hush's reason: the rule is only paid per round it
+        # stands, and a rule that stands for one round is a footnote.
         behaviour="quiet",
-        stats=Stats(max_hp=16, hp=16, speed=1.32, damage=(3, 5), evasion=2),
+        stats=Stats(max_hp=22, hp=22, speed=1.32, damage=(3, 5), evasion=2),
         gold=(5, 9),
         min_depth=4,
         weight=0.6,
@@ -1159,9 +1175,10 @@ ENEMIES: dict[str, EnemyTemplate] = {
         glyph="e",
         color="#30b848",
         # It eats the wounds off its friends and grows on them. A status build
-        # in its room starves.
+        # in its room starves -- and it has to survive long enough to be worth
+        # the wound build's while to kill first.
         behaviour="eater",
-        stats=Stats(max_hp=28, hp=28, speed=1.02, damage=(4, 7)),
+        stats=Stats(max_hp=34, hp=34, speed=1.02, damage=(4, 7)),
         gold=(6, 10),
         min_depth=7,
         weight=0.6,
@@ -1175,7 +1192,9 @@ ENEMIES: dict[str, EnemyTemplate] = {
         # Its health is the floor's kill count: it bills you for what you have
         # already done, and every further kill on the floor feeds it.
         behaviour="notary",
-        stats=Stats(max_hp=16, hp=16, speed=0.92, damage=(4, 7), armor=1),
+        stats=Stats(
+            max_hp=NOTARY_MINIMUM, hp=NOTARY_MINIMUM, speed=0.92, damage=(4, 7), armor=1
+        ),
         gold=(7, 11),
         min_depth=5,
         weight=0.6,

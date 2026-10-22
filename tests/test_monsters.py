@@ -384,13 +384,13 @@ def test_the_notary_bills_the_floor_and_is_fed_by_it():
     from neverdeads_revenge.game.battle import Battle
 
     Battle(state, [notary])
-    assert notary.stats.max_hp == 20, "the bill was not the floor's kills"
+    assert notary.stats.max_hp == 30, "the bill was not the floor's kills"
 
     notary.stats.hp = 10
     ghoul = make_enemy(ENEMIES["ghoul"], state.player.position)
     state.enemies.append(ghoul)
     _on_death(state, ghoul)
-    assert notary.stats.hp == 14, "a kill on the floor did not feed it"
+    assert notary.stats.hp == 16, "a kill on the floor did not feed it"
 
 
 def test_the_reaver_takes_the_blade_and_gives_it_back():
