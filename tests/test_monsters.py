@@ -44,6 +44,30 @@ def test_the_briar_gives_back_what_it_takes():
     assert state.player.hp == before - ENEMIES["briar"].thorns, "the thorns never bit"
 
 
+def test_the_silence_takes_the_top_off_a_blow():
+    """Eighteen health is still one swing of a heavy blade; ten is not.
+
+    The ceiling is what makes the hush the same fight for every hero: it sits
+    above Noxx's whole roll and below Yeti's, so the fast hero pays nothing for
+    it and the heavy one pays the turns the fast hero was already paying.
+    """
+    state = _run()
+    hush = _monster(state, "hush", "hush")
+    state.player.stats.damage = (40, 40)
+    state.player.stats.crit_chance = 0.0
+
+    outcome = resolve_player_attack(state, hush)
+
+    assert outcome.damage == ENEMIES["hush"].blow_cap, "the silence let it through"
+    assert outcome.capped
+
+    ghoul = _monster(state, "ghoul", "ghoul")
+    outcome = resolve_player_attack(state, ghoul)
+
+    assert outcome.damage == 40, "a body with no silence took less than the swing"
+    assert not outcome.capped
+
+
 # -- the already-dying -----------------------------------------------------
 def test_the_already_dying_bleeds_itself_when_it_strikes():
     state = _run()

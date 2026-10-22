@@ -279,6 +279,10 @@ class Actor:
     #: monster is the other way round -- the leech barely feels steel and comes
     #: apart at a bleed -- and the fight reads both here rather than by name.
     blow_scale: float = 1.0
+    #: The most a single blow can take off it. One monster has it: the hush
+    #: swallows the weight of a swing, so the heavy heroes who would finish it in
+    #: one blow pay the same turns the fast ones do. Zero means no ceiling.
+    blow_cap: int = 0
     status_scale: float = 1.0
     #: The share of a landed blow it gives straight back. The unbroken does
     #: half, in blood, and never swings at all.
@@ -795,6 +799,8 @@ class EnemyTemplate:
     #: what each of them means.
     awake: bool = True
     blow_scale: float = 1.0
+    #: The ceiling on one blow against it; see ``Actor.blow_cap``.
+    blow_cap: int = 0
     status_scale: float = 1.0
     reflect_share: float = 0.0
 
@@ -1004,11 +1010,18 @@ ENEMIES: dict[str, EnemyTemplate] = {
         # whole of what it is: a hero is his tricks. A hero is his tricks, and this takes them away without touching
         # his health -- the fight nobody has practised.
         #
-        # Twenty and not fourteen: at fourteen a heavy hero killed it with one
+        # Eighteen and not fourteen: at fourteen a heavy hero killed it with one
         # swing, so half the roster never met the silence at all. The body is
         # the clock the rule runs on, and a clock with one tick is no clock.
+        #
+        # And the ceiling on one blow, which is the part health could not do:
+        # eighteen is still one swing to Yeti, so the silence takes the *weight*
+        # out of a swing instead. Ten is above Noxx's whole roll and below
+        # Yeti's and Inferno's -- the fast hero pays nothing for it, the heavy
+        # ones pay the turns the fast hero was already paying.
         behaviour="hush",
-        stats=Stats(max_hp=20, hp=20, speed=1.15, damage=(4, 6), evasion=2),
+        stats=Stats(max_hp=18, hp=18, speed=1.15, damage=(4, 6), evasion=2),
+        blow_cap=10,
         gold=(4, 7),
         min_depth=2,
         weight=1.1,
@@ -1265,6 +1278,7 @@ def make_enemy(template: EnemyTemplate, position: Pos) -> Actor:
         thorns=template.thorns,
         awake=template.awake,
         blow_scale=template.blow_scale,
+        blow_cap=template.blow_cap,
         status_scale=template.status_scale,
         reflect_share=template.reflect_share,
     )

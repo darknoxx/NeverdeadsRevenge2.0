@@ -49,6 +49,10 @@ class AttackOutcome:
     damage: int
     killed: bool
     dodged: bool = False
+    #: Whether a ceiling on the defender took the top off the blow -- the hush's
+    #: silence. Said out loud in the log, because a number that is quietly less
+    #: than the roll reads as a bug.
+    capped: bool = False
 
     @property
     def verb(self) -> str:
@@ -149,13 +153,23 @@ def attack(
         damage = max(1, int(round(damage * defender.blow_scale)))
     if bonus:
         damage = max(1, damage + bonus)
+    capped = False
+    if defender.blow_cap and damage > defender.blow_cap:
+        # THE HUSH. The silence takes the weight out of a swing: a blow still
+        # lands, it just cannot be the whole fight. Last, after every other
+        # rule, so the crit a trick paid for is clipped like the rest. A bell
+        # or a shard of glass is not a swing and is not read here.
+        damage = defender.blow_cap
+        capped = True
 
     dealt = defender.hurt(damage, pierce=attacker.pierce)
     killed = not defender.stats.alive
     if killed:
         defender.alive = False
 
-    return AttackOutcome(hit=True, crit=crit, damage=dealt, killed=killed)
+    return AttackOutcome(
+        hit=True, crit=crit, damage=dealt, killed=killed, capped=capped
+    )
 
 
 def apply_revenge(actor: Actor, stacks: int) -> int:

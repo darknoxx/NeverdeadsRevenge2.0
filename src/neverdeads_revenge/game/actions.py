@@ -782,6 +782,8 @@ def _enemy_takes_damage(state: GameState, enemy: Actor, outcome) -> None:
         f"You {outcome.verb_second_person} the {enemy.name} for {outcome.damage}.",
         LogKind.CRIT if outcome.crit else LogKind.COMBAT,
     )
+    if outcome.capped:
+        state.say("The silence swallows the rest of it.", LogKind.PLAIN)
 
 
 # -- player actions --------------------------------------------------------
