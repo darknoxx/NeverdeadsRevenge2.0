@@ -164,7 +164,10 @@ def test_enemy_spawn_weights_are_respected():
     rng = Rng(11)
     counts: dict[str, int] = {}
     for _ in range(6000):
-        key = pick_enemy_template(rng).key
+        # Depth two, because the wraith arrives on the second floor now: the
+        # ladder is the roster, and a sample of floor one cannot see half of what
+        # the weights are for.
+        key = pick_enemy_template(rng, 2).key
         counts[key] = counts.get(key, 0) + 1
     # Template keys, not display names: the skeleton's key is "bone".
     assert counts["ghoul"] > counts["bone"] > counts["wraith"]

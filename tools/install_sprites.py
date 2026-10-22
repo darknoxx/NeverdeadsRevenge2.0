@@ -101,6 +101,20 @@ EXPORTS: dict[str, tuple[str, float]] = {
     "the_briar.png": ("briar.png", MONSTER_SCALE),
     "the_picker.png": ("picker.png", MONSTER_SCALE),
     "the_lid.png": ("lid.png", MONSTER_SCALE),
+    # The ten whose rule is about the room. Two came with their own spelling:
+    # the debt's export says "dept", and the quiet's says "quit" -- the picture
+    # is a hooded thing with a finger to its lips and bottles on its belt, so
+    # there is no doubt which it is.
+    "idle.png": ("idle.png", MONSTER_SCALE),
+    "twin.png": ("twin.png", MONSTER_SCALE),
+    "dept.png": ("debt.png", MONSTER_SCALE),
+    "judge.png": ("judge.png", MONSTER_SCALE),
+    "leech.png": ("leech.png", MONSTER_SCALE),
+    "quit.png": ("quiet.png", MONSTER_SCALE),
+    "unbroken.png": ("unbroken.png", MONSTER_SCALE),
+    "eater.png": ("eater.png", MONSTER_SCALE),
+    "notary.png": ("notary.png", MONSTER_SCALE),
+    "reaver.png": ("reaver.png", MONSTER_SCALE),
 }
 
 

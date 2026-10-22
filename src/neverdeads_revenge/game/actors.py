@@ -789,6 +789,35 @@ class EnemyTemplate:
     reflect_share: float = 0.0
 
 
+#: The ladder: what a floor can put in front of you, and from when.
+#:
+#: One rule, and it is the player's: every floor introduces a *little*, and the
+#: things that are worst together are kept apart long enough that the player has
+#: met each of them alone first.
+#:
+#:   1  the ground        ghoul, skeleton, viper, ooze -- slow, plated, poisoned,
+#:                        and a wall. Nothing here has a rule beyond its numbers.
+#:   2  the first rules   wraith, mound, briar, hush -- fast, heavy, thorns, and
+#:                        a thing that stops the purse. All four are felt on the
+#:                        turn they are met.
+#:   3  the first choices kindly one, idle, already-dying -- pay, walk past, wait.
+#:                        None of them punishes a player who has not learned a
+#:                        *system* yet.
+#:   4  the room's own    twin, quiet, picker -- order, a closed pack, a purse.
+#:   5  the floor's books notary, leech, debt -- kills priced, steel refused, a
+#:                        debt handed to the next room.
+#:   6  the pressure      judge, unbroken, and the echo. The judge is the curse
+#:                        build's enemy and pairs with the hush's silence, so it
+#:                        arrives four floors after it; the unbroken is a pure
+#:                        exchange.
+#:   7  the denial        eater -- it starves the leech's only weakness, two
+#:                        floors after the leech, so the pair is late and rare.
+#:   8  the price         reaver -- it takes the blade. The worst single thing a
+#:                        room can do, and it comes when the hero has the kit and
+#:                        the potions to answer it.
+#:
+#: The last two floors introduce nobody: they are where the *pairs* happen, and
+#: a floor that can hold any two of twenty-four is the deep floor's own reward.
 ENEMIES: dict[str, EnemyTemplate] = {
     "ghoul": EnemyTemplate(
         key="ghoul",
@@ -803,6 +832,7 @@ ENEMIES: dict[str, EnemyTemplate] = {
         stats=Stats(max_hp=15, hp=15, speed=0.7, damage=(4, 6), evasion=0, armor=0),
         gold=(3, 6),
         weight=4.0,
+        min_depth=1,
     ),
     "bone": EnemyTemplate(
         key="bone",
@@ -813,6 +843,7 @@ ENEMIES: dict[str, EnemyTemplate] = {
         stats=Stats(max_hp=22, hp=22, speed=1.0, damage=(5, 8), accuracy=1, armor=1),
         gold=(6, 11),
         weight=3.0,
+        min_depth=1,
     ),
     "wraith": EnemyTemplate(
         key="wraith",
@@ -834,6 +865,7 @@ ENEMIES: dict[str, EnemyTemplate] = {
         # 1.14 with the rest of the wall: a slow hero's problem is the number of
         # things hitting him, and this is the dial that changes it.
         weight_growth=1.25,
+        min_depth=2,
     ),
     "ooze": EnemyTemplate(
         key="ooze",
@@ -857,6 +889,7 @@ ENEMIES: dict[str, EnemyTemplate] = {
         # problem by floor eight, when the turns it eats are the turns the run
         # needed.
         weight_growth=1.18,
+        min_depth=1,
     ),
     "viper": EnemyTemplate(
         key="viper",
@@ -872,6 +905,7 @@ ENEMIES: dict[str, EnemyTemplate] = {
         inflicts=("poison",),
         weight=1.5,
         weight_growth=1.10,
+        min_depth=1,
     ),
     "mound": EnemyTemplate(
         key="mound",
@@ -885,8 +919,9 @@ ENEMIES: dict[str, EnemyTemplate] = {
         behaviour="cautious",
         stats=Stats(max_hp=34, hp=34, speed=0.6, damage=(6, 9), accuracy=1, armor=1),
         gold=(10, 16),
-        weight=1.0,
+        weight=1.2,
         weight_growth=1.20,
+        min_depth=2,
     ),
     "hunter": EnemyTemplate(
         key="hunter",
@@ -944,8 +979,8 @@ ENEMIES: dict[str, EnemyTemplate] = {
         behaviour="kindly",
         stats=Stats(max_hp=36, hp=36, speed=0.95, damage=(6, 9), accuracy=2, armor=1),
         gold=(8, 12),
-        min_depth=2,
-        weight=0.9,
+        min_depth=3,
+        weight=0.8,
         weight_growth=1.10,
     ),
     "hush": EnemyTemplate(
@@ -962,7 +997,7 @@ ENEMIES: dict[str, EnemyTemplate] = {
         stats=Stats(max_hp=14, hp=14, speed=1.15, damage=(4, 6), evasion=2),
         gold=(4, 7),
         min_depth=2,
-        weight=1.2,
+        weight=1.1,
         weight_growth=1.15,
     ),
     "dying": EnemyTemplate(
@@ -976,8 +1011,8 @@ ENEMIES: dict[str, EnemyTemplate] = {
         self_inflicts=("bleed",),
         stats=Stats(max_hp=10, hp=10, speed=1.05, damage=(7, 10)),
         gold=(6, 10),
-        min_depth=2,
-        weight=1.1,
+        min_depth=3,
+        weight=1.0,
         weight_growth=1.10,
     ),
     "briar": EnemyTemplate(
@@ -991,7 +1026,7 @@ ENEMIES: dict[str, EnemyTemplate] = {
         stats=Stats(max_hp=26, hp=26, speed=0.65, damage=(5, 7), armor=1),
         gold=(6, 11),
         min_depth=2,
-        weight=1.4,
+        weight=1.2,
         weight_growth=1.10,
     ),
     "picker": EnemyTemplate(
@@ -1008,7 +1043,7 @@ ENEMIES: dict[str, EnemyTemplate] = {
         behaviour="thief",
         stats=Stats(max_hp=60, hp=60, speed=1.45, damage=(3, 5), evasion=2),
         gold=(30, 45),
-        min_depth=2,
+        min_depth=4,
         weight=0.45,
         weight_growth=1.10,
     ),
@@ -1029,7 +1064,7 @@ ENEMIES: dict[str, EnemyTemplate] = {
         awake=False,
         stats=Stats(max_hp=18, hp=18, speed=0.88, damage=(5, 8)),
         gold=(4, 8),
-        min_depth=2,
+        min_depth=3,
         weight=0.9,
         weight_growth=1.05,
     ),
@@ -1043,8 +1078,8 @@ ENEMIES: dict[str, EnemyTemplate] = {
         behaviour="twin",
         stats=Stats(max_hp=22, hp=22, speed=1.08, damage=(5, 8)),
         gold=(6, 10),
-        min_depth=3,
-        weight=0.7,
+        min_depth=4,
+        weight=0.8,
         weight_growth=1.10,
     ),
     "debt": EnemyTemplate(
@@ -1056,7 +1091,7 @@ ENEMIES: dict[str, EnemyTemplate] = {
         behaviour="debt",
         stats=Stats(max_hp=20, hp=20, speed=0.98, damage=(5, 8), armor=1),
         gold=(5, 9),
-        min_depth=4,
+        min_depth=5,
         weight=0.6,
         weight_growth=1.10,
     ),
@@ -1070,7 +1105,7 @@ ENEMIES: dict[str, EnemyTemplate] = {
         behaviour="judge",
         stats=Stats(max_hp=26, hp=26, speed=0.82, damage=(1, 2), armor=1),
         gold=(8, 12),
-        min_depth=5,
+        min_depth=6,
         weight=0.5,
         weight_growth=1.10,
     ),
@@ -1086,7 +1121,7 @@ ENEMIES: dict[str, EnemyTemplate] = {
         gold=(5, 9),
         blow_scale=0.25,
         status_scale=2.0,
-        min_depth=4,
+        min_depth=5,
         weight=0.7,
         weight_growth=1.10,
     ),
@@ -1099,7 +1134,7 @@ ENEMIES: dict[str, EnemyTemplate] = {
         behaviour="quiet",
         stats=Stats(max_hp=16, hp=16, speed=1.32, damage=(3, 5), evasion=2),
         gold=(5, 9),
-        min_depth=3,
+        min_depth=4,
         weight=0.6,
         weight_growth=1.10,
     ),
@@ -1114,8 +1149,8 @@ ENEMIES: dict[str, EnemyTemplate] = {
         stats=Stats(max_hp=34, hp=34, speed=0.78, damage=(1, 2)),
         gold=(6, 10),
         reflect_share=0.5,
-        min_depth=2,
-        weight=0.8,
+        min_depth=6,
+        weight=0.7,
         weight_growth=1.10,
     ),
     "eater": EnemyTemplate(
@@ -1128,8 +1163,8 @@ ENEMIES: dict[str, EnemyTemplate] = {
         behaviour="eater",
         stats=Stats(max_hp=28, hp=28, speed=1.02, damage=(4, 7)),
         gold=(6, 10),
-        min_depth=4,
-        weight=0.7,
+        min_depth=7,
+        weight=0.6,
         weight_growth=1.10,
     ),
     "notary": EnemyTemplate(
@@ -1142,7 +1177,7 @@ ENEMIES: dict[str, EnemyTemplate] = {
         behaviour="notary",
         stats=Stats(max_hp=16, hp=16, speed=0.92, damage=(4, 7), armor=1),
         gold=(7, 11),
-        min_depth=3,
+        min_depth=5,
         weight=0.6,
         weight_growth=1.10,
     ),
@@ -1156,7 +1191,7 @@ ENEMIES: dict[str, EnemyTemplate] = {
         behaviour="reaver",
         stats=Stats(max_hp=26, hp=26, speed=1.12, damage=(6, 9), armor=1),
         gold=(8, 13),
-        min_depth=5,
+        min_depth=8,
         weight=0.5,
         weight_growth=1.10,
     ),
