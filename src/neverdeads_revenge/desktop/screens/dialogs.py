@@ -382,9 +382,14 @@ class InfoScreen(_Dialog):
     FITTED = True
 
     def __init__(
-        self, title: str, name: str, text: str, picture: str | None = None
+        self,
+        title: str,
+        name: str,
+        text: str,
+        picture: str | None = None,
+        on_done=None,
     ) -> None:
-        super().__init__()
+        super().__init__(on_done)
         self.title = title
         self._name = name
         self._text = text

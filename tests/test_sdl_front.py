@@ -318,6 +318,9 @@ def test_a_monster_is_walked_into_fought_and_the_floor_comes_back():
     from neverdeads_revenge.world.tiles import Tile
 
     app = SdlApp(seed=3)
+    # The page for a first kill has its own test; this one is the loop, so the
+    # ghoul is already known and no card steps between the verdict and the floor.
+    app.progress.bestiary = ["ghoul"]
     app.key("enter")  # NEW RUN
     app.key("enter")  # the first hero
     app.key("escape")  # the prologue, skipped
@@ -602,6 +605,9 @@ def test_a_run_starts_in_a_process_where_qt_does_not_exist():
         from neverdeads_revenge.world.tiles import Tile
 
         state = app.run
+        # Already known, so the kill does not open the Almanac's card in the
+        # middle of this walk: the card and the verdict have a test of their own.
+        app.progress.bestiary = ["ghoul"]
         beside = (state.player.position[0] + 1, state.player.position[1])
         state.dungeon_map.set_tile(beside, Tile.FLOOR)
         ghoul = make_enemy(ENEMIES["ghoul"], beside)
@@ -1486,6 +1492,44 @@ def test_a_first_kill_writes_a_page_once_the_room_is_quiet():
 
     app.key("escape")
     assert type(app.screens[-1]).__name__ == "SdlArena", "the book did not close"
+
+
+def test_the_page_is_read_before_the_verdict_of_the_fight():
+    """Reported: the card and the victory screen collided, and the page was lost.
+
+    The window is real -- the verdict is decided at the killing blow and the card
+    arrives about half a second later -- so a player drumming enter on the win
+    left the room before the book had said anything. The page now comes first,
+    and the verdict waits until it is closed.
+    """
+    app, monster = _fight_with_a_monster(seed=3)
+    app.progress.bestiary = []
+    monster.stats.hp = 1
+
+    app.key("a")
+    app.key("enter")
+    for _ in range(3):
+        app.tick(1 / 30.0)
+        app.key("enter")  # mashing: must not leave the room
+
+    arena = app.screens[-1]
+    assert type(arena).__name__ == "SdlArena", "enter left before the page"
+    assert arena.arena.verdict is None, "the verdict came before the page"
+
+    # The round is played out first (about a second), then the book's own beat.
+    for _ in range(120):
+        if type(app.screens[-1]).__name__ == "InfoScreen":
+            break
+        app.tick(1 / 30.0)
+    assert type(app.screens[-1]).__name__ == "InfoScreen", "the page never arrived"
+    assert arena.arena.verdict is None, "the verdict showed under the page"
+
+    app.key("enter")  # read it
+    app.tick(1 / 30.0)
+    assert arena.arena.verdict == "VICTORY", "the verdict did not follow the page"
+
+    app.key("enter")
+    assert type(app.screens[-1]).__name__ == "GameScreen", "the floor did not return"
 
 
 def test_a_monster_already_in_the_book_is_not_announced_again():

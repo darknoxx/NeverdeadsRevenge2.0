@@ -57,8 +57,12 @@ def write_the_weapon(app, key: str) -> bool:
     return _write(app, "record_weapon", key)
 
 
-def the_page(key: str):
-    """The card for a monster's page, or ``None`` if the book has no such monster."""
+def the_page(key: str, on_done=None):
+    """The card for a monster's page, or ``None`` if the book has no such monster.
+
+    ``on_done`` is how the arena learns that the page has been read: a fight
+    that writes a page on its last blow holds its verdict until the card closes.
+    """
     from .dialogs import InfoScreen
 
     entry = bestiary_entry(key)
@@ -70,6 +74,7 @@ def the_page(key: str):
         entry.name,
         f"A page has been written.\n\n{entry.rule}",
         picture=picture,
+        on_done=on_done,
     )
 
 

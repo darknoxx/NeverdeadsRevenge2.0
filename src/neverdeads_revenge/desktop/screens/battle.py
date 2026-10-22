@@ -740,6 +740,15 @@ class BattleScreen(Screen):
         #: What this screen has already looked at, so the same kill is not filed
         #: on every frame it is drawn.
         self._filed: set[str] = set()
+        #: The verdict the fight has earned and not yet *shown*. It waits for the
+        #: book: a page written by the last blow is read before the room says who
+        #: won, or the player leaves on the verdict and the page is never seen.
+        self._outcome: str | None = None
+        self._victory_sound: str | None = None
+        #: Whether a page's card is open over the room. Set when one is pushed,
+        #: cleared by the card itself when it is read -- the arena is not stepped
+        #: while a dialog is on top of it, so a timer here would be guessing.
+        self._card_open = False
         #: And which wounds have been *seen*: the same rule one step further, for
         #: the badge row. The rules inflict a wound at the swing -- they resolve
         #: the whole turn at once -- and the room must not: a badge that turned up
@@ -995,8 +1004,11 @@ class BattleScreen(Screen):
         if self.battle.over:
             # The fight is decided, but the arena may still be playing the last
             # blow: leaving on a keypress before the verdict has been shown would
-            # be the player skipping the one thing they just earned.
+            # be the player skipping the one thing they just earned. And the
+            # verdict itself waits for the book, so the page is read first.
             if not self.busy and name in ("enter", "return", "space"):
+                if self._outcome is not None or self._pages_due:
+                    return True
                 app.leave_battle()
             return True
         if self.picking:
@@ -1260,6 +1272,7 @@ class BattleScreen(Screen):
             popup.age += dt
         self._popups = [popup for popup in self._popups if popup.age < Popup.LIFE]
         self._write_the_pages(app)
+        self._settle(app)
         if self._beat > 0:
             self._beat = max(0.0, self._beat - dt)
             return
@@ -1513,23 +1526,23 @@ class BattleScreen(Screen):
                 app.effects.spark(point, "grey70", count=8)
             return
         if isinstance(event, Over):
-            self.verdict = (
-                "VICTORY"
-                if event.won
-                else "YOU GOT AWAY"
-                if event.escaped
-                else "YOU DIED"
-            )
-            # A death is scored once, by the summary that follows it: playing it
-            # here too gave the arena's deaths a doubled sting.
-            if event.won or event.escaped:
-                app.play("quest_complete" if event.won else "dash_roll")
             if not event.won and not event.escaped:
-                # The run ended in here. The arena steps out of the way first:
+                # The run ended in here, and a death is not held up for a page:
                 # the summary is about the run, and the run is what is standing
                 # behind the arena.
+                self.verdict = "YOU DIED"
                 app.leave_battle()
                 app.show_game_over(won=False)
+                return
+            # The verdict is *earned* here and *shown* by :meth:`_settle`: a page
+            # written by the last blow comes first, because a dialog that turns
+            # up after the player has already left is a page that was written and
+            # never read.
+            self._outcome = "VICTORY" if event.won else "YOU GOT AWAY"
+            # A death is scored once, by the summary that follows it: playing it
+            # here too gave the arena's deaths a doubled sting.
+            self._victory_sound = "quest_complete" if event.won else "dash_roll"
+            self._settle(app)
             return
         if isinstance(event, Struck):
             self._took_a_turn(event.actor)
@@ -1560,9 +1573,34 @@ class BattleScreen(Screen):
         if self._clock < self._page_at:
             return
         self._page_at = None
-        card = the_page(self._pages_due.pop(0))
+        card = the_page(self._pages_due.pop(0), on_done=self._card_read)
         if card is not None:
+            self._card_open = True
             app.push(card)
+
+    def _card_read(self, _value=None) -> None:
+        """The page has been closed. The room may speak again."""
+        self._card_open = False
+
+    def _settle(self, app) -> None:
+        """Show the verdict once the book has had its say.
+
+        Three things hold it back, and each of them is a way the player could
+        otherwise miss the page: the round is still being played, a page is
+        still queued, or a page is on screen over the room. The last one is why
+        this is asked every frame rather than fired with the event -- the arena
+        is not stepped while a dialog is on top of it, so the frame after the
+        card closes is the first frame the verdict may arrive on.
+        """
+        if self.verdict or self._outcome is None:
+            return
+        if self.busy or self._pages_due or self._card_open:
+            return
+        self.verdict = self._outcome
+        self._outcome = None
+        if self._victory_sound is not None:
+            app.play(self._victory_sound)
+            self._victory_sound = None
 
     def _land(self, struck: Struck, app) -> None:
         """A blow landing: a number, a shove, and a sound that matches it."""
