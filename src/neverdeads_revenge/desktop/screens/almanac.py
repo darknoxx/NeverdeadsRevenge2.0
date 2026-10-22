@@ -62,16 +62,18 @@ class AlmanacScreen(Screen):
     #: index is for finding a thing, the page is for reading it.
     LIST_WIDTH = 30
 
-    #: Rows of a twenty-pixel line the monster's picture may take. Six is the
-    #: height the sheets were painted at, so the page shows the figure at 1:1
-    #: rather than as a thumbnail of it.
-    PICTURE_ROWS = 6
+    #: Rows of a twenty-pixel line the monster's picture takes. Eight is half
+    #: again the height the sheets were painted at, which is the size a figure
+    #: wants on a page: big enough to look at, small enough that the words still
+    #: have the page. The application smooth-scales it, the same way the arena
+    #: scales its own figures -- no nearest-neighbour blocks, no blur.
+    PICTURE_ROWS = 8
 
     #: The column the figure stands in, in cells, when the page is wide enough to
     #: afford one. Beside the words and not above them: a page whose lore has to
     #: give up its last lines so an illustration can breathe is a page that has
     #: its priorities backwards.
-    FIGURE_COLUMN = 14
+    FIGURE_COLUMN = 16
 
     #: How far a page-up moves the body, in lines: the chronicle's scroll and a
     #: long page's, because both are prose a player reads downward.
@@ -79,6 +81,11 @@ class AlmanacScreen(Screen):
 
     def __init__(self) -> None:
         self.tab = 0
+        #: Where the keyboard is: the tab row, the index, or the monster's card.
+        #: Three places, and the arrows walk between them the way the page is
+        #: laid out -- up out of the top of a list lands on the tabs, left and
+        #: right cross between the names and the page.
+        self.focus = "list"
         #: The chronicle's scroll, and the bestiary's cursor and page scroll.
         self.offset = 0
         self.index = 0
@@ -88,6 +95,10 @@ class AlmanacScreen(Screen):
         #: refuse scrolling a list that does not overflow, and to page a body
         #: that does.
         self._body = (0, 0)
+        #: How long the two scrollable bodies came out last time, for the same
+        #: reason: an end key has to stop where the text stops.
+        self._chronicle_total = 0
+        self._card_total = 0
 
     # -- what the book knows ------------------------------------------------
     @staticmethod
@@ -99,7 +110,7 @@ class AlmanacScreen(Screen):
 
     # -- the frame ----------------------------------------------------------
     def _frame(self, buffer) -> tuple[int, int, int, int]:
-        width = min(buffer.cols - 4, 92)
+        width = min(buffer.cols - 4, 100)
         height = min(buffer.rows - 2, 30)
         return width, height, (buffer.cols - width) // 2, (buffer.rows - height) // 2
 
@@ -116,22 +127,30 @@ class AlmanacScreen(Screen):
         else:
             self._bestiary(buffer, app, x, y, width, body_rows)
         rule(buffer, x + 1, y + height - 2, width - 2, ASH)
-        hint = (
-            "←→ tab   ↑↓ scroll   esc close"
-            if self.tab == 0
-            else "←→ tab   ↑↓ choose   pgup/pgdn page   esc close"
-        )
+        hint = self._hint()
         # The arrow is the same "there is more below" the reading panels use: a
         # page that is quietly missing its last paragraph is a page that lied.
         more = "  ▼" if self._more else ""
         buffer.text(x + 3, y + height - 1, (hint + more)[: width - 6], parse_style(ASH))
 
     def _tabs(self, buffer, app, x: int, y: int, width: int) -> None:
+        """The two tabs, with the one you are *in* lit.
+
+        The bracket says which book is open; the reverse says the keyboard is up
+        here choosing. Two different facts, and a player needs both: a tab bar
+        that looked the same whether the arrows were on it or in the text would
+        leave them pressing left and wondering why nothing moved.
+        """
         cursor = x + 2
         for number, name in enumerate(self.TABS):
             chosen = number == self.tab
             label = f"[ {name} ]" if chosen else f"  {name}  "
-            style = parse_style(f"bold {BONE}" if chosen else ASH)
+            if chosen and self.focus == "tabs":
+                style = parse_style(f"bold {BONE} reverse")
+            elif chosen:
+                style = parse_style(f"bold {BONE}")
+            else:
+                style = parse_style(ASH)
             buffer.text(cursor, y + 1, label, style)
             cursor += len(label) + 1
         if self.tab == 0:
@@ -141,12 +160,12 @@ class AlmanacScreen(Screen):
         buffer.text(x + width - 3 - len(count), y + 1, count, parse_style(ASH))
 
     # -- tab one: the chronicle --------------------------------------------
-    def chronicle_lines(self, app) -> list[tuple[str, str]]:
+    def chronicle_lines(self, app, width: int = 88) -> list[tuple[str, str]]:
         rows: list[tuple[str, str]] = []
         for number in range(1, PAGE_COUNT + 1):
             if number in app.progress.pages:
                 rows.append((f"PAGE {numeral(number)}", f"bold {BONE}"))
-                for line in _wrap((page(number) or "").strip(), 64):
+                for line in _wrap((page(number) or "").strip(), width - 12):
                     rows.append((f"      {line}", BONE))
                 rows.append(("", ""))
             else:
@@ -156,7 +175,7 @@ class AlmanacScreen(Screen):
         return rows
 
     def _chronicle(self, buffer, app, x, y, width, body_rows) -> None:
-        rows = self.chronicle_lines(app)
+        rows = self.chronicle_lines(app, width)
         #: How long the book is, for the key handler: it pages what is drawn,
         #: and a scroll that counted anything else would stop short of the end.
         self._chronicle_total = len(rows)
@@ -226,6 +245,7 @@ class AlmanacScreen(Screen):
         entry = self._selected(app)
         if entry.key not in self.known(app):
             self.detail_offset = 0
+            self._card_total = 0
             buffer.text(text_left, y + 3, "NOT YET WRITTEN", parse_style(f"bold {ASH}"))
             note = _wrap("Kill one and the page writes itself.", text_room)
             for i, line in enumerate(note):
@@ -238,6 +258,7 @@ class AlmanacScreen(Screen):
             )
             return
         rows = self.page_lines(entry, text_room)
+        self._card_total = len(rows)
         self.detail_offset = max(0, min(self.detail_offset, max(0, len(rows) - body_rows)))
         self._more = self.detail_offset + body_rows < len(rows)
         for i, (text, style) in enumerate(
@@ -291,11 +312,18 @@ class AlmanacScreen(Screen):
         if not art_exists(picture):
             return []
         measured = art_size(picture)
+        if measured is None:
+            return []
         cell_w, cell_h = app.font.cell_w, app.font.cell_h
-        tall = min(
-            measured[1] if measured else 0,
-            self.PICTURE_ROWS * cell_h - 6,
-        )
+        # Filled to the column's height: the sheets are painted between a hundred
+        # and a hundred and twenty pixels, and eight rows is half again that --
+        # the size a page's figure wants. Never larger than the column is wide,
+        # so a wide monster does not run over the divider.
+        tall = self.PICTURE_ROWS * cell_h - 8
+        wide = tall * measured[0] / max(1, measured[1])
+        if wide > self.FIGURE_COLUMN * cell_w:
+            wide = self.FIGURE_COLUMN * cell_w
+            tall = round(wide * measured[1] / max(1, measured[0]))
         if tall <= 0:
             return []
         return [
@@ -308,63 +336,148 @@ class AlmanacScreen(Screen):
         ]
 
     # -- input --------------------------------------------------------------
+    def _hint(self) -> str:
+        """What the arrows do *here*, which is three different sentences."""
+        if self.focus == "tabs":
+            return "←→ tab   ↓ open   esc close"
+        if self.tab == 0:
+            return "→ bestiary   ↑↓ scroll   ↑ at top: tabs   esc close"
+        if self.focus == "page":
+            return "← names   ↑↓ page   pgup/pgdn   esc close"
+        return "→ card   ← chronicle   ↑ at top: tabs   esc close"
+
     def key(self, name, event, app) -> bool:
         # Holds scroll, because a list is something a player holds a key to walk;
-        # holds do not *switch tabs*, because a tab is one decision.
-        if event.isAutoRepeat() and name in ("left", "right", "tab"):
-            return True
-        if name in ("left", "right", "tab"):
-            self.tab = 1 - self.tab
-            self.detail_offset = 0
-            return True
-        if name in ("c", "b"):
-            self.tab = 0 if name == "c" else 1
-            self.detail_offset = 0
+        # holds do not cross between panes or tabs, because those are decisions
+        # and a held key that crossed them would flicker between two pages.
+        if event.isAutoRepeat() and name in ("left", "right", "tab", "c", "b"):
             return True
         if name == "escape":
             app.pop()
             return True
-        rows, _width = self._body
+        if name in ("c", "b"):
+            # A shortcut, not part of the arrow language: it names the book and
+            # lands the keyboard in it.
+            self._open(0 if name == "c" else 1)
+            return True
+        if name == "tab":
+            self._switch(1 - self.tab)
+            if self.focus == "page":
+                # The card belongs to the monster in the other book; the list is
+                # where the keyboard belongs after a jump like that.
+                self.focus = "list"
+            return True
+        if self.focus == "tabs":
+            return self._tab_key(name)
         if self.tab == 0:
-            return self._chronicle_key(name, rows)
-        return self._bestiary_key(name, rows)
+            return self._chronicle_key(name)
+        return self._bestiary_key(name)
 
-    def _chronicle_key(self, name: str, rows: int) -> bool:
-        total = max(0, getattr(self, "_chronicle_total", 0) - rows)
-        if name == "home":
-            self.offset = 0
+    def _open(self, tab: int) -> None:
+        """Jump straight into a book: the tab, and the keyboard with it."""
+        self._switch(tab)
+        self.focus = "list"
+
+    def _switch(self, tab: int) -> None:
+        self.tab = tab
+        self.detail_offset = 0
+
+    # -- the tab row ---------------------------------------------------------
+    def _tab_key(self, name: str) -> bool:
+        if name in ("left", "right"):
+            # Left and right walk the row and show the book as they pass, so
+            # what the player is choosing is the thing in front of them.
+            self._switch(1 - self.tab)
             return True
-        if name == "end":
-            self.offset = total
+        if name in ("down", "enter", "space"):
+            self.focus = "list"
             return True
-        if name in ("down", "j"):
-            step = 1
-        elif name in ("up", "k"):
-            step = -1
-        elif name == "pagedown":
-            step = self.PAGE_SCROLL
-        elif name == "pageup":
-            step = -self.PAGE_SCROLL
-        else:
-            step = 0
-        if step:
-            self.offset = max(0, min(self.offset + step, total))
         return True
 
-    def _bestiary_key(self, name: str, rows: int) -> bool:
-        before = self.index
+    # -- the chronicle's body ------------------------------------------------
+    def _chronicle_key(self, name: str) -> bool:
+        if name == "right":
+            # This book has no second pane, so the arrow points at the only
+            # thing to its right: the other book.
+            self._open(1)
+            return True
+        if name == "left":
+            return True
+        rows = self._body[0]
+        total = max(0, self._chronicle_total - rows)
+        if name in ("up", "k"):
+            if self.offset == 0:
+                # The top of the text is the tab row above it.
+                self.focus = "tabs"
+                return True
+            self.offset = max(0, self.offset - 1)
+            return True
         if name in ("down", "j"):
+            self.offset = min(self.offset + 1, total)
+        elif name == "pageup":
+            self.offset = max(0, self.offset - self.PAGE_SCROLL)
+        elif name == "pagedown":
+            self.offset = min(self.offset + self.PAGE_SCROLL, total)
+        elif name == "home":
+            self.offset = 0
+        elif name == "end":
+            self.offset = total
+        return True
+
+    # -- the bestiary: two panes --------------------------------------------
+    def _bestiary_key(self, name: str) -> bool:
+        # The arrows point where the panes are: right is the card, left is the
+        # names -- and left again, out of the names, is the book beside this one.
+        if name == "right":
+            if self.focus == "list":
+                self.focus = "page"
+            return True
+        if name == "left":
+            if self.focus == "page":
+                self.focus = "list"
+            else:
+                self._open(0)
+            return True
+        if self.focus == "list":
+            return self._names_key(name)
+        return self._card_key(name)
+
+    def _names_key(self, name: str) -> bool:
+        before = self.index
+        if name in ("up", "k"):
+            if self.index == 0:
+                # Above the first name is the tab row.
+                self.focus = "tabs"
+                return True
+            self.index -= 1
+        elif name in ("down", "j"):
             self.index = min(self.index + 1, len(ENTRIES) - 1)
-        elif name in ("up", "k"):
-            self.index = max(self.index - 1, 0)
         elif name == "home":
             self.index = 0
         elif name == "end":
             self.index = len(ENTRIES) - 1
-        elif name in ("pagedown", "pageup"):
+        elif name in ("pageup", "pagedown"):
             step = self.PAGE_SCROLL if name == "pagedown" else -self.PAGE_SCROLL
-            self.detail_offset = max(0, self.detail_offset + step)
-            return True
+            self.index = max(0, min(self.index + step, len(ENTRIES) - 1))
         if self.index != before:
+            # A new monster is a new page, and a page that opened halfway down
+            # would be a page that started in the middle of a sentence.
             self.detail_offset = 0
+        return True
+
+    def _card_key(self, name: str) -> bool:
+        rows = self._body[0]
+        total = max(0, self._card_total - rows)
+        if name in ("up", "k"):
+            self.detail_offset = max(0, self.detail_offset - 1)
+        elif name in ("down", "j"):
+            self.detail_offset = min(self.detail_offset + 1, total)
+        elif name == "pageup":
+            self.detail_offset = max(0, self.detail_offset - self.PAGE_SCROLL)
+        elif name == "pagedown":
+            self.detail_offset = min(self.detail_offset + self.PAGE_SCROLL, total)
+        elif name == "home":
+            self.detail_offset = 0
+        elif name == "end":
+            self.detail_offset = total
         return True

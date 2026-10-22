@@ -1220,11 +1220,86 @@ def test_a_page_shows_the_figure_the_numbers_and_the_rule():
     assert "GHOUL" in text
     assert "HP 15" in text
     assert "THE RULE" in text and "HOW IT IS ANSWERED" in text
-    assert "Neverdead" in text, "the chronicle's paragraph is not on the page"
+    assert "the house" in text.lower(), "the page's paragraph is not on it"
 
     art = screen.art(app)
     assert len(art) == 1 and art[0].art == "sprites/ghoul.png"
-    assert art[0].height == 103, "the figure was resampled instead of shown"
+    assert art[0].height == AlmanacScreen.PICTURE_ROWS * app.font.cell_h - 8
+    assert art[0].height > 103, "the figure is no bigger than the sheet"
+
+
+def test_the_arrows_walk_between_the_names_the_card_and_the_tabs():
+    """Left and right cross the two columns; up out of the first name is the tab
+    row; left there is the other book. That is the whole map of the screen."""
+    from neverdeads_revenge.desktop.screens.almanac import AlmanacScreen
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3)
+    app.progress.bestiary = ["ghoul", "hush"]
+    screen = AlmanacScreen()
+    screen.tab = 1
+    screen.index = next(
+        i for i, page in enumerate(__import__(
+            "neverdeads_revenge.game.bestiary", fromlist=["ENTRIES"]
+        ).ENTRIES) if page.key == "ghoul"
+    )
+    app.screens = [screen]
+    # A short frame, so the page is longer than the pane and can be scrolled.
+    _page_text(screen, app, cols=80, rows=24)
+
+    app.key("right")
+    assert screen.focus == "page", "right did not take the keyboard to the card"
+
+    names_before = screen.index
+    app.key("down")
+    assert screen.index == names_before, "the card's down moved the names"
+    assert screen.detail_offset == 1, "down did not scroll the card"
+
+    app.key("left")
+    assert screen.focus == "list", "left did not come back to the names"
+
+    screen.index = 0
+    app.key("up")
+    assert screen.focus == "tabs", "up out of the first name did not reach the tabs"
+
+    app.key("left")
+    assert screen.tab == 0, "left on the tab row did not open the chronicle"
+    assert screen.focus == "tabs"
+
+    app.key("down")
+    assert screen.focus == "list", "down from the tab row did not enter the book"
+
+    # And the short way, the one the hint promises: left out of the names.
+    app.key("right")
+    assert screen.tab == 1, "right in the chronicle did not open the bestiary"
+    screen.index = 3
+    app.key("left")
+    assert screen.tab == 0, "left out of the names did not open the chronicle"
+
+
+def test_the_open_tab_is_lit_while_the_arrows_are_on_the_row():
+    from neverdeads_revenge.desktop.pattern import PatternBuffer
+    from neverdeads_revenge.desktop.screens.almanac import AlmanacScreen
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3)
+    screen = AlmanacScreen()
+
+    def lit() -> str:
+        buffer = PatternBuffer(110, 40, app.font)
+        screen.draw(buffer, app)
+        return "".join(
+            cell.char for row in buffer.cells for cell in row if cell.style.reverse
+        )
+
+    assert "CHRONICLE" not in lit(), "the tab was lit while the arrows were in it"
+
+    screen.focus = "tabs"
+    assert "CHRONICLE" in lit(), "the tab row did not light up when it was reached"
+
+    screen.tab = 1
+    screen.focus = "tabs"
+    assert "BESTIARY" in lit(), "the other tab did not light up"
 
 
 def test_a_monster_that_has_not_been_killed_has_no_page():

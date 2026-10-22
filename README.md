@@ -220,9 +220,8 @@ than to a perfect one.)
     them, alphabetical -- and a page is written the first time a run *kills*
     that monster. The page shows the figure at its painted size, its numbers
     (health, damage, speed, armour, evasion, gold), what its rule does, how it is
-    answered, and the chronicle's own paragraph on it. Killing one for the first
-    time opens the page in the fight, on a card, once the blow has finished
-    landing.
+    answered, and a paragraph of its own. Killing one for the first time opens
+    the page in the fight, on a card, once the blow has finished landing.
 - **The board** keeps every finished run, best first, with the name you left.
 - **Fame** is score: a chest's curse taken for the reward pays you nothing, but
   a chest's reward *left* for the curse pays a point of fame, which raises the
@@ -275,7 +274,10 @@ the glass itself.
 | `esc` | pause (`r`/`esc` resume, `c` controls, `a` the Almanac, `s` save and quit, `q` to title, `m` sound) |
 
 The menus are read sideways: `←` `→` choose, `enter` takes, or press the letter
-of the row you want. The **legend of glyphs** lives in its own menu (`l`) --
+of the row you want. The Almanac is the one screen that is read like a page:
+`←` `→` crosses between the names and the monster's card, `↑` `↓` scrolls
+whichever of the two you are in, and `↑` out of the top of a list reaches the
+tab row, where `←` `→` pick the book. The **legend of glyphs** lives in its own menu (`l`) --
 the sidebar keeps the run, the reference lives one key away. The pause offers
 **CONTROLS**, and the title offers **DELETE PROGRESS**: it asks for the word
 DELETE to be typed out, because a confirm key is a reflex and a word is a
