@@ -197,6 +197,10 @@ class GameState:
     #: count never comes back down; this one is emptied every descent, because a
     #: ledger is a page and a page is a floor.
     floor_kills: int = 0
+    #: The monsters this run has killed, by template key, in the order they
+    #: first died. The dungeon's own record: it does not know what a page is,
+    #: and it is the Almanac that decides what a first kill writes down.
+    defeated: list[str] = field(default_factory=list)
     #: Whether the weapon's *first blow* rule has been paid this fight. A fact
     #: about the fight and not about each monster, which is what the blade says.
     first_blow_spent: bool = False

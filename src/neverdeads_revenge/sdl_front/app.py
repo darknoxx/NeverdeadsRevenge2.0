@@ -6,15 +6,10 @@ it does *not* do is own the game -- every rule, every screen and every panel it
 shows is the same code the Qt build shows, because none of them ever knew what a
 window was.
 
-Two things are honestly missing, and named rather than hidden:
-
-* **The effects layer.** The Qt build has sparks, flashes and a shaking glass;
-  those are painted in pixels and they are the next session's work. The screens
-  ask for them the same way they always did, and this answers politely and does
-  nothing -- so a fight is playable and quieter than it will be.
-* **The screens that are not ported yet.** The shop, the scoreboard and the
-  chronicle are Qt screens; opening one here says so. A front end that pretended
-  to open them would be a front end that lost a purchase.
+The menus are not this file's: the shop, the scoreboard and the Almanac are the
+game's own screens, kept in ``desktop/screens`` and drawn here. What this file
+owns is the stack, the window, the frame and the keys between them -- so a menu
+that asks only for a grid, a font and a ``progress`` works on either front end.
 """
 
 from __future__ import annotations
@@ -454,10 +449,11 @@ class SdlApp:
 
         self.push(ScoreboardScreen())
 
-    def open_chronicle(self) -> None:
-        from ..desktop.screens.menus import ChronicleScreen
+    def open_almanac(self) -> None:
+        """The book: the chronicle and the bestiary, on one stack entry."""
+        from ..desktop.screens.almanac import AlmanacScreen
 
-        self.push(ChronicleScreen())
+        self.push(AlmanacScreen())
 
     def open_delete_progress(self) -> None:
         """Ask for the word, then erase everything.

@@ -45,6 +45,7 @@ def a_busy_run() -> GameState:
     state.add_curse(CURSES["bleed"])
     state.gold = 137
     state.kills = 9
+    state.defeated = ["ghoul", "hush"]
     state.level = 3
     state.turn = 12
     state.total_turns = 88
@@ -158,6 +159,15 @@ def test_the_generator_comes_back_where_it_left_off():
     reloaded = load(json.loads(json.dumps(dump(state))))
 
     assert reloaded.rng.between(1, 10**9) == state.rng.between(1, 10**9)
+
+
+def test_the_almanac_remembers_what_the_run_has_killed():
+    """The book asks the *run* what it has met, so a resume that forgot would
+    announce a page the player already owns."""
+    state = a_busy_run()
+    reloaded = load(json.loads(json.dumps(dump(state))))
+
+    assert reloaded.defeated == ["ghoul", "hush"]
 
 
 def test_the_map_comes_back_whole():

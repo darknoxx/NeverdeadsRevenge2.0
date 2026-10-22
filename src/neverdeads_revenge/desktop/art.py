@@ -131,6 +131,18 @@ def item_icon(template) -> str | None:
     return _own_or_shared(template.key, shared)
 
 
+def monster_art(name: str) -> str | None:
+    """The picture of a monster, by the name the game calls it.
+
+    One rule, here, because three callers need it and they must not each spell
+    the filename differently: the arena stages it, the Almanac prints it, and a
+    name with a space in it ("the kindly one") is a file with an underscore. A
+    name and not a key -- the pictures were painted to the names.
+    """
+    where = f"sprites/{name.replace(' ', '_')}.png"
+    return where if exists(where) else None
+
+
 def curse_icon(key: str) -> str | None:
     """The page that announces a curse: its own drawing, or the curse's."""
     return _own_or_shared(key, CURSE_ART)

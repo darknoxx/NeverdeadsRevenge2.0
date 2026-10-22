@@ -245,6 +245,12 @@ class Actor:
     kind: ActorKind
     stats: Stats
     position: Pos
+    #: Which monster this is, by template key -- ``"bone"`` for the skeleton,
+    #: ``"dying"`` for the already-dying. Carried because the Almanac files a
+    #: page under the monster's *name* but has to recognise it by the one thing
+    #: that never changes: a display name is a sentence the log may rewrite, and
+    #: a key is the monster.
+    key: str = ""
     #: A fallback for an actor built without an identity. Heroes and monsters get
     #: theirs from their template, so this is never the player -- it used to
     #: default to ``@``, which read as "the hero" long after the hero stopped
@@ -1264,6 +1270,7 @@ def make_enemy(template: EnemyTemplate, position: Pos) -> Actor:
     """Create a fresh actor from an enemy template."""
     return Actor(
         name=template.name,
+        key=template.key,
         kind=ActorKind.ENEMY,
         # Copy for the same reason as make_hero: templates outlive every actor.
         stats=replace(template.stats),

@@ -211,9 +211,18 @@ than to a perfect one.)
 
 ## Between the runs
 
-- **The chronicle** collects **37 torn pages** found on the floors. Each page is
-  prose, and once found it is in the book for good; the chronicle shows the full
-  text of every page you have, and marks the ones you have not.
+- **The Almanac** is one book with two halves, opened from the title (`a`) or
+  from the pause menu mid-run.
+  - **The chronicle** collects **37 torn pages** found on the floors. Each page
+    is prose, and once found it is in the book for good; the chronicle shows the
+    full text of every page you have, and marks the ones you have not.
+  - **The bestiary** has a page for every monster in the dungeon -- **24** of
+    them, alphabetical -- and a page is written the first time a run *kills*
+    that monster. The page shows the figure at its painted size, its numbers
+    (health, damage, speed, armour, evasion, gold), what its rule does, how it is
+    answered, and the chronicle's own paragraph on it. Killing one for the first
+    time opens the page in the fight, on a card, once the blow has finished
+    landing.
 - **The board** keeps every finished run, best first, with the name you left.
 - **Fame** is score: a chest's curse taken for the reward pays you nothing, but
   a chest's reward *left* for the curse pays a point of fame, which raises the
@@ -263,7 +272,7 @@ the glass itself.
 | `c` | the hero sheet |
 | `?` | controls and reference |
 | `r` | the borrowed hour |
-| `esc` | pause (`r`/`esc` resume, `c` controls, `s` save and quit, `q` to title, `m` sound) |
+| `esc` | pause (`r`/`esc` resume, `c` controls, `a` the Almanac, `s` save and quit, `q` to title, `m` sound) |
 
 The menus are read sideways: `←` `→` choose, `enter` takes, or press the letter
 of the row you want. The **legend of glyphs** lives in its own menu (`l`) --
@@ -304,7 +313,7 @@ python3 -m venv .venv
 ./ndr2 --seed 42     # the same dungeon, again
 ./ndr2 --no-sound    # start silent
 ./ndr2 --sound-log   # every sound decision, to /tmp/ndr2-sound.log
-./ndr2 --testrun     # the chronicle unlocked and the purse full
+./ndr2 --testrun     # the chronicle and the bestiary unlocked, and the purse full
 ./ndr2 --battle-scene  # straight into a fight
 ```
 

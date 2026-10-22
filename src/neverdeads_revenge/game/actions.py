@@ -500,6 +500,11 @@ def _on_death(state: GameState, enemy: Actor) -> None:
         state.encounter = None
     state.kills += 1
     state.floor_kills += 1
+    if enemy.kind is ActorKind.ENEMY and enemy.key and enemy.key not in state.defeated:
+        # THE ALMANAC's rule, kept where every death passes: the first kill of a
+        # monster is the moment it is *known*. What the page says is the book's
+        # business; that there is one is the dungeon's.
+        state.defeated.append(enemy.key)
     state.deaths.append(enemy.position)
     # THE CARRION TONGUE reads this long after the blood has been cleared: a
     # square where something died is a square that feeds, for the whole floor.

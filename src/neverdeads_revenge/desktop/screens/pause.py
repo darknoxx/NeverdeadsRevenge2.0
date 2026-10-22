@@ -26,6 +26,7 @@ class PauseScreen(Screen):
         return [
             ("r", "RESUME"),
             ("c", "CONTROLS"),
+            ("a", "THE ALMANAC"),
             ("s", "SAVE AND QUIT"),
             ("q", "QUIT TO TITLE"),
             ("m", f"SOUND: {'on' if not app.sfx.muted else 'off'}"),
@@ -57,7 +58,7 @@ class PauseScreen(Screen):
         if name in ("escape", "r"):
             app.pop()
             return True
-        if name in ("s", "q", "m", "c"):
+        if name in ("s", "q", "m", "c", "a"):
             self._choose(name, app)
             return True
         return True
@@ -70,6 +71,12 @@ class PauseScreen(Screen):
             from .menus import HelpScreen
 
             app.push(HelpScreen())
+        elif key == "a":
+            # The book, mid-run: the chronicle and the bestiary are both worth
+            # reading with the floor still under your feet.
+            from .almanac import AlmanacScreen
+
+            app.push(AlmanacScreen())
         elif key == "s":
             app.save_and_quit()
         elif key == "q":

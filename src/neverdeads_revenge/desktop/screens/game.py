@@ -20,6 +20,7 @@ from neverdeads_revenge.game.state import GameState
 
 from ..keys import KEY_BINDINGS
 from .base import Screen
+from .pages import the_page, write_the_page
 from .dialogs import (
     KindlyScreen,
     FAME,
@@ -75,6 +76,9 @@ class GameScreen(Screen):
         #: Whether the key being handled was refused. Read by ``key_sound``, so
         #: the refusal beeps instead of clicking.
         self._denied = False
+        #: The monsters this screen has already filed a page for, so a step does
+        #: not re-read the whole list of the run's dead on every keypress.
+        self._filed: set[str] = set()
 
     def key_sound(self, name: str) -> str | None:
         """The sound this press makes: a refusal has one, a click has another."""
@@ -202,6 +206,7 @@ class GameScreen(Screen):
         app.play_after(before)
         self._effects(app, hp, gold, gifts, curses, before[2])
         self._file_pages(app)
+        self._file_monsters(app)
 
         if result.prompt is not None:
             self._ask(result, app)
@@ -406,6 +411,24 @@ class GameScreen(Screen):
             equipment_before,
             carried_before,
         )
+
+    def _file_monsters(self, app) -> None:
+        """Write the page of anything the *floor* killed outright.
+
+        Fights file their own dead, in the arena, where the death is played out.
+        The floor can kill too -- the hungry road's glass, an ultimate -- and a
+        page left until the next fight would arrive attached to the wrong
+        moment. Here it arrives when the thing died.
+        """
+        for key in self.state.defeated:
+            if key in self._filed:
+                continue
+            self._filed.add(key)
+            if not write_the_page(app, key):
+                continue
+            card = the_page(key)
+            if card is not None:
+                app.push(card)
 
     def _file_pages(self, app) -> None:
         """Bank a found page at once, and open it.

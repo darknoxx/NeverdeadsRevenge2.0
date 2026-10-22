@@ -48,12 +48,14 @@ from ...game.specials import (
 from ...game.statuses import status_by_key
 from ...game.state import LogKind
 from ..art import exists as art_exists
+from ..art import monster_art
 from ..art import size as art_size
 from ..chrome import ASH, BLOOD, BONE, box, rule
 from ..pattern import PatternBuffer
 from ..render import log_style
 from ..theme import Colour, Style, parse_style
 from .base import Screen
+from .pages import the_page, write_the_page
 
 __all__ = ["BattleScreen", "Popup", "Staged"]
 
@@ -69,9 +71,9 @@ def _picture(name: str) -> str | None:
     """
     # A monster's picture is its *name*, with the spaces as underscores: "the
     # kindly one" is a sentence in the log and a file on disk, and the file cannot
-    # have the space. The one rule, here, so no caller has to remember it.
-    where = f"sprites/{name.replace(' ', '_')}.png"
-    return where if art_exists(where) else None
+    # have the space. The rule lives with the art, because the Almanac needs the
+    # same answer about the same monster.
+    return monster_art(name)
 
 #: The floor's two tile tones at the hero's feet, and the same two at the far
 #: edge. Distance is shade here, not size: the far rows fade into the dark the
@@ -368,6 +370,10 @@ WALL_LIFE = 1.2
 #: *sinking*, because the thing that killed it took it down rather than out.
 SINK_LIFE = 0.9
 SINK_DROP = 46
+#: How long the book waits after a blow before it opens the page it just wrote.
+#: The body goes in GONE_LIFE, and a page that turned up on the swing would cover
+#: the death it is about -- so the notice waits for the room to be quiet again.
+PAGE_AFTER = 0.45
 #: How long a blow's own flourish lasts. Inside the beat that carries it, so the
 #: fight still reads one blow at a time -- but long enough to be *seen*, which is
 #: the whole point of fifteen tricks looking like fifteen tricks.
@@ -725,6 +731,15 @@ class BattleScreen(Screen):
         #: landed, not the moment the rules decided it. Everything that reads a
         #: figure's aliveness for the picture reads this instead.
         self._dying: dict[int, float] = {}
+        #: THE ALMANAC's queue. A monster killed for the first time is written
+        #: down the moment the room notices it, and *shown* once the room has
+        #: finished letting the body go: a page over the death would be the book
+        #: covering the fight it describes.
+        self._pages_due: list[str] = []
+        self._page_at: float | None = None
+        #: What this screen has already looked at, so the same kill is not filed
+        #: on every frame it is drawn.
+        self._filed: set[str] = set()
         #: And which wounds have been *seen*: the same rule one step further, for
         #: the badge row. The rules inflict a wound at the swing -- they resolve
         #: the whole turn at once -- and the room must not: a badge that turned up
@@ -1244,6 +1259,7 @@ class BattleScreen(Screen):
                     self._dying[popup.target_id] = self._clock
             popup.age += dt
         self._popups = [popup for popup in self._popups if popup.age < Popup.LIFE]
+        self._write_the_pages(app)
         if self._beat > 0:
             self._beat = max(0.0, self._beat - dt)
             return
@@ -1518,6 +1534,35 @@ class BattleScreen(Screen):
         if isinstance(event, Struck):
             self._took_a_turn(event.actor)
             self._land(event, app)
+
+    def _write_the_pages(self, app) -> None:
+        """File what this fight has killed, and say so when the room is quiet.
+
+        The dungeon's half is ``state.defeated``: every death passes through the
+        one door, whatever killed the thing -- a blow, a wound, the shadow -- so
+        the book does not have to know how. The book's half is the player's
+        progress, and the two are *not* the same clock: the page is written at
+        once (a kill is a kill), and shown after the playback, because a dialog
+        is something the player reads rather than something the fight talks over.
+        """
+        for key in self.battle.state.defeated:
+            if key in self._filed:
+                continue
+            self._filed.add(key)
+            if write_the_page(app, key):
+                self._pages_due.append(key)
+        if self.busy or not self._pages_due:
+            self._page_at = None
+            return
+        if self._page_at is None:
+            self._page_at = self._clock + PAGE_AFTER
+            return
+        if self._clock < self._page_at:
+            return
+        self._page_at = None
+        card = the_page(self._pages_due.pop(0))
+        if card is not None:
+            app.push(card)
 
     def _land(self, struck: Struck, app) -> None:
         """A blow landing: a number, a shove, and a sound that matches it."""

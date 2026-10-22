@@ -99,6 +99,12 @@ class MetaProgress:
     #: one thing here that is a *collection* rather than a currency: gold buys,
     #: scores rank, and a page is simply known.
     pages: list[int] = field(default_factory=list)
+    #: Monsters whose page in the Almanac has been written, by template key.
+    #:
+    #: Kept sorted, and a list for the same reason ``pages`` is one: the save is
+    #: JSON. This is the *second* collection, and the same kind of thing as the
+    #: first -- an entry is not bought and not scored, it is met.
+    bestiary: list[str] = field(default_factory=list)
     #: Lifetime run statistics.
     runs_started: int = 0
     runs_won: int = 0
@@ -117,6 +123,19 @@ class MetaProgress:
             return False
         self.pages.append(number)
         self.pages.sort()
+        return True
+
+    def record_bestiary(self, key: str) -> bool:
+        """Write one monster's page. Returns whether it was new.
+
+        The answer and not a bare write, because the caller has a dialog to raise
+        and a sound to make, and neither is wanted for a monster the book has
+        already met.
+        """
+        if not key or key in self.bestiary:
+            return False
+        self.bestiary.append(key)
+        self.bestiary.sort()
         return True
 
     def record_run(
@@ -301,6 +320,7 @@ def load_meta(path: Path | None = None) -> MetaProgress:
             wild_stock=[str(key) for key in raw.get("wild_stock", [])],
             amulet_stock=[str(key) for key in raw.get("amulet_stock", [])],
             pages=[int(number) for number in raw.get("pages", [])],
+            bestiary=[str(key) for key in raw.get("bestiary", [])],
             runs_started=int(raw.get("runs_started", 0)),
             runs_won=int(raw.get("runs_won", 0)),
             best_depth=int(raw.get("best_depth", 0)),
@@ -347,6 +367,12 @@ def grant_test_save(path: Path | None = None) -> tuple[Path, Path | None]:
 
     progress.gold = TEST_GOLD
     progress.pages = list(range(1, PAGE_COUNT + 1))
+    # And every page of the Almanac, for the same reason: a test save that left
+    # the bestiary to be ground out by hand would be a test save for the part of
+    # the game that is not being tested.
+    from .game.actors import ENEMIES
+
+    progress.bestiary = sorted(ENEMIES)
     save_meta(progress, target)
     return target, backup
 

@@ -187,6 +187,7 @@ def dump(state: GameState) -> dict:
         "run_state": _encode(state.run_state),
         "kills": state.kills,
         "floor_kills": state.floor_kills,
+        "defeated": list(state.defeated),
         "level": state.level,
         "kill_points": state.kill_points,
         "kill_points_bonus": state.kill_points_bonus,
@@ -271,6 +272,7 @@ def load(payload: dict) -> GameState:
         # nothing, so a save written before the field existed resumes with an
         # empty floor rather than refusing to open.
         state.floor_kills = int(payload.get("floor_kills", 0))
+        state.defeated = [str(key) for key in payload.get("defeated", [])]
         state.level = payload["level"]
         # A save from before the purse: filled rather than empty, because the
         # alternative is a run that opens with its tricks unaffordable.

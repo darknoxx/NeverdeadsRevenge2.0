@@ -1084,7 +1084,7 @@ def test_the_command_line_can_start_the_second_front_end():
 
 
 def test_the_menu_keys_open_the_shared_screens_on_the_second_front_end():
-    """Shop, scoreboard, chronicle, pause, pack, character, legend: all of them.
+    """Shop, scoreboard, the Almanac, pause, pack, character, legend: all of them.
 
     These are not screens this front end has; they are the *game's* screens, and
     the application they are handed has to answer everything they ask for. That is
@@ -1098,7 +1098,7 @@ def test_the_menu_keys_open_the_shared_screens_on_the_second_front_end():
     for key, opened in (
         ("s", "ShopScreen"),
         ("h", "ScoreboardScreen"),
-        ("l", "ChronicleScreen"),
+        ("a", "AlmanacScreen"),
     ):
         app.key(key)
         assert type(app.screens[-1]).__name__ == opened, (
@@ -1126,6 +1126,138 @@ def test_the_menu_keys_open_the_shared_screens_on_the_second_front_end():
     assert type(app.screens[-1]).__name__ == "GameScreen", "escape did not come back"
 
 
+def _page_text(screen, app, cols: int = 110, rows: int = 40) -> str:
+    """What a screen actually writes into the grid, as one string.
+
+    The panels are characters, so the cheapest way to hold what a page *says* is
+    to ask the buffer rather than the pixels. The window is a fixed one on
+    purpose: a test that read the surface would be a test of the font.
+    """
+    from neverdeads_revenge.desktop.pattern import PatternBuffer
+
+    buffer = PatternBuffer(cols, rows, app.font)
+    screen.draw(buffer, app)
+    return "\n".join("".join((cell.char or " ") for cell in row) for row in buffer.cells)
+
+
+def test_the_almanac_is_two_books_in_one_cover():
+    """The chronicle and the bestiary, one screen and two tabs."""
+    from neverdeads_revenge.desktop.screens.almanac import AlmanacScreen
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3)
+    app.key("a")
+    screen = app.screens[-1]
+    assert isinstance(screen, AlmanacScreen)
+
+    chronicle = _page_text(screen, app)
+    assert "THE ALMANAC" in chronicle
+    assert "[ CHRONICLE ]" in chronicle and "BESTIARY" in chronicle
+
+    app.key("right")
+    assert screen.tab == 1
+    bestiary = _page_text(screen, app)
+    assert "[ BESTIARY ]" in bestiary and "CHRONICLE" in bestiary
+    assert "of 24 written" in bestiary
+
+
+def test_a_page_shows_the_figure_the_numbers_and_the_rule():
+    from neverdeads_revenge.desktop.screens.almanac import AlmanacScreen
+    from neverdeads_revenge.game.bestiary import ENTRIES
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3)
+    app.progress.bestiary = ["ghoul"]
+    screen = AlmanacScreen()
+    screen.tab = 1
+    screen.index = next(i for i, page in enumerate(ENTRIES) if page.key == "ghoul")
+
+    text = _page_text(screen, app)
+    assert "GHOUL" in text
+    assert "HP 15" in text
+    assert "THE RULE" in text and "HOW IT IS ANSWERED" in text
+    assert "Neverdead" in text, "the chronicle's paragraph is not on the page"
+
+    art = screen.art(app)
+    assert len(art) == 1 and art[0].art == "sprites/ghoul.png"
+    assert art[0].height == 103, "the figure was resampled instead of shown"
+
+
+def test_a_monster_that_has_not_been_killed_has_no_page():
+    from neverdeads_revenge.desktop.screens.almanac import AlmanacScreen
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3)
+    app.progress.bestiary = []
+    screen = AlmanacScreen()
+    screen.tab = 1
+
+    text = _page_text(screen, app)
+    assert "NOT YET WRITTEN" in text
+    assert "0 of 24 met" in text
+    assert screen.art(app) == [], "a locked page showed its monster"
+
+
+def test_the_almanac_is_on_the_pause_menu_too():
+    from neverdeads_revenge.desktop.screens.almanac import AlmanacScreen
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3)
+    app.key("enter")
+    app.key("enter")
+    app.key("escape")  # the prologue, skipped
+    assert type(app.screens[-1]).__name__ == "GameScreen"
+
+    app.key("escape")
+    assert type(app.screens[-1]).__name__ == "PauseScreen"
+    app.key("a")
+    assert isinstance(app.screens[-1], AlmanacScreen), "the book is not in the pause menu"
+
+
+def test_a_first_kill_writes_a_page_once_the_room_is_quiet():
+    """Two clocks, and the whole point of the feature is that they are not one.
+
+    The dungeon files the death the moment the rules decide it; the *book* says
+    so only after the round has been played out, because a page over the blow
+    would be the book covering the fight it describes.
+    """
+    app, monster = _fight_with_a_monster(seed=3)
+    app.progress.bestiary = []
+    monster.stats.hp = 1
+
+    app.key("a")
+    app.key("enter")
+    assert type(app.screens[-1]).__name__ == "SdlArena"
+    assert app.progress.bestiary == [], "the book was written before the swing"
+
+    app.tick(1 / 30.0)
+    assert "ghoul" in app.progress.bestiary, "the page waited for the animation"
+    assert type(app.screens[-1]).__name__ == "SdlArena", "the page covered the blow"
+
+    _play_out(app)
+    for _ in range(24):
+        app.tick(1 / 30.0)
+    assert type(app.screens[-1]).__name__ == "InfoScreen", "the page was never shown"
+    assert "A page has been written" in app.screens[-1]._body()
+
+    app.key("escape")
+    assert type(app.screens[-1]).__name__ == "SdlArena", "the book did not close"
+
+
+def test_a_monster_already_in_the_book_is_not_announced_again():
+    app, monster = _fight_with_a_monster(seed=3)
+    app.progress.bestiary = ["ghoul"]
+    monster.stats.hp = 1
+
+    app.key("a")
+    app.key("enter")
+    _play_out(app)
+    for _ in range(24):
+        app.tick(1 / 30.0)
+
+    assert type(app.screens[-1]).__name__ == "SdlArena", "a known monster got a page"
+
+
 def test_every_menu_is_qt_free_too():
     """The same walk as the test above, in a process where Qt does not exist.
 
@@ -1150,7 +1282,7 @@ def test_every_menu_is_qt_free_too():
         from neverdeads_revenge.sdl_front.app import SdlApp
 
         app = SdlApp(seed=3)
-        for key in ("s", "h", "l"):
+        for key in ("s", "h", "a"):
             app.key(key)
             app.key("escape")
         app.key("enter")
@@ -1888,9 +2020,9 @@ def test_every_shared_menu_draws_on_the_second_front_end():
         GameOverScreen,
         NameEntryScreen,
     )
+    from neverdeads_revenge.desktop.screens.almanac import AlmanacScreen
     from neverdeads_revenge.desktop.screens.menus import (
         CharacterScreen,
-        ChronicleScreen,
         HelpScreen,
         LegendScreen,
         PackScreen,
@@ -1914,7 +2046,7 @@ def test_every_shared_menu_draws_on_the_second_front_end():
         LegendScreen(state),
         ShopScreen(),
         ScoreboardScreen(),
-        ChronicleScreen(),
+        AlmanacScreen(),
         ConfirmScreen("WELL?", "A question with two answers."),
         InfoScreen("A GIFT", "something", "and what it does"),
         GameOverScreen(state, won=True, best=99, can_rewind=True),
