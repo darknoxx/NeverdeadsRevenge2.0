@@ -46,6 +46,7 @@ def a_busy_run() -> GameState:
     state.gold = 137
     state.kills = 9
     state.defeated = ["ghoul", "hush"]
+    state.found_weapons = ["tooth", "grave"]
     state.level = 3
     state.turn = 12
     state.total_turns = 88
@@ -168,6 +169,15 @@ def test_the_almanac_remembers_what_the_run_has_killed():
     reloaded = load(json.loads(json.dumps(dump(state))))
 
     assert reloaded.defeated == ["ghoul", "hush"]
+
+
+def test_the_armory_remembers_what_the_run_has_taken_up():
+    """The same question as the bestiary's, for the other collection: a resume
+    that forgot would write a page the player already owns."""
+    state = a_busy_run()
+    reloaded = load(json.loads(json.dumps(dump(state))))
+
+    assert reloaded.found_weapons == ["tooth", "grave"]
 
 
 def test_the_map_comes_back_whole():

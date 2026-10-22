@@ -106,6 +106,9 @@ class MetaProgress:
     #: JSON. This is the *second* collection, and the same kind of thing as the
     #: first -- an entry is not bought and not scored, it is met.
     bestiary: list[str] = field(default_factory=list)
+    #: Blades whose page in the Armory has been written, by item key. The same
+    #: kind of thing again: a blade is met, not bought and not scored.
+    armory: list[str] = field(default_factory=list)
     #: Lifetime run statistics.
     runs_started: int = 0
     runs_won: int = 0
@@ -137,6 +140,14 @@ class MetaProgress:
             return False
         self.bestiary.append(key)
         self.bestiary.sort()
+        return True
+
+    def record_weapon(self, key: str) -> bool:
+        """Write one blade's page. Returns whether it was new."""
+        if not key or key in self.armory:
+            return False
+        self.armory.append(key)
+        self.armory.sort()
         return True
 
     def record_run(
@@ -322,6 +333,7 @@ def load_meta(path: Path | None = None) -> MetaProgress:
             amulet_stock=[str(key) for key in raw.get("amulet_stock", [])],
             pages=[int(number) for number in raw.get("pages", [])],
             bestiary=[str(key) for key in raw.get("bestiary", [])],
+            armory=[str(key) for key in raw.get("armory", [])],
             runs_started=int(raw.get("runs_started", 0)),
             runs_won=int(raw.get("runs_won", 0)),
             best_depth=int(raw.get("best_depth", 0)),
@@ -355,10 +367,14 @@ def unlock_everything(progress: MetaProgress) -> None:
     cheat carries is not punished for asking.
     """
     from .game.actors import ENEMIES
+    from .world.items import ITEMS
 
     progress.gold = max(progress.gold, TEST_GOLD)
     progress.pages = list(range(1, PAGE_COUNT + 1))
     progress.bestiary = sorted(ENEMIES)
+    progress.armory = sorted(
+        key for key, template in ITEMS.items() if template.slot == "weapon"
+    )
 
 
 def grant_test_save(path: Path | None = None) -> tuple[Path, Path | None]:

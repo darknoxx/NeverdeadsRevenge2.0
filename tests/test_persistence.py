@@ -188,6 +188,7 @@ def test_a_test_save_fills_the_book_and_the_purse(tmp_path: Path):
     assert loaded.gold == TEST_GOLD
     assert loaded.pages == list(range(1, PAGE_COUNT + 1))
     assert loaded.bestiary == sorted(ENEMIES), "the test save left the bestiary shut"
+    assert loaded.armory, "the test save left the armory shut"
 
 
 def test_unlocking_everything_never_takes_gold_away():

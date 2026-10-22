@@ -1,26 +1,30 @@
-"""The Almanac: the chronicle, and the monsters that wrote it.
+"""The Almanac: the chronicle, the monsters, and the blades that cut them.
 
-One book with two halves, because they answer the same question from two sides.
-The chronicle is what the old lords left behind; the bestiary is what is still
-down there, written down the moment it is first killed. A player who opens the
-Almanac is asking "what is this place", and the answer is a page of the book or
-a page of the dungeon.
+Three books in one cover, because they answer the same question from three
+sides. The chronicle is what the old lords left behind; the bestiary is what is
+still down there, written down the moment it is first killed; the armory is what
+is lying about to kill it with, written down the moment it is first taken up.
 
-The bestiary is *earned*: a monster's page is blank until the run has killed
-one, so the book fills as the player survives. That is the whole reason it is a
-collection and not a manual -- a manual would have told them what the hush does,
+Both collections are *earned*: a page is blank until the run has met the thing,
+so the books fill as the player survives. That is the whole reason they are
+collections and not manuals -- a manual would have told them what the hush does,
 and finding out is the game.
 
 Order is alphabetical by the name on the page. Not by floor (nobody looks a
 monster up by the floor it stood on) and not by when it was met (that is the
-shelf of a collector, not a book).
+shelf of a collector, not a book). The armory sorts without the article, since
+half the blades are called "the something" and a catalogue filed under T is a
+catalogue nobody can use.
 """
 
 from __future__ import annotations
 
 from ...game.actors import ENEMIES
+from ...game.armory import WEAPONS, Weapon
+from ...game.armory import stat_lines as weapon_stats
 from ...game.bestiary import ENTRIES, Entry, stat_lines, title_of
 from ...game.lore import PAGE_COUNT, TITLE, numeral, page
+from ...world.items import ITEMS
 from ..art import Placed, exists as art_exists, size as art_size
 from ..chrome import ASH, BONE, BLOOD, PURPLE, box, rule
 from ..theme import parse_style
@@ -47,29 +51,29 @@ def _clip(text: str, width: int) -> str:
 
 
 class AlmanacScreen(Screen):
-    """Two tabs, one cover."""
+    """Three books, one cover."""
 
     modal = True
 
-    #: The two halves, in the order they are read: the story first, the monsters
-    #: second. The other order would open the book on a list of things that have
-    #: not happened yet.
-    TABS = ("CHRONICLE", "BESTIARY")
+    #: The three, in the order they are read: the story, then what it is about,
+    #: then what you do about it. The other order would open the book on a list
+    #: of things that have not happened yet.
+    TABS = ("CHRONICLE", "BESTIARY", "ARMORY")
 
-    #: How wide the bestiary's index is, in cells -- a third of the page and no
-    #: wider, so the page never gets the narrow half. The longest name ("one who
-    #: did not come back") is shortened on the index and whole on the page: an
-    #: index is for finding a thing, the page is for reading it.
+    #: How wide a collection's index is, in cells -- a third of the page and no
+    #: wider, so the page never gets the narrow half. The longest name is
+    #: shortened on the index and whole on the page: an index is for finding a
+    #: thing, the page is for reading it.
     LIST_WIDTH = 30
 
-    #: Rows of a twenty-pixel line the monster's picture takes. Eight is half
+    #: Rows of a twenty-pixel line a monster's picture takes. Eight is half
     #: again the height the sheets were painted at, which is the size a figure
     #: wants on a page: big enough to look at, small enough that the words still
     #: have the page. The application smooth-scales it, the same way the arena
     #: scales its own figures -- no nearest-neighbour blocks, no blur.
     PICTURE_ROWS = 8
 
-    #: The column the figure stands in, in cells, when the page is wide enough to
+    #: The column a picture stands in, in cells, when the page is wide enough to
     #: afford one. Beside the words and not above them: a page whose lore has to
     #: give up its last lines so an illustration can breathe is a page that has
     #: its priorities backwards.
@@ -81,14 +85,17 @@ class AlmanacScreen(Screen):
 
     def __init__(self) -> None:
         self.tab = 0
-        #: Where the keyboard is: the tab row, the index, or the monster's card.
+        #: Where the keyboard is: the tab row, the index, or a thing's card.
         #: Three places, and the arrows walk between them the way the page is
         #: laid out -- up out of the top of a list lands on the tabs, left and
         #: right cross between the names and the page.
         self.focus = "list"
-        #: The chronicle's scroll, and the bestiary's cursor and page scroll.
+        #: The chronicle's scroll, and a cursor and page scroll per collection:
+        #: the bestiary's and the armory's are different lists, and one cursor
+        #: for both would jump a page every time the player changed books.
         self.offset = 0
         self.index = 0
+        self.weapon_index = 0
         self.list_offset = 0
         self.detail_offset = 0
         #: The size of the body as of the last draw: the key handler needs it to
@@ -100,13 +107,36 @@ class AlmanacScreen(Screen):
         self._chronicle_total = 0
         self._card_total = 0
 
-    # -- what the book knows ------------------------------------------------
+    # -- what the books know -------------------------------------------------
     @staticmethod
     def known(app) -> set[str]:
+        """The monsters whose page has been written."""
         return set(getattr(app.progress, "bestiary", ()))
 
-    def _selected(self, app) -> Entry:
-        return ENTRIES[max(0, min(self.index, len(ENTRIES) - 1))]
+    @staticmethod
+    def known_weapons(app) -> set[str]:
+        """The blades whose page has been written."""
+        return set(getattr(app.progress, "armory", ()))
+
+    def _entries(self) -> tuple:
+        """The pages of the collection that is open."""
+        return ENTRIES if self.tab == 1 else WEAPONS
+
+    def _known_now(self, app) -> set[str]:
+        return self.known(app) if self.tab == 1 else self.known_weapons(app)
+
+    def _cursor(self) -> int:
+        return self.index if self.tab == 1 else self.weapon_index
+
+    def _set_cursor(self, value: int) -> None:
+        if self.tab == 1:
+            self.index = value
+        else:
+            self.weapon_index = value
+
+    def _selected(self):
+        pages = self._entries()
+        return pages[max(0, min(self._cursor(), len(pages) - 1))]
 
     # -- the frame ----------------------------------------------------------
     def _frame(self, buffer) -> tuple[int, int, int, int]:
@@ -125,7 +155,7 @@ class AlmanacScreen(Screen):
         if self.tab == 0:
             self._chronicle(buffer, app, x, y, width, body_rows)
         else:
-            self._bestiary(buffer, app, x, y, width, body_rows)
+            self._collection(buffer, app, x, y, width, body_rows)
         rule(buffer, x + 1, y + height - 2, width - 2, ASH)
         hint = self._hint()
         # The arrow is the same "there is more below" the reading panels use: a
@@ -134,7 +164,7 @@ class AlmanacScreen(Screen):
         buffer.text(x + 3, y + height - 1, (hint + more)[: width - 6], parse_style(ASH))
 
     def _tabs(self, buffer, app, x: int, y: int, width: int) -> None:
-        """The two tabs, with the one you are *in* lit.
+        """The three tabs, with the one you are *in* lit.
 
         The bracket says which book is open; the reverse says the keyboard is up
         here choosing. Two different facts, and a player needs both: a tab bar
@@ -155,11 +185,13 @@ class AlmanacScreen(Screen):
             cursor += len(label) + 1
         if self.tab == 0:
             count = f"{len(app.progress.pages)} of {PAGE_COUNT} pages"
-        else:
+        elif self.tab == 1:
             count = f"{len(self.known(app))} of {len(ENTRIES)} written"
+        else:
+            count = f"{len(self.known_weapons(app))} of {len(WEAPONS)} found"
         buffer.text(x + width - 3 - len(count), y + 1, count, parse_style(ASH))
 
-    # -- tab one: the chronicle --------------------------------------------
+    # -- the chronicle ------------------------------------------------------
     def chronicle_lines(self, app, width: int = 88) -> list[tuple[str, str]]:
         rows: list[tuple[str, str]] = []
         for number in range(1, PAGE_COUNT + 1):
@@ -184,28 +216,30 @@ class AlmanacScreen(Screen):
         for i, (text, style) in enumerate(rows[self.offset : self.offset + body_rows]):
             buffer.text(x + 3, y + 3 + i, text[: width - 6], parse_style(style))
 
-    # -- tab two: the bestiary ---------------------------------------------
-    def _bestiary(self, buffer, app, x, y, width, body_rows) -> None:
-        known = self.known(app)
-        self._list_window(body_rows, len(ENTRIES), self.index)
+    # -- a collection: names on the left, the page on the right --------------
+    def _collection(self, buffer, app, x, y, width, body_rows) -> None:
+        pages = self._entries()
+        known = self._known_now(app)
+        cursor = self._cursor()
+        self._list_window(body_rows, len(pages), cursor)
         left = x + 2
         # Never more than a third of the inside, never less than a name that
         # cannot be read: the index is a column, not the page.
         list_w = max(22, min(self.LIST_WIDTH, (width - 4) // 3))
         for row in range(body_rows):
             number = self.list_offset + row
-            if number >= len(ENTRIES):
+            if number >= len(pages):
                 break
-            entry = ENTRIES[number]
-            chosen = number == self.index
+            entry = pages[number]
+            chosen = number == cursor
             marker = "►" if chosen else " "
             if entry.key in known:
                 text = f"{marker} {entry.name}"
                 style = f"bold {BONE}" if chosen else BONE
             else:
                 # A page that is not written yet recedes: the names the player
-                # *has* are the index, and eighteen rows of question marks at the
-                # same weight as the names would be a list of holes.
+                # *has* are the index, and a column of question marks at the same
+                # weight as the names would be a list of holes.
                 text = f"{marker} ???"
                 style = f"bold {ASH}" if chosen else "grey23"
             buffer.text(left, y + 3 + row, _clip(text, list_w), parse_style(style))
@@ -233,31 +267,33 @@ class AlmanacScreen(Screen):
         # keep what they need first. The widest line on a page is the armour
         # line, and a column that squeezed it into "accura" would be an
         # illustration that cost the page its numbers. A narrow window drops the
-        # column instead: fourteen cells out of forty is a page with no room to
+        # column instead: sixteen cells out of forty is a page with no room to
         # read.
-        figure = self.FIGURE_COLUMN if room >= self.FIGURE_COLUMN + 40 else 0
+        figure = self.FIGURE_COLUMN if room >= self.FIGURE_COLUMN + 38 else 0
         text_left = left + (figure + 2 if figure else 0)
         text_room = room - (figure + 2 if figure else 0)
         #: What ``art`` needs to put the figure down: the column, its width, and
         #: where the page starts. Kept in cells, and multiplied out by whichever
         #: front end is painting.
         self._figure = (left, figure, y + 3)
-        entry = self._selected(app)
-        if entry.key not in self.known(app):
+        entry = self._selected()
+        if entry.key not in self._known_now(app):
             self.detail_offset = 0
             self._card_total = 0
             buffer.text(text_left, y + 3, "NOT YET WRITTEN", parse_style(f"bold {ASH}"))
-            note = _wrap("Kill one and the page writes itself.", text_room)
+            note = _wrap(self._locked_note(), text_room)
             for i, line in enumerate(note):
                 buffer.text(text_left, y + 5 + i, line, parse_style(ASH))
+            page_count = len(self._entries())
+            met = len(self._known_now(app))
             buffer.text(
                 text_left,
                 y + 7 + len(note),
-                f"{len(self.known(app))} of {len(ENTRIES)} met.",
+                f"{met} of {page_count} {'met' if self.tab == 1 else 'found'}.",
                 parse_style(ASH),
             )
             return
-        rows = self.page_lines(entry, text_room)
+        rows = self._lines(entry, text_room)
         self._card_total = len(rows)
         self.detail_offset = max(0, min(self.detail_offset, max(0, len(rows) - body_rows)))
         self._more = self.detail_offset + body_rows < len(rows)
@@ -266,7 +302,21 @@ class AlmanacScreen(Screen):
         ):
             buffer.text(text_left, y + 3 + i, text[:text_room], parse_style(style))
 
-    def page_lines(self, entry: Entry, room: int) -> list[tuple[str, str]]:
+    def _locked_note(self) -> str:
+        return (
+            "Kill one and the page writes itself."
+            if self.tab == 1
+            else "Take one up and the page writes itself."
+        )
+
+    def _lines(self, entry, room: int) -> list[tuple[str, str]]:
+        return (
+            self.monster_lines(entry, room)
+            if self.tab == 1
+            else self.weapon_lines(entry, room)
+        )
+
+    def monster_lines(self, entry: Entry, room: int) -> list[tuple[str, str]]:
         """One monster's page as lines, top to bottom.
 
         The figure is *not* in here: it is painted in pixels beside these words
@@ -292,18 +342,33 @@ class AlmanacScreen(Screen):
         rows += [(line, "grey60") for line in _wrap(entry.lore, room)]
         return rows
 
+    def weapon_lines(self, entry: Weapon, room: int) -> list[tuple[str, str]]:
+        """One blade's page: its numbers first, because that is what it is for."""
+        colour = ITEMS[entry.key].color
+        stats, where = weapon_stats(entry)
+        rows: list[tuple[str, str]] = [(entry.name.upper(), f"bold {BONE}")]
+        for i, line in enumerate(_wrap(f"{entry.glyph}   {stats}", room)):
+            rows.append((line, colour if i == 0 else ASH))
+        rows.append((where, ASH))
+        rows.append(("", ""))
+        rows.append(("WHAT IT IS", f"bold {PURPLE}"))
+        rows += [(line, BONE) for line in _wrap(entry.what, room)]
+        rows.append(("", ""))
+        rows += [(line, "grey60") for line in _wrap(entry.lore, room)]
+        return rows
+
     # -- the picture --------------------------------------------------------
     def art(self, app) -> list[Placed]:
-        """The monster's own drawing, in the column its page keeps for it.
+        """The thing's own drawing, in the column its page keeps for it.
 
         The column is the picture's *own*, so the words can scroll beside it
         without ever printing over it -- which is the reason it is a column and
         not a band across the top of the page.
         """
-        if self.tab != 1:
+        if self.tab == 0:
             return []
-        entry = self._selected(app)
-        if entry.key not in self.known(app):
+        entry = self._selected()
+        if entry.key not in self._known_now(app):
             return []
         left, column, top = getattr(self, "_figure", (0, 0, 0))
         if column <= 0:
@@ -315,11 +380,15 @@ class AlmanacScreen(Screen):
         if measured is None:
             return []
         cell_w, cell_h = app.font.cell_w, app.font.cell_h
-        # Filled to the column's height: the sheets are painted between a hundred
-        # and a hundred and twenty pixels, and eight rows is half again that --
-        # the size a page's figure wants. Never larger than the column is wide,
-        # so a wide monster does not run over the divider.
+        # Monsters are filled to the column's height -- the sheets are painted
+        # between a hundred and a hundred and twenty pixels, and eight rows is
+        # half again that. Blades are painted at the size a card draws them, so
+        # they stop at 1:1; a stretched sword is a sword that has been resampled.
         tall = self.PICTURE_ROWS * cell_h - 8
+        if self.tab == 2:
+            tall = min(tall, measured[1])
+        # Never wider than the column, so a wide figure does not run over the
+        # divider.
         wide = tall * measured[0] / max(1, measured[1])
         if wide > self.FIGURE_COLUMN * cell_w:
             wide = self.FIGURE_COLUMN * cell_w
@@ -337,33 +406,34 @@ class AlmanacScreen(Screen):
 
     # -- input --------------------------------------------------------------
     def _hint(self) -> str:
-        """What the arrows do *here*, which is three different sentences."""
+        """What the arrows do *here*, which is a different sentence per place."""
         if self.focus == "tabs":
             return "←→ tab   ↓ open   esc close"
         if self.tab == 0:
             return "→ bestiary   ↑↓ scroll   ↑ at top: tabs   esc close"
         if self.focus == "page":
             return "← names   ↑↓ page   pgup/pgdn   esc close"
-        return "→ card   ← chronicle   ↑ at top: tabs   esc close"
+        previous = self.TABS[self.tab - 1].lower()
+        return f"→ card   ← {previous}   ↑ at top: tabs   esc close"
 
     def key(self, name, event, app) -> bool:
         # Holds scroll, because a list is something a player holds a key to walk;
         # holds do not cross between panes or tabs, because those are decisions
         # and a held key that crossed them would flicker between two pages.
-        if event.isAutoRepeat() and name in ("left", "right", "tab", "c", "b"):
+        if event.isAutoRepeat() and name in ("left", "right", "tab", "c", "b", "a"):
             return True
         if name == "escape":
             app.pop()
             return True
-        if name in ("c", "b"):
-            # A shortcut, not part of the arrow language: it names the book and
+        if name in ("c", "b", "a"):
+            # Shortcuts, not part of the arrow language: each names a book and
             # lands the keyboard in it.
-            self._open(0 if name == "c" else 1)
+            self._open({"c": 0, "b": 1, "a": 2}[name])
             return True
         if name == "tab":
-            self._switch(1 - self.tab)
+            self._switch((self.tab + 1) % len(self.TABS))
             if self.focus == "page":
-                # The card belongs to the monster in the other book; the list is
+                # The card belongs to the thing in the other book; the list is
                 # where the keyboard belongs after a jump like that.
                 self.focus = "list"
             return True
@@ -371,7 +441,7 @@ class AlmanacScreen(Screen):
             return self._tab_key(name)
         if self.tab == 0:
             return self._chronicle_key(name)
-        return self._bestiary_key(name)
+        return self._collection_key(name)
 
     def _open(self, tab: int) -> None:
         """Jump straight into a book: the tab, and the keyboard with it."""
@@ -384,10 +454,13 @@ class AlmanacScreen(Screen):
 
     # -- the tab row ---------------------------------------------------------
     def _tab_key(self, name: str) -> bool:
-        if name in ("left", "right"):
+        if name == "left":
             # Left and right walk the row and show the book as they pass, so
             # what the player is choosing is the thing in front of them.
-            self._switch(1 - self.tab)
+            self._switch(max(0, self.tab - 1))
+            return True
+        if name == "right":
+            self._switch(min(len(self.TABS) - 1, self.tab + 1))
             return True
         if name in ("down", "enter", "space"):
             self.focus = "list"
@@ -398,7 +471,7 @@ class AlmanacScreen(Screen):
     def _chronicle_key(self, name: str) -> bool:
         if name == "right":
             # This book has no second pane, so the arrow points at the only
-            # thing to its right: the other book.
+            # thing to its right: the next book.
             self._open(1)
             return True
         if name == "left":
@@ -424,8 +497,8 @@ class AlmanacScreen(Screen):
             self.offset = total
         return True
 
-    # -- the bestiary: two panes --------------------------------------------
-    def _bestiary_key(self, name: str) -> bool:
+    # -- a collection: two panes --------------------------------------------
+    def _collection_key(self, name: str) -> bool:
         # The arrows point where the panes are: right is the card, left is the
         # names -- and left again, out of the names, is the book beside this one.
         if name == "right":
@@ -436,31 +509,34 @@ class AlmanacScreen(Screen):
             if self.focus == "page":
                 self.focus = "list"
             else:
-                self._open(0)
+                self._open(self.tab - 1)
             return True
         if self.focus == "list":
             return self._names_key(name)
         return self._card_key(name)
 
     def _names_key(self, name: str) -> bool:
-        before = self.index
+        pages = self._entries()
+        before = self._cursor()
+        index = before
         if name in ("up", "k"):
-            if self.index == 0:
+            if index == 0:
                 # Above the first name is the tab row.
                 self.focus = "tabs"
                 return True
-            self.index -= 1
+            index -= 1
         elif name in ("down", "j"):
-            self.index = min(self.index + 1, len(ENTRIES) - 1)
+            index = min(index + 1, len(pages) - 1)
         elif name == "home":
-            self.index = 0
+            index = 0
         elif name == "end":
-            self.index = len(ENTRIES) - 1
+            index = len(pages) - 1
         elif name in ("pageup", "pagedown"):
             step = self.PAGE_SCROLL if name == "pagedown" else -self.PAGE_SCROLL
-            self.index = max(0, min(self.index + step, len(ENTRIES) - 1))
-        if self.index != before:
-            # A new monster is a new page, and a page that opened halfway down
+            index = max(0, min(index + step, len(pages) - 1))
+        self._set_cursor(index)
+        if index != before:
+            # A new thing is a new page, and a page that opened halfway down
             # would be a page that started in the middle of a sentence.
             self.detail_offset = 0
         return True

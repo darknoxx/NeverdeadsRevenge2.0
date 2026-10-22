@@ -201,6 +201,10 @@ class GameState:
     #: first died. The dungeon's own record: it does not know what a page is,
     #: and it is the Almanac that decides what a first kill writes down.
     defeated: list[str] = field(default_factory=list)
+    #: The blades this run has taken up, by item key, in the order they were
+    #: first held. The Armory's record, and deliberately narrower than "seen":
+    #: a blade lying on the floor is not one the hero knows.
+    found_weapons: list[str] = field(default_factory=list)
     #: Whether the weapon's *first blow* rule has been paid this fight. A fact
     #: about the fight and not about each monster, which is what the blade says.
     first_blow_spent: bool = False

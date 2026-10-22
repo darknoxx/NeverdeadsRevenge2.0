@@ -1359,6 +1359,70 @@ def test_the_open_tab_is_lit_while_the_arrows_are_on_the_row():
     assert "BESTIARY" in lit(), "the other tab did not light up"
 
 
+def test_the_armory_shows_a_blade_once_it_has_been_taken_up():
+    """The same page as the bestiary, for the other collection: numbers, the
+    paragraph, and the blade itself at the size it was painted."""
+    from neverdeads_revenge.desktop.screens.almanac import AlmanacScreen
+    from neverdeads_revenge.game.armory import WEAPONS
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3)
+    app.progress.armory = ["grave"]
+    screen = AlmanacScreen()
+    screen.tab = 2
+    screen.weapon_index = next(i for i, page in enumerate(WEAPONS) if page.key == "grave")
+
+    text = _page_text(screen, app)
+    assert "GRAVE IRON" in text
+    assert "+6 damage" in text
+    assert "WHAT IT IS" in text
+    assert "buried with" in text.lower(), "the blade's paragraph is not on its page"
+
+    art = screen.art(app)
+    assert len(art) == 1 and art[0].art == "sprites/weapons/grave.png"
+    assert art[0].height == 123, "the blade was stretched instead of shown"
+
+
+def test_a_blade_that_has_not_been_taken_up_has_no_page():
+    from neverdeads_revenge.desktop.screens.almanac import AlmanacScreen
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3)
+    app.progress.armory = []
+    screen = AlmanacScreen()
+    screen.tab = 2
+
+    text = _page_text(screen, app)
+    assert "NOT YET WRITTEN" in text
+    assert "Take one up" in text
+    assert "0 of 26 found" in text
+    assert screen.art(app) == []
+
+
+def test_taking_a_blade_up_writes_its_page_and_says_so_on_the_card():
+    """One card, not two: the pickup card is where the blade is introduced, so
+    the page is announced in the same breath."""
+    from neverdeads_revenge.game.actors import HEROES
+    from neverdeads_revenge.sdl_front.app import SdlApp
+    from neverdeads_revenge.world.items import ITEMS, make_item
+
+    app = SdlApp(seed=3, no_sound=True)
+    app.key("enter")
+    app.key("enter")
+    app.key("escape")  # the prologue, skipped
+    state = app.run
+    state.dungeon_map.add_item(state.player.position, make_item(ITEMS["tooth"]))
+    app.progress.armory = []
+
+    app.key("enter")  # the one useful thing where the player is standing
+
+    assert "tooth" in app.progress.armory, "the page was not written"
+    assert type(app.screens[-1]).__name__ == "InfoScreen"
+    body = app.screens[-1]._body()
+    assert "A page has been written in the Armory" in body, body
+    assert "rusted tooth" in body.lower()
+
+
 def test_a_monster_that_has_not_been_killed_has_no_page():
     from neverdeads_revenge.desktop.screens.almanac import AlmanacScreen
     from neverdeads_revenge.sdl_front.app import SdlApp

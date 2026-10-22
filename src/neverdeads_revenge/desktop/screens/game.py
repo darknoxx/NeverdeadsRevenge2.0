@@ -20,7 +20,7 @@ from neverdeads_revenge.game.state import GameState
 
 from ..keys import KEY_BINDINGS
 from .base import Screen
-from .pages import the_page, write_the_page
+from .pages import the_page, write_the_page, write_the_weapon
 from .dialogs import (
     KindlyScreen,
     FAME,
@@ -79,6 +79,10 @@ class GameScreen(Screen):
         #: The monsters this screen has already filed a page for, so a step does
         #: not re-read the whole list of the run's dead on every keypress.
         self._filed: set[str] = set()
+        #: The same for the Armory's blades, and the keys whose card should say
+        #: that a page was just written -- one card, not two.
+        self._filed_weapons: set[str] = set()
+        self._new_weapons: set[str] = set()
 
     def key_sound(self, name: str) -> str | None:
         """The sound this press makes: a refusal has one, a click has another."""
@@ -207,6 +211,7 @@ class GameScreen(Screen):
         self._effects(app, hp, gold, gifts, curses, before[2])
         self._file_pages(app)
         self._file_monsters(app)
+        self._file_weapons(app)
 
         if result.prompt is not None:
             self._ask(result, app)
@@ -229,11 +234,18 @@ class GameScreen(Screen):
         from ..art import item_icon
         from .dialogs import InfoScreen
 
+        text = describe_item(template)
+        if template.key in self._new_weapons:
+            # The blade's page and the blade's card are one moment: a second
+            # window on the same find would be the game saying the same thing
+            # twice and asking to be dismissed twice.
+            text = f"{text}\n\nA page has been written in the Armory."
+            self._new_weapons.discard(template.key)
         app.push(
             InfoScreen(
                 CARD_TITLES.get(template.kind, "A THING"),
                 name,
-                describe_item(template),
+                text,
                 picture=item_icon(template),
             )
         )
@@ -429,6 +441,20 @@ class GameScreen(Screen):
             card = the_page(key)
             if card is not None:
                 app.push(card)
+
+    def _file_weapons(self, app) -> None:
+        """Write the Armory page of anything just taken up.
+
+        A blade is known when it is in the hand -- mid-swing, mid-run, with the
+        old one lying on the floor beside it. The card that already announces a
+        pickup says the page was written; this only does the writing.
+        """
+        for key in self.state.found_weapons:
+            if key in self._filed_weapons:
+                continue
+            self._filed_weapons.add(key)
+            if write_the_weapon(app, key):
+                self._new_weapons.add(key)
 
     def _file_pages(self, app) -> None:
         """Bank a found page at once, and open it.

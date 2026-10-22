@@ -222,6 +222,13 @@ than to a perfect one.)
     (health, damage, speed, armour, evasion, gold), what its rule does, how it is
     answered, and a paragraph of its own. Killing one for the first time opens
     the page in the fight, on a card, once the blow has finished landing.
+  - **The armory** has a page for every blade in the game -- **26**, sorted by
+    name without the article, since half of them are called "the something" --
+    and a page is written the first time a run *takes one up* (a blade walked
+    past is not a blade known). The page shows the painted blade at 1:1, what it
+    adds and what it opens, where it comes from, and the house's paragraph on
+    it. The pickup card says the page was written, so the find is announced once
+    and not twice.
 - **The board** keeps every finished run, best first, with the name you left.
 - **Fame** is score: a chest's curse taken for the reward pays you nothing, but
   a chest's reward *left* for the curse pays a point of fame, which raises the
@@ -275,9 +282,10 @@ the glass itself.
 
 The menus are read sideways: `←` `→` choose, `enter` takes, or press the letter
 of the row you want. The Almanac is the one screen that is read like a page:
-`←` `→` crosses between the names and the monster's card, `↑` `↓` scrolls
+`←` `→` crosses between the names and the card, `↑` `↓` scrolls
 whichever of the two you are in, and `↑` out of the top of a list reaches the
-tab row, where `←` `→` pick the book. The **legend of glyphs** lives in its own menu (`l`) --
+tab row, where `←` `→` pick the book -- chronicle, bestiary, armory (`c`, `b`,
+`a` jump straight to one). The **legend of glyphs** lives in its own menu (`l`) --
 the sidebar keeps the run, the reference lives one key away. The pause offers
 **CONTROLS**, and the title offers **DELETE PROGRESS**: it asks for the word
 DELETE to be typed out, because a confirm key is a reflex and a word is a
@@ -320,8 +328,8 @@ python3 -m venv .venv
 ```
 
 And without a flag: type **`battle4ever`** on the title screen. It grants exactly what
-`--testrun` grants -- 9999 coin, every page of the chronicle, every page of the bestiary -- saves
-it at once, and answers with a sound.
+`--testrun` grants -- 9999 coin, every page of the chronicle, of the bestiary and of the armory --
+saves it at once, and answers with a sound.
 
 ### The window
 

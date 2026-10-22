@@ -2187,6 +2187,11 @@ def _equip(state: GameState, item: GroundItem) -> None:
     player = state.player
     previous = player.equipment.get(item.slot)
     player.equipment[item.slot] = item
+    if item.slot == "weapon" and item.item_id not in state.found_weapons:
+        # THE ARMORY. A blade is *known* the moment it is in the hand, not when
+        # it is lying on the floor: a catalogue of what you walked past is not a
+        # catalogue of what you have.
+        state.found_weapons.append(item.item_id)
 
     changes = ", ".join(item.modifiers.describe())
     detail = f" ({changes})" if changes else ""
