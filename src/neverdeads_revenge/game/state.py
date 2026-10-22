@@ -318,6 +318,9 @@ class GameState:
     #: fight on this floor start with everything in it already burning, and hold
     #: his purse at three points for as long as it lasts.
     ravaging: bool = False
+    #: How many debts are owed on this floor: one monster's death is paid by the
+    #: next room. Read where a room is made, and cleared when it pays.
+    debt: int = 0
     #: Whether an ultimate has been given into this run. One shared price: the
     #: purse holds five points for the rest of it, and the shop cannot buy them
     #: back. See :data:`levels.SACRIFICED_KILL_POINTS`.

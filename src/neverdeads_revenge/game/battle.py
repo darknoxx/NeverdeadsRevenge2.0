@@ -304,6 +304,20 @@ def encounter_around(
             group.append(other)
             if len(group) >= limit:
                 break
+    if state.debt:
+        # THE DEBT. It died, and dying paid nothing: the thing it owed walks into
+        # the next room of this floor wearing it. Read here, where a room is
+        # made, because that is the only moment a fight has a company to buff.
+        for enemy in group:
+            enemy.stats.max_hp = round(enemy.stats.max_hp * 1.25)
+            enemy.stats.hp = enemy.stats.max_hp
+            low, high = enemy.stats.damage
+            enemy.stats.damage = (low + 2 * state.debt, high + 2 * state.debt)
+        state.say(
+            "The debt is collected: what comes next is wearing it.",
+            LogKind.BAD,
+        )
+        state.debt = 0
     return group
 
 
@@ -321,6 +335,21 @@ class Battle:
         self.state = state
         self.hero = state.player
         self.enemies = list(enemies)
+        #: The blade a reaver took, held here until the room is done with it.
+        self._held_weapon = None
+        for enemy in self.enemies:
+            if enemy.behaviour == "reaver" and "weapon" in self.hero.equipment:
+                # THE REAVER. The free swing is not the weapon; this is. Held
+                # and given back when the fight ends -- win, lose or run -- so
+                # the fight is a fight without a blade and not a robbery.
+                self._held_weapon = self.hero.equipment.pop("weapon")
+            elif enemy.behaviour == "notary":
+                # THE NOTARY bills the floor: its health is what has already
+                # been killed on it. Read when the room opens, because that is
+                # when the bill is handed over.
+                bill = max(8, state.floor_kills * 4)
+                enemy.stats.max_hp = bill
+                enemy.stats.hp = bill
         #: Whether the hero has his feet set, which lasts one round.
         self._guarded = False
         #: Armour lent by a trick for the length of the fight, and taken back
@@ -448,6 +477,14 @@ class Battle:
         rather than in a number on a sheet.
         """
         events: list[Event] = []
+        if self._held_weapon is not None:
+            events.append(
+                Said(
+                    "The reaver takes your blade out of your hand. It gives it "
+                    "back when the room is done.",
+                    LogKind.BAD,
+                )
+            )
         self._advance(events)
         return events
 
@@ -534,6 +571,26 @@ class Battle:
             self._turns.append(actor)
             self._enemy_acts(actor, events)
 
+    def _hushed_drink(self) -> bool:
+        """Whether a quiet has the hero's mouth closed. Says so, and takes nothing."""
+        quiet = next(
+            (
+                one
+                for one in self.enemies
+                if one.behaviour == "quiet" and one.stats.alive
+            ),
+            None,
+        )
+        if quiet is None:
+            return False
+        before = len(self.state.log)
+        self.state.say(
+            f"The {quiet.name} has your voice. The bottle stays corked.",
+            LogKind.BAD,
+        )
+        self._splice(before, [])
+        return True
+
     def _hushed(self) -> bool:
         """Whether a hush is standing: no kill point is paid while it is."""
         return any(
@@ -617,6 +674,78 @@ class Battle:
             events.append(
                 ShadowStruck(struck, killed=not struck.stats.alive)
             )
+
+        self._the_judge_reads(events)
+        self._the_eater_eats(events)
+
+    def _the_judge_reads(self, events: list[Event]) -> None:
+        """THE JUDGE reads the hero's curses out loud, and each one costs a point.
+
+        It never swings; this is the whole of what it does, and it is the only
+        monster that makes a fat collection of curses -- the fame build -- into a
+        liability. Capped at three, because thirteen curses at a point a round is
+        not a judgement, it is an execution.
+        """
+        judge = next(
+            (
+                one
+                for one in self.enemies
+                if one.behaviour == "judge" and one.stats.alive
+            ),
+            None,
+        )
+        if judge is None or not self.state.curses:
+            return
+        words = min(3, len(self.state.curses))
+        before = len(self.state.log)
+        self.state.say(
+            f"The {judge.name} reads your curses aloud. {words}.",
+            LogKind.DAMAGE,
+        )
+        self.hero.stats.hp = max(0, self.hero.stats.hp - words)
+        self.state.hits.append(self.hero.position)
+        self._splice(before, events)
+
+    def _the_eater_eats(self, events: list[Event]) -> None:
+        """THE EATER takes a wound off one of its own and grows on it.
+
+        One stack a round, off somebody who is not itself: a status build in its
+        room starves, and the room has to decide whether the eater or the wound
+        is the problem. Four health a stack, which is what makes a deep bleed
+        worth eating.
+        """
+        for eater in [
+            one
+            for one in self.enemies
+            if one.behaviour == "eater" and one.stats.alive
+        ]:
+            prey = next(
+                (
+                    one
+                    for one in self.enemies
+                    if one is not eater
+                    and one.stats.alive
+                    and one.statuses
+                ),
+                None,
+            )
+            if prey is None:
+                continue
+            key = sorted(prey.statuses)[0]
+            depth = max(1, prey.status_stacks.get(key, 1))
+            if depth > 1:
+                prey.status_stacks[key] = depth - 1
+            else:
+                del prey.statuses[key]
+                prey.status_stacks.pop(key, None)
+            healed = eater.stats.heal(4 * depth)
+            tail = f" and puts {healed} back" if healed else ""
+            before = len(self.state.log)
+            self.state.say(
+                f"The {eater.name} eats the {key} out of the {prey.name}{tail}.",
+                LogKind.BAD,
+            )
+            self._splice(before, events)
 
     def turns(self) -> list[Actor]:
         """Who took a turn in the round just resolved, in the order they took it.
@@ -728,6 +857,8 @@ class Battle:
             # covers the wound, and it says what it did. A fight that healed by
             # its own arithmetic would disagree with the pack about what the
             # bottle is worth -- and the pack is where the bottle is.
+            if self._hushed_drink():
+                return False
             result = perform_action(self.state, Action.QUAFF)
             self._splice(before, events)
             return result.consumed_turn
@@ -1306,6 +1437,9 @@ class Battle:
         lives where closing happens. Inventing a second reading of it for the
         arena would be two opinions about one word.
         """
+        if attacker.behaviour in ("unbroken", "judge"):
+            # These two never swing: one is a trade and one is a sentence.
+            return
         # And it leaves when there is nothing left to take: with an empty purse
         # it can never set ``stolen``, so the old rule kept it in the room until
         # one of the two died -- a purse with nothing in it, fought to the death.
@@ -1375,6 +1509,11 @@ class Battle:
         and a fight that went out without coming back through here would leave a
         floor that never moves again.
         """
+        if self._held_weapon is not None:
+            # The blade comes back. A reaver that kept it would be a monster that
+            # deletes a find, and this game does not do that.
+            self.hero.equipment["weapon"] = self._held_weapon
+            self._held_weapon = None
         if self._round_armour:
             # A fight that ends mid-round still gives the borrowed armour back.
             self.state.player.stats.armor -= self._round_armour

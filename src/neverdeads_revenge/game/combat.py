@@ -143,6 +143,10 @@ def attack(
         # Never nothing. A ward that turned a blow into a no-op would be a
         # different amulet, and the message would be a lie.
         damage = max(1, int(round(damage * damage_scale)))
+    if defender.blow_scale != 1.0:
+        # THE LEECH barely feels steel. What it *does* feel is the wound, and
+        # that is scaled where the wound ticks.
+        damage = max(1, int(round(damage * defender.blow_scale)))
     if bonus:
         damage = max(1, damage + bonus)
 

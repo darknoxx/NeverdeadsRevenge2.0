@@ -200,6 +200,7 @@ def dump(state: GameState) -> dict:
         "sight_bonus": state.sight_bonus,
         "sight_penalty": state.sight_penalty,
         "ravaging": state.ravaging,
+        "debt": state.debt,
         "floor_draughts": sorted(state.floor_draughts),
         "death_squares": [list(pos) for pos in sorted(state.death_squares)],
         "coin_multiplier": state.coin_multiplier,
@@ -288,6 +289,7 @@ def load(payload: dict) -> GameState:
         state.sight_bonus = payload["sight_bonus"]
         state.sight_penalty = int(payload.get("sight_penalty", 0))
         state.ravaging = bool(payload.get("ravaging", False))
+        state.debt = int(payload.get("debt", 0))
         state.floor_draughts = {str(key) for key in payload.get("floor_draughts", [])}
         state.death_squares = {
             (int(pos[0]), int(pos[1])) for pos in payload.get("death_squares", [])

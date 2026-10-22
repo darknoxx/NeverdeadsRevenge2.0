@@ -262,6 +262,17 @@ class Actor:
     #: for one monster each: the already-dying and the briar.
     self_inflicts: tuple[str, ...] = ()
     thorns: int = 0
+    #: Whether it is awake. One monster sleeps until something wakes it, and a
+    #: sleeper that acts is a monster you cannot walk past.
+    awake: bool = True
+    #: What a blow *into* it is worth, and what a wound on it is worth. One
+    #: monster is the other way round -- the leech barely feels steel and comes
+    #: apart at a bleed -- and the fight reads both here rather than by name.
+    blow_scale: float = 1.0
+    status_scale: float = 1.0
+    #: The share of a landed blow it gives straight back. The unbroken does
+    #: half, in blood, and never swings at all.
+    reflect_share: float = 0.0
     #: What a thief has taken off the hero. The picker leaves when it has
     #: something to leave with, and this is what says it does.
     stolen: int = 0
@@ -735,14 +746,13 @@ class EnemyTemplate:
     glyph: str
     color: str
     stats: Stats
-    #: How this monster moves. Only ``"cautious"`` is read, by the movement code
-    #: in :mod:`game.actions`: it hangs back until the player closes. Everything
-    #: else -- including the default -- walks straight at them.
-    #:
-    #: It used to say "see game.ai", which never existed, and the wraith carried
-    #: ``"hunter"``, which nothing has ever read. A label that names a behaviour
-    #: no code implements is worse than no label: it reads as a monster doing
-    #: something clever when it is doing the same thing as a ghoul.
+    #: How this monster behaves. ``"cautious"`` is read by the movement code in
+    #: :mod:`game.actions` (it hangs back until the player closes); ``"hunter"``
+    #: knows where the hero is from the first step; ``"thief"`` steals and leaves;
+    #: ``"kindly"`` asks first; ``"hush"`` stops the purse; ``"echo"`` wears a
+    #: hero's face; and the ten newest each read where their rule happens --
+    #: idle, twin, debt, judge, leech, quiet, unbroken, eater, notary, reaver.
+    #: Anything else walks straight at the hero, which is still most of them.
     behaviour: str = "aggressive"
     #: Coins this monster leaves behind, before depth scaling. A range rather
     #: than a number so a kill is worth something different each time, which is
@@ -771,6 +781,12 @@ class EnemyTemplate:
     #: Damage given back to whatever lands a blow on it. One does: the briar is
     #: the answer to a hero who wins by taking more turns.
     thorns: int = 0
+    #: The four that fight with a rule rather than a number; see ``Actor`` for
+    #: what each of them means.
+    awake: bool = True
+    blow_scale: float = 1.0
+    status_scale: float = 1.0
+    reflect_share: float = 0.0
 
 
 ENEMIES: dict[str, EnemyTemplate] = {
@@ -952,7 +968,7 @@ ENEMIES: dict[str, EnemyTemplate] = {
     "dying": EnemyTemplate(
         key="dying",
         name="already-dying",
-        glyph="d",
+        glyph="a",
         color="#5a1f1f",
         # A wound with a body around it: every blow it lands opens one on itself.
         # It hits hard and it is nearly gone, so the fight is a race and the race
@@ -967,7 +983,7 @@ ENEMIES: dict[str, EnemyTemplate] = {
     "briar": EnemyTemplate(
         key="briar",
         name="briar",
-        glyph="n",
+        glyph="b",
         color="#6b8e23",
         # What it grows, you take: thorns is the answer to a hero who wins by
         # taking more turns, and the hummingbird's nightmare.
@@ -994,6 +1010,154 @@ ENEMIES: dict[str, EnemyTemplate] = {
         gold=(30, 45),
         min_depth=2,
         weight=0.45,
+        weight_growth=1.10,
+    ),
+    # -- the ten that ask about the room, not the numbers --------------------
+    #
+    # One lowercase letter each, and the name begins with it: the rule is what
+    # lets the alphabet be the roster. None of them is a bigger monster; each is
+    # a fact about the *room* that the room has not had before.
+    "idle": EnemyTemplate(
+        key="idle",
+        name="idle",
+        glyph="i",
+        color="#184030",
+        # It sleeps until it is hit or somebody stands beside it. A monster that
+        # does not act is a monster you may walk past -- the first real "leave
+        # it" on the floor.
+        behaviour="idle",
+        awake=False,
+        stats=Stats(max_hp=18, hp=18, speed=0.88, damage=(5, 8)),
+        gold=(4, 8),
+        min_depth=2,
+        weight=0.9,
+        weight_growth=1.05,
+    ),
+    "twin": EnemyTemplate(
+        key="twin",
+        name="twin",
+        glyph="t",
+        color="#a040c8",
+        # Kill one and the other one stops grieving: full health, twice the
+        # damage. The order you kill them in is the fight.
+        behaviour="twin",
+        stats=Stats(max_hp=22, hp=22, speed=1.08, damage=(5, 8)),
+        gold=(6, 10),
+        min_depth=3,
+        weight=0.7,
+        weight_growth=1.10,
+    ),
+    "debt": EnemyTemplate(
+        key="debt",
+        name="debt",
+        glyph="d",
+        color="#40c898",
+        # Dying does not cancel it: the next fight on this floor collects.
+        behaviour="debt",
+        stats=Stats(max_hp=20, hp=20, speed=0.98, damage=(5, 8), armor=1),
+        gold=(5, 9),
+        min_depth=4,
+        weight=0.6,
+        weight_growth=1.10,
+    ),
+    "judge": EnemyTemplate(
+        key="judge",
+        name="judge",
+        glyph="j",
+        color="#c078e8",
+        # It does not swing. It reads your curses out loud, and every one of
+        # them costs a point a round.
+        behaviour="judge",
+        stats=Stats(max_hp=26, hp=26, speed=0.82, damage=(1, 2), armor=1),
+        gold=(8, 12),
+        min_depth=5,
+        weight=0.5,
+        weight_growth=1.10,
+    ),
+    "leech": EnemyTemplate(
+        key="leech",
+        name="leech",
+        glyph="l",
+        color="#80e8b8",
+        # Steel is nothing to it; a wound is everything. The one monster that
+        # makes a status build the *only* answer.
+        behaviour="leech",
+        stats=Stats(max_hp=30, hp=30, speed=0.68, damage=(3, 5)),
+        gold=(5, 9),
+        blow_scale=0.25,
+        status_scale=2.0,
+        min_depth=4,
+        weight=0.7,
+        weight_growth=1.10,
+    ),
+    "quiet": EnemyTemplate(
+        key="quiet",
+        name="quiet",
+        glyph="q",
+        color="#6058e0",
+        # The pack stays shut while it lives. It takes nothing but the answer.
+        behaviour="quiet",
+        stats=Stats(max_hp=16, hp=16, speed=1.32, damage=(3, 5), evasion=2),
+        gold=(5, 9),
+        min_depth=3,
+        weight=0.6,
+        weight_growth=1.10,
+    ),
+    "unbroken": EnemyTemplate(
+        key="unbroken",
+        name="unbroken",
+        glyph="u",
+        color="#d09870",
+        # It never swings, and it gives half of every blow straight back. Killing
+        # it is a trade, not a fight.
+        behaviour="unbroken",
+        stats=Stats(max_hp=34, hp=34, speed=0.78, damage=(1, 2)),
+        gold=(6, 10),
+        reflect_share=0.5,
+        min_depth=2,
+        weight=0.8,
+        weight_growth=1.10,
+    ),
+    "eater": EnemyTemplate(
+        key="eater",
+        name="eater",
+        glyph="e",
+        color="#30b848",
+        # It eats the wounds off its friends and grows on them. A status build
+        # in its room starves.
+        behaviour="eater",
+        stats=Stats(max_hp=28, hp=28, speed=1.02, damage=(4, 7)),
+        gold=(6, 10),
+        min_depth=4,
+        weight=0.7,
+        weight_growth=1.10,
+    ),
+    "notary": EnemyTemplate(
+        key="notary",
+        name="notary",
+        glyph="n",
+        color="#b8b830",
+        # Its health is the floor's kill count: it bills you for what you have
+        # already done, and every further kill on the floor feeds it.
+        behaviour="notary",
+        stats=Stats(max_hp=16, hp=16, speed=0.92, damage=(4, 7), armor=1),
+        gold=(7, 11),
+        min_depth=3,
+        weight=0.6,
+        weight_growth=1.10,
+    ),
+    "reaver": EnemyTemplate(
+        key="reaver",
+        name="reaver",
+        glyph="r",
+        color="#c84088",
+        # It takes the blade out of your hand for the length of the fight. The
+        # free swing is still free; it is the *weapon* that is gone.
+        behaviour="reaver",
+        stats=Stats(max_hp=26, hp=26, speed=1.12, damage=(6, 9), armor=1),
+        gold=(8, 13),
+        min_depth=5,
+        weight=0.5,
         weight_growth=1.10,
     ),
     "echo": EnemyTemplate(
@@ -1045,6 +1209,10 @@ def make_enemy(template: EnemyTemplate, position: Pos) -> Actor:
         inflicts=template.inflicts,
         self_inflicts=template.self_inflicts,
         thorns=template.thorns,
+        awake=template.awake,
+        blow_scale=template.blow_scale,
+        status_scale=template.status_scale,
+        reflect_share=template.reflect_share,
     )
 
 

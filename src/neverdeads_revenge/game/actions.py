@@ -239,7 +239,7 @@ def tick_statuses(state: GameState, actor: Actor) -> None:
         # three of them is that three times. It is the only thing a stack means,
         # which is what makes the number on the badge and the number in the log
         # the same number.
-        dealt = status.damage * stacks
+        dealt = max(1, round(status.damage * stacks * actor.status_scale))
         actor.stats.hp = max(0, actor.stats.hp - dealt)
         state.hits.append(actor.position)
         if actor.is_player:
@@ -414,6 +414,58 @@ def _remove_corpse(state: GameState, enemy: Actor) -> None:
     state.turn_queue.remove(enemy)
 
 
+def _one_death_answers(state: GameState, enemy: Actor) -> None:
+    """The three monsters whose *death* is their move.
+
+    A death is usually the end of a monster's rules. For three of them it is the
+    beginning of somebody else's: the twin's grief, the debt's collection, and
+    the notary's bill (which grows with every kill on the floor, this one
+    included).
+    """
+    if enemy.behaviour == "twin":
+        # The one left stops grieving: full health and twice the anger. Killing
+        # the pair in one order is a different fight from the other.
+        mate = next(
+            (
+                one
+                for one in state.enemies
+                if one is not enemy
+                and one.behaviour == "twin"
+                and one.stats.alive
+            ),
+            None,
+        )
+        if mate is not None:
+            mate.stats.hp = mate.stats.max_hp
+            low, high = mate.stats.damage
+            mate.stats.damage = (low * 2, high * 2)
+            state.say(
+                f"The {mate.name} stops grieving, and comes for you.",
+                LogKind.BAD,
+            )
+
+    if enemy.behaviour == "debt":
+        # Dying does not cancel it. The next room on this floor collects.
+        state.debt += 1
+        state.say("The debt is not paid. It is passed on.", LogKind.BAD)
+
+    # THE NOTARY grows on every kill on its floor, and this is one of them.
+    notary = next(
+        (
+            one
+            for one in state.enemies
+            if one is not enemy
+            and one.behaviour == "notary"
+            and one.stats.alive
+        ),
+        None,
+    )
+    if notary is not None:
+        fed = notary.stats.heal(4)
+        if fed:
+            state.say(f"The {notary.name} writes it down. {fed}.", LogKind.BAD)
+
+
 def _kill_message(state: GameState, enemy: Actor, outcome) -> None:
     """Report a blow that killed, and everything a kill is worth."""
     state.say(
@@ -454,6 +506,7 @@ def _on_death(state: GameState, enemy: Actor) -> None:
     _drop_coins(state, enemy)
     if enemy.behaviour == "hunter":
         _hunter_spoils(state, enemy)
+    _one_death_answers(state, enemy)
     _learn(state)
 
     # The blade's own reckoning, after the kill is counted: a debt paid, and a
@@ -1146,7 +1199,20 @@ def resolve_player_attack(
     if outcome.crit and state.has_passive("patient_knife") and first:
         state.say("It has been waiting for this one.", LogKind.GOOD)
 
+    target.awake = True
     _enemy_takes_damage(state, target, outcome)
+    if target.reflect_share:
+        # THE UNBROKEN: half of every landed blow, straight back and through the
+        # armour. It never swings; this is the whole of the exchange.
+        back = max(1, round(outcome.damage * target.reflect_share))
+        given = state.player.stats.reflect(back)
+        if given:
+            state.say(
+                f"The {target.name} gives {given} of it back.", LogKind.BAD
+            )
+            if state.player.hp <= 0:
+                state.die("What did not break gave it all back.")
+                return outcome
     if state.has_draught("thin_veil"):
         # The veil was a promise about *looking*. The moment a blow lands, the
         # floor has seen where the hero is, and the bottle's work is done.
@@ -2452,6 +2518,15 @@ def take_turn(state: GameState, actor: Actor) -> bool:
         return False
 
     player = state.player
+    if actor.behaviour == "idle" and not actor.awake:
+        # THE IDLE sleeps until it is hit or somebody stands beside it. It does
+        # not spend a turn while it sleeps; a sleeper that walked would be a
+        # monster you cannot leave.
+        if chebyshev(actor.position, player.position) <= 1:
+            actor.awake = True
+            state.say(f"The {actor.name} wakes.", LogKind.BAD)
+        else:
+            return False
     # THE FROZEN FORTRESS. While the wall stands, it is what everything on
     # the floor wants: the lure is read once, here, so no monster has its own
     # opinion about it. The hunter is included -- a wall of ice that the one

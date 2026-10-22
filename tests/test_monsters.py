@@ -204,3 +204,202 @@ def test_the_lid_is_in_the_queue_and_not_only_in_the_room():
     lid = state.encounter
     assert lid is not None and lid.name == "lid"
     assert lid in state.turn_queue, "the lid was never scheduled"
+
+
+# -- the ten that ask about the room ---------------------------------------
+def _battle(state, foes):
+    from neverdeads_revenge.game.battle import Battle
+
+    battle = Battle(state, foes)
+    battle.begin()
+    return battle
+
+
+def test_the_idle_sleeps_until_it_is_woken():
+    """A sleeper that acts is a monster you cannot leave. Hit it or stand by it."""
+    from neverdeads_revenge.game.actions import take_turn
+    from neverdeads_revenge.world.tiles import Tile
+
+    state = _run()
+    sleeper = _monster(state, "idle", "idle")
+    spot = (state.player.position[0] + 2, state.player.position[1])
+    state.dungeon_map.set_tile(spot, Tile.FLOOR)
+    sleeper.position = spot
+    state.refresh_vision()
+
+    assert take_turn(state, sleeper) is False, "the idle spent a turn asleep"
+    assert sleeper.awake is False
+
+    resolve_player_attack(state, sleeper)
+    assert sleeper.awake is True, "a blow did not wake it"
+
+
+def test_the_twin_that_is_left_stops_grieving():
+    from neverdeads_revenge.game.actions import _on_death
+    from neverdeads_revenge.game.actors import Stats
+
+    state = _run()
+    first = _monster(state, "twin", "twin")
+    second = _monster(state, "twin", "twin")
+    first.stats.max_hp = first.stats.hp = 40
+    low, high = first.stats.damage
+
+    _on_death(state, second)
+
+    assert first.stats.hp == first.stats.max_hp, "the survivor did not get up"
+    assert first.stats.damage == (low * 2, high * 2), "the survivor did not get angry"
+
+
+def test_the_debt_is_paid_by_the_next_room():
+    from neverdeads_revenge.game.actions import _on_death
+    from neverdeads_revenge.game.battle import encounter_around
+
+    state = _run()
+    debtor = _monster(state, "debt", "debt")
+    _on_death(state, debtor)
+    assert state.debt == 1, "the debt was cancelled by dying"
+
+    trigger = _monster(state, "ghoul", "ghoul")
+    low, high = trigger.stats.damage
+    group = encounter_around(state, trigger)
+
+    assert state.debt == 0, "the debt was never collected"
+    assert trigger in group
+    assert trigger.stats.damage == (low + 2, high + 2), "the room did not pay"
+
+
+def test_the_judge_reads_every_curse_aloud():
+    from neverdeads_revenge.game.actions import perform_action, Action
+    from neverdeads_revenge.game.curses import CURSES
+
+    state = _run()
+    state.add_curse(CURSES["wither"])
+    state.add_curse(CURSES["famine"])
+    judge = _monster(state, "judge", "judge")
+    judge.stats.hp = judge.stats.max_hp = 999
+    battle = _battle(state, [judge])
+    hp = state.player.hp
+
+    battle.choose("attack", judge)
+
+    assert state.player.hp <= hp - 2, "two curses cost less than two health"
+
+
+def test_the_leech_barely_feels_steel_and_comes_apart_at_a_wound():
+    from neverdeads_revenge.game.actions import inflict, tick_statuses
+    from neverdeads_revenge.game.actors import HEROES
+    from neverdeads_revenge.game.state import start_run
+
+    def one(template: str) -> int:
+        state = start_run(HEROES["noxx"], seed=3)
+        state.player.stats.accuracy = 99
+        foe = make_enemy(ENEMIES[template], state.player.position)
+        foe.stats.max_hp = foe.stats.hp = 999
+        state.enemies = [foe]
+        return resolve_player_attack(state, foe).damage
+
+    though = one("leech")
+    plain = one("ghoul")
+
+    assert though == max(1, round(plain * 0.25)), (though, plain)
+
+    state = _run()
+    leech = _monster(state, "leech", "leech")
+    leech.stats.max_hp = leech.stats.hp = 999
+    inflict(state, leech, ("bleed",), source=state.player)
+    before = leech.stats.hp
+    tick_statuses(state, leech)
+    assert before - leech.stats.hp == 4, "a bleed is not double on the leech"
+
+
+def test_the_quiet_keeps_the_bottle_corked():
+    from neverdeads_revenge.world.items import ITEMS, make_item
+
+    state = _run()
+    state.inventory.append(make_item(ITEMS["potion"]))
+    state.player.stats.hp = 5
+    quiet = _monster(state, "quiet", "quiet")
+    battle = _battle(state, [quiet])
+
+    battle.choose("item")
+
+    assert len(state.inventory) == 1, "the bottle was drunk anyway"
+
+
+def test_the_unbroken_never_swings_and_gives_half_back():
+    state = _run()
+    state.player.stats.accuracy = 99
+    stone = _monster(state, "unbroken", "unbroken")
+    stone.stats.max_hp = stone.stats.hp = 999
+
+    hp = state.player.hp
+    outcome = resolve_player_attack(state, stone)
+    assert state.player.hp == hp - max(1, round(outcome.damage * 0.5)), (
+        "the unbroken did not give half of it back"
+    )
+
+    from neverdeads_revenge.game.battle import Battle
+
+    hp = state.player.hp
+    battle = Battle(state, [stone])
+    events = battle.choose("attack", stone)
+    swung = [
+        event
+        for event in events
+        if getattr(event, "actor", None) is stone and type(event).__name__ == "Struck"
+    ]
+    assert not swung, "the unbroken swung at somebody"
+
+
+def test_the_eater_takes_a_wound_off_its_friend():
+    state = _run()
+    eater = _monster(state, "eater", "eater")
+    friend = _monster(state, "ghoul", "ghoul")
+    friend.stats.hp = friend.stats.max_hp = 999
+    friend.statuses["bleed"] = 5
+    friend.status_stacks["bleed"] = 2
+    eater.stats.hp = 10
+    battle = _battle(state, [eater, friend])
+
+    battle.choose("attack", friend)
+
+    assert friend.status_stacks.get("bleed") == 1, "the eater took no stack"
+    assert eater.stats.hp > 10, "the eater did not grow on it"
+
+
+def test_the_notary_bills_the_floor_and_is_fed_by_it():
+    from neverdeads_revenge.game.actions import _on_death
+
+    state = _run()
+    state.floor_kills = 5
+    notary = _monster(state, "notary", "notary")
+    notary.stats.hp = notary.stats.max_hp = 999
+    state.enemies = [notary]
+
+    from neverdeads_revenge.game.battle import Battle
+
+    Battle(state, [notary])
+    assert notary.stats.max_hp == 20, "the bill was not the floor's kills"
+
+    notary.stats.hp = 10
+    ghoul = make_enemy(ENEMIES["ghoul"], state.player.position)
+    state.enemies.append(ghoul)
+    _on_death(state, ghoul)
+    assert notary.stats.hp == 14, "a kill on the floor did not feed it"
+
+
+def test_the_reaver_takes_the_blade_and_gives_it_back():
+    from neverdeads_revenge.game.battle import Battle
+    from neverdeads_revenge.world.items import ITEMS, make_item
+
+    state = _run()
+    state.player.equipment["weapon"] = make_item(ITEMS["tooth"])
+    reaver = _monster(state, "reaver", "reaver")
+
+    battle = Battle(state, [reaver])
+    assert "weapon" not in state.player.equipment, "the reaver took nothing"
+
+    battle.begin()
+    battle._close_the_fight()
+
+    assert state.player.equipment["weapon"].item_id == "tooth", "the blade never came back"
