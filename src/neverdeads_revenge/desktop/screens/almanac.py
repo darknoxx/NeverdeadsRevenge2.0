@@ -89,7 +89,11 @@ class AlmanacScreen(Screen):
         #: Three places, and the arrows walk between them the way the page is
         #: laid out -- up out of the top of a list lands on the tabs, left and
         #: right cross between the names and the page.
-        self.focus = "list"
+        #:
+        #: It starts on the tabs, because the first question the book asks is
+        #: *which* book: a cursor already sitting in the chronicle's text assumes
+        #: an answer the player has not given yet.
+        self.focus = "tabs"
         #: The chronicle's scroll, and a cursor and page scroll per collection:
         #: the bestiary's and the armory's are different lists, and one cursor
         #: for both would jump a page every time the player changed books.

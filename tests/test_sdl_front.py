@@ -1304,6 +1304,10 @@ def test_the_arrows_walk_between_the_names_the_card_and_the_tabs():
     # A short frame, so the page is longer than the pane and can be scrolled.
     _page_text(screen, app, cols=80, rows=24)
 
+    assert screen.focus == "tabs", "the book did not open on its tabs"
+    app.key("down")
+    assert screen.focus == "list", "down from the tab row did not enter the book"
+
     app.key("right")
     assert screen.focus == "page", "right did not take the keyboard to the card"
 
@@ -1349,10 +1353,10 @@ def test_the_open_tab_is_lit_while_the_arrows_are_on_the_row():
             cell.char for row in buffer.cells for cell in row if cell.style.reverse
         )
 
-    assert "CHRONICLE" not in lit(), "the tab was lit while the arrows were in it"
+    assert "CHRONICLE" in lit(), "the tab row was not lit when the book opened"
 
-    screen.focus = "tabs"
-    assert "CHRONICLE" in lit(), "the tab row did not light up when it was reached"
+    screen.focus = "list"
+    assert "CHRONICLE" not in lit(), "the tab stayed lit while the arrows were in it"
 
     screen.tab = 1
     screen.focus = "tabs"
