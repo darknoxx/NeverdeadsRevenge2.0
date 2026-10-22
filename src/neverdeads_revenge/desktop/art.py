@@ -26,6 +26,7 @@ __all__ = [
     "ITEMS_DIR",
     "WEAPONS_DIR",
     "Placed",
+    "TITLE_ART",
     "exists",
     "path",
     "curse_icon",
@@ -51,6 +52,11 @@ ITEMS_DIR = SPRITES_DIR / "items"
 
 #: And the stone the rooms are made of.
 TILES_DIR = ART_ROOT / "tiles"
+
+#: The game's own name, painted. It used to be the block font, which is the
+#: alphabet the *dungeon* is drawn in -- a title is the one place the game is
+#: allowed to look like a thing somebody made rather than a thing that grew.
+TITLE_ART = "sprites/menu/title.png"
 
 
 @dataclass(frozen=True)

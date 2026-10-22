@@ -1,12 +1,21 @@
 """The title.
 
-A grim little menu: the name in the block font, a line under it that says what
-the game is about, and five things to do. The stack is a list of ``(key, label)``
-so the menu, the keys and the drawing cannot disagree about what is on it.
+A grim little menu: the painted name, the version under it, and six things to
+do. The stack is a list of ``(key, label)`` so the menu, the keys and the drawing
+cannot disagree about what is on it.
+
+The name is a *picture* and not the block font. The block letters are the
+dungeon's own alphabet -- the one the walls are made of -- and a title is the one
+place the game is allowed to look like something somebody painted. A checkout
+without the art still draws the old letters, because a menu that will not open
+because a PNG is missing is a menu that is not a menu.
 """
 
 from __future__ import annotations
 
+import math
+
+from ..art import TITLE_ART, Placed, exists as art_exists, size as art_size
 from ..blocks import render_word
 from ..chrome import ASH, BONE, BLOOD, PURPLE, rule
 from ..theme import parse_style
@@ -46,29 +55,39 @@ class TitleScreen(Screen):
 
     def draw(self, buffer, app) -> None:
         buffer.clear()
-        art = render_word("NEVERDEAD'S") + render_word("REVENGE")
         items = self.items(app)
 
         # Laid out from the *bottom*: the rules and the hint lines are what a
-        # player reads most, so they get their rows first and the big art makes
-        # do with what is left. The version number is only twice its weight when
-        # the screen can carry both it and the lines below.
+        # player reads most, so they get their rows first and the big picture
+        # makes do with what is left. The version is one line now that the name
+        # is painted, and the best score sits under it, both just above the rule.
         glass_y = buffer.rows - 2
         nav_y = buffer.rows - 3
         menu_y = buffer.rows - 5
         rule_y = buffer.rows - 6
-        version = render_word("2.0")
-        y = max(0, rule_y - len(art) - len(version) - 2)
+        cell_w, cell_h = self._cell(buffer)
+        piece = self._logo(buffer.cols, buffer.rows, cell_w, cell_h)
+        if piece is not None:
+            # The version and the best score are the last two lines of the same
+            # block as the painting, so they sit under it wherever it landed --
+            # and the whole block is centred in the room above the rule.
+            version_y = min(rule_y - 2, math.ceil(piece.bottom / cell_h))
+            best_y = min(rule_y - 1, version_y + 1)
+        else:
+            version_y = max(0, rule_y - 2)
+            best_y = max(0, rule_y - 1)
+            # No painting in this checkout: the alphabet underneath every
+            # picture in this game is still the alphabet.
+            alt = render_word("NEVERDEAD'S") + render_word("REVENGE")
+            y = max(0, version_y - len(alt) - 1)
+            for line in alt:
+                self._centre(buffer, y, line, f"bold {PURPLE}")
+                y += 1
 
-        for line in art:
-            self._centre(buffer, y, line, f"bold {PURPLE}")
-            y += 1
-        for line in version:
-            self._centre(buffer, y, line, "bold #c81e1e")
-            y += 1
+        self._centre(buffer, version_y, "2.0", "bold #c81e1e")
         best = app.progress.best_score
-        if best and y + 1 < rule_y - 1:
-            self._centre(buffer, y, f"best {best}", ASH)
+        if best:
+            self._centre(buffer, best_y, f"best {best}", ASH)
 
         rule(buffer, 2, rule_y, buffer.cols - 4, BLOOD)
         self._menu_line(buffer, menu_y, items, self.index)
@@ -79,6 +98,52 @@ class TitleScreen(Screen):
             "F11 screen   F2 scanlines   F3 bloom   F4 curve",
             ASH,
         )
+
+    # -- the painting --------------------------------------------------------
+    def art(self, app) -> list[Placed]:
+        """The name, painted, as large as the menu leaves room for.
+
+        Fitted to the *height* the screen can spare and then clipped by the
+        width, and never scaled above the size it was painted at: a title is the
+        one picture in this game that has to look like itself. Centred *with*
+        the version and the best score under it, as one block, in the room above
+        the rule -- so a tall window gives the lot air instead of floating the
+        name somewhere and pinning the version to the menu.
+        """
+        piece = self._logo(app.cols, app.rows, app.font.cell_w, app.font.cell_h)
+        return [piece] if piece is not None else []
+
+    @staticmethod
+    def _cell(buffer) -> tuple[int, int]:
+        """How wide a cell is, for a screen that may be drawn without a face.
+
+        Ten by twenty is the reference cell every panel in this game is laid out
+        for; a test frame has no font and the art still has to know where it
+        would go.
+        """
+        font = getattr(buffer, "font", None)
+        return (getattr(font, "cell_w", 10), getattr(font, "cell_h", 20))
+
+    @staticmethod
+    def _logo(cols: int, rows: int, cell_w: int, cell_h: int) -> Placed | None:
+        if not art_exists(TITLE_ART):
+            return None
+        measured = art_size(TITLE_ART)
+        if measured is None:
+            return None
+        width, height = measured
+        # Everything above the rule is the block's room: the painting, then the
+        # version and the best score, centred as one thing. The two lines keep
+        # their rows first, so a short window loses size and never the menu.
+        room = max(3 * cell_h, (rows - 6) * cell_h)
+        tall = min(height, room - 2 * cell_h)
+        widest = max(1, (cols - 4) * cell_w)
+        if tall * width / max(1, height) > widest:
+            tall = round(widest * height / max(1, width))
+        if tall < cell_h:
+            return None
+        top = max(0, (room - (tall + 2 * cell_h)) // 2)
+        return Placed(TITLE_ART, cols * cell_w / 2, top + tall, tall)
 
     def _menu_line(self, buffer, y, items, index) -> None:
         """The menu as one line, the chosen entry lit and bracketed.

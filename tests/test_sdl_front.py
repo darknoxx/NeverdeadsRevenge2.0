@@ -190,6 +190,63 @@ def test_the_same_screen_renders_without_qt_in_the_room():
     assert inked > 200, f"the title screen came out nearly empty: {inked} cells of ink"
 
 
+def test_the_title_is_the_painted_name_at_the_size_it_was_painted():
+    """The logo, not the block alphabet -- and never resampled larger.
+
+    The picture is 636 by 350, and a title that stretched it to fill a big window
+    would be the one place in this game where the art lies about itself.
+    """
+    from neverdeads_revenge.desktop.art import TITLE_ART, size
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3)
+    screen = app.screens[-1]
+    pieces = screen.art(app)
+    assert len(pieces) == 1, "the title asked for nothing to paint"
+    assert pieces[0].art == TITLE_ART
+    assert pieces[0].height == size(TITLE_ART)[1], "the name was scaled"
+
+
+def test_a_checkout_without_the_title_art_falls_back_to_the_letters(monkeypatch):
+    """The painting travels with the game, but the game is not the painting.
+
+    A frame with no title.png still has to open, and the alphabet underneath
+    every picture in this game is the block font.
+    """
+    from neverdeads_revenge.desktop.pattern import PatternBuffer
+    from neverdeads_revenge.desktop.screens import title as title_screen
+    from neverdeads_revenge.desktop.screens.title import TitleScreen
+
+    class Stub:
+        class Progress:
+            best_score = 0
+
+        progress = Progress()
+
+        def has_saved_run(self) -> bool:
+            return False
+
+    monkeypatch.setattr(title_screen, "art_exists", lambda _name: False)
+    grid = PatternBuffer(96, 27)
+    TitleScreen().draw(grid, Stub())
+    text = "".join(cell.char or " " for row in grid.cells for cell in row)
+    assert "█" in text, "the block letters did not come back"
+    assert TitleScreen().art(_StubWithFont()) == [], "a missing picture was announced"
+
+
+class _StubWithFont:
+    """Enough of an application for `art`: a grid and a face."""
+
+    cols = 96
+    rows = 27
+
+    class _Font:
+        cell_w = 10
+        cell_h = 20
+
+    font = _Font()
+
+
 def test_a_run_starts_and_the_hero_walks_with_no_qt_in_the_room():
     """The whole loop of the game, on SDL: choose a hero, begin, walk.
 
