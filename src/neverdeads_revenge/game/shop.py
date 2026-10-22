@@ -413,7 +413,7 @@ WILD_OFFERS: dict[str, WildOffer] = {
         key="grave_goods",
         name="grave goods",
         price=105,
-        pitch="grave iron in hand from the start",
+        pitch="the grave iron in hand from the start",
         catch="it is heavy, and it slows you down",
     ),
     "second_wind": WildOffer(

@@ -590,7 +590,7 @@ def test_a_deeper_chest_holds_the_top_of_its_tier():
         ]
         return sum(1 for template in rolls if template.key == key) / len(rolls)
 
-    # grave iron is the top of the blade ladder, the runed edge the bottom.
+    # the grave iron is the top of the blade ladder, the runed edge the bottom.
     assert share("grave", 9) > share("grave", 2) * 1.4
     assert share("edge", 9) < share("edge", 2)
     assert ITEMS["grave"].weight_growth > ITEMS["edge"].weight_growth

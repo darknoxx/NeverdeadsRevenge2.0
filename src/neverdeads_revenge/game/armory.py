@@ -12,7 +12,8 @@ Two rules of the book:
   merely saw.
 * **Alphabetical by the name without its article.** The blades are called "the
   ash kiss", "the blood price" and so on, and a catalogue sorted under T is a
-  catalogue nobody can use. `grave iron` is the one that had no article to lose.
+  catalogue nobody can use. Every blade is called "the something" now, and the
+  sort simply loses the article.
 """
 
 from __future__ import annotations
@@ -90,7 +91,7 @@ _PAGES: dict[str, tuple[str, str, str]] = {
         "A short dagger but still somehow balanced wrong - On purpose, so that every swing is a coin. It hits like a debt collector and misses like a rumour; the house finds this funny.",
     ),
     "grave": (
-        "grave iron",
+        "the grave iron",
         "The heaviest number a blade adds, and the heaviest price in turns. Yeti swings it like it was made for him.",
         "An old Zweihänder that was buried with its house. It hits like a falling wall and moves like one. Whatever it kills stays killed; whatever it misses has time to leave.",
     ),

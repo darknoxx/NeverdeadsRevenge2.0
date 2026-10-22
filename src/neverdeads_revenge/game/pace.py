@@ -34,7 +34,7 @@ ACTIONS_PER_SECOND = 6.0
 #: grows.
 MAX_ACTIONS_PER_SECOND = 20.0
 
-#: The slowest, so a hero carrying grave iron is heavy and not unusable.
+#: The slowest, so a hero carrying the grave iron is heavy and not unusable.
 MIN_ACTIONS_PER_SECOND = 3.0
 
 

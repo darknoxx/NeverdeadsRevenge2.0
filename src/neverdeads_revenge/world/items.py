@@ -692,14 +692,14 @@ ITEMS: dict[str, ItemTemplate] = {
         kind="weapon",
         slot="weapon",
         # The only blade that also defends. The strongest thing in the game that
-        # is not grave iron, and the one that asks nothing of you for it.
+        # is not the grave iron, and the one that asks nothing of you for it.
         modifiers=Modifiers(damage=5, armor=1),
         chest_only=True,
         weight_growth=1.12
     ),
     "grave": ItemTemplate(
         key="grave",
-        name="grave iron",
+        name="the grave iron",
         glyph=WEAPON_GLYPH,
         color=WEAPON_COLOR,
         kind="weapon",
