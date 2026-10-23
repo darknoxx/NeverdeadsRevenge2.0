@@ -913,6 +913,37 @@ def test_the_floor_shows_the_log_and_the_sidebar_on_the_second_front_end():
 
 
 
+def test_the_shop_counts_what_is_bought_of_the_permanent_shelf():
+    """The total beside the purse, and each row's own tally beside its name."""
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3, no_sound=True)
+    app.progress.upgrades = {"vigour": 3, "haste": 2}
+    app.open_shop()
+    screen = app.screens[-1]
+    text = _page_text(screen, app)  # the first draw stocks the shelf
+    assert "upgrades 5/40" in text, text[:400]
+
+    # Walk the cursor down to the permanence, which is below the supplies.
+    screen.index = next(
+        number for number, offer in enumerate(screen.offers) if offer.label == "Vigour"
+    )
+    text = _page_text(screen, app)
+    assert "(3/5)" in text, "Vigour's five are not counted"
+    assert "(3/5) " in text, "the tally runs into the price"
+    # A supply is not permanent and has no column of its own.
+    supplies = [
+        row
+        for row, _style, number in screen._rows(74)
+        if number is not None and screen.offers[number].section == "SUPPLIES"
+    ]
+    import re
+
+    assert supplies and all(
+        not re.search(r"\(\d+/\d+\)", row) for row in supplies
+    ), supplies
+
+
 def test_the_pack_is_a_belt_of_squares_at_the_foot_of_the_sidebar():
     """Two bought, five to come: the run's draughts, always in sight.
 

@@ -10,7 +10,14 @@ from __future__ import annotations
 from neverdeads_revenge.game.actions import drink, drop
 from neverdeads_revenge.game.gifts import gift_by_key
 from neverdeads_revenge.game.difficulty import ULTIMATE_LEVEL
-from neverdeads_revenge.game.shop import ShopError, WILD_OFFERS, build_stock, buy, describe_item
+from neverdeads_revenge.game.shop import (
+    ShopError,
+    WILD_OFFERS,
+    build_stock,
+    buy,
+    describe_item,
+    permanent_tally,
+)
 from neverdeads_revenge.world.items import ITEMS
 
 from ..art import Placed, weapon_icon
@@ -439,7 +446,15 @@ class ShopScreen(Screen):
             else:
                 style = f"bold {BONE}" if chosen else BONE
             tag = "►" if chosen else " "
-            rows.append((f"{tag} {offer.label:<26}{price:>7}", style, i))
+            # The permanence behind a row, where it can be counted: three of the
+            # five Vigour bought reads "3/5" beside the name. Wild offers have
+            # no column -- they are a run's bargain, not the shelf's.
+            tally = (
+                f"({offer.owned}/{offer.limit})"
+                if offer.section in ("UPGRADES", "BLOODLINES") and offer.limit
+                else ""
+            )
+            rows.append((f"{tag} {offer.label:<24}{tally:>7} {price:>7}", style, i))
             rows.append((f"      {offer.detail}", ASH, None))
         return rows
 
@@ -450,7 +465,15 @@ class ShopScreen(Screen):
         height = min(buffer.rows - 2, 24)
         x, y = (buffer.cols - width) // 2, (buffer.rows - height) // 2
         box(buffer, x, y, width, height, title="THE SHOP", border=BLOOD, fill=True)
-        buffer.text(x + 3, y + 1, f"Gold {app.progress.gold}", parse_style(f"bold {PURPLE}"))
+        purse = f"Gold {app.progress.gold}"
+        buffer.text(x + 3, y + 1, purse, parse_style(f"bold {PURPLE}"))
+        owned, total = permanent_tally(app.progress)
+        buffer.text(
+            x + 3 + len(purse) + 4,
+            y + 1,
+            f"upgrades {owned}/{total}",
+            parse_style(ASH),
+        )
 
         rows = self._rows(width)
         window = height - 6

@@ -51,6 +51,7 @@ __all__ = [
     "SECTIONS",
     "ShopError",
     "build_stock",
+    "permanent_tally",
     "buy",
     "describe_item",
     "AMULET_SLOTS",
@@ -577,6 +578,23 @@ def describe_item(template: ItemTemplate) -> str:
             described.append(f"leaves you {status.name}")
 
     return ", ".join(described) if described else "does nothing in particular"
+
+
+def permanent_tally(progress) -> tuple[int, int]:
+    """How many permanent stacks are bought, and how many can ever be.
+
+    The shop's whole shelf of permanence in one pair of numbers -- the bloodlines
+    included, because they are bought once and kept forever like the rest. Wild
+    offers are *not* counted: they are bargains for one run, and a total that
+    moved with them would be a total about a different thing.
+    """
+    owned = total = 0
+    for key, upgrade in META_UPGRADES.items():
+        if upgrade.wild:
+            continue
+        total += upgrade.max_stacks
+        owned += min(progress.upgrades.get(key, 0), upgrade.max_stacks)
+    return owned, total
 
 
 def build_stock(progress) -> list[Offer]:

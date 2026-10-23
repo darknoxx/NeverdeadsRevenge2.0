@@ -27,6 +27,7 @@ from neverdeads_revenge.game.shop import (
     buy,
     describe_item,
     loadout_from,
+    permanent_tally,
     roll_wild_stock,
 )
 from neverdeads_revenge.game.state import start_run
@@ -49,6 +50,30 @@ def offer_for(progress: MetaProgress, key: str):
 
 
 # -- the catalogue ----------------------------------------------------------
+def test_the_permanent_shelf_can_be_counted_at_a_glance():
+    """Bought stacks against the whole shelf -- bloodlines included, wilds not.
+
+    A wild offer is a bargain for one run, so counting it would make a total
+    about a different thing than permanence.
+    """
+    progress = MetaProgress()
+    owned, total = permanent_tally(progress)
+    assert owned == 0
+    assert total == sum(
+        upgrade.max_stacks
+        for upgrade in META_UPGRADES.values()
+        if not upgrade.wild
+    )
+
+    progress.upgrades = {"vigour": 2, "haste": 1}
+    assert permanent_tally(progress) == (3, total)
+
+    # Past the ceiling is the ceiling: a save that somehow holds six Vigour is
+    # still five of five, not six of forty.
+    progress.upgrades = {"vigour": 99}
+    assert permanent_tally(progress)[0] == META_UPGRADES["vigour"].max_stacks
+
+
 def test_every_shelf_is_on_the_shelf_in_order():
     """The screen draws sections in the order it is given them."""
     stock = build_stock(shop(0))

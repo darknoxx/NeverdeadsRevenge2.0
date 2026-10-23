@@ -155,6 +155,11 @@ what the purse cannot reach is drawn grey with the reason beside the price. The
 shelves are sectioned -- **supplies, gear, amulets, upgrades, wild offers** --
 and a purchase rings the till.
 
+Two counters keep the shelf honest. Beside the purse, **upgrades 5/40** is the
+whole permanent shelf bought so far -- the bloodlines included, wild offers not,
+because those are a run's bargain. And every permanent row carries its own
+**(3/5)**: the Vigour you hold against the Vigour there is.
+
 **Permanent upgrades** buy things that survive the run:
 
 | upgrade | price | what it does | stacks |
