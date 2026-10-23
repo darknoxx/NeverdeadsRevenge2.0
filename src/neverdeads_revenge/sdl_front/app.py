@@ -1303,6 +1303,8 @@ class SdlApp:
         # without a context can never grow one. Turning the scanlines back on
         # after starting with them off used to do nothing at all until the next
         # launch -- which is exactly how a player loses the CRT for good.
+        started_on = self._driver_name(pygame)
+        egl_started = bool(os.environ.get("SDL_VIDEO_X11_FORCE_EGL"))
         if self._try_glass(pygame, size, flags, base):
             return
         # The roads this machine has not been asked down yet, in the order worth
@@ -1311,13 +1313,26 @@ class SdlApp:
         # one is a fresh display and a real context; the first that draws wins,
         # and the game is playable on the ones that do not.
         for driver, egl in self._glass_roads(pygame):
-            self._restart_display(pygame, driver, egl)
+            if not self._restart_display(pygame, driver, egl):
+                continue
             if self._try_glass(pygame, size, flags, base):
                 return
+        if started_on and self._driver_name(pygame) != started_on:
+            # Every road was a dead end: go back to the display the machine had
+            # before it was asked, so the plain window is made where the game
+            # would have started in the first place.
+            self._restart_display(pygame, started_on, egl_started)
         self._window = pygame.display.set_mode(size, flags)
         self._fit()
         if self.show_timings or self.profile_seconds:
             print(f"crt      not available, plain blit: {self._glass_error}")
+
+    def _driver_name(self, pygame) -> str:
+        """Which SDL video driver this display is on, or "" when there is none."""
+        try:
+            return pygame.display.get_driver()
+        except pygame.error:
+            return ""
 
     def _glass_roads(self, pygame) -> list[tuple[str, bool]]:
         """The display servers worth trying after the first one failed.
@@ -1329,25 +1344,36 @@ class SdlApp:
         """
         if not sys.platform.startswith("linux"):
             return []
-        try:
-            on_x11 = pygame.display.get_driver() == "x11"
-        except pygame.error:
-            on_x11 = True
+        driver = self._driver_name(pygame)
+        # A headless display -- the test suite, a probe -- has no other road to
+        # take, and re-initialising it as x11 would take the display away from
+        # everything that runs after this.
+        if driver not in ("x11", "wayland", "kmsdrm"):
+            return []
         egl = bool(os.environ.get("SDL_VIDEO_X11_FORCE_EGL"))
-        if on_x11:
+        if driver == "x11":
             return [] if egl else [("x11", True)]
         return [("x11", True), ("x11", False)]
 
-    def _restart_display(self, pygame, driver: str, egl: bool) -> None:
-        """A clean display on a named driver, with the GL road chosen on purpose."""
-        pygame.display.quit()
-        os.environ["SDL_VIDEODRIVER"] = driver
-        if egl:
-            os.environ["SDL_VIDEO_X11_FORCE_EGL"] = "1"
-        else:
-            os.environ.pop("SDL_VIDEO_X11_FORCE_EGL", None)
-        pygame.display.init()
+    def _restart_display(self, pygame, driver: str, egl: bool) -> bool:
+        """A clean display on a named driver, with the GL road chosen on purpose.
+
+        False when the driver will not start at all, in which case there is
+        nothing to try on it and the caller moves to the next road.
+        """
+        try:
+            pygame.display.quit()
+            os.environ["SDL_VIDEODRIVER"] = driver
+            if egl:
+                os.environ["SDL_VIDEO_X11_FORCE_EGL"] = "1"
+            else:
+                os.environ.pop("SDL_VIDEO_X11_FORCE_EGL", None)
+            pygame.display.init()
+        except pygame.error:
+            self._window = None
+            return False
         self._window = None
+        return True
 
     def _try_glass(self, pygame, size, flags, base) -> bool:
         """One attempt at a window with a context, and the glass on top of it."""
