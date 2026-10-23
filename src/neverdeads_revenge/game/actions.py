@@ -279,10 +279,11 @@ def inflict(
     builds a wound rather than a damage multiplier, and three is the ceiling
     that keeps it one.
 
-    ``stacks`` is for the two rules that are not a second blow: the bloodline
-    that says how deep a crit's wound is, and the trick that says *three*. It
-    sets the depth rather than adding to it, because "how deep" is the sentence
-    those two are written in.
+    ``stacks`` is for the rules that are not a second blow: the bloodline that
+    says how deep a crit's wound is, and the trick that opens a vein for two.
+    It *adds* to whatever is already open, up to the ceiling -- a cut on a cut is
+    a deeper cut, and setting the depth instead meant that opening a vein on a
+    monster that was already bleeding twice did nothing at all.
 
     ``source`` is who caused it, and it exists for one rule: the amulets that
     deepen a *particular* wound. They work on what the hero leaves in somebody
@@ -309,7 +310,7 @@ def inflict(
             else 0
         )
         if stacks is not None:
-            depth = stacks
+            depth = target.status_stacks.get(key, 0) + stacks
         elif status.stackable:
             depth = target.status_stacks.get(key, 0) + 1
         else:

@@ -1494,6 +1494,47 @@ def test_a_first_kill_writes_a_page_once_the_room_is_quiet():
     assert type(app.screens[-1]).__name__ == "SdlArena", "the book did not close"
 
 
+def test_the_draught_is_drunk_before_the_monster_swings():
+    """Reported: "I drink, then the monster is up and the potion comes after".
+
+    The rules mend at the keypress, but the room's health bars are the
+    *playback's* -- a blow is seen before it is read -- and a drink had no moment
+    of its own on that clock. The bar stood still through the round and jumped at
+    the end, so the potion looked as if it had worked after the enemy's blow.
+    """
+    from neverdeads_revenge.sdl_front.app import SdlApp
+    from neverdeads_revenge.world.items import ITEMS, make_item
+
+    app = SdlApp(seed=3, battle_scene=True, no_sound=True)
+    arena = app.screens[-1]
+    state = arena.battle.state
+    state.inventory.append(make_item(ITEMS["potion"]))
+    state.player.stats.hp = 14
+    for one in arena.battle.enemies:
+        one.stats.hp = 999
+        one.stats.speed = 3.0
+
+    app.key("a")  # burn a round, so the room is due when the potion goes down
+    app.key("enter")
+    for _ in range(80):
+        app.tick(1 / 30.0)
+        if not arena.busy:
+            break
+
+    hero = state.player
+    app.key("i")
+    app.key("enter")
+    for _ in range(8):  # the drink's own beat, and not yet the room's turn
+        app.tick(1 / 30.0)
+
+    assert not any("attacks" in line.text for line in arena.arena.lines), (
+        "the monster spoke before the potion was read"
+    )
+    assert arena.arena._shown.get(id(hero), 0) > 14, (
+        "the bar did not move with the draught"
+    )
+
+
 def test_the_page_is_read_before_the_verdict_of_the_fight():
     """Reported: the card and the victory screen collided, and the page was lost.
 

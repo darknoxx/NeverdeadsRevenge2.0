@@ -26,6 +26,7 @@ import math
 from dataclasses import dataclass
 
 from ...game.battle import (
+    Mended,
     ATTACK,
     FLEE,
     ITEM,
@@ -1387,6 +1388,7 @@ class BattleScreen(Screen):
             self._late = [(when, line) for when, line in self._late if self._clock < when]
             for line in due:
                 self.lines = [*self.lines, line][-LOG_LINES:]
+                self._level_line(line, app)
         if self._showers:
             due = [one for one in self._showers if self._clock >= one[0]]
             self._showers = [one for one in self._showers if self._clock < one[0]]
@@ -1402,6 +1404,37 @@ class BattleScreen(Screen):
             ]
             for actor in due:
                 self._catching_up(actor)
+
+    def _delay_to_impact(self, line: Said) -> float | None:
+        """How long this line waits: until the *blow it belongs to* lands.
+
+        Not a flat beat. A killing blow writes several lines -- the kill, the
+        level, the kill points, the trick learned -- and the blow itself is played
+        after all of them, so a flat delay put four lines into the log and the
+        death a quarter of a second later. The wait walks the queue to the next
+        blow and adds up the beats it will take to get there.
+
+        ``None`` when there is no blow ahead at all: a line marked ``waits`` with
+        nothing to wait for is read like any other rather than held forever.
+        """
+        ahead = self._queue
+        cut = next((i for i, one in enumerate(ahead) if isinstance(one, Struck)), None)
+        if cut is None:
+            return None
+        between = sum(self._beat_for(one) for one in ahead[:cut])
+        return self._beat_for(line) + between + IMPACT_AT
+
+    def _level_line(self, line: Said, app) -> None:
+        """The one line in a fight that gets a picture of its own.
+
+        The arrow over his head, and the note that goes with it -- fired when the
+        *line* arrives rather than when it is queued. It used to fire at the
+        start of the line's beat, which put the arrow over the hero a good third
+        of a second before the killing blow had landed: the rules had worked out
+        the death and the room had not shown it yet.
+        """
+        if line.text.startswith("Level "):
+            self._level_up(app)
 
     @staticmethod
     def _beat_for(event) -> float:
@@ -1436,22 +1469,17 @@ class BattleScreen(Screen):
     def _play(self, event, app) -> None:
         """One event, on the screen and in the ear."""
         if isinstance(event, Said):
-            if event.text.startswith("Level "):
-                # The one line in a fight that gets a picture of its own: the
-                # arrow over his head, and the note that goes with it. The rules
-                # wrote it, and the rules do not know what a picture is.
-                self._level_up(app)
             # The log is the fight's voice, and its voice does not run ahead of
-            # its hands: a line that describes a blow *waits* for the blow, and
-            # turns up on the frame the sword does. Lines that are not about a
-            # blow -- a curse arriving, a hero setting his feet -- are read at
-            # once, because there is nothing for them to wait on.
-            follows = self._queue[0] if self._queue else None
-            if isinstance(follows, Struck):
-                waits = self._beat_for(event) + IMPACT_AT
-                self._late.append((self._clock + waits, event))
+            # its hands: a line the rules marked as the blow's *waits* for the
+            # blow, and turns up on the frame the sword does. Lines about
+            # anything else -- a draught, a retreat, a wound ticking -- are read
+            # at once, because there is nothing for them to wait on.
+            wait = self._delay_to_impact(event) if event.waits else None
+            if wait is not None:
+                self._late.append((self._clock + wait, event))
             else:
                 self.lines = [*self.lines, event][-LOG_LINES:]
+                self._level_line(event, app)
             return
         if isinstance(event, ShadowStruck):
             # The shadow went for somebody: the ghost over them, and -- if that
@@ -1543,6 +1571,12 @@ class BattleScreen(Screen):
             # here too gave the arena's deaths a doubled sting.
             self._victory_sound = "quest_complete" if event.won else "dash_roll"
             self._settle(app)
+            return
+        if isinstance(event, Mended):
+            # The draught on the bars' own clock: the rules mend at the keypress,
+            # and a bar that waited for the end of the round made the potion look
+            # as if it had worked after the monster's blow.
+            self._shown[id(event.actor)] = event.hp
             return
         if isinstance(event, Struck):
             self._took_a_turn(event.actor)

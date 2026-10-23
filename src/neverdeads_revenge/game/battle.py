@@ -87,6 +87,7 @@ __all__ = [
     "Battle",
     "Flourish",
     "Guarded",
+    "Mended",
     "Special",
     "Over",
     "Said",
@@ -121,6 +122,12 @@ class Said:
 
     text: str
     kind: LogKind = LogKind.PLAIN
+    #: Whether the line is about a blow that has not landed yet. The rules
+    #: resolve a whole turn at once, so a line written by a blow reaches the
+    #: screen before the sword does; ``waits`` is the rules saying "this one is
+    #: the blow's, read it when the blow lands". Lines about anything else -- a
+    #: draught, a step back -- are read when they happen.
+    waits: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -170,6 +177,22 @@ class ShadowStruck:
 
 
 @dataclass(frozen=True, slots=True)
+class Mended:
+    """A draught went down: how much of the drinker came back, and to what.
+
+    The bars in the room are the *playback's* and not the rules' -- a blow is
+    seen before it is read -- so a heal, which the rules apply at the keypress,
+    needs a moment of its own on that clock. Without one the bar stood still
+    through the whole round and the potion looked as if it had worked after the
+    monster's blow.
+    """
+
+    actor: Actor
+    healed: int
+    hp: int
+
+
+@dataclass(frozen=True, slots=True)
 class Guarded:
     """The hero set his feet: everything aimed at him this round is halved."""
 
@@ -185,7 +208,7 @@ class Over:
 
 
 #: Everything a fight can say to a screen.
-Event = Said | Struck | ShadowStruck | Flourish | Guarded | Over
+Event = Said | Struck | ShadowStruck | Flourish | Guarded | Mended | Over
 
 
 def open_fight(state: GameState, trigger: Actor | None = None) -> Battle | None:
@@ -851,7 +874,7 @@ class Battle:
             outcome = resolve_player_attack(
                 self.state, enemy, damage_scale=PLAIN_SWING, wield=True
             )
-            self._splice(before, events)
+            self._splice(before, events, waits=True)
             events.append(Struck(self.hero, enemy, outcome))
             return True
 
@@ -871,8 +894,19 @@ class Battle:
             # bottle is worth -- and the pack is where the bottle is.
             if self._hushed_drink():
                 return False
+            hp_before = self.hero.stats.hp
             result = perform_action(self.state, Action.QUAFF)
             self._splice(before, events)
+            if result.consumed_turn:
+                # The drink has its own moment: the bar must move *here*, in the
+                # order the round is read, or it moves at the end of it.
+                events.append(
+                    Mended(
+                        self.hero,
+                        self.hero.stats.hp - hp_before,
+                        self.hero.stats.hp,
+                    )
+                )
             return result.consumed_turn
 
         if command == FLEE:
@@ -977,7 +1011,7 @@ class Battle:
             # every trick a delivery service for the thing in his hand.
             wield=False,
         )
-        self._splice(before, events)
+        self._splice(before, events, waits=True)
         events.append(Struck(self.hero, enemy, outcome, flair=flair))
         return outcome
 
@@ -1488,7 +1522,7 @@ class Battle:
             self.state.say(
                 f"The cold comes off him onto the {attacker.name}.", LogKind.GOOD
             )
-        self._splice(before, events)
+        self._splice(before, events, waits=True)
         if outcome is not None:
             events.append(Struck(attacker, self.hero, outcome))
 
@@ -1533,7 +1567,13 @@ class Battle:
         self.state.in_fight = False
 
     # -- plumbing -----------------------------------------------------------
-    def _splice(self, before: int, events: list[Event]) -> None:
-        """Hand on everything the rules wrote into the log, in order."""
+    def _splice(self, before: int, events: list[Event], *, waits: bool = False) -> None:
+        """Hand on everything the rules wrote into the log, in order.
+
+        ``waits`` for the callers that are a *blow*: a hit's lines, and the
+        level a kill pays, are the blow's own sentence and are read when it
+        lands. Everything else -- a draught, a retreat, a wound ticking at the
+        start of a turn -- is read when it happens.
+        """
         for entry in self.state.log[before:]:
-            events.append(Said(text=entry.text, kind=entry.kind))
+            events.append(Said(text=entry.text, kind=entry.kind, waits=waits))

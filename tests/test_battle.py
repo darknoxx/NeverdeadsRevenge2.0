@@ -11,6 +11,7 @@ pays out on the map.
 from __future__ import annotations
 
 from neverdeads_revenge.game.actions import (
+    STACK_LIMIT,
     Action,
     advance_world,
     perform_action,
@@ -30,6 +31,7 @@ from neverdeads_revenge.game.battle import (
     Battle,
     Flourish,
     Guarded,
+    Mended,
     Over,
     Said,
     Struck,
@@ -1057,6 +1059,57 @@ def test_a_monster_that_bleeds_to_death_ends_the_fight_at_once():
     assert any(isinstance(event, Over) and event.won for event in events), (
         "no verdict was handed over"
     )
+
+
+def test_a_vein_opened_on_a_bleeding_monster_deepens_the_wound_to_the_cap():
+    """A cut on a cut is a deeper cut.
+
+    The trick used to *set* the depth to two, so opening a vein on a monster that
+    was already bleeding twice did nothing at all -- the most expensive way to
+    learn that the wound had a ceiling.
+    """
+    battle = levelled(5)
+    enemy = battle.enemies[0]
+    enemy.stats.hp = 999
+
+    battle.choose(SPECIAL, enemy, special=OPEN_VEIN)
+    assert enemy.status_stacks["bleed"] == 2
+
+    battle.choose(SPECIAL, enemy, special=OPEN_VEIN)
+    assert enemy.status_stacks["bleed"] == STACK_LIMIT, "the second vein did not add"
+
+    battle.choose(SPECIAL, enemy, special=OPEN_VEIN)
+    assert enemy.status_stacks["bleed"] == STACK_LIMIT, "the ceiling was passed"
+
+
+def test_the_kill_lines_wait_for_the_killing_blow():
+    """The log may not know the ending before the room has shown it.
+
+    A killing blow writes several lines -- the kill, the level, the kill points,
+    the trick learned -- and they are all the blow's sentence. The screen reads
+    them when the blow lands, so the level-up arrow cannot rise over a monster
+    that is still standing.
+    """
+    state = start_run(HEROES["noxx"], seed=7)
+    state.kills = 2
+    state.level = 1
+    from neverdeads_revenge.game.actors import ENEMIES, make_enemy
+
+    enemy = make_enemy(ENEMIES["ghoul"], (1, 1))
+    enemy.stats.hp = 1
+    state.enemies = [enemy]
+    state.turn_queue = type(state.turn_queue)([state.player, enemy])
+    battle = Battle(state, [enemy])
+    battle.begin()
+
+    events = battle.choose(ATTACK, enemy)
+
+    said = [event for event in events if isinstance(event, Said)]
+    level = [line for line in said if line.text.startswith("Level 2")]
+    assert level, "the kill did not pay a level"
+    assert all(line.waits for line in level), "the level line was read at the swing"
+    killed = [line for line in said if "kill" in line.text]
+    assert killed and all(line.waits for line in killed), "the kill line ran ahead"
 
 
 def test_the_open_vein_keeps_costing_him():
