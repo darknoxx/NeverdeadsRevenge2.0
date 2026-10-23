@@ -85,6 +85,17 @@ class DungeonMap:
     items: dict[Pos, GroundItem] = field(default_factory=dict)
     explored: set[Pos] = field(default_factory=set)
     visible: set[Pos] = field(default_factory=set)
+    #: What to *draw* per square, worked out once. Deciding whether a piece of
+    #: void reads as wall means looking at all eight neighbours -- and a viewport
+    #: is mostly void, so the overworld was doing that for two thousand squares
+    #: on every frame it painted. The answer is a fact about this map, not about
+    #: this frame; ``set_tile`` is the only thing that can change it.
+    _display: dict[Pos, Tile] = field(
+        default_factory=dict,
+        repr=False,
+        compare=False,
+        metadata={"saved": False},
+    )
 
     def __post_init__(self) -> None:
         if not self.tiles:
@@ -115,6 +126,9 @@ class DungeonMap:
     def set_tile(self, pos: Pos, tile: Tile) -> None:
         if self.in_bounds(pos):
             self.tiles[self._index(pos)] = tile.value
+            # A square changed, and its neighbours' *appearance* may have: one
+            # cleared cell beside a run of void can turn eight walls into rock.
+            self._display.clear()
 
     # -- movement -----------------------------------------------------------
     def is_walkable(self, pos: Pos) -> bool:
@@ -150,9 +164,13 @@ class DungeonMap:
         It lives here rather than in either screen because both of them draw the
         same dungeon and neither of them should be the one that knows.
         """
+        known = self._display.get(pos)
+        if known is not None:
+            return known
         tile = self.tile_at(pos)
         if tile is Tile.VOID and self._touches_walkable(pos):
-            return Tile.WALL
+            tile = Tile.WALL
+        self._display[pos] = tile
         return tile
 
     def _touches_walkable(self, pos: Pos) -> bool:

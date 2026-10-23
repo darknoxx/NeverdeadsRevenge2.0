@@ -30,7 +30,7 @@ from neverdeads_revenge.world.items import (
 )
 from neverdeads_revenge.world.tiles import Tile
 
-from .pattern import PatternBuffer
+from .pattern import BLANK, PatternBuffer
 from .chrome import ASH, rule
 from ..game.difficulty import BASE_PACK_SLOTS
 from ..game.shop import META_UPGRADES
@@ -300,7 +300,7 @@ def _cell_content(position, state: GameState) -> tuple[str, Style]:
         or tile in (Tile.STAIRS_DOWN, Tile.RIFT, Tile.SPRING)
     ):
         return tile.glyph, parse_style("grey30")
-    return " ", Style()
+    return " ", BLANK
 
 
 # -- the sidebar --------------------------------------------------------------

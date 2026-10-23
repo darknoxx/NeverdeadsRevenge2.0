@@ -93,8 +93,14 @@ def _encode(value: Any) -> Any:
         return {
             "!type": type(value).__name__,
             "fields": {
+                # A field may say it is not part of the save: the map remembers
+                # what each square looks like, which is a fact about a frame and
+                # not about the dungeon, and writing it down would both bloat the
+                # file and ask the codec to rebuild an enum it deliberately does
+                # not know.
                 field.name: _encode(getattr(value, field.name))
                 for field in fields(value)
+                if field.metadata.get("saved", True)
             },
         }
     if isinstance(value, tuple):

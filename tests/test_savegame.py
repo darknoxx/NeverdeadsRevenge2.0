@@ -99,6 +99,10 @@ def assert_same(left, right, path: str = "") -> None:
     if is_dataclass(left) and not isinstance(left, type):
         assert type(left) is type(right), f"{path}: {type(left)} vs {type(right)}"
         for field in fields(left):
+            if not field.metadata.get("saved", True):
+                # Not in the save, so not in the comparison: a frame's own memory
+                # of what a square looks like comes back empty, on purpose.
+                continue
             assert_same(
                 getattr(left, field.name), getattr(right, field.name),
                 f"{path}.{field.name}",
@@ -121,6 +125,26 @@ def assert_same(left, right, path: str = "") -> None:
 
 
 # -- the round trip ----------------------------------------------------------
+def test_a_floor_that_has_been_drawn_still_saves():
+    """What a square *looks* like is a fact about a frame, not about the dungeon.
+
+    The map remembers the display tile of every square it has ever drawn -- that
+    is what keeps the overworld from asking eight neighbours about two thousand
+    squares a frame. That memory is not part of the save: written down it would
+    bloat the file and ask the codec to rebuild a tile enum it deliberately does
+    not carry. This draws the floor first, so the cache is full when it is saved.
+    """
+    state = a_busy_run()
+    dungeon = state.dungeon_map
+    for y in range(dungeon.height):
+        for x in range(dungeon.width):
+            dungeon.display_tile((x, y))
+
+    reloaded = load(json.loads(json.dumps(dump(state))))
+
+    assert_same(state, reloaded)
+
+
 def test_a_whole_run_comes_back_field_for_field():
     """The test that makes the generic codec safe."""
     state = a_busy_run()
