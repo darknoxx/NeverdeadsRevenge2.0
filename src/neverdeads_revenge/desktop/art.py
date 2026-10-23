@@ -174,14 +174,27 @@ def exists(name: str) -> bool:
     Asked by the screens that draw a letter when the sheets have nothing for a
     hero: a card that promises a figure and then shows a blank band is a card
     that lied, and the alphabet is what is underneath every picture in this game.
+
+    Cached like :func:`size`, and for the same reason: the fight asks it on every
+    frame for every figure, and the answer is a fact about a file that does not
+    change while the game runs. On a desk a stat is nothing; on a mounted image
+    it is a trip through a userspace daemon, and there were a dozen a frame.
     """
-    return path(name).exists()
+    address = path(name)
+    known = _EXISTS.get(address)
+    if known is None:
+        known = address.exists()
+        _EXISTS[address] = known
+    return known
 
 
 #: The sizes already read, by path. The answer is a fact about a file that never
 #: changes under a running game, and this is asked per *frame* -- a full read of a
 #: half-megabyte backdrop sixty times a second was a millisecond nobody needed.
 _SIZES: dict[Path, tuple[int, int]] = {}
+
+#: And which of them are there at all: the same fact, the same reason.
+_EXISTS: dict[Path, bool] = {}
 
 
 def size(name: str) -> tuple[int, int] | None:
