@@ -279,7 +279,7 @@ the glass itself.
 | `enter` | interact: loot, stairs, spring, chest, or speak |
 | `>` | take the stairs down |
 | `q` | drink the cheapest draught that covers the wound |
-| `i` | the pack -- `↑↓` choose, `enter` drink it, `x` set it down |
+| `i` | the pack -- `↑↓` choose, `enter` drink it, `x` set it down (**X** on a pad) |
 | `l` | the legend of glyphs |
 | `f` | the hero's ultimate, once a floor (see above) |
 | `c` | the hero sheet |
@@ -301,7 +301,7 @@ the pad rumbles when a blow lands.
 | left stick / D-pad | walk (eight directions) | aim and lists | navigate |
 | **A** | the one useful thing | confirm the marked verb | confirm / buy |
 | **B** | the pack | back one level | back |
-| **X** | the ultimate | the tricks | -- |
+| **X** | the ultimate | the tricks | set a bottle down (pack) |
 | **Y** | drink | the draught | -- |
 | **LB / RB** | sheet / legend | previous / next target | previous / next tab |
 | **LT / RT** | -- | -- | page up / down |

@@ -22,6 +22,7 @@ from neverdeads_revenge.world.items import ITEMS
 
 from ..art import Placed, weapon_icon
 from ..chrome import ASH, BONE, BLOOD, PURPLE, box, menu, rule
+from ..padmap import PACK as PACK_MAP
 from ..theme import parse_style
 from .base import Screen
 
@@ -169,7 +170,12 @@ class PackScreen(_Panel):
     """
 
     title = "THE PACK"
+    PAD = PACK_MAP
     hint = "↑↓  enter drink  x drop  esc close"
+    #: The same line in the buttons a pad has. Not the buffer's usual word swap:
+    #: ``x`` has no pad name, and a hint that says "x" to somebody holding a
+    #: controller is a hint about a keyboard.
+    pad_hint = "↑↓  A drink  X drop  B close"
 
     def __init__(self, state) -> None:
         super().__init__()
@@ -236,7 +242,9 @@ class PackScreen(_Panel):
         for i, (text, style, _id) in enumerate(rows[self.offset : self.offset + window]):
             buffer.text(x + 3, y + 2 + i, text[: width - 6], parse_style(style))
         rule(buffer, x + 1, y + height - 2, width - 2, ASH)
-        line = self.message or self.hint
+        line = self.message or (
+            self.pad_hint if getattr(buffer, "pad", False) else self.hint
+        )
         more = "  ▼" if self.offset + window < len(rows) else ""
         buffer.text(x + 3, y + height - 1, (line + more)[: width - 6], parse_style(ASH))
 

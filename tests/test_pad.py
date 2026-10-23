@@ -385,6 +385,30 @@ def test_the_alphabet_on_the_card_does_not_take_the_keyboard_away():
     assert type(app.screens[-1]).__name__ != "NameEntryScreen", "enter did not keep it"
 
 
+def test_x_sets_a_bottle_down_from_the_pack():
+    """The pack's one other verb had no button. X is the drop, as `x` is."""
+    from neverdeads_revenge.desktop.padmap import PACK
+    from neverdeads_revenge.desktop.screens.menus import PackScreen
+    from neverdeads_revenge.world.items import ITEMS, make_item
+
+    assert PACK["west"] == "x", "the pad's X is not the pack's drop"
+
+    app, stick = _app_with_pad()
+    app.begin_run("noxx")
+    if type(app.screens[-1]).__name__ == "PrologueScreen":
+        app.key("escape")
+    app.key("i")
+    screen = app.screens[-1]
+    assert isinstance(screen, PackScreen), type(screen).__name__
+
+    app.run.inventory.append(make_item(ITEMS["potion"]))
+    before = len(app.run.inventory)
+    assert before, "the pack started empty"
+    _press(app, stick, 2)  # X: set the bottle down
+    assert len(app.run.inventory) == before - 1, "X did not set the bottle down"
+    assert screen.message, "the pack said nothing about it"
+
+
 # -- the hints --------------------------------------------------------------
 def test_hints_speak_the_pads_language_when_the_pad_spoke_last():
     grid = PatternBuffer(80, 10)

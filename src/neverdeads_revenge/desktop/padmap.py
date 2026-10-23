@@ -29,6 +29,7 @@ __all__ = [
     "PAUSE",
     "SETTINGS",
     "CHEST",
+    "PACK",
     "CONFIRM",
     "TALLY",
     "NAME_ENTRY",
@@ -111,6 +112,12 @@ PAUSE = _map(back="a")
 
 #: The settings: A toggles, B leaves.
 SETTINGS = _map(east="escape", start="escape", back="escape")
+
+#: The pack: A drinks, X sets the bottle down, B closes. X is the floor's big
+#: trick and here the pack's one other verb -- the bottle in the hand, put down --
+#: which is the same kind of thing: the button a player already reaches for when
+#: they mean "do the other thing with this".
+PACK = _map(south="enter", east="escape", west="x", start="escape", back="escape")
 
 #: A chest asks its three questions: pay and take, pay and leave, walk away.
 CHEST = _map(south="enter", west="f", east="escape", back="escape")
