@@ -141,6 +141,7 @@ class SdlApp:
         fps: bool = False,
         timings: bool = False,
         backdrop: bool = True,
+        fullscreen: bool = True,
     ) -> None:
         import pygame
 
@@ -269,6 +270,12 @@ class SdlApp:
         #: Whether the window loop should keep going. Only ``quit`` clears it --
         #: there is no window object to ask on this front end.
         self._running = True
+        #: Whether the window opens on the whole screen, with the grid taken from
+        #: the display. On by default, because a game that opens in a window the
+        #: size of *another* screen -- 960x540 on a Deck, 1920x1080 on a laptop --
+        #: is a game that has to be resized before it can be played. ``--windowed``
+        #: asks for the old behaviour, which is what a developer window wants.
+        self.fullscreen_start = fullscreen
         if battle_scene:
             self.open_battle_scene()
 
@@ -1151,6 +1158,12 @@ class SdlApp:
         if not pygame.display.get_init():
             pygame.init()
         desktop = pygame.display.get_desktop_sizes()
+        if self.fullscreen_start and desktop:
+            cols, rows = self._grid_size(*desktop[0])
+            mode = f"full screen {desktop[0][0]}x{desktop[0][1]} = {cols}x{rows} cells"
+        else:
+            width, height = self._buffer_size()
+            mode = f"windowed {width * self.scale}x{height * self.scale}"
         try:
             surface = pygame.display.get_surface()
             drawable = surface.get_size() if surface is not None else None
@@ -1159,6 +1172,7 @@ class SdlApp:
         grid = self._grid_size(self.cols * self.font.cell_w, self.rows * self.font.cell_h)
         return [
             f"platform      {sys.platform}",
+            f"start mode    {mode}",
             f"dpi scale     {self._dpi():.2f}",
             f"desktop       {desktop}",
             f"drawable      {drawable}",
@@ -1180,8 +1194,23 @@ class SdlApp:
         """
         import pygame
 
+        flags = 0
+        if self.fullscreen_start:
+            # The display is the size, and the grid is taken from it. On a 1280x800
+            # Deck this comes out at exactly 128x40 cells with no bars; on a
+            # 1920x1080 desktop at 96x27 with the picture doubled. The old start
+            # was a fixed 1920x1080 window, which is a window the size of a
+            # monitor the player may not have.
+            desktop = pygame.display.get_desktop_sizes()[0]
+            self.cols, self.rows = self._grid_size(*desktop)
+            self.scale = self._scale_for(*desktop)
+            size = desktop
+            flags = pygame.FULLSCREEN
+            self._fullscreen = True
+        else:
+            base = self._buffer_size()
+            size = (base[0] * self.scale, base[1] * self.scale)
         base = self._buffer_size()
-        size = (base[0] * self.scale, base[1] * self.scale)
         if self.crt.scanlines or self.crt.bloom or self.crt.geometry:
             try:
                 import moderngl
@@ -1193,7 +1222,7 @@ class SdlApp:
                     pygame.GL_CONTEXT_MINOR_VERSION, 1
                 )
                 self._window = pygame.display.set_mode(
-                    size, pygame.OPENGL | pygame.DOUBLEBUF
+                    size, pygame.OPENGL | pygame.DOUBLEBUF | flags
                 )
                 from .glass import SdlGlass
 
@@ -1207,7 +1236,7 @@ class SdlApp:
                 return
             except Exception:
                 self.glass = None
-        self._window = pygame.display.set_mode(size)
+        self._window = pygame.display.set_mode(size, flags)
         self._fit()
 
     def _toggle_fullscreen(self) -> None:

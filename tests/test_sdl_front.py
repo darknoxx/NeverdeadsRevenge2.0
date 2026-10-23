@@ -2795,6 +2795,45 @@ def test_a_new_screen_wants_a_fresh_press():
     assert type(app.screens[-1]).__name__ == "GameScreen", "a fresh hold did not work"
 
 
+def test_the_window_opens_on_the_whole_screen_with_the_display_s_grid(monkeypatch):
+    """A game that opens at another screen's size has to be resized to be played.
+
+    On a 1280x800 Deck the old fixed 1920x1080 window was clipped. The start is
+    now the display's own size, and the grid is worked out from it -- 128x40,
+    which is a cell for every pixel and no bars.
+    """
+    import pygame
+
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3, no_sound=True, fullscreen=True)
+    monkeypatch.setattr(pygame.display, "get_desktop_sizes", lambda: [(1280, 800)])
+    # A full-screen window *is* the display; the dummy driver would otherwise
+    # report whatever mode an earlier test left behind.
+    monkeypatch.setattr(pygame.display, "get_window_size", lambda: (1280, 800))
+
+    app._open_window()
+
+    assert (app.cols, app.rows) == (128, 40), "the grid did not come from the display"
+    assert app.fullscreen is True, "the game opened in a window"
+    assert app._shown == (1280, 800), "the picture did not fill the display"
+
+
+def test_windowed_keeps_the_grid_it_was_given(monkeypatch):
+    import pygame
+
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3, no_sound=True, cols=96, rows=27, scale=1, fullscreen=False)
+    monkeypatch.setattr(pygame.display, "get_desktop_sizes", lambda: [(1280, 800)])
+    monkeypatch.setattr(pygame.display, "get_window_size", lambda: (960, 540))
+
+    app._open_window()
+
+    assert (app.cols, app.rows) == (96, 27), "--windowed was overruled"
+    assert app.fullscreen is False
+
+
 def test_the_grid_comes_from_the_window_like_the_qt_build(monkeypatch):
     """A 1440p screen full of dungeon instead of two bars: the Qt build's rule.
 
@@ -2812,6 +2851,7 @@ def test_the_grid_comes_from_the_window_like_the_qt_build(monkeypatch):
     app = SdlApp(seed=3, no_sound=True)
     for size, scale, grid in (
         ((960, 540), 1, (96, 27)),  # the window both front ends start with
+        ((1280, 800), 1, (128, 40)),  # the Steam Deck, exactly
         ((1920, 1080), 2, (96, 27)),
         ((2560, 1440), 2, (128, 36)),  # the one that used to be two black bars
         ((1366, 768), 1, (136, 38)),

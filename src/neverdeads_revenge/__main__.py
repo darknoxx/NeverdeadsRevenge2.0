@@ -79,7 +79,12 @@ def main(argv: list[str] | None = None) -> int:
         type=int,
         default=1,
         metavar="N",
-        help="how many screen pixels per game pixel (default 1)",
+        help="how many screen pixels per game pixel, windowed only (default 1)",
+    )
+    parser.add_argument(
+        "--windowed",
+        action="store_true",
+        help="open in a window instead of the whole screen",
     )
     args = parser.parse_args(argv)
 
@@ -99,6 +104,7 @@ def main(argv: list[str] | None = None) -> int:
             scale=args.scale,
             no_sound=True,
             backdrop=not args.no_backdrop,
+            fullscreen=not args.windowed,
         ).display_report():
             print(line)
         return 0
@@ -118,6 +124,9 @@ def main(argv: list[str] | None = None) -> int:
         fps=args.fps,
         timings=args.timings,
         backdrop=not args.no_backdrop,
+        # The whole screen, with the grid taken from the display: a game that
+        # opens at another monitor's size has to be resized before it is played.
+        fullscreen=not args.windowed,
     )
     window.open_window()
     return 0
