@@ -24,15 +24,20 @@ import re
 from dataclasses import dataclass
 from typing import Iterator
 
-from .theme import Style
+from .theme import Style, style_on
 
 __all__ = ["Cell", "PatternBuffer"]
+
+#: The style of an empty cell, shared by every one of them: a `Style` is frozen,
+#: so one object is safe, and a grid that made five thousand of them a frame was
+#: five thousand objects to compare and collect.
+BLANK = Style()
 
 
 @dataclass(slots=True)
 class Cell:
     char: str = " "
-    style: Style = Style()
+    style: Style = BLANK
 
 
 #: The words that name a *key*, and what the same gesture is called on a pad.
@@ -99,10 +104,7 @@ class PatternBuffer:
                 # not lift the panel out from under the writing: the text keeps
                 # the background the square had, which is why the words in a
                 # menu read on the panel and not on a stripe of black.
-                new = Style(
-                    fg=new.fg, bg=cell.style.bg, bold=new.bold, dim=new.dim,
-                    reverse=new.reverse, italic=new.italic,
-                )
+                new = style_on(new, cell.style.bg)
             cell.char = char
             cell.style = new
 
@@ -125,20 +127,34 @@ class PatternBuffer:
             self.put(x, y, char, style)
 
     # -- reading ------------------------------------------------------------
-    def runs(self) -> Iterator[tuple[int, int, list[Cell]]]:
+    def runs(self, first: int = 0, last: int | None = None) -> Iterator[tuple[int, int, list[Cell]]]:
         """Every row as runs of same-styled cells: ``(x, y, the run)``.
 
         The unit both painters draw in. Qt draws a string faster than a string
         of one character many times, and a blitter draws one strip of a texture
         faster than the same strip in pieces -- so the run is the thing worth
         finding once rather than twice.
+
+        ``first`` and ``last`` are rows, for a painter that wants one band: the
+        fight's menu is painted *over* the room's art, and walking three
+        thousand cells to find the twenty rows of a box was most of what that
+        second pass cost.
         """
-        for y, row in enumerate(self.cells):
+        stop = self.rows if last is None else min(self.rows, last)
+        for y in range(max(0, first), stop):
+            row = self.cells[y]
             x = 0
             while x < self.cols:
                 style = row[x].style
                 end = x + 1
-                while end < self.cols and row[end].style == style:
+                # Identity first and equality second: a row is written a string
+                # at a time, so the cells of one run usually hold the *same*
+                # Style object -- and six field comparisons per cell was the
+                # largest piece of Python in the frame.
+                while end < self.cols:
+                    other = row[end].style
+                    if other is not style and other != style:
+                        break
                     end += 1
                 yield x, y, row[x:end]
                 x = end

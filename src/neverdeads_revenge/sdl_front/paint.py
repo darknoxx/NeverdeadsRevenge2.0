@@ -86,9 +86,7 @@ def paint(grid: PatternBuffer, font: SdlFont, background=BACKGROUND, rows=None) 
     elif background is not None:
         surface.fill(background)
 
-    for x, y, run in grid.runs():
-        if not first <= y < last:
-            continue
+    for x, y, run in grid.runs(first, last):
         style = run[0].style
         left = x * font.cell_w
         top = (y - first) * font.cell_h

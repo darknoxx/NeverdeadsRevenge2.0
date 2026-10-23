@@ -254,6 +254,17 @@ class SdlApp:
         self._window = None
         self._surface = None
         self._last_frame: float | None = None
+        #: Whether the picture on the screen is out of date. The game is
+        #: turn-based, so between a key and its answer *nothing moves*: a frame
+        #: that redraws the same room sixty times a second is sixty times the
+        #: work for a picture nobody asked to change. Screens that animate (a
+        #: fight, the prologue's hold bar, a shake) say so themselves, and this
+        #: flag is what carries an input across to the next repaint.
+        self._dirty = True
+        self._painted_at = 0.0
+        #: Frames actually painted, for the timings report: with a still picture
+        #: skipped, "fps" alone would not say how much drawing was done.
+        self._painted = 0
         #: Whether the window is the whole screen, and where the picture sits in
         #: whatever size the window has now. Both move on F11 and on a resize.
         self._fullscreen = False
@@ -774,10 +785,28 @@ class SdlApp:
         self._last_frame = now
         self._poll_pad(dt)
         screen = self.screens[-1]
-        if getattr(screen, "busy", False) or getattr(screen, "animating", False):
+        #: A screen with something playing -- a fight breathing, a hold bar
+        #: filling -- has a picture that changes without a key, so it is stepped
+        #: and repainted every frame. Everything else is a still life between
+        #: presses, and repainting it is the work this game does not need to do.
+        playing = bool(
+            getattr(screen, "busy", False) or getattr(screen, "animating", False)
+        )
+        if playing:
             screen.step(dt, self)
-        self.effects.step(dt)
-        self.redraw()
+        if self.effects.step(dt):
+            self._dirty = True
+        if self.glass_note is not None and now > self.glass_note[1]:
+            # The note has had its two seconds: the frame it is standing on has
+            # to be drawn again for it to come off.
+            self.glass_note = None
+            self._dirty = True
+        if self.show_fps and now - self._painted_at >= 0.5:
+            # A counter that only moves when the player does is a counter that
+            # lies about the machine. Twice a second is enough to read it.
+            self._dirty = True
+        if playing or self._dirty:
+            self.redraw()
         self._report_timings(time.monotonic())
 
     def redraw(self) -> None:
@@ -838,6 +867,7 @@ class SdlApp:
         self._surface = paint(self.grid, self.font, base)
         mark = self._note("paint", mark)
         self._small_face()
+        mark = self._note("small", mark)
         # And a screen may paint straight onto the frame once the grid is drawn:
         # that is where the art lives -- sprites do not fit in a character cell.
         # It is called `paint_over` and not `paste`, which is Qt's name for the
@@ -852,10 +882,15 @@ class SdlApp:
         # happened, drawn last so they land on top of everything.
         self.effects.draw(self._surface)
         self._draw_note()
+        mark = self._note("effects", mark)
         if self.show_fps:
             self._draw_fps()
         self._present()
         self._note("present", mark)
+        #: The picture is the screen's own from here until something changes it.
+        self._dirty = False
+        self._painted_at = time.monotonic()
+        self._painted += 1
 
     def _note(self, name: str, mark: float) -> float:
         """Book the milliseconds since ``mark`` under ``name``, and pass it on.
@@ -887,7 +922,11 @@ class SdlApp:
         done = sum(
             spent / frames * 1000.0 for spent, frames in self._timing.values() if frames
         )
-        print(f"{self.frames:5.1f} fps   {parts}   ({done:.2f} ms drawn)")
+        painted, self._painted = self._painted, 0
+        print(
+            f"{self.frames:5.1f} fps  {painted:3d} painted/s   "
+            f"{parts}   ({done:.2f} ms a painted frame)"
+        )
         self._timing.clear()
 
     def _small_face(self) -> None:
@@ -1331,15 +1370,22 @@ class SdlApp:
             )
             pygame.display.flip()
             return
-        surface.fill((0, 0, 0))
-        scaled = pygame.transform.scale(
-            self._surface,
-            (self._surface.get_width() * fit, self._surface.get_height() * fit),
-        )
-        surface.blit(
-            scaled,
-            (self._shown_at[0] + offset[0] * fit, self._shown_at[1] + offset[1] * fit),
-        )
+        # A whole-number fit of one -- the Deck's 1280x800, and any window that
+        # is exactly its own grid -- needs no scaling at all: `scale` would copy
+        # a megabyte to hand back the same pixels, and a fill would paint over
+        # the picture before it went down. Between the two that was most of what
+        # presenting a frame cost on a machine this game should run on.
+        shown = (self._surface.get_width() * fit, self._surface.get_height() * fit)
+        at = (self._shown_at[0] + offset[0] * fit, self._shown_at[1] + offset[1] * fit)
+        if shown != surface.get_size() or at != (0, 0):
+            # Something will be left bare -- bars, or the edge the shake pulled
+            # the picture away from -- so the frame underneath is cleared.
+            surface.fill((0, 0, 0))
+        if shown == self._surface.get_size():
+            scaled = self._surface
+        else:
+            scaled = pygame.transform.scale(self._surface, shown)
+        surface.blit(scaled, at)
         pygame.display.flip()
 
     # -- the pad ------------------------------------------------------------
@@ -1452,6 +1498,9 @@ class SdlApp:
             }[turned]
             + (" ON" if getattr(self.crt, turned) else " OFF")
         )
+        # The frame is still a still life between inputs now, so the toggle has
+        # to ask for the repaint itself.
+        self.redraw()
         return True
 
     def _note_glass(self, note: str) -> None:

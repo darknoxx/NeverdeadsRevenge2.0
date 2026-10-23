@@ -122,8 +122,14 @@ class SdlEffects:
             )
 
     # -- the clock ----------------------------------------------------------
-    def step(self, dt: float) -> None:
-        """A frame went by: the pixels moved, and the glass stopped shaking."""
+    def step(self, dt: float) -> bool:
+        """A frame went by: the pixels moved, and the glass stopped shaking.
+
+        Returns whether anything *was* moving, so a painter can leave a still
+        frame alone: a game that redraws a quiet room sixty times a second is a
+        game spending a core on the same picture.
+        """
+        moving = bool(self.particles) or self._left > 0
         alive: list[Particle] = []
         for one in self.particles:
             one.life -= dt
@@ -138,6 +144,7 @@ class SdlEffects:
             self._left = max(0.0, self._left - dt)
             if self._left == 0.0:
                 self._shake = 0.0
+        return moving
 
     def draw(self, surface) -> None:
         """The field, on the frame, in the buffer's own chunky pixels."""

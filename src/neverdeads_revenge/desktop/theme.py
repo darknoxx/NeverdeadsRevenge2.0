@@ -22,6 +22,7 @@ already read a colour had to be told about the change.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import NamedTuple
 
 __all__ = ["Colour", "Style", "as_colour", "parse_style", "BACKGROUND", "FOREGROUND"]
@@ -180,7 +181,6 @@ def as_colour(value) -> Colour | None:
 @dataclass(frozen=True, slots=True)
 class Style:
     """A foreground, an optional background, and four flags."""
-
     fg: Colour = FOREGROUND
     bg: Colour | None = None
     bold: bool = False
@@ -202,11 +202,29 @@ def parse_style(text: str, base: Style | None = None) -> Style:
     Unknown words are ignored rather than raising: a colour this build has not
     learned is a colour that falls back to the foreground, which is a legible
     screen, and a screen that refuses to draw is not.
+
+    The common call -- a plain string and nothing to build on -- is memoised, and
+    not only for the time: the *same* object for the same words is what lets the
+    painter compare two cells by identity and hold a run together with a pointer
+    check instead of six field comparisons. Formatting a style string is a small
+    cost paid a hundred times a frame; a still picture should pay it never.
     """
-    style = base or Style()
-    fg = style.fg
-    bold, dim, reverse = style.bold, style.dim, style.reverse
-    italic = style.italic
+    if base is None:
+        return _parse_style(text)
+    return _parse_style_on(text, base)
+
+
+@lru_cache(maxsize=1024)
+def _parse_style(text: str) -> Style:
+    """One style string, read once. ``Style`` is frozen, so sharing it is safe."""
+    return _parse_style_on(text, Style())
+
+
+def _parse_style_on(text: str, base: Style) -> Style:
+    """The same parse, on top of a style somebody already has in hand."""
+    fg = base.fg
+    bold, dim, reverse = base.bold, base.dim, base.reverse
+    italic = base.italic
     for word in text.replace(",", " ").split():
         word = word.lower()
         if word in _BOLD:
@@ -224,3 +242,23 @@ def parse_style(text: str, base: Style | None = None) -> Style:
             if colour is not None:
                 fg = colour
     return Style(fg=fg, bold=bold, dim=dim, reverse=reverse, italic=italic)
+
+
+@lru_cache(maxsize=2048)
+def style_on(style: Style, bg: Colour) -> Style:
+    """The same style lifted onto a panel's colour, and shared.
+
+    A word written onto a panel keeps the panel's background (a cell does not
+    lose the box it sits in because a letter landed on it). That rule used to
+    make a new `Style` for every character, which is how a screen of text came to
+    be a screen of styles that were *equal* and not *the same* -- and why finding
+    a run cost six field comparisons per cell instead of a pointer check.
+    """
+    return Style(
+        fg=style.fg,
+        bg=bg,
+        bold=style.bold,
+        dim=style.dim,
+        reverse=style.reverse,
+        italic=style.italic,
+    )

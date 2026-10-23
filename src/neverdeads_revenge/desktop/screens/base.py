@@ -116,7 +116,17 @@ class Screen:
     #: A screen that says yes is stepped once per frame and repainted while it
     #: does, because nothing else in this game needs a heartbeat: the hold bars
     #: read the clock themselves and the particles live in the effects layer.
-    busy: bool = False
+    @property
+    def busy(self) -> bool:
+        """Whether a bar is filling on this screen.
+
+        A hold's bar is wall-clock time: between two presses it still has to be
+        painted, or it stands still while the key is down. Any screen with a
+        ``hold`` answers for it here; the ones with a clock of their own (the
+        fight) say so themselves.
+        """
+        hold = getattr(self, "hold", None)
+        return bool(hold is not None and hold.progress)
 
     #: Whether something on this screen is *moving*, which is not the same as
     #: talking: a fight breathes while the player is deciding what to do, and a

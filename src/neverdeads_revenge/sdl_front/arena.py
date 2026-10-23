@@ -523,13 +523,20 @@ class SdlArena(Screen):
         first version of this did nothing at all: five hundred and ninety-two
         cells still had their floor. Clearing is not writing a word, so it is the
         one place that writes a cell outright.
+
+        The cells are reset where they are rather than replaced: five hundred and
+        ninety-two fresh ``Cell`` objects a frame was a frame's worth of garbage
+        for a picture that is the same every time.
         """
-        from ..desktop.pattern import Cell
+        from ..desktop.pattern import BLANK
 
         x0, y0, width, height = self.arena._areas(buffer.cols, buffer.rows)["ground"]
         for row in range(y0, y0 + height):
+            line = buffer.cells[row]
             for column in range(x0, x0 + width):
-                buffer.cells[row][column] = Cell()
+                cell = line[column]
+                cell.char = " "
+                cell.style = BLANK
 
     def _wounds(self, surface, app, figures, fades, scales=None, poses=None) -> None:
         """What is eating each monster, at the end of its bar.

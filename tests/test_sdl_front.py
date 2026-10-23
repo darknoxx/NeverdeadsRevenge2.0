@@ -3219,9 +3219,57 @@ def test_the_timings_report_says_where_the_frame_went(capsys):
 
     out = capsys.readouterr().out
     assert "fps" in out, out
-    for stage in ("cells", "paint", "art", "present"):
+    for stage in ("cells", "paint", "small", "art", "effects", "present"):
         assert stage in out, f"{stage} is not in the report: {out}"
-    assert "ms drawn" in out, out
+    assert "painted/s" in out, "the report does not say how much was drawn"
+    assert "ms a painted frame" in out, out
+
+
+def test_a_still_picture_is_not_painted_again():
+    """The game is turn-based: between two keys, nothing on the screen moves.
+
+    It used to repaint sixty times a second anyway -- a whole core on a Deck
+    drawing the same room -- which is what a still frame must not cost. A key
+    is a reason to paint, and so is anything actually playing; a quiet room is
+    not.
+    """
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3, no_sound=True)
+    app.tick(1 / 60)
+    painted = app._painted
+    assert painted == 1, "the first frame was not drawn"
+
+    for _ in range(30):
+        app.tick(1 / 60)
+    assert app._painted == painted, "a still screen was painted again"
+
+    app.key("down")  # the title's cursor, and nothing that animates
+    assert app._painted == painted + 1, "the key did not repaint the screen"
+
+
+def test_a_hold_bar_keeps_the_frame_moving():
+    """The bar is wall-clock time: a skipped frame is a bar that stands still."""
+    from neverdeads_revenge.desktop.screens.prologue import PrologueScreen
+
+    screen = PrologueScreen()
+    assert screen.busy is False, "a quiet prologue asks for frames it does not need"
+
+    screen.hold.press("enter")
+    screen.hold._started -= 0.5  # half a second into the hold
+    assert screen.busy is True, "the fill stopped asking to be painted"
+
+
+def test_a_frame_that_is_still_drawing_is_painted_every_tick():
+    """A fight breathes -- the arena says it animates, so the skip must not bite."""
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3, battle_scene=True, no_sound=True)
+    app.tick(1 / 60)
+    painted = app._painted
+    for _ in range(10):
+        app.tick(1 / 60)
+    assert app._painted > painted, "the battle stopped being drawn"
 
 
 def test_skipping_the_cell_floor_changes_no_pixel_of_the_painting():
