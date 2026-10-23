@@ -423,8 +423,19 @@ def sidebar_text(
             slots.append(Slot(slot_x, slot_y, SLOT_SIZE, item.item_id if item else None))
         else:
             slots.append(Slot(slot_x, slot_y, SLOT_SIZE, None, locked=True))
+    # The two ways into the pack, right above the belt: the quick draught and
+    # the pack itself. The words are the keyboard's and the pad's are the same
+    # sentence with the buttons it actually has.
+    quick, bag = ("Y", "B") if pad else ("Q", "I")
+    hints = (
+        (f"Press {quick} for fast healing.", "grey35"),
+        (f"Press {bag} to open the pack.", "grey35"),
+    )
+    hints_top = slots_top - (len(hints) * small_cell_h + small_cell_h // 2)
+    for number, (text, colour) in enumerate(hints):
+        out.append(Ink(text[:chars], left, hints_top + number * small_cell_h, colour))
     # And the rows above stop short of them.
-    bottom = slots_top - SLOT_LEAD
+    bottom = hints_top - small_cell_h // 2
 
     y = top
     for kind in ("curses", "gifts", "effects", "draughts", "statuses"):
@@ -625,16 +636,10 @@ def hud_lines(state: GameState) -> list[tuple[str, str]]:
     if state.at_the_rift:
         lines.append(("The rift hums.", "bold bright_cyan"))
 
-    # The whole pack, not just the medicine: a strange bottle takes a slot, and
-    # a counter that said 1/2 while the pack was full was a counter that lied
-    # about the only number on the line that is a limit.
-    healing = sum(1 for item in state.inventory if item.heal > 0)
-    draughts = (
-        f"Gold {state.gold}   Draughts {len(state.inventory)}/{state.pack_capacity}"
-    )
-    if healing:
-        draughts += " q"
-    lines.append((draughts, "bold yellow"))
+    # Gold alone, now: the pack is a belt of squares at the foot of the panel,
+    # and a counter beside the purse was saying the same thing twice -- once
+    # correctly and once as a number nobody counted.
+    lines.append((f"Gold {state.gold}", "bold yellow"))
 
     lines.append(
         (

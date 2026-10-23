@@ -959,6 +959,55 @@ def test_the_pack_is_a_belt_of_squares_at_the_foot_of_the_sidebar():
     assert slots[4].locked is True, "a square past the pack was sold for free"
 
 
+def test_the_pack_has_its_two_hints_above_it():
+    """Q heals, I opens -- and on a pad, the buttons that mean the same thing."""
+    from neverdeads_revenge.desktop.render import sidebar_text
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3, no_sound=True)
+    app.key("enter")
+    app.key("enter")
+    app.key("escape")
+    state = app.run
+    face = app.font_small
+
+    def texts(pad: bool) -> list[str]:
+        out, _rule, _slots = sidebar_text(
+            state,
+            app.grid.cols,
+            app.grid.rows,
+            app.font.cell_w,
+            app.font.cell_h,
+            face.cell_w,
+            face.cell_h,
+            pad=pad,
+        )
+        return [one.text for one in out]
+
+    keyboard = texts(False)
+    assert "Press Q for fast healing." in keyboard, keyboard
+    assert "Press I to open the pack." in keyboard
+
+    pad = texts(True)
+    assert "Press Y for fast healing." in pad, pad
+    assert "Press B to open the pack." in pad
+
+
+def test_the_gold_line_no_longer_counts_the_draughts():
+    """The belt at the foot is the count now; the HUD says gold and nothing else."""
+    from neverdeads_revenge.desktop.render import hud_lines
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3, no_sound=True)
+    app.key("enter")
+    app.key("enter")
+    app.key("escape")
+    lines = [text for text, _style in hud_lines(app.run)]
+
+    assert any(text.startswith("Gold") for text in lines), lines
+    assert not any("Draughts" in text for text in lines), lines
+
+
 def test_the_sidebar_paints_the_bottles_and_crosses_the_locked_ones():
     """The belt in pixels: a bottle where there is one, an X where there is not."""
     from neverdeads_revenge.desktop.render import sidebar_text

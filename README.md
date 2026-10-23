@@ -325,8 +325,9 @@ tab row, where `←` `→` pick the book -- chronicle, bestiary, armory (`c`, `b
 the sidebar keeps the run, the reference lives one key away. At the foot of the
 sidebar sits the **pack**: one square per slot the game can ever sell -- empty
 while nothing is in it, the draught's own bottle once it is, and a grey cross for
-a slot the shop has not sold yet. The bottle is scaled by whole steps, so it stays
-the drawing it was. The pause offers
+a slot the shop has not sold yet. Above it are the two ways in: `q` (or **Y** on
+a pad) drinks the smallest draught that covers the wound, `i` (or **B**) opens
+the pack. The bottle is scaled by whole steps, so it stays the drawing it was. The pause offers
 **CONTROLS**, and the title offers **DELETE PROGRESS**: it asks for the word
 DELETE to be typed out, because a confirm key is a reflex and a word is a
 decision. Dialogs never answer their own opening press, and the two
