@@ -3259,19 +3259,40 @@ def test_the_zoom_doubles_the_field_and_leaves_the_panels_alone():
     assert 0 <= point[1] < map_h * app.font.cell_h
 
 
-def test_the_settings_screen_has_the_zoom_row():
-    from neverdeads_revenge.desktop.screens.settings import SettingsScreen
-    from neverdeads_revenge.sdl_front.app import SdlApp
+def test_the_pause_menu_has_the_field_zoom():
+    """The room's own size is a pause-menu switch: it is about the floor."""
+    from neverdeads_revenge.desktop.screens.pause import PauseScreen
 
-    app = SdlApp(seed=3, no_sound=True)
-    screen = SettingsScreen()
-    app.push(screen)
-    labels = [label for label, _value in screen.rows(app)]
-    assert "field zoom x2" in labels, labels
+    app = _app_with_a_run()
+    app.key("escape")
+    screen = app.screens[-1]
+    assert isinstance(screen, PauseScreen), type(screen).__name__
 
-    screen.index = labels.index("field zoom x2")
+    labels = [label for _key, label in screen.items(app)]
+    row = next(label for label in labels if label.startswith("FIELD ZOOM"))
+    assert row == "FIELD ZOOM: off", row
+
+    screen.index = labels.index(row)
     app.key("enter")
     assert app.field_zoom is True, "the row did not toggle the zoom"
+    assert screen.items(app)[screen.index][1] == "FIELD ZOOM: on"
+
+
+def test_the_pause_menu_opens_the_settings_screen():
+    """The glass and the sound have one home, and the pause is a door to it."""
+    from neverdeads_revenge.desktop.screens.settings import SettingsScreen
+
+    app = _app_with_a_run()
+    app.key("escape")
+    assert type(app.screens[-1]).__name__ == "PauseScreen"
+
+    app.key("e")
+
+    screen = app.screens[-1]
+    assert isinstance(screen, SettingsScreen), type(screen).__name__
+    labels = [label for label, _value in screen.rows(app)]
+    assert "scanlines" in labels and "sound" in labels, labels
+    assert "field zoom x2" not in labels, "the zoom belongs to the pause, not here"
 
 
 def test_the_timings_report_says_where_the_frame_went(capsys):

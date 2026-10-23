@@ -1,8 +1,11 @@
 """The pause menu.
 
-Thin on purpose: resume, save and quit, quit to title, and the sound. The sound
-toggle lives here because this is the only menu in the game and a sound you
-cannot turn off is a sound that stops you playing.
+Thin on purpose: resume, the settings, the reference, the book, the room's own
+zoom, save and quit, quit to title, and the sound. The sound toggle and the zoom
+live here because this is the menu the player is in when they want them -- a
+sound you cannot turn off is a sound that stops you playing, and a room you
+cannot see is a room you stop walking. The settings screen itself is one row
+away, so the switches have one home and the pause is the door.
 """
 
 from __future__ import annotations
@@ -27,8 +30,10 @@ class PauseScreen(Screen):
     def items(self, app) -> list[tuple[str, str]]:
         return [
             ("r", "RESUME"),
+            ("e", "SETTINGS"),
             ("c", "CONTROLS"),
             ("a", "THE ALMANAC"),
+            ("z", f"FIELD ZOOM: {'on' if app.field_zoom else 'off'}"),
             ("s", "SAVE AND QUIT"),
             ("q", "QUIT TO TITLE"),
             ("m", f"SOUND: {'on' if not app.sfx.muted else 'off'}"),
@@ -60,7 +65,7 @@ class PauseScreen(Screen):
         if name in ("escape", "r"):
             app.pop()
             return True
-        if name in ("s", "q", "m", "c", "a"):
+        if name in ("s", "q", "m", "c", "a", "z", "e"):
             self._choose(name, app)
             return True
         return True
@@ -86,3 +91,13 @@ class PauseScreen(Screen):
         elif key == "m":
             app.toggle_sound()
             self.index = min(self.index, len(self.items(app)) - 1)
+        elif key == "z":
+            # The room's own size, changed where the room is: a setting about the
+            # floor belongs to the floor, not to the title.
+            app.toggle_field_zoom()
+        elif key == "e":
+            # The glass and the sound, from inside the run: the same screen the
+            # title opens, so there is one opinion about what the switches are.
+            from .settings import SettingsScreen
+
+            app.push(SettingsScreen())

@@ -287,7 +287,7 @@ the glass itself.
 | `r` | the borrowed hour |
 | `m` | the Almanac, from the floor or a fight (the pause opens it too) |
 | `v` | in a fight: the Almanac, open at the enemy being aimed at |
-| `esc` | pause (`r`/`esc` resume, `c` controls, `a` the Almanac, `s` save and quit, `q` to title, `m` sound) |
+| `esc` | pause (`r`/`esc` resume, `e` settings, `c` controls, `a` the Almanac, `z` field zoom, `s` save and quit, `q` to title, `m` sound) |
 
 ### The controller
 
@@ -324,15 +324,17 @@ always did, and the cursor is only a convenience there.
 ### Settings
 
 The title's **SETTINGS** row (`e`, or **Start** on a pad) is where the glass and
-the sound live now: full screen, scanlines, bloom, the CRT curve, the field zoom
-and the sound. `F11`, `F2`, `F3` and `F4` still do the same thing from the
-keyboard; the zoom is the menu's, because it is about the room and not about the
-glass.
+the sound live: full screen, scanlines, bloom, the CRT curve, and the sound.
+`F11`, `F2`, `F3` and `F4` still do the same thing from the keyboard. The same
+screen opens from the pause menu (`e` there too), so a setting can be changed
+without leaving the run.
 
-**Field zoom** draws the overworld's map at twice the size -- a character is four
-characters' worth of pixels, the same drawing with a smaller camera -- and leaves
-the panels and the log at their own size, because a room is walked in and a panel
-is read. It is the overworld's alone: a fight is already drawn to fit its room.
+**Field zoom** is the pause menu's own switch (`z`), and it draws the overworld's
+map at twice the size -- a character is four characters' worth of pixels, the
+same drawing with a smaller camera -- and leaves the panels and the log at their
+own size, because a room is walked in and a panel is read. It lives in the pause
+because it is about the room under your feet; the title's settings are about the
+glass. It is the overworld's alone: a fight is already drawn to fit its room.
 
 The menus are read sideways: `←` `→` choose, `enter` takes, or press the letter
 of the row you want. The Almanac is the one screen that is read like a page:
