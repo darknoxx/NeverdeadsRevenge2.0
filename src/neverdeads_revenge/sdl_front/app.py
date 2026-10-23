@@ -194,6 +194,9 @@ class SdlApp:
         #: a second and never drawn: a breakdown is a thing to read in a terminal,
         #: not a thing to put in the picture.
         self.show_timings = timings
+        #: Where the timings go when a terminal is not there to read them (a
+        #: launcher's shortcut has none). Opened by ``open_window``.
+        self._timing_log = None
         self._timing: dict[str, tuple[float, int]] = {}
         self._timing_since = time.monotonic()
         #: The grid, made once and cleared from then on. It is *this* app's, so it
@@ -936,12 +939,29 @@ class SdlApp:
             if frames and not name.startswith("draw[")
         )
         painted, self._painted = self._painted, 0
-        print(
+        self._say(
             f"{self.frames:5.1f} fps  {painted:3d} painted/s   "
             f"cells {self.grid.cols}x{self.grid.rows}/{self.grid.puts} written   "
             f"{parts}   ({done:.2f} ms a painted frame)"
         )
         self._timing.clear()
+
+    def _say(self, line: str) -> None:
+        """Say a timings line in the terminal, and in the data directory too.
+
+        A game started by a launcher has no terminal: Steam runs the shortcut and
+        keeps the output to itself. The same line goes to ``timings.log`` beside
+        the save, so a slow launch can be read afterwards instead of guessed at.
+        The file is truncated when the window opens, so it is this run and not a
+        pile of runs.
+        """
+        print(line)
+        if self._timing_log is not None:
+            try:
+                self._timing_log.write(line + "\n")
+                self._timing_log.flush()
+            except OSError:
+                self._timing_log = None
 
     def _small_face(self) -> None:
         """The sidebar's lower rows and the combat log, one size down.
@@ -1601,14 +1621,21 @@ class SdlApp:
         pygame.display.set_caption(title)
         self._open_window()
         if self.show_timings:
+            self._timing_log = self._open_timing_log()
             width, height = (
                 self._window.get_size() if self._window is not None else (0, 0)
             )
-            print(
+            self._say(
                 f"mode     ndr2 {__version__} {pygame.display.get_driver()} "
                 f"{width}x{height} {'full screen' if self._fullscreen else 'window'}, "
                 f"{self.cols}x{self.rows} cells, "
                 f"{'crt' if self.glass is not None else 'plain blit'}"
+            )
+            self._say(
+                f"launch   preload={os.environ.get('LD_PRELOAD', '-')!r} "
+                f"path={os.environ.get('LD_LIBRARY_PATH', '-')!r} "
+                f"steam={os.environ.get('STEAM_RUNTIME', '-')!r} "
+                f"pressure={os.environ.get('PRESSURE_VESSEL_VERSION', '-')!r}"
             )
         self.redraw()
         clock = pygame.time.Clock()
@@ -1620,4 +1647,18 @@ class SdlApp:
             self.tick(min(clock.tick(60) / 1000.0, 1 / 30.0))
             for event in pygame.event.get():
                 self.feed(event)
+        if self._timing_log is not None:
+            self._timing_log.close()
+            self._timing_log = None
         pygame.quit()
+
+    def _open_timing_log(self):
+        """The timings, in a file beside the save, for a launch with no terminal."""
+        from ..persistence import data_dir
+
+        try:
+            path = data_dir() / "timings.log"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            return path.open("w", encoding="utf-8")
+        except OSError:
+            return None
