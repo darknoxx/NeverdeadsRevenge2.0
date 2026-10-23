@@ -315,6 +315,12 @@ row, the stick walks it, and A takes whatever the marker is on -- B only ever
 backs out one step. And **the pad's hints follow it**: the moment it is the last
 thing touched, the hints read A and B rather than enter and esc.
 
+The name on the scoreboard is spelled the same way: the card ends a run with the
+alphabet on it, the D-pad walks that alphabet, **A** takes the letter under the
+cursor, **B** takes one back (and, with nothing left, keeps the name off the
+board), and **Start** keeps it. **X** still rolls a name. A keyboard types as it
+always did, and the cursor is only a convenience there.
+
 ### Settings
 
 The title's **SETTINGS** row (`e`, or **Start** on a pad) is where the glass and

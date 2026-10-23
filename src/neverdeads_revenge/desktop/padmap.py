@@ -125,13 +125,13 @@ TALLY = _map(south="enter", west="r", east="escape", start="escape", back="escap
 #: (the same deliberate gesture a typed word is).
 DELETE = _map(south="hold", east="escape", start=None, back="escape")
 
-#: The name entry: A accepts, X rolls a name, Y clears it.
+#: The name entry: the d-pad walks the alphabet on the card, A takes the letter
+#: under the cursor, B takes one back, X rolls a name and Start keeps it.
 NAME_ENTRY = _map(
-    south="enter",
+    south="take",
     east="backspace",
     west="random",
-    north="clear",
-    start="enter",
+    start="space",
     back="escape",
     lb=None,
     rb=None,

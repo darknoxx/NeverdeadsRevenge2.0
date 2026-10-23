@@ -144,69 +144,110 @@ class GameOverScreen(Screen):
             self.on_done(value)
 
 
-#: Names a pad can roll instead of typing one. Short, because the board keeps
+#: Names a pad can roll instead of spelling one. Short, because the board keeps
 #: five cells, and not the heroes' names, because a run is the player's.
 PAD_NAMES: tuple[str, ...] = ("ASH", "WREN", "MOTH", "SABLE", "HOLLOW", "KESTREL")
 
 
 class NameEntryScreen(Screen):
-    """Five slots for the scoreboard."""
+    """Five slots for the scoreboard, and the alphabet to fill them.
+
+    A keyboard is not a thing a pad has, and the platform's own one would cover
+    the card and turn a five-letter board into a typing lesson. So the alphabet
+    is *on* the card: the d-pad walks it, A takes the letter under the cursor, B
+    takes one back, Start keeps the name. A keyboard still types, because a desk
+    is a desk.
+    """
 
     modal = True
-    #: A accepts, X rolls a name, Y clears; the keyboard types as it always did.
+    #: A takes, B backs, X rolls a name, Start keeps.
     PAD = NAME_PAD
+
+    #: Six by six in reading order: letters first, then digits.
+    ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    COLUMNS = 6
 
     def __init__(self, score: int, previous: str = "", on_done=None) -> None:
         self.score = score
         self.name = clean_name(previous)
         self.on_done = on_done
+        self.cursor = 0
 
     def draw(self, buffer, app) -> None:
         pad = bool(getattr(buffer, "pad", False))
+        rows = (len(self.ALPHABET) + self.COLUMNS - 1) // self.COLUMNS
         width = 40
-        height = 9
+        height = rows + 8
         x, y = (buffer.cols - width) // 2, (buffer.rows - height) // 2
         box(buffer, x, y, width, height, title="ENTER YOUR NAME", border=BLOOD, fill=True)
-        buffer.text(x + 3, y + 2, f"for a score of {self.score}", parse_style(ASH))
+        buffer.text(x + 3, y + 1, f"for a score of {self.score}", parse_style(ASH))
         cells = []
         for i in range(SLOTS):
             char = self.name[i] if i < len(self.name) else "_"
             cells.append(f" {char} ")
-        buffer.text(x + 3, y + 4, " ".join(cells), parse_style(f"bold {PURPLE}"))
+        buffer.text(x + 3, y + 3, " ".join(cells), parse_style(f"bold {PURPLE}"))
+        for index, char in enumerate(self.ALPHABET):
+            row, column = divmod(index, self.COLUMNS)
+            chosen = index == self.cursor
+            buffer.text(
+                x + 3 + column * 4,
+                y + 5 + row,
+                f"[{char}]" if chosen else f" {char} ",
+                parse_style(f"bold {BONE}" if chosen else ASH),
+            )
         rule(buffer, x + 1, y + height - 2, width - 2, ASH)
         buffer.text(
             x + 3,
             y + height - 1,
-            # Short enough for the box: the old line ran through the border and
-            # out of the frame by eleven characters.
-            "A keeps   X random   Y clear"
+            "A takes   B erases   Start keeps"
             if pad
             else "letters   backspace   enter keeps",
             parse_style(ASH),
         )
 
     def key(self, name, event, app) -> bool:
-        if name == "random":
-            # A pad cannot type, and "???" is not a name. The dice are the pad's
-            # keyboard, and they only fill a *slot* the player can keep.
-            seed = len(self.name) + len(PAD_NAMES)
-            self.name = PAD_NAMES[seed % len(PAD_NAMES)]
-            return True
-        if name == "clear":
-            self.name = ""
+        if name in ("left", "right", "up", "down"):
+            # Held directions walk the board: a d-pad is a thumb, not a cursor,
+            # and thirty-six cells are a long way to tap.
+            step = {
+                "left": -1,
+                "right": 1,
+                "up": -self.COLUMNS,
+                "down": self.COLUMNS,
+            }[name]
+            self.cursor = (self.cursor + step) % len(self.ALPHABET)
             return True
         if event.isAutoRepeat():
             return True
-        if name in ("enter", "return", "escape"):
+        if name == "take":
+            if len(self.name) < SLOTS:
+                self.name += self.ALPHABET[self.cursor]
+            else:
+                # Five letters and a full board: A is the way on.
+                self.finish(app, self.name)
+            return True
+        if name in ("enter", "return", "space", "escape"):
             self.finish(app, self.name or "???")
             return True
         if name in ("backspace", "delete"):
-            self.name = self.name[:-1]
+            if self.name:
+                self.name = self.name[:-1]
+            else:
+                # B with nothing in it is still a way out: a player who does not
+                # want their name on the board must not be trapped by the board.
+                self.finish(app, "???")
+            return True
+        if name == "random":
+            # The dice are still here for a player who would rather not spell:
+            # they fill the slots, and every one of them can be taken back.
+            seed = len(self.name) + len(PAD_NAMES)
+            self.name = PAD_NAMES[seed % len(PAD_NAMES)]
             return True
         char = clean_name(event.text() or "")
         if char and len(self.name) < SLOTS:
             self.name += char
         return True
+
 
     def finish(self, app, value) -> None:
         app.pop()

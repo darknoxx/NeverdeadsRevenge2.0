@@ -62,6 +62,7 @@ class Screen:
         "home": "tab_switch",
         "end": "tab_switch",
         "enter": "cursor_confirm",
+        "take": "cursor_confirm",
         "space": "cursor_confirm",
         "escape": "cursor_back",
         "backspace": "cursor_back",

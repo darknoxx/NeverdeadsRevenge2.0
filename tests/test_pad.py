@@ -297,19 +297,85 @@ def test_the_right_stick_pages_only_where_a_screen_reads_pages():
     assert ("pagedown", "key", False) in heard, "the reading stick never paged"
 
 
-def test_the_name_can_be_finished_without_a_keyboard():
+def test_the_name_is_spelled_on_the_pad():
+    """The alphabet is on the card: the d-pad walks it, A takes the letter.
+
+    A pad cannot type, and rolling a name was the only way to finish a run with
+    a name of its own. The board is on the card now, so five letters are five
+    presses and five steps -- and the dice are still there for a player who
+    would rather not spell.
+    """
     from neverdeads_revenge.desktop.screens.game_over import PAD_NAMES, NameEntryScreen
 
     app, stick = _app_with_pad()
-    screen = NameEntryScreen(1234)
+    kept: list[str] = []
+    screen = NameEntryScreen(1234, on_done=kept.append)
     app.push(screen)
 
-    app.key("random")
+    def step(direction: tuple[int, int]) -> None:
+        stick.hat = direction
+        app.tick(1 / 30.0)
+        stick.hat = (0, 0)
+        for _ in range(2):
+            app.tick(1 / 30.0)
+
+    _press(app, stick, 0)  # A: the cursor is on A
+    assert screen.name == "A"
+
+    step((1, 0))  # right: B
+    step((1, 0))  # right: C
+    _press(app, stick, 0)  # A: C
+    assert screen.name == "AC", "the d-pad did not walk the alphabet"
+
+    step((0, -1))  # down six cells: I
+    _press(app, stick, 0)
+    assert screen.name == "ACI", screen.name
+
+    _press(app, stick, 1)  # B takes one back
+    assert screen.name == "AC", "B did not erase a letter"
+
+    _press(app, stick, 2)  # X rolls one
     assert screen.name in PAD_NAMES, "the dice rolled nothing"
-    app.key("clear")
-    assert screen.name == ""
-    app.key("enter")
+    rolled = screen.name
+    _press(app, stick, 1)  # and the roll can be taken back
+    assert screen.name == rolled[:-1]
+
+    _press(app, stick, 7)  # Start keeps the name
     assert type(app.screens[-1]).__name__ != "NameEntryScreen", "the card stayed up"
+    assert kept and kept[0] == screen.name
+
+
+def test_b_with_nothing_typed_still_leaves_the_board():
+    """A player who does not want their name on the board is not trapped by it."""
+    from neverdeads_revenge.desktop.screens.game_over import NameEntryScreen
+
+    app, stick = _app_with_pad()
+    kept: list[str] = []
+    app.push(NameEntryScreen(0, on_done=kept.append))
+
+    _press(app, stick, 1)  # B on an empty name
+
+    assert kept == ["???"], kept
+    assert type(app.screens[-1]).__name__ != "NameEntryScreen"
+
+
+def test_the_alphabet_on_the_card_does_not_take_the_keyboard_away():
+    """A desk is a desk: typing still writes the name, letter by letter."""
+    from neverdeads_revenge.desktop.screens.game_over import NameEntryScreen
+
+    app, _ = _app_with_pad()
+    screen = NameEntryScreen(0)
+    app.push(screen)
+
+    for char in "nox":
+        app.key(char, text=char)
+    assert screen.name == "NOX"
+
+    app.key("backspace")
+    assert screen.name == "NO"
+
+    app.key("enter")
+    assert type(app.screens[-1]).__name__ != "NameEntryScreen", "enter did not keep it"
 
 
 # -- the hints --------------------------------------------------------------
