@@ -1,4 +1,4 @@
 """Neverdead's Revenge 2.0 -- the same dungeon, rendered as a CRT."""
 
-__version__ = "0.5.19"
+__version__ = "0.5.20"
 __all__ = ["__version__"]
