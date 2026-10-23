@@ -75,6 +75,15 @@ def main(argv: list[str] | None = None) -> int:
         help="print what each stage of the frame costs, once a second",
     )
     parser.add_argument(
+        "--profile",
+        type=int,
+        nargs="?",
+        const=10,
+        default=0,
+        metavar="SECONDS",
+        help="profile the first N seconds (default 10) and print where the time went",
+    )
+    parser.add_argument(
         "--scale",
         type=int,
         default=1,
@@ -127,6 +136,7 @@ def main(argv: list[str] | None = None) -> int:
         # The whole screen, with the grid taken from the display: a game that
         # opens at another monitor's size has to be resized before it is played.
         fullscreen=not args.windowed,
+        profile=args.profile,
     )
     window.open_window()
     return 0

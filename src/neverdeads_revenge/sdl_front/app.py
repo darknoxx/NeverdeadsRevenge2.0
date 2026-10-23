@@ -142,6 +142,7 @@ class SdlApp:
         timings: bool = False,
         backdrop: bool = True,
         fullscreen: bool = True,
+        profile: int = 0,
     ) -> None:
         import pygame
 
@@ -190,6 +191,10 @@ class SdlApp:
         #: a second and never drawn: a breakdown is a thing to read in a terminal,
         #: not a thing to put in the picture.
         self.show_timings = timings
+        #: Seconds to profile the *real* window for, then print where the time
+        #: went. A frame breakdown says which stage; this says which function,
+        #: and it is the only way to ask a machine that is not this one.
+        self.profile_seconds = profile
         self._timing: dict[str, tuple[float, int]] = {}
         self._timing_since = time.monotonic()
         #: The grid, made once and cleared from then on. It is *this* app's, so it
@@ -853,7 +858,14 @@ class SdlApp:
                 and not getattr(screen, "opaque", True)
             ):
                 continue
-            screen.draw(self.grid, self)
+            if self.show_timings:
+                # Which screen the cells went to: a stack can hold the room and
+                # the fight, and "cells 24" does not say whose 24 it was.
+                drawn = time.perf_counter()
+                screen.draw(self.grid, self)
+                self._note(f"draw[{type(screen).__name__}]", drawn)
+            else:
+                screen.draw(self.grid, self)
         mark = self._note("cells", mark)
         # A screen may bring its own paper: the arena's painted room goes *under*
         # the cells, so the panels, the log and the sidebar sit on it instead of
@@ -920,11 +932,14 @@ class SdlApp:
             if frames
         )
         done = sum(
-            spent / frames * 1000.0 for spent, frames in self._timing.values() if frames
+            spent / frames * 1000.0
+            for name, (spent, frames) in self._timing.items()
+            if frames and not name.startswith("draw[")
         )
         painted, self._painted = self._painted, 0
         print(
             f"{self.frames:5.1f} fps  {painted:3d} painted/s   "
+            f"cells {self.grid.cols}x{self.grid.rows}/{self.grid.puts} written   "
             f"{parts}   ({done:.2f} ms a painted frame)"
         )
         self._timing.clear()
@@ -1250,31 +1265,37 @@ class SdlApp:
             base = self._buffer_size()
             size = (base[0] * self.scale, base[1] * self.scale)
         base = self._buffer_size()
-        if self.crt.scanlines or self.crt.bloom or self.crt.geometry:
-            try:
-                import moderngl
+        # The glass is made whether or not an effect is *on* at this moment: the
+        # three switches are uniforms, not a different window, and a window made
+        # without a context can never grow one. Turning the scanlines back on
+        # after starting with them off used to do nothing at all until the next
+        # launch -- which is exactly how a player loses the CRT for good.
+        try:
+            import moderngl
 
-                pygame.display.gl_set_attribute(
-                    pygame.GL_CONTEXT_MAJOR_VERSION, 2
-                )
-                pygame.display.gl_set_attribute(
-                    pygame.GL_CONTEXT_MINOR_VERSION, 1
-                )
-                self._window = pygame.display.set_mode(
-                    size, pygame.OPENGL | pygame.DOUBLEBUF | flags
-                )
-                from .glass import SdlGlass
+            pygame.display.gl_set_attribute(
+                pygame.GL_CONTEXT_MAJOR_VERSION, 2
+            )
+            pygame.display.gl_set_attribute(
+                pygame.GL_CONTEXT_MINOR_VERSION, 1
+            )
+            self._window = pygame.display.set_mode(
+                size, pygame.OPENGL | pygame.DOUBLEBUF | flags
+            )
+            from .glass import SdlGlass
 
-                self.glass = SdlGlass(
-                    self.crt,
-                    base,
-                    self._window.get_size(),
-                    context=moderngl.create_context(),
-                )
-                self._fit()
-                return
-            except Exception:
-                self.glass = None
+            self.glass = SdlGlass(
+                self.crt,
+                base,
+                self._window.get_size(),
+                context=moderngl.create_context(),
+            )
+            self._fit()
+            return
+        except Exception as error:
+            self.glass = None
+            if self.show_timings or self.profile_seconds:
+                print(f"crt      not available, plain blit: {error}")
         self._window = pygame.display.set_mode(size, flags)
         self._fit()
 
@@ -1558,9 +1579,26 @@ class SdlApp:
         self._title = title
         pygame.display.set_caption(title)
         self._open_window()
+        if self.show_timings or self.profile_seconds:
+            width, height = (
+                self._window.get_size() if self._window is not None else (0, 0)
+            )
+            print(
+                f"mode     {width}x{height} {'full screen' if self._fullscreen else 'window'}, "
+                f"{self.cols}x{self.rows} cells, "
+                f"{'crt' if self.glass is not None else 'plain blit'}"
+            )
         self.redraw()
         clock = pygame.time.Clock()
         self._running = True
+        profiler = None
+        deadline = 0.0
+        if self.profile_seconds:
+            import cProfile
+
+            profiler = cProfile.Profile()
+            profiler.enable()
+            deadline = time.monotonic() + self.profile_seconds
         while self._running:
             # Every beat in this game is written against a thirtieth of a second,
             # so that is the frame this loop asks for: a fight that played faster
@@ -1568,4 +1606,24 @@ class SdlApp:
             self.tick(min(clock.tick(60) / 1000.0, 1 / 30.0))
             for event in pygame.event.get():
                 self.feed(event)
+            if profiler is not None and time.monotonic() >= deadline:
+                profiler.disable()
+                self._print_profile(profiler)
+                profiler = None
         pygame.quit()
+
+    def _print_profile(self, profiler) -> None:
+        """The functions the window actually spent its seconds in.
+
+        ``--timings`` says which *stage* is slow; this says which line. It is a
+        development tool and prints to the terminal the player already has --
+        the same bargain as the timings, and the only way to ask a machine that
+        is not the one the code was written on.
+        """
+        import io
+        import pstats
+
+        out = io.StringIO()
+        pstats.Stats(profiler, stream=out).sort_stats("tottime").print_stats(25)
+        print(f"--- profile: {self.profile_seconds}s of play, by own time ---")
+        print(out.getvalue())

@@ -75,6 +75,11 @@ class PatternBuffer:
         #: by the application from the last input device; off everywhere else,
         #: which is why no test has to know about it.
         self.pad = False
+        #: Cells written since the last clear, for the timings report: a frame
+        #: that takes twenty milliseconds to draw is a frame either writing a
+        #: great many cells or writing them very slowly, and the number says
+        #: which.
+        self.puts = 0
         #: Kept rather than used: the grid is measured in cells and does not
         #: care how wide one is, but a painter wants the font and the caller has
         #: already got it in hand.
@@ -90,6 +95,7 @@ class PatternBuffer:
         # of them is a frame spending a millisecond and a half writing the same
         # blank. (Measured: 1.43 ms a frame, and 0.03 ms this way.)
         blank = style or Style()
+        self.puts = 0
         for row in self.cells:
             for cell in row:
                 cell.char = char
@@ -97,6 +103,7 @@ class PatternBuffer:
 
     def put(self, x: int, y: int, char: str, style: Style | None = None) -> None:
         if 0 <= x < self.cols and 0 <= y < self.rows:
+            self.puts += 1
             cell = self.cells[y][x]
             new = style or Style()
             if new.bg is None and cell.style.bg is not None:
