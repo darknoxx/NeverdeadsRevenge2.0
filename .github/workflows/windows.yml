@@ -4,14 +4,18 @@ name: Windows build
 # which is the only reason this workflow exists. It also runs the test suite,
 # because a Windows build that has never run the tests is a guess.
 #
-# The .exe is always attached as a workflow artifact. On a v* tag it is also
-# attached to that release, so a tag is the whole release process.
+# The .exe is always attached as a workflow artifact. The tag trigger is off
+# for now, so a release is the Linux build alone; run this by hand when the .exe
+# is wanted, and put the tag trigger back when a tag should carry both again.
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - "v*"
+  # Off for now, on purpose: a release does not wait thirteen minutes for a
+  # Windows runner. Run it by hand (Actions -> Windows build -> Run workflow)
+  # when the .exe is wanted, and put the tag trigger back when it is again.
+  # push:
+  #   tags:
+  #     - "v*"
 
 # Creating a release needs write access to the repository's contents; the
 # default token is read-only on a repository configured that way, which is how

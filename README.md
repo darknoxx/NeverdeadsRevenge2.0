@@ -483,6 +483,13 @@ library that a second client could drive, and the desktop is one client of it.
 from the terminal build on purpose: experimenting here never touches a terminal
 run's scores or chronicle, and the other way around.
 
+Beside the saves is `run.log`: one short record per launch -- the build, the
+display server, the grid, whether the frame goes through the glass, and what a
+launcher put in front of the game. When Steam starts it, the first fifteen
+seconds of frame reports go in as well, because a shortcut has no terminal to
+read them in. It is overwritten each time and is only there to be sent with a
+bug report.
+
 ## Licence
 
 AGPL-3.0-or-later. See `LICENSE` for the text.

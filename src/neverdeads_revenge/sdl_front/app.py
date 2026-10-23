@@ -194,9 +194,25 @@ class SdlApp:
         #: a second and never drawn: a breakdown is a thing to read in a terminal,
         #: not a thing to put in the picture.
         self.show_timings = timings
-        #: Where the timings go when a terminal is not there to read them (a
-        #: launcher's shortcut has none). Opened by ``open_window``.
-        self._timing_log = None
+        #: Whether a launcher started us -- Steam, or a runtime around it. Such a
+        #: launch has no terminal and no easy way to pass a flag, so the first
+        #: fifteen seconds of frame reports are written on their own.
+        launcher = any(
+            os.environ.get(name)
+            for name in (
+                "SteamGameId",
+                "SteamAppId",
+                "STEAM_RUNTIME",
+                "PRESSURE_VESSEL_VERSION",
+            )
+        )
+        #: Whether a frame is being measured right now: the flag, or the start of
+        #: a launcher's run. ``_timing_until`` ends the automatic window.
+        self._timing_now = bool(timings or launcher)
+        self._timing_until = time.monotonic() + 15.0 if launcher else 0.0
+        #: Where every launch leaves a short record: what build, how it was
+        #: started, and for a launcher, the first seconds of frame reports.
+        self._run_log = None
         self._timing: dict[str, tuple[float, int]] = {}
         #: Events the window handed over since the last report, and their kinds.
         self._events = 0
@@ -793,7 +809,7 @@ class SdlApp:
             gap = max(1e-4, now - self._last_frame)
             self.frames = (self.frames * 9.0 + (1.0 / gap)) / 10.0
         self._last_frame = now
-        mark = time.perf_counter() if self.show_timings else 0.0
+        mark = time.perf_counter() if self._timing_now else 0.0
         self._poll_pad(dt)
         mark = self._note("pad", mark)
         screen = self.screens[-1]
@@ -836,7 +852,7 @@ class SdlApp:
             self.grid.font = self.font
             self.grid.clear()
         self.grid.pad = self.pad_active
-        mark = time.perf_counter() if self.show_timings else 0.0
+        mark = time.perf_counter() if self._timing_now else 0.0
         # An opaque modal: nothing under it is drawn. A menu is a panel, not a
         # window onto the dungeon, so the topmost modal roots the stack -- the
         # same rule the Qt build keeps, and the reason a dialog is not a
@@ -865,7 +881,7 @@ class SdlApp:
                 and not getattr(screen, "opaque", True)
             ):
                 continue
-            if self.show_timings:
+            if self._timing_now:
                 # Which screen the cells went to: a stack can hold the room and
                 # the fight, and "cells 24" does not say whose 24 it was.
                 drawn = time.perf_counter()
@@ -917,7 +933,7 @@ class SdlApp:
         Nothing but two clock reads when ``--timings`` was not asked for, which is
         why it can stand in the middle of the frame at all.
         """
-        if not self.show_timings:
+        if not self._timing_now:
             return mark
         now = time.perf_counter()
         spent, frames = self._timing.get(name, (0.0, 0))
@@ -926,7 +942,12 @@ class SdlApp:
 
     def _report_timings(self, now: float) -> None:
         """Once a second: what each stage of the frame cost, in milliseconds."""
-        if not self.show_timings or now - self._timing_since < 1.0:
+        if self._timing_until and now > self._timing_until:
+            # The free look is over: a launcher's start has been measured, the
+            # log has it, and the game stops paying for stages nobody asked for.
+            self._timing_until = 0.0
+            self._timing_now = self.show_timings
+        if not self._timing_now or now - self._timing_since < 1.0:
             return
         self._timing_since = now
         if not self._timing:
@@ -965,13 +986,14 @@ class SdlApp:
         The file is truncated when the window opens, so it is this run and not a
         pile of runs.
         """
-        print(line)
-        if self._timing_log is not None:
+        if self._timing_now:
+            print(line)
+        if self._run_log is not None:
             try:
-                self._timing_log.write(line + "\n")
-                self._timing_log.flush()
+                self._run_log.write(line + "\n")
+                self._run_log.flush()
             except OSError:
-                self._timing_log = None
+                self._run_log = None
 
     def _small_face(self) -> None:
         """The sidebar's lower rows and the combat log, one size down.
@@ -1260,6 +1282,7 @@ class SdlApp:
         return [
             f"platform      {sys.platform}",
             f"version       {__version__}",
+            f"saves         {self._data_dir()}",
             f"video driver  {driver}",
             f"session       wayland={os.environ.get('WAYLAND_DISPLAY')!r} "
             f"display={os.environ.get('DISPLAY')!r} "
@@ -1634,23 +1657,23 @@ class SdlApp:
         self._title = title
         pygame.display.set_caption(title)
         self._open_window()
-        if self.show_timings:
-            self._timing_log = self._open_timing_log()
-            width, height = (
-                self._window.get_size() if self._window is not None else (0, 0)
-            )
-            self._say(
-                f"mode     ndr2 {__version__} {pygame.display.get_driver()} "
-                f"{width}x{height} {'full screen' if self._fullscreen else 'window'}, "
-                f"{self.cols}x{self.rows} cells, "
-                f"{'crt' if self.glass is not None else 'plain blit'}"
-            )
-            self._say(
-                f"launch   preload={os.environ.get('LD_PRELOAD', '-')!r} "
-                f"path={os.environ.get('LD_LIBRARY_PATH', '-')!r} "
-                f"steam={os.environ.get('STEAM_RUNTIME', '-')!r} "
-                f"pressure={os.environ.get('PRESSURE_VESSEL_VERSION', '-')!r}"
-            )
+        self._run_log = self._open_run_log()
+        width, height = (
+            self._window.get_size() if self._window is not None else (0, 0)
+        )
+        self._say(
+            f"mode     ndr2 {__version__} {pygame.display.get_driver()} "
+            f"{width}x{height} {'full screen' if self._fullscreen else 'window'}, "
+            f"{self.cols}x{self.rows} cells, "
+            f"{'crt' if self.glass is not None else 'plain blit'}"
+        )
+        self._say(
+            f"launch   preload={os.environ.get('LD_PRELOAD', '-')!r} "
+            f"path={os.environ.get('LD_LIBRARY_PATH', '-')!r} "
+            f"steam={os.environ.get('SteamGameId', '-')!r} "
+            f"runtime={os.environ.get('STEAM_RUNTIME', '-')!r} "
+            f"pressure={os.environ.get('PRESSURE_VESSEL_VERSION', '-')!r}"
+        )
         self.redraw()
         clock = pygame.time.Clock()
         self._running = True
@@ -1660,7 +1683,7 @@ class SdlApp:
             # on a quicker machine would be a different fight.
             self.tick(min(clock.tick(60) / 1000.0, 1 / 30.0))
             for event in pygame.event.get():
-                if self.show_timings:
+                if self._timing_now:
                     # How much the window is handing over, and of what: a pad in
                     # a launcher's hands can arrive as a stream of axis events,
                     # and a stream of events is a stream of Python objects.
@@ -1668,17 +1691,30 @@ class SdlApp:
                     kind = pygame.event.event_name(event.type)
                     self._event_kinds[kind] = self._event_kinds.get(kind, 0) + 1
                 self.feed(event)
-        if self._timing_log is not None:
-            self._timing_log.close()
-            self._timing_log = None
+        if self._run_log is not None:
+            self._run_log.close()
+            self._run_log = None
         pygame.quit()
 
-    def _open_timing_log(self):
-        """The timings, in a file beside the save, for a launch with no terminal."""
+    def _data_dir(self) -> str:
+        """Where the game keeps its saves, its settings and this launch's log."""
+        from ..persistence import data_dir
+
+        return str(data_dir())
+
+    def _open_run_log(self):
+        """The last launch, in a file beside the save.
+
+        A game started by a launcher has no terminal: Steam keeps the output to
+        itself, and a flag in a shortcut is one more thing that can be left out.
+        So every launch writes the same short record -- build, display server,
+        grid, glass, and what the launcher put in front of it -- and a launcher's
+        first seconds of frame reports. Truncated each time: this run, not a pile.
+        """
         from ..persistence import data_dir
 
         try:
-            path = data_dir() / "timings.log"
+            path = data_dir() / "run.log"
             path.parent.mkdir(parents=True, exist_ok=True)
             return path.open("w", encoding="utf-8")
         except OSError:
