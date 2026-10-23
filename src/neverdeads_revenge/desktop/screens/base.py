@@ -97,6 +97,20 @@ class Screen:
         """
         return []
 
+    #: What the controller's buttons mean here: physical button -> key name.
+    #: A screen that says nothing gets the default (A confirms, B goes back),
+    #: and a screen that says ``None`` for a button means "nothing here".
+    from ..padmap import DEFAULT as PAD
+
+    #: Whether the left stick and the D-pad may send the four diagonals. Only
+    #: the floor moves in eight directions; a menu that heard ``home`` would
+    #: jump to its first row on a diagonal push.
+    pad_diagonals = False
+
+    #: Whether the right stick may page the body. Reading screens want it; the
+    #: floor must not, because its page keys are movement.
+    pad_scroll = False
+
     #: Whether the screen is in the middle of something it has to finish.
     #: A screen that says yes is stepped once per frame and repainted while it
     #: does, because nothing else in this game needs a heartbeat: the hold bars

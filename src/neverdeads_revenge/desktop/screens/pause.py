@@ -8,6 +8,7 @@ cannot turn off is a sound that stops you playing.
 from __future__ import annotations
 
 from ..chrome import ASH, BLOOD, box, menu
+from ..padmap import PAUSE as PAUSE_PAD
 from ..theme import parse_style
 from .base import Screen
 
@@ -18,6 +19,7 @@ class PauseScreen(Screen):
     """The dungeon, held still."""
 
     modal = True
+    PAD = PAUSE_PAD
 
     def __init__(self) -> None:
         self.index = 0

@@ -19,6 +19,7 @@ from neverdeads_revenge.game.pace import action_gap
 from neverdeads_revenge.game.state import GameState
 
 from ..keys import KEY_BINDINGS
+from ..padmap import FLOOR as FLOOR_PAD
 from .base import Screen
 from .pages import the_page, write_the_page, write_the_weapon
 from .dialogs import (
@@ -64,6 +65,12 @@ class GameScreen(Screen):
     """
 
     smaller_face = True
+
+    #: The pad's layout here: A does, B is the bag, X the ultimate, Y the bottle,
+    #: L3 the borrowed hour, R3 the controls, Back the book.
+    PAD = FLOOR_PAD
+    #: Eight directions, because the floor has them.
+    pad_diagonals = True
 
     def __init__(self, state: GameState) -> None:
         self.state = state
@@ -118,6 +125,11 @@ class GameScreen(Screen):
             from .pause import PauseScreen
 
             app.push(PauseScreen())
+            return True
+        if name == "m":
+            # The book, on the floor. Back on a pad and `m` on a keyboard land
+            # here; the pause menu's Almanac row does the same thing.
+            app.open_almanac()
             return True
         if name in ("?", "f1"):
             from .menus import HelpScreen

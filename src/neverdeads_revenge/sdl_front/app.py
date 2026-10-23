@@ -21,9 +21,11 @@ import time
 from pathlib import Path
 
 from ..persistence import load_meta
+from ..desktop.padmap import DEFAULT as DEFAULT_PAD
 from ..desktop.theme import BACKGROUND, Colour
 from .font import SdlFont
 from .effects import SdlEffects
+from .pad import Pad
 from .keys import name_of, typed
 from .paint import paint
 
@@ -236,6 +238,13 @@ class SdlApp:
         #: What the game asked to be heard. A front end with no sound is still a
         #: front end that was asked, and a test can read this.
         self.played: list[str] = []
+        #: The controller, if there is one. Empty and silent when there is not:
+        #: a front end that refuses to start without a pad is a front end that
+        #: lost a player.
+        self.pad = Pad.open()
+        #: Which device spoke last. Hints follow it: a pad player should read A
+        #: and B, a keyboard player should read enter and esc.
+        self.pad_active = False
         self.headline = headline
         self._window = None
         self._surface = None
@@ -273,20 +282,25 @@ class SdlApp:
     def push(self, screen) -> None:
         self.screens.append(screen)
         self._forget_presses()
+        self.pad.forget()
 
     def pop(self) -> None:
         if len(self.screens) > 1:
             self.screens.pop()
         self._forget_presses()
+        self.pad.forget()
 
     def swap(self, screen) -> None:
         self.screens[-1:] = [screen]
         self._forget_presses()
+        self.pad.forget()
 
     def return_to_title(self) -> None:
         from ..desktop.screens.title import TitleScreen
 
         self.screens = [TitleScreen()]
+        self._forget_presses()
+        self.pad.forget()
 
     # -- what the screens ask of an application ------------------------------
     def has_saved_run(self) -> bool:
@@ -464,11 +478,15 @@ class SdlApp:
         self.play("secret_found")
         self._note_glass("CHEAT: 9999 coin, every page")
 
-    def open_almanac(self) -> None:
-        """The book: the chronicle and the bestiary, on one stack entry."""
+    def open_almanac(self, tab: int = 0) -> None:
+        """The book, opened at the half the question belongs to.
+
+        The chronicle by default; a fight opens the bestiary, because there the
+        question is always "what does *this* do to me".
+        """
         from ..desktop.screens.almanac import AlmanacScreen
 
-        self.push(AlmanacScreen())
+        self.push(AlmanacScreen(tab=tab))
 
     def open_delete_progress(self) -> None:
         """Ask for the word, then erase everything.
@@ -693,6 +711,7 @@ class SdlApp:
         if event.type == pygame.QUIT:
             self.quit()
         elif event.type == pygame.KEYDOWN:
+            self.pad_active = False
             text = typed(event)
             name = name_of(event)
             if name is not None and name in self._stale:
@@ -742,6 +761,7 @@ class SdlApp:
             gap = max(1e-4, now - self._last_frame)
             self.frames = (self.frames * 9.0 + (1.0 / gap)) / 10.0
         self._last_frame = now
+        self._poll_pad(dt)
         screen = self.screens[-1]
         if getattr(screen, "busy", False) or getattr(screen, "animating", False):
             screen.step(dt, self)
@@ -763,6 +783,7 @@ class SdlApp:
         else:
             self.grid.font = self.font
             self.grid.clear()
+        self.grid.pad = self.pad_active
         mark = time.perf_counter() if self.show_timings else 0.0
         # An opaque modal: nothing under it is drawn. A menu is a panel, not a
         # window onto the dungeon, so the topmost modal roots the stack -- the
@@ -899,6 +920,7 @@ class SdlApp:
             self.font.cell_h,
             face.cell_w,
             face.cell_h,
+            pad=self.pad_active,
         )
         for ink in out:
             self._put_small(surface, face, ink)
@@ -1215,6 +1237,46 @@ class SdlApp:
             (self._shown_at[0] + offset[0] * fit, self._shown_at[1] + offset[1] * fit),
         )
         pygame.display.flip()
+
+    # -- the pad ------------------------------------------------------------
+    def _poll_pad(self, dt: float) -> None:
+        """Ask the controller what it did, and hand it on as key names.
+
+        The top screen says what its buttons mean (``PAD``) and whether it wants
+        eight directions and the right stick's pages; everything else is the same
+        road a keystroke takes, which is the whole reason the screens never had
+        to learn about a pad.
+        """
+        screen = self.screens[-1]
+        mapping = getattr(screen, "PAD", DEFAULT_PAD)
+        events = self.pad.poll(
+            dt,
+            mapping,
+            diagonals=bool(getattr(screen, "pad_diagonals", False)),
+            scroll=bool(getattr(screen, "pad_scroll", False)),
+        )
+        for name, kind, repeat in events:
+            self.pad_active = True
+            screen = self.screens[-1]
+            if kind == "up":
+                if screen.key_up(name, KeyPress(False), self):
+                    self.redraw()
+            else:
+                self.key(name, KeyPress(repeat))
+
+    def rumble(self, low: float, high: float, ms: int = 90) -> None:
+        """Shake the pad: a blow, a kill, a level, a death."""
+        self.pad.rumble(low, high, ms)
+
+    @property
+    def fullscreen(self) -> bool:
+        """Whether the window is the whole screen, for the settings to say."""
+        return self._fullscreen
+
+    def open_settings(self) -> None:
+        from ..desktop.screens.settings import SettingsScreen
+
+        self.push(SettingsScreen())
 
     # -- the keys -----------------------------------------------------------
     def key(self, name: str, event=None, text: str = "") -> bool:

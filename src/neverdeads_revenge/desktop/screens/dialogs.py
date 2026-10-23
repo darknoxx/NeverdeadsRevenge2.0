@@ -12,6 +12,10 @@ import math
 
 from ..art import size
 from ..chrome import ASH, BONE, BLOOD, box, rule
+from ..hold import HoldToContinue
+from ..padmap import CHEST as CHEST_PAD
+from ..padmap import CONFIRM as CONFIRM_PAD
+from ..padmap import DELETE as DELETE_PAD
 from ..theme import parse_style
 from .base import Screen
 from .game_over import clean_name
@@ -61,6 +65,9 @@ class _Dialog(Screen):
     """
 
     modal = True
+    #: A pad's A confirms and B goes back on every card there is.
+    from ..padmap import DEFAULT as PAD
+
     #: And it does not cover what is under it. The exception is a room that
     #: paints in pixels -- the arena, the turning -- where the paint lands after
     #: the grid and would cover the box; the app keeps those dialogs solid.
@@ -161,6 +168,8 @@ class _Dialog(Screen):
             buffer.text(at, y + 2 + lead + i, line, parse_style(BONE))
         rule(buffer, x + 1, y + height - 2, width - 2, ASH)
         hint = self.hint[: width - 6]
+        if getattr(buffer, "pad", False) and getattr(self, "_pad_hint", None):
+            hint = self._pad_hint[: width - 6]
         at = x + 3
         if self.FITTED:
             at = x + max(2, (width - len(hint)) // 2)
@@ -189,6 +198,8 @@ class _Dialog(Screen):
 
 class ConfirmScreen(_Dialog):
     """A yes/no question. Escape answers no, the way it does everywhere."""
+
+    PAD = CONFIRM_PAD
 
     def __init__(self, title: str, body: str, on_done=None) -> None:
         super().__init__(on_done)
@@ -238,6 +249,12 @@ class KindlyScreen(_Dialog):
         )
 
     def key(self, name, event, app) -> bool:
+        if name == "hold":
+            # Repeats are the hold: a tap banks nothing, which is the whole
+            # reason this screen exists.
+            if self.hold.press("hold", event.isAutoRepeat()):
+                self.finish(app, True)
+            return True
         if event.isAutoRepeat():
             return True
         if name == "escape":
@@ -250,6 +267,10 @@ class KindlyScreen(_Dialog):
 
 
 class ChestScreen(_Dialog):
+    #: The chest's three answers on three buttons: A pays and takes, X pays and
+    #: takes nothing (the fame), B walks away.
+    PAD = CHEST_PAD
+
     """The price, and nothing else. The reward stays behind the lid."""
 
     title = "AN OMINOUS CHEST"
@@ -258,6 +279,7 @@ class ChestScreen(_Dialog):
         super().__init__(on_done)
         self.price = price
         self.hint = "enter open it    f the curse, for fame    esc walk away"
+        self._pad_hint = "A open it    X the curse, for fame    B walk away"
 
     def _body(self) -> str:
         return (
@@ -312,20 +334,40 @@ class DeleteProgressScreen(_Dialog):
     """
 
     modal = True
+    #: On a pad there is nothing to type: A is held for a moment instead, which
+    #: is the same bargain a typed word is -- a decision that cannot be a reflex.
+    PAD = DELETE_PAD
     title = "DELETE EVERYTHING"
     hint = "type DELETE   enter to erase   esc to keep"
 
     def __init__(self, on_done=None) -> None:
         super().__init__(on_done)
         self.typed = ""
+        self.hold = HoldToContinue(keys=("hold",), seconds=1.4)
 
     def _body(self) -> str:
+        if getattr(self, "_pad", False):
+            return (
+                "This erases every score on the board, the chronicle, the purse, "
+                "every upgrade bought, and the run you put down. There is no undo "
+                "and no copy.\n\n"
+                "Hold A to be sure."
+            )
         return (
             "This erases every score on the board, the chronicle, the purse, "
             "every upgrade bought, and the run you put down. There is no undo "
             "and no copy.\n\n"
             f"Type DELETE to be sure:   {self.typed or '_'}"
         )
+
+    def draw(self, buffer, app) -> None:
+        self._pad = bool(getattr(buffer, "pad", False))
+        self.hint = (
+            "hold A to erase   B to keep"
+            if self._pad
+            else "type DELETE   enter to erase   esc to keep"
+        )
+        super().draw(buffer, app)
 
     def key(self, name, event, app) -> bool:
         if event.isAutoRepeat():
@@ -343,6 +385,12 @@ class DeleteProgressScreen(_Dialog):
         if char and len(self.typed) < len("DELETE"):
             self.typed += char.upper()
         return True
+
+    def key_up(self, name, event, app) -> bool:
+        if name == "hold":
+            self.hold.release("hold")
+            return True
+        return False
 
 
 class NpcScreen(_Dialog):

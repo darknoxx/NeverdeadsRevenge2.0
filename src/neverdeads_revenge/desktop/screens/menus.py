@@ -31,6 +31,9 @@ class _Panel(Screen):
     """A titled box with a scrolling list and one hint line."""
 
     modal = True
+    #: The right stick pages a long list; the floor must not, because its page
+    #: keys are movement.
+    pad_scroll = True
     title = ""
     hint = "↑↓ scroll   esc close"
 
@@ -383,6 +386,7 @@ class ShopScreen(Screen):
     """Spend coin. The one menu with a price on every line."""
 
     modal = True
+    pad_scroll = True
 
     def __init__(self) -> None:
         self.index = 0

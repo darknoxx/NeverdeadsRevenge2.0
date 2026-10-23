@@ -19,6 +19,8 @@ faster than a character at a time.
 
 from __future__ import annotations
 
+import re
+
 from dataclasses import dataclass
 from typing import Iterator
 
@@ -33,12 +35,41 @@ class Cell:
     style: Style = Style()
 
 
+#: The words that name a *key*, and what the same gesture is called on a pad.
+#: Word boundaries only: "sentence" must not become "sBntence".
+PAD_WORDS: dict[str, str] = {
+    r"\benter\b": "A",
+    r"\besc\b": "B",
+    r"\bescape\b": "B",
+    r"\bpgup\b": "LT",
+    r"\bpgdn\b": "RT",
+    r"\bbackspace\b": "B",
+}
+
+
+def pad_words(text: str) -> str:
+    """Say a hint in the buttons the player is actually holding.
+
+    The screens write "enter" and "esc" because that is the vocabulary every
+    screen answers; a pad is a different set of *names on the same words*. This
+    is the translation for the words that appear in hints, and only when the pad
+    was the last thing touched -- a keyboard player still reads "esc".
+    """
+    for pattern, word in PAD_WORDS.items():
+        text = re.sub(pattern, word, text)
+    return text
+
+
 class PatternBuffer:
     """A grid of character cells."""
 
     def __init__(self, cols: int, rows: int, font=None) -> None:
         self.cols = cols
         self.rows = rows
+        #: Whether hints should name the pad's buttons instead of the keys. Set
+        #: by the application from the last input device; off everywhere else,
+        #: which is why no test has to know about it.
+        self.pad = False
         #: Kept rather than used: the grid is measured in cells and does not
         #: care how wide one is, but a painter wants the font and the caller has
         #: already got it in hand.
@@ -83,6 +114,8 @@ class PatternBuffer:
         somewhere the screen did not ask for.
         """
         style = style or Style()
+        if self.pad:
+            string = pad_words(string)
         for offset, char in enumerate(string):
             self.put(x + offset, y, char, style)
         return x + len(string)

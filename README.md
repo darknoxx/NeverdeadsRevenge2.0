@@ -277,7 +277,41 @@ the glass itself.
 | `c` | the hero sheet |
 | `?` | controls and reference |
 | `r` | the borrowed hour |
+| `m` | the Almanac, from the floor or a fight (the pause opens it too) |
+| `v` | in a fight: the Almanac, open at the enemy being aimed at |
 | `esc` | pause (`r`/`esc` resume, `c` controls, `a` the Almanac, `s` save and quit, `q` to title, `m` sound) |
+
+### The controller
+
+An Xbox pad drives the whole game -- and anything SDL's mapping database knows,
+which includes a DualShock, a DualSense and the Retroid's own controls. The
+D-pad and the left stick both move, the shoulders cycle, the triggers page, and
+the pad rumbles when a blow lands.
+
+| pad | floor | fight | menus |
+| --- | --- | --- | --- |
+| left stick / D-pad | walk (eight directions) | aim and lists | navigate |
+| **A** | the one useful thing | confirm the marked verb | confirm / buy |
+| **B** | the pack | back one level | back |
+| **X** | the ultimate | the tricks | -- |
+| **Y** | drink | the draught | -- |
+| **LB / RB** | sheet / legend | previous / next target | previous / next tab |
+| **LT / RT** | -- | -- | page up / down |
+| **L3** | the borrowed hour | -- | -- |
+| **R3** | controls and reference | inspect the enemy | -- |
+| **Back** | the Almanac | the Almanac | the Almanac (pause) |
+| **Start** | pause | -- | close; on the title, the settings |
+
+Two of those are worth spelling out. **Flee is never B**: the four verbs are a
+row, the stick walks it, and A takes whatever the marker is on -- B only ever
+backs out one step. And **the pad's hints follow it**: the moment it is the last
+thing touched, the hints read A and B rather than enter and esc.
+
+### Settings
+
+The title's **SETTINGS** row (`e`, or **Start** on a pad) is where the glass and
+the sound live now: full screen, scanlines, bloom, the CRT curve, and the sound.
+`F11`, `F2`, `F3` and `F4` still do the same thing from the keyboard.
 
 The menus are read sideways: `←` `→` choose, `enter` takes, or press the letter
 of the row you want. The Almanac is the one screen that is read like a page:

@@ -27,6 +27,7 @@ from ...game.lore import PAGE_COUNT, TITLE, numeral, page
 from ...world.items import ITEMS
 from ..art import Placed, exists as art_exists, size as art_size
 from ..chrome import ASH, BONE, BLOOD, PURPLE, box, rule
+from ..padmap import ALMANAC as ALMANAC_PAD
 from ..theme import parse_style
 from .base import Screen
 from .dialogs import wrap
@@ -54,6 +55,10 @@ class AlmanacScreen(Screen):
     """Three books, one cover."""
 
     modal = True
+    #: Back closes the book, the shoulders turn the tab page, the triggers page
+    #: the text and the right stick scrolls it.
+    PAD = ALMANAC_PAD
+    pad_scroll = True
 
     #: The three, in the order they are read: the story, then what it is about,
     #: then what you do about it. The other order would open the book on a list
@@ -83,8 +88,8 @@ class AlmanacScreen(Screen):
     #: long page's, because both are prose a player reads downward.
     PAGE_SCROLL = 9
 
-    def __init__(self) -> None:
-        self.tab = 0
+    def __init__(self, tab: int = 0, select: str | None = None) -> None:
+        self.tab = tab
         #: Where the keyboard is: the tab row, the index, or a thing's card.
         #: Three places, and the arrows walk between them the way the page is
         #: laid out -- up out of the top of a list lands on the tabs, left and
@@ -110,6 +115,23 @@ class AlmanacScreen(Screen):
         #: reason: an end key has to stop where the text stops.
         self._chronicle_total = 0
         self._card_total = 0
+        if select is not None:
+            self.select(select)
+
+    def select(self, key: str) -> None:
+        """Open the book at one page: what R3 does mid-fight.
+
+        The keyboard is put on the *page* rather than the index, because the
+        question that sent the player here was "what does this thing do" and the
+        answer is the page, not the list it is in.
+        """
+        pages = self._entries()
+        for number, page in enumerate(pages):
+            if page.key == key:
+                self._set_cursor(number)
+                self.focus = "page"
+                self.detail_offset = 0
+                return
 
     # -- what the books know -------------------------------------------------
     @staticmethod
@@ -426,8 +448,16 @@ class AlmanacScreen(Screen):
         # and a held key that crossed them would flicker between two pages.
         if event.isAutoRepeat() and name in ("left", "right", "tab", "c", "b", "a"):
             return True
-        if name == "escape":
+        if name in ("escape", "m"):
+            # Back closes the book; `m` is the same door from the other side.
             app.pop()
+            return True
+        if name in ("[", "]"):
+            # The shoulders: previous and next tab, from wherever the keyboard is.
+            step = -1 if name == "[" else 1
+            self._switch(max(0, min(len(self.TABS) - 1, self.tab + step)))
+            if self.focus == "page":
+                self.focus = "list"
             return True
         if name in ("c", "b", "a"):
             # Shortcuts, not part of the arrow language: each names a book and

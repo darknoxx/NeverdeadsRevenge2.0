@@ -16,6 +16,7 @@ from __future__ import annotations
 import math
 
 from ..art import TITLE_ART, Placed, exists as art_exists, size as art_size
+from ..padmap import TITLE as TITLE_PAD
 from ..blocks import render_word
 from ..chrome import ASH, BONE, BLOOD, PURPLE, rule
 from ..theme import parse_style
@@ -31,6 +32,9 @@ class TitleScreen(Screen):
     #: Never announced in the game: a cheat is something somebody tells you, not
     #: something a menu advertises.
     CHEAT = "battle4ever"
+
+    #: Start is the settings on this screen; B quits nothing.
+    PAD = TITLE_PAD
 
     def __init__(self) -> None:
         self.index = 0
@@ -48,6 +52,7 @@ class TitleScreen(Screen):
             ("s", "SHOP"),
             ("h", "SCORES"),
             ("a", "ALMANAC"),
+            ("e", "SETTINGS"),
             ("d", "DELETE PROGRESS"),
             ("q", "QUIT"),
         ]
@@ -61,7 +66,6 @@ class TitleScreen(Screen):
         # player reads most, so they get their rows first and the big picture
         # makes do with what is left. The version is one line now that the name
         # is painted, and the best score sits under it, both just above the rule.
-        glass_y = buffer.rows - 2
         nav_y = buffer.rows - 3
         menu_y = buffer.rows - 5
         rule_y = buffer.rows - 6
@@ -91,13 +95,14 @@ class TitleScreen(Screen):
 
         rule(buffer, 2, rule_y, buffer.cols - 4, BLOOD)
         self._menu_line(buffer, menu_y, items, self.index)
-        self._centre(buffer, nav_y, "←→ choose   enter take   esc quit", ASH)
-        self._centre(
-            buffer,
-            glass_y,
-            "F11 screen   F2 scanlines   F3 bloom   F4 curve",
-            ASH,
+        # A pad has no escape, and B must not quit a game from its title: the
+        # pad's line names the button that *does* exist for the menu, Start.
+        nav = (
+            "←→ choose   A take   Start settings"
+            if getattr(app, "pad_active", False)
+            else "←→ choose   enter take   esc quit"
         )
+        self._centre(buffer, nav_y, nav, ASH)
 
     # -- the painting --------------------------------------------------------
     def art(self, app) -> list[Placed]:
@@ -160,7 +165,9 @@ class TitleScreen(Screen):
             chosen = i == index
             style = parse_style(f"bold {BONE}") if chosen else parse_style(ASH)
             buffer.text(x, y, texts[i], style)
-            x += len(texts[i]) + 3
+            # Two cells and not three: eight rows (CONTINUE included) have to
+            # fit one line at the smallest grid the game allows.
+            x += len(texts[i]) + 2
 
     @staticmethod
     def _centre(buffer, y: int, text: str, style: str) -> None:
@@ -233,6 +240,8 @@ class TitleScreen(Screen):
             app.open_scoreboard()
         elif key == "a":
             app.open_almanac()
+        elif key == "e":
+            app.open_settings()
         elif key == "d":
             app.open_delete_progress()
         elif key == "q":

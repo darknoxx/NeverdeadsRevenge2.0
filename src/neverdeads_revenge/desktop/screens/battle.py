@@ -52,6 +52,7 @@ from ..art import exists as art_exists
 from ..art import monster_art
 from ..art import size as art_size
 from ..chrome import ASH, BLOOD, BONE, box, rule
+from ..padmap import BATTLE as BATTLE_PAD
 from ..pattern import PatternBuffer
 from ..render import log_style
 from ..theme import Colour, Style, parse_style
@@ -645,6 +646,10 @@ class Staged:
 
 
 class BattleScreen(Screen):
+    #: The pad's four faces are the four verbs; B backs out one level and never
+    #: flees; R3 inspects what is being fought, Back opens the book.
+    PAD = BATTLE_PAD
+
     """The stage, and one fight, played a beat at a time."""
 
     def __init__(self, battle: Battle) -> None:
@@ -1002,6 +1007,16 @@ class BattleScreen(Screen):
         return (buffer.cols, buffer.rows)
 
     def key(self, name: str, event, app) -> bool:
+        if name == "m":
+            # The book, mid-fight. It is the one screen the game lets you open
+            # here: reading is not a turn, and a monster's page is worth more
+            # than a pause. It opens at the bestiary, because a fight's question
+            # is always about a monster.
+            app.open_almanac(tab=1)
+            return True
+        if name == "v":
+            self._inspect(app)
+            return True
         if self.battle.over:
             # The fight is decided, but the arena may still be playing the last
             # blow: leaving on a keypress before the verdict has been shown would
@@ -1113,7 +1128,7 @@ class BattleScreen(Screen):
         if name in ("right", "l"):
             self._walk(1, app)
             return True
-        if name == "escape":
+        if name in ("escape", "backspace"):
             # Back where the choice came from, with the trick still picked: the
             # aim is a step in a menu and not a trap.
             self.aiming = False
@@ -1136,6 +1151,22 @@ class BattleScreen(Screen):
         cols, rows = self._dims(app)
         return max(1, self._areas(cols, rows)["commands"][3] - 4)
 
+    def _inspect(self, app) -> None:
+        """R3: the Almanac, open at what is being fought.
+
+        The target is the monster the arrow is on, or the first one standing.
+        A page that has not been written stays unwritten -- the fight is not a
+        way around the collection -- but the page that *is* written answers
+        "what does this thing do to me" without leaving the room.
+        """
+        living = self.battle.living_enemies()
+        if not living:
+            return
+        target = living[self.target % len(living)]
+        from .almanac import AlmanacScreen
+
+        app.push(AlmanacScreen(tab=1, select=target.key))
+
     def _pick_special(self, name: str, app) -> bool:
         """What he has learned, being looked at: pick one, or come back."""
         specials = self.battle.learned()
@@ -1150,7 +1181,7 @@ class BattleScreen(Screen):
         # the price of each trick where the number used to be, and a shortcut is
         # a convenience for the player who already knows the list by heart.
         index = {str(digit): digit - 1 for digit in range(1, 10)}.get(name)
-        if name == "escape":
+        if name in ("escape", "backspace"):
             self.picking = False
             return True
         rows = self._list_rows(app)
@@ -1559,6 +1590,9 @@ class BattleScreen(Screen):
                 # the summary is about the run, and the run is what is standing
                 # behind the arena.
                 self.verdict = "YOU DIED"
+                rumble = getattr(app, "rumble", None)
+                if rumble is not None:
+                    rumble(1.0, 0.8, 450)
                 app.leave_battle()
                 app.show_game_over(won=False)
                 return
@@ -1639,6 +1673,17 @@ class BattleScreen(Screen):
     def _land(self, struck: Struck, app) -> None:
         """A blow landing: a number, a shove, and a sound that matches it."""
         outcome = struck.outcome
+        if outcome.hit:
+            # The pad says it in the hand: a heavy low for a blow, a small sharp
+            # one on top for a crit, and a longer shake for the killing one.
+            rumble = getattr(app, "rumble", None)
+            if rumble is not None:
+                if outcome.killed:
+                    rumble(0.8, 0.4, 140)
+                elif outcome.crit:
+                    rumble(0.5, 0.6, 90)
+                else:
+                    rumble(0.35, 0.15, 55)
         figure = self._figure_of(struck.target, app)
         if figure is not None:
             text = str(outcome.damage) if outcome.hit else "miss"
@@ -2402,7 +2447,14 @@ class BattleScreen(Screen):
         box(buffer, x, y, width, height, title="COMMAND", border=BLOOD, fill=True)
         if height < 4 or width < 12:
             return
-        keys = {ATTACK: "a", SPECIAL: "s", ITEM: "i", FLEE: "f"}
+        on_pad = getattr(buffer, "pad", False)
+        if on_pad:
+            # A pad has no letters: X and Y are direct, and A confirms whatever
+            # the marker is on -- so only the two shortcuts are advertised, and
+            # the label closes up where there is no shortcut to show.
+            keys = {ATTACK: "", SPECIAL: "X ", ITEM: "Y ", FLEE: ""}
+        else:
+            keys = {ATTACK: "a ", SPECIAL: "s ", ITEM: "i ", FLEE: "f "}
         rows = [(keys[verb], verb.upper()) for verb in VERBS[: height - 2]]
         chosen = self.verb if self.verb < len(rows) else 0
         ready = self.battle.special_ready()
@@ -2416,7 +2468,7 @@ class BattleScreen(Screen):
                 style = parse_style("grey23")
             else:
                 style = parse_style(ASH)
-            buffer.text(x + 2, y + 1 + index, f"{marker} {key}  {label}", style)
+            buffer.text(x + 2, y + 1 + index, f"{marker} {key} {label}", style)
             if verb == ATTACK:
                 self._draw_wield(buffer, x + 14, y + 1 + index, width - 16)
 
@@ -2525,6 +2577,9 @@ class BattleScreen(Screen):
         popup = self._popup(LEVEL_UP, LEVEL_UP_COLOUR, figure, app, True)
         popup.y -= 12  # clear of the damage numbers, which land on the same head
         self._popups.append(popup)
+        rumble = getattr(app, "rumble", None)
+        if rumble is not None:
+            rumble(0.25, 0.7, 120)
         # And *now* the plate may say it: the count, the level and the purse all
         # move with the arrow, which is the moment the level happened for the
         # player rather than the moment the rules worked it out.

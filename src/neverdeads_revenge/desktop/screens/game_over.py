@@ -8,6 +8,8 @@ slots, letters and digits, because that is what a scoreboard column wants.
 from __future__ import annotations
 
 from ..chrome import ASH, BONE, BLOOD, PURPLE, box, rule
+from ..padmap import NAME_ENTRY as NAME_PAD
+from ..padmap import TALLY as TALLY_PAD
 from ..hold import HoldToContinue
 from ..theme import parse_style
 from .base import Screen
@@ -55,6 +57,8 @@ class GameOverScreen(Screen):
     """The tally. A held enter goes on; ``r`` takes the ending back."""
 
     modal = True
+    #: Hold A to go on, X to take it back, B to skip.
+    PAD = TALLY_PAD
 
     def __init__(self, state, won: bool, best: int, can_rewind: bool, on_done=None) -> None:
         self.state = state
@@ -80,7 +84,11 @@ class GameOverScreen(Screen):
     def _hint(self, buffer, x: int, y: int, width: int) -> None:
         bar = self.hold.bar()
         if self.can_rewind:
-            text = f"hold enter   {bar}      r take it back"
+            text = (
+                f"hold A   {bar}      X take it back"
+                if getattr(buffer, "pad", False)
+                else f"hold enter   {bar}      r take it back"
+            )
         else:
             text = f"hold enter   {bar}"
         buffer.text(x + 3, y, text[: width - 6], parse_style(ASH))
@@ -136,10 +144,17 @@ class GameOverScreen(Screen):
             self.on_done(value)
 
 
+#: Names a pad can roll instead of typing one. Short, because the board keeps
+#: five cells, and not the heroes' names, because a run is the player's.
+PAD_NAMES: tuple[str, ...] = ("ASH", "WREN", "MOTH", "SABLE", "HOLLOW", "KESTREL")
+
+
 class NameEntryScreen(Screen):
     """Five slots for the scoreboard."""
 
     modal = True
+    #: A accepts, X rolls a name, Y clears; the keyboard types as it always did.
+    PAD = NAME_PAD
 
     def __init__(self, score: int, previous: str = "", on_done=None) -> None:
         self.score = score
@@ -147,6 +162,7 @@ class NameEntryScreen(Screen):
         self.on_done = on_done
 
     def draw(self, buffer, app) -> None:
+        pad = bool(getattr(buffer, "pad", False))
         width = 40
         height = 9
         x, y = (buffer.cols - width) // 2, (buffer.rows - height) // 2
@@ -163,11 +179,22 @@ class NameEntryScreen(Screen):
             y + height - 1,
             # Short enough for the box: the old line ran through the border and
             # out of the frame by eleven characters.
-            "letters   backspace   enter keeps",
+            "A keeps   X random   Y clear"
+            if pad
+            else "letters   backspace   enter keeps",
             parse_style(ASH),
         )
 
     def key(self, name, event, app) -> bool:
+        if name == "random":
+            # A pad cannot type, and "???" is not a name. The dice are the pad's
+            # keyboard, and they only fill a *slot* the player can keep.
+            seed = len(self.name) + len(PAD_NAMES)
+            self.name = PAD_NAMES[seed % len(PAD_NAMES)]
+            return True
+        if name == "clear":
+            self.name = ""
+            return True
         if event.isAutoRepeat():
             return True
         if name in ("enter", "return", "escape"):

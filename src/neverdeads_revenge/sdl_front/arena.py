@@ -74,6 +74,19 @@ NUMBER_LIFT = 2
 class SdlArena(Screen):
     """The arena's own panels, its playback, and the room painted by pygame."""
 
+    @property
+    def PAD(self):
+        """The arena's own pad map, asked through the wrapper.
+
+        This screen is a skin: the panels, the rules and the keys all belong to
+        the ``BattleScreen`` inside it, and a pad that asked the skin would get
+        the menu default -- B would *escape* a fight instead of backing out of
+        the aim.
+        """
+        from ..desktop.padmap import DEFAULT
+
+        return getattr(self.arena, "PAD", DEFAULT)
+
     def __init__(self, battle, backdrop: bool = True) -> None:
         self.battle = battle
         #: Whether the room is one painting or the game's own flagstones and

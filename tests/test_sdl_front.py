@@ -181,13 +181,17 @@ def test_the_same_screen_renders_without_qt_in_the_room():
     TitleScreen().draw(grid, Stub())
     surface = paint(grid, font)
 
+    # The menu is the screen's own ink now that the name is a painted sprite.
+    said = "\n".join("".join(cell.char or " " for cell in row) for row in grid.cells)
+    assert "NEW RUN" in said and "SETTINGS" in said, "the menu did not come out"
+
     inked = sum(
         1
         for y in range(0, surface.get_height(), 4)
         for x in range(0, surface.get_width(), 4)
         if surface.get_at((x, y))[:3] != tuple(BACKGROUND)
     )
-    assert inked > 200, f"the title screen came out nearly empty: {inked} cells of ink"
+    assert inked > 120, f"the title screen came out nearly empty: {inked} cells of ink"
 
 
 def test_the_title_is_the_painted_name_at_the_size_it_was_painted():

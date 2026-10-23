@@ -341,6 +341,7 @@ def sidebar_text(
     small_cell_w: int,
     small_cell_h: int,
     now: float | None = None,
+    pad: bool = False,
 ) -> tuple[list[Ink], tuple[int, int, int] | None]:
     """Everything under the HUD's rule, as rows to draw.
 
@@ -397,7 +398,11 @@ def sidebar_text(
         price = (
             "the price is paid: 5 kill points"
             if state.sacrificed
-            else "f  sacrifice your kill points for power"
+            else (
+                "X  sacrifice your kill points for power"
+                if pad
+                else "f  sacrifice your kill points for power"
+            )
         )
         if y + small_cell_h <= bottom:
             out.append(Ink(price[:chars], text_x, y, "grey35"))
@@ -413,7 +418,14 @@ def sidebar_text(
     # progress, and a reference that never changes was spending the best rows on
     # every turn -- so what is left here is the pointer to it.
     if y + small_cell_h <= bottom:
-        out.append(Ink("l legend   ? reference", left, y, "grey30"))
+        out.append(
+            Ink(
+                "RB legend   R3 reference" if pad else "l legend   ? reference",
+                left,
+                y,
+                "grey30",
+            )
+        )
     return out, rule
 
 

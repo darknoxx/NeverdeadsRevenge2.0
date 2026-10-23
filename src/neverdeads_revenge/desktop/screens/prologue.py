@@ -89,7 +89,14 @@ class PrologueScreen(Screen):
         for i, (text, style) in enumerate(window):
             buffer.text(x + 4, y + 2 + i, text[: width - 8], parse_style(style))
         rule(buffer, x + 1, y + height - 3, width - 2, ASH)
-        buffer.text(x + 4, y + height - 2, "arrows read   hold enter to begin", parse_style(ASH))
+        buffer.text(
+            x + 4,
+            y + height - 2,
+            "arrows read   hold A to begin"
+            if getattr(buffer, "pad", False)
+            else "arrows read   hold enter to begin",
+            parse_style(ASH),
+        )
         bar_style = f"bold {_FILLED}" if self.hold.progress else _EMPTY
         buffer.text(x + width - 4 - 10, y + height - 2, self.hold.bar(), parse_style(bar_style))
 
