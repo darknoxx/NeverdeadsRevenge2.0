@@ -66,6 +66,30 @@ SEEDS = range(25)
 
 
 # -- stats -----------------------------------------------------------------
+def test_the_standing_map_answers_what_actor_at_answers():
+    """One pass over the actors and two thousand lookups, or two thousand scans.
+
+    The overworld asks "who is on this square?" for every square in view, and it
+    used to ask the state once per square -- a scan of the whole floor each time,
+    which is why a busy floor was slower than an empty one. ``standing`` is the
+    same question answered once; it has to give the same answers, position for
+    position, or a hero would be drawn as a ghoul.
+    """
+    state = start_run(NOXX, seed=7)
+    state.build_floor(4)
+    # A few things on the same floor: the hero, the monsters, and the people.
+    state.atritas = make_enemy(ENEMIES[next(iter(ENEMIES))], state.player.position)
+    standing = state.standing()
+
+    for y in range(state.dungeon_map.height):
+        for x in range(state.dungeon_map.width):
+            position = (x, y)
+            assert standing.get(position) is state.actor_at(position), position
+    # And a square nobody stands on, inside and outside the floor.
+    assert standing.get((0, 0)) is state.actor_at((0, 0))
+    assert standing.get((-1, -1)) is state.actor_at((-1, -1))
+
+
 def test_hurt_applies_armour():
     stats = Stats(max_hp=20, hp=20, armor=2)
     assert stats.hurt(5) == 3

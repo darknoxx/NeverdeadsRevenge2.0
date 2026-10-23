@@ -191,11 +191,13 @@ def _draw_map(buffer, state, area) -> None:
     # leaves coin there, so the stain was invisible exactly where it mattered
     # most. The *background* is the one channel loot does not use.
     tongue = state.has_draught("carrion_tongue")
+    # Who stands where, once: asking the state per square is a scan per square.
+    standing = state.standing()
 
     for y in range(view_h):
         for x in range(view_w):
             position = (left + x, top + y)
-            glyph, style = _cell_content(position, state)
+            glyph, style = _cell_content(position, state, standing)
             if position in state.hits:
                 # A square something struck this turn flashes in reverse --
                 # parsed onto the cell's own style, so the wall stays a wall.
@@ -211,7 +213,7 @@ def _draw_map(buffer, state, area) -> None:
                 )
             if burning and style.bg is None:
                 fg = style.fg
-                actor = state.actor_at(position)
+                actor = standing.get(position)
                 if dungeon.display_tile(position) is Tile.WALL or (
                     actor is not None and actor.kind is ActorKind.ENEMY
                 ):
@@ -237,7 +239,7 @@ def _draw_map(buffer, state, area) -> None:
                     # the one thing the fortress's own weather erases.
                     fg = parse_style("grey15").fg
                 elif (
-                    state.actor_at(position) is not None
+                    standing.get(position) is not None
                     or dungeon.item_at(position) is not None
                 ):
                     # Everything alive and everything lying there goes black
@@ -255,16 +257,23 @@ def _draw_map(buffer, state, area) -> None:
             buffer.put(x0 + x, y0 + y, glyph, style)
 
 
-def _cell_content(position, state: GameState) -> tuple[str, Style]:
+def _cell_content(position, state: GameState, standing=None) -> tuple[str, Style]:
     """One map cell: an actor, else loot, else the glass, else terrain.
 
     The port of ``map_view._cell_content``: same order, same rules, including
     WHAT THE DARK KNOWS seeing through walls and THE HUNGRY ROAD's red comma.
+
+    ``standing`` is :meth:`GameState.standing` for this frame -- who is where, in
+    one pass -- because a subscription to it per square is the whole difference
+    between a floor with four monsters and a floor with ten. A caller with one
+    square in its hand may leave it out and pay for that one pass.
     """
+    if standing is None:
+        standing = state.standing()
     dungeon = state.dungeon_map
     visible = dungeon.is_visible(position)
 
-    actor = state.actor_at(position)
+    actor = standing.get(position)
     if actor is not None:
         if visible:
             return actor.glyph, parse_style(f"bold {actor.color}")

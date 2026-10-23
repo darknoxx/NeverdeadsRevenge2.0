@@ -802,6 +802,32 @@ class GameState:
             return self.fortress
         return None
 
+    def standing(self) -> dict[Pos, Actor]:
+        """Who is where, in one pass, for a painter that asks about every square.
+
+        ``actor_at`` answers the same question for one square, and the overworld
+        asks it for every square in view -- two thousand of them a frame. One
+        pass over the actors is a map; two thousand passes are two thousand times
+        the monsters, which is exactly what a busy floor used to cost.
+
+        The precedence is ``actor_at``'s, and written the other way round so the
+        highest claim lands last: the hero, then the living enemies, the people,
+        the shadow, the fortress.
+        """
+        standing: dict[Pos, Actor] = {}
+        if self.fortress is not None:
+            standing[self.fortress.position] = self.fortress
+        if self.atritas is not None:
+            standing[self.atritas.position] = self.atritas
+        for npc in self.npcs:
+            standing[npc.position] = npc
+        for enemy in self.enemies:
+            if enemy.alive:
+                standing[enemy.position] = enemy
+        if self.player.alive:
+            standing[self.player.position] = self.player
+        return standing
+
     @property
     def lure(self) -> Actor | None:
         """What the monsters would rather bite than the hero, if anything.
