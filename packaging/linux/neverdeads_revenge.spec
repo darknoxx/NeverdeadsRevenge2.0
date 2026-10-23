@@ -75,8 +75,33 @@ a = Analysis(
     noarchive=False,
 )
 
-pyz = PYZ(a.pure)
+#: Libraries the *system* owns, and has to keep owning. The C++ runtime is the
+#: one that matters: mesa and its drivers are built against the distribution's
+#: libstdc++, and PyInstaller puts the build machine's older copy in front of it
+#: on ``LD_LIBRARY_PATH``. A driver that cannot resolve its own runtime does not
+#: load, and SDL reports the only thing it can see from there -- "Couldn't find
+#: matching GLX visual", "Could not get EGL display" -- which is a game with no
+#: CRT that works perfectly from source, on the same machine. The rest are base
+#: system libraries of the same kind, and none of them are ours to ship.
+SYSTEM_LIBS = {
+    "libstdc++.so.6",
+    "libgcc_s.so.1",
+    "libz.so.1",
+    "libexpat.so.1",
+    "libuuid.so.1",
+    "libffi.so.8",
+    "libbz2.so.1.0",
+    "liblzma.so.5",
+    "libreadline.so.8",
+    "libtinfo.so.6",
+    "libmvec.so.1",
+}
 
+a.binaries = [
+    entry for entry in a.binaries if os.path.basename(entry[0]) not in SYSTEM_LIBS
+]
+
+pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,

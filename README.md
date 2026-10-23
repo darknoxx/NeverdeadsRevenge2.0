@@ -437,6 +437,12 @@ what SteamOS can run. `packaging/linux/build_appimage.sh` makes the same image
 locally, but only for the machine it was built on: glibc is forward compatible,
 not backwards compatible.
 
+It deliberately ships **no system libraries** -- the C++ runtime above all. A
+bundled libstdc++ is put in front of the graphics driver's own, and a driver that
+cannot load is a game with no CRT that works perfectly from source. SDL, the
+Python runtime and the game are inside; the operating system's libraries are
+left to the operating system.
+
 The game needs a display: the design is the screen. Headless environments run
 the test suite instead, offscreen:
 

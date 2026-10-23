@@ -18,15 +18,6 @@ import tempfile
 def main(argv: list[str] | None = None) -> int:
     """Run the game."""
     argv = list(sys.argv[1:] if argv is None else argv)
-    #: Hidden, and answered before anything else: the game asks a child whether a
-    #: display server can make a GL context, because a driver that cannot may
-    #: take the process down instead of failing politely. See ``probe.py``.
-    if argv and argv[0] == "--probe-gl":
-        from .sdl_front.probe import probe_gl
-
-        driver = argv[1] if len(argv) > 1 else ""
-        egl = len(argv) > 2 and argv[2] == "egl"
-        return 0 if probe_gl(driver, egl) else 1
     parser = argparse.ArgumentParser(
         prog="ndr2",
         description="Neverdead's Revenge 2.0 -- the same dungeon, on a CRT.",
@@ -86,15 +77,6 @@ def main(argv: list[str] | None = None) -> int:
         help="print what each stage of the frame costs, once a second",
     )
     parser.add_argument(
-        "--profile",
-        type=int,
-        nargs="?",
-        const=10,
-        default=0,
-        metavar="SECONDS",
-        help="profile the first N seconds (default 10) and print where the time went",
-    )
-    parser.add_argument(
         "--scale",
         type=int,
         default=1,
@@ -147,7 +129,6 @@ def main(argv: list[str] | None = None) -> int:
         # The whole screen, with the grid taken from the display: a game that
         # opens at another monitor's size has to be resized before it is played.
         fullscreen=not args.windowed,
-        profile=args.profile,
     )
     window.open_window()
     return 0

@@ -143,7 +143,6 @@ class SdlApp:
         timings: bool = False,
         backdrop: bool = True,
         fullscreen: bool = True,
-        profile: int = 0,
     ) -> None:
         import pygame
 
@@ -195,10 +194,6 @@ class SdlApp:
         #: a second and never drawn: a breakdown is a thing to read in a terminal,
         #: not a thing to put in the picture.
         self.show_timings = timings
-        #: Seconds to profile the *real* window for, then print where the time
-        #: went. A frame breakdown says which stage; this says which function,
-        #: and it is the only way to ask a machine that is not this one.
-        self.profile_seconds = profile
         self._timing: dict[str, tuple[float, int]] = {}
         self._timing_since = time.monotonic()
         #: The grid, made once and cleared from then on. It is *this* app's, so it
@@ -1283,123 +1278,15 @@ class SdlApp:
         # without a context can never grow one. Turning the scanlines back on
         # after starting with them off used to do nothing at all until the next
         # launch -- which is exactly how a player loses the CRT for good.
-        started_on = self._driver_name(pygame)
-        egl_started = bool(os.environ.get("SDL_VIDEO_X11_FORCE_EGL"))
         if self._try_glass(pygame, size, flags, base):
             return
-        # The roads this machine has not been asked down yet, each one *asked in
-        # a child first*: a display server that cannot make a context sometimes
-        # takes the process with it instead of failing, and a driver crash cannot
-        # be caught. The child either exits or it does not; only a road it
-        # survived is taken here.
-        for driver, egl in self._glass_roads(pygame):
-            if not self._road_works(driver, egl):
-                continue
-            if not self._restart_display(pygame, driver, egl):
-                continue
-            if self._try_glass(pygame, size, flags, base):
-                return
-        if started_on and self._driver_name(pygame) != started_on:
-            # Every road was a dead end: go back to the display the machine had
-            # before it was asked, so the plain window is made where the game
-            # would have started in the first place.
-            self._restart_display(pygame, started_on, egl_started)
+        # No context, no CRT: a plain window at the same size. A machine that
+        # cannot make one -- an old driver, a remote session, a compositor with
+        # no GL -- still gets the game.
         self._window = pygame.display.set_mode(size, flags)
         self._fit()
-        if self.show_timings or self.profile_seconds:
+        if self.show_timings:
             print(f"crt      not available, plain blit: {self._glass_error}")
-
-    def _driver_name(self, pygame) -> str:
-        """Which SDL video driver this display is on, or "" when there is none."""
-        try:
-            return pygame.display.get_driver()
-        except pygame.error:
-            return ""
-
-    def _glass_roads(self, pygame) -> list[tuple[str, bool]]:
-        """The display servers worth trying after the first one failed.
-
-        Not a pile of guesses: on Linux there are exactly two ways to a GL
-        context, and both belong to X11's pair -- GLX and EGL. A Wayland session
-        that will not give one is a session whose compatibility layer still
-        might. Off Linux the first road is the only road there is.
-        """
-        if not sys.platform.startswith("linux"):
-            return []
-        driver = self._driver_name(pygame)
-        # A headless display -- the test suite, a probe -- has no other road to
-        # take, and re-initialising it as x11 would take the display away from
-        # everything that runs after this.
-        if driver not in ("x11", "wayland", "kmsdrm"):
-            return []
-        roads: list[tuple[str, bool]] = []
-        if os.environ.get("WAYLAND_DISPLAY") and driver != "wayland":
-            # The session's own server: a full screen there is a toplevel state
-            # and not a video mode, so there is no mode for a visual to match --
-            # which is the one thing that failed on a Deck under XWayland.
-            roads.append(("wayland", False))
-        egl = bool(os.environ.get("SDL_VIDEO_X11_FORCE_EGL"))
-        if driver == "x11":
-            if not egl:
-                roads.append(("x11", True))
-        else:
-            roads.append(("x11", True))
-            roads.append(("x11", False))
-        return roads
-
-    def _road_works(self, driver: str, egl: bool) -> bool:
-        """Ask a child process whether that display server can make a context.
-
-        Out of process because that is the only place a driver crash can be
-        survived: the child exits 0 or it does not, and a negative return code
-        (a signal) is an answer too. The game itself never finds out the hard way.
-        """
-        import subprocess
-
-        if getattr(sys, "frozen", False):
-            command = [sys.executable, "--probe-gl", driver]
-        else:
-            command = [sys.executable, "-m", "neverdeads_revenge", "--probe-gl", driver]
-        if egl:
-            command.append("egl")
-        try:
-            done = subprocess.run(
-                command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=20
-            )
-        except (OSError, subprocess.TimeoutExpired):
-            return False
-        if done.returncode != 0 and (self.show_timings or self.profile_seconds):
-            road = driver + (" egl" if egl else "")
-            if done.returncode < 0:
-                # A signal, not an exit code: the driver took the child down.
-                # Worth saying, because it is the difference between "this road
-                # is closed" and "this road killed the process it was asked on".
-                print(f"crt      {road} crashed in the probe (signal {-done.returncode})")
-            else:
-                said = (done.stderr or b"").decode("utf-8", "replace").strip()
-                lines = [line for line in said.splitlines() if line.strip()]
-                print(f"crt      {road} closed: {lines[-1] if lines else 'no reason given'}")
-        return done.returncode == 0
-
-    def _restart_display(self, pygame, driver: str, egl: bool) -> bool:
-        """A clean display on a named driver, with the GL road chosen on purpose.
-
-        False when the driver will not start at all, in which case there is
-        nothing to try on it and the caller moves to the next road.
-        """
-        try:
-            pygame.display.quit()
-            os.environ["SDL_VIDEODRIVER"] = driver
-            if egl:
-                os.environ["SDL_VIDEO_X11_FORCE_EGL"] = "1"
-            else:
-                os.environ.pop("SDL_VIDEO_X11_FORCE_EGL", None)
-            pygame.display.init()
-        except pygame.error:
-            self._window = None
-            return False
-        self._window = None
-        return True
 
     def _try_glass(self, pygame, size, flags, base) -> bool:
         """One attempt at a window with a context, and the glass on top of it."""
@@ -1707,7 +1594,7 @@ class SdlApp:
         self._title = title
         pygame.display.set_caption(title)
         self._open_window()
-        if self.show_timings or self.profile_seconds:
+        if self.show_timings:
             width, height = (
                 self._window.get_size() if self._window is not None else (0, 0)
             )
@@ -1717,22 +1604,9 @@ class SdlApp:
                 f"{self.cols}x{self.rows} cells, "
                 f"{'crt' if self.glass is not None else 'plain blit'}"
             )
-            print(
-                f"session  wayland={os.environ.get('WAYLAND_DISPLAY')!r} "
-                f"display={os.environ.get('DISPLAY')!r} "
-                f"session={os.environ.get('XDG_SESSION_TYPE')!r}"
-            )
         self.redraw()
         clock = pygame.time.Clock()
         self._running = True
-        profiler = None
-        deadline = 0.0
-        if self.profile_seconds:
-            import cProfile
-
-            profiler = cProfile.Profile()
-            profiler.enable()
-            deadline = time.monotonic() + self.profile_seconds
         while self._running:
             # Every beat in this game is written against a thirtieth of a second,
             # so that is the frame this loop asks for: a fight that played faster
@@ -1740,24 +1614,4 @@ class SdlApp:
             self.tick(min(clock.tick(60) / 1000.0, 1 / 30.0))
             for event in pygame.event.get():
                 self.feed(event)
-            if profiler is not None and time.monotonic() >= deadline:
-                profiler.disable()
-                self._print_profile(profiler)
-                profiler = None
         pygame.quit()
-
-    def _print_profile(self, profiler) -> None:
-        """The functions the window actually spent its seconds in.
-
-        ``--timings`` says which *stage* is slow; this says which line. It is a
-        development tool and prints to the terminal the player already has --
-        the same bargain as the timings, and the only way to ask a machine that
-        is not the one the code was written on.
-        """
-        import io
-        import pstats
-
-        out = io.StringIO()
-        pstats.Stats(profiler, stream=out).sort_stats("tottime").print_stats(25)
-        print(f"--- profile: {self.profile_seconds}s of play, by own time ---")
-        print(out.getvalue())
