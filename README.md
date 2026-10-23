@@ -220,7 +220,10 @@ than to a perfect one.)
     them, alphabetical -- and a page is written the first time a run *kills*
     that monster. The page shows the figure at its painted size, its numbers
     (health, damage, speed, armour, evasion, gold), what its rule does, how it is
-    answered, and a paragraph of its own. Killing one for the first time opens
+    answered, and a paragraph of its own. The figure is drawn at **twice** its
+    painted size when the page is wide enough and at 1:1 when it is not -- never
+    at some fraction in between, because a resampled monster is a blur and a
+    whole step is not. Killing one for the first time opens
     the page in the fight, on a card, once the blow has finished landing.
   - **The armory** has a page for every blade in the game -- **26**, sorted by
     name without the article, since half of them are called "the something" --
@@ -319,7 +322,11 @@ of the row you want. The Almanac is the one screen that is read like a page:
 whichever of the two you are in, and `↑` out of the top of a list reaches the
 tab row, where `←` `→` pick the book -- chronicle, bestiary, armory (`c`, `b`,
 `a` jump straight to one). The **legend of glyphs** lives in its own menu (`l`) --
-the sidebar keeps the run, the reference lives one key away. The pause offers
+the sidebar keeps the run, the reference lives one key away. At the foot of the
+sidebar sits the **pack**: one square per slot the game can ever sell -- empty
+while nothing is in it, the draught's own bottle once it is, and a grey cross for
+a slot the shop has not sold yet. The bottle is scaled by whole steps, so it stays
+the drawing it was. The pause offers
 **CONTROLS**, and the title offers **DELETE PROGRESS**: it asks for the word
 DELETE to be typed out, because a confirm key is a reflex and a word is a
 decision. Dialogs never answer their own opening press, and the two

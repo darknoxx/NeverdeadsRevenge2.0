@@ -75,6 +75,10 @@ class Placed:
     centre: float
     bottom: float
     height: int
+    #: Whether the painter may smooth-scale it. A figure that is drawn at a whole
+    #: multiple is *not* smoothed: nearest-neighbour is what keeps a painted
+    #: monster a painting and not a smear.
+    smooth: bool = True
 
 
 #: The picture of a blade that has not been painted yet: a frame and a question

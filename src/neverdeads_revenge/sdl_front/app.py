@@ -245,6 +245,10 @@ class SdlApp:
         #: Which device spoke last. Hints follow it: a pad player should read A
         #: and B, a keyboard player should read enter and esc.
         self.pad_active = False
+        #: The pack's bottle sprites, scaled once per size: the sidebar is painted
+        #: every frame, and a sprite resized thirty times a second is a frame
+        #: spending itself on the same arithmetic.
+        self._slot_faces: dict[tuple[str, int], object] = {}
         self.headline = headline
         self._window = None
         self._surface = None
@@ -912,7 +916,7 @@ class SdlApp:
         surface.fill(tuple(BACKGROUND), pygame.Rect(*rect))
         for ink in rows:
             self._put_small(surface, face, ink)
-        out, rule = sidebar_text(
+        out, rule, slots = sidebar_text(
             self.run,
             self.grid.cols,
             self.grid.rows,
@@ -924,6 +928,8 @@ class SdlApp:
         )
         for ink in out:
             self._put_small(surface, face, ink)
+        for slot in slots:
+            self._put_slot(surface, slot)
         if rule is not None:
             surface.fill(
                 tuple(parse_style("grey30").fg),
@@ -985,7 +991,12 @@ class SdlApp:
             width = max(
                 1, round(art.get_width() * piece.height / max(1, art.get_height()))
             )
-            scaled = pygame.transform.smoothscale(art, (width, piece.height))
+            if piece.smooth:
+                scaled = pygame.transform.smoothscale(art, (width, piece.height))
+            else:
+                # A whole multiple, and nearest: the sprite keeps every pixel it
+                # was painted with instead of averaging them into a blur.
+                scaled = pygame.transform.scale(art, (width, piece.height))
             self._surface.blit(
                 scaled,
                 (
@@ -993,6 +1004,70 @@ class SdlApp:
                     round(piece.bottom - piece.height),
                 ),
             )
+
+    def _put_slot(self, surface, slot) -> None:
+        """One square of the pack: a frame, and what is in it.
+
+        The squares are the run's, not an item sheet's: an unlocked slot is an
+        empty box, a locked one is grey and crossed, and a draught is its own
+        picture at a *whole* scale -- down by two or three for these bottles, so
+        the sprite stays itself instead of being resampled into a smear.
+        """
+        import pygame
+
+        from ..desktop.art import item_icon
+        from ..desktop.theme import parse_style
+        from ..world.items import ITEMS
+        from .paint import load
+
+        frame = pygame.Rect(slot.x, slot.y, slot.size, slot.size)
+        pygame.draw.rect(surface, tuple(parse_style("grey23").fg), frame, 1)
+        if slot.locked:
+            grey = tuple(parse_style("grey19").fg)
+            inset = max(6, slot.size // 5)
+            pygame.draw.line(
+                surface,
+                grey,
+                (frame.left + inset, frame.top + inset),
+                (frame.right - inset, frame.bottom - inset),
+            )
+            pygame.draw.line(
+                surface,
+                grey,
+                (frame.right - inset, frame.top + inset),
+                (frame.left + inset, frame.bottom - inset),
+            )
+            return
+        if slot.key is None:
+            return
+        cached = self._slot_faces.get((slot.key, slot.size))
+        if cached is None:
+            template = ITEMS.get(slot.key)
+            icon = item_icon(template) if template is not None else None
+            art = load(icon) if icon is not None else None
+            if art is None:
+                self._slot_faces[(slot.key, slot.size)] = None
+                return
+            room = max(1, slot.size - 8)
+            largest = max(art.get_width(), art.get_height())
+            factor = max(1, -(-largest // room))  # a whole step, up or down
+            cached = pygame.transform.scale(
+                art,
+                (
+                    max(1, art.get_width() // factor),
+                    max(1, art.get_height() // factor),
+                ),
+            )
+            self._slot_faces[(slot.key, slot.size)] = cached
+        if cached is None:
+            return
+        surface.blit(
+            cached,
+            (
+                frame.centerx - cached.get_width() // 2,
+                frame.centery - cached.get_height() // 2,
+            ),
+        )
 
     def _max_scale(self, width: int, height: int) -> int:
         """The largest whole-number scale that still leaves a playable grid."""

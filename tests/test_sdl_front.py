@@ -893,7 +893,7 @@ def test_the_floor_shows_the_log_and_the_sidebar_on_the_second_front_end():
     )
     assert ink > 100, f"the log panel is blank: {ink} pixels of ink"
 
-    out, _rule = sidebar_text(
+    out, _rule, _slots = sidebar_text(
         app.run,
         app.grid.cols,
         app.grid.rows,
@@ -911,6 +911,98 @@ def test_the_floor_shows_the_log_and_the_sidebar_on_the_second_front_end():
     )
     assert ink > 100, f"the sidebar's lower rows are blank: {ink} pixels of ink"
 
+
+
+def test_the_pack_is_a_belt_of_squares_at_the_foot_of_the_sidebar():
+    """Two bought, five to come: the run's draughts, always in sight.
+
+    A square is a *place*: the painter puts the bottle in it. So what a screen
+    test can hold is the belt itself -- seven squares, one per slot the game can
+    ever sell, empty, filled or crossed.
+    """
+    from neverdeads_revenge.desktop.render import MAX_PACK_SLOTS, sidebar_text
+    from neverdeads_revenge.sdl_front.app import SdlApp
+    from neverdeads_revenge.world.items import ITEMS, make_item
+
+    app = SdlApp(seed=3, no_sound=True)
+    app.key("enter")
+    app.key("enter")
+    app.key("escape")
+    state = app.run
+    face = app.font_small
+
+    def belt():
+        _out, _rule, slots = sidebar_text(
+            state,
+            app.grid.cols,
+            app.grid.rows,
+            app.font.cell_w,
+            app.font.cell_h,
+            face.cell_w,
+            face.cell_h,
+        )
+        return slots
+
+    slots = belt()
+    assert len(slots) == MAX_PACK_SLOTS == 7
+    assert slots[0].locked is False and slots[0].key is None, "the first square"
+    assert slots[1].locked is False and slots[1].key is None, "the second square"
+    assert all(one.locked for one in slots[2:]), "the unsold squares were not locked"
+
+    state.pack_capacity = 4
+    state.inventory.append(make_item(ITEMS["potion"]))
+    state.inventory.append(make_item(ITEMS["elixir"]))
+    slots = belt()
+    assert slots[0].key == "potion" and slots[1].key == "elixir"
+    assert slots[2].locked is False, "a bought square was crossed"
+    assert slots[3].locked is False and slots[3].key is None, "a bought square is empty"
+    assert slots[4].locked is True, "a square past the pack was sold for free"
+
+
+def test_the_sidebar_paints_the_bottles_and_crosses_the_locked_ones():
+    """The belt in pixels: a bottle where there is one, an X where there is not."""
+    from neverdeads_revenge.desktop.render import sidebar_text
+    from neverdeads_revenge.desktop.theme import BACKGROUND
+    from neverdeads_revenge.sdl_front.app import SdlApp
+    from neverdeads_revenge.world.items import ITEMS, make_item
+
+    app = SdlApp(seed=3, no_sound=True)
+    app.key("enter")
+    app.key("enter")
+    app.key("escape")
+    state = app.run
+    state.pack_capacity = 4
+    state.inventory.append(make_item(ITEMS["potion"]))
+    app.redraw()
+
+    face = app.font_small
+    _out, _rule, slots = sidebar_text(
+        state,
+        app.grid.cols,
+        app.grid.rows,
+        app.font.cell_w,
+        app.font.cell_h,
+        face.cell_w,
+        face.cell_h,
+    )
+    surface = app._surface
+    filled, empty, locked = slots[0], slots[3], slots[5]
+    background = tuple(BACKGROUND)
+
+    def ink(slot) -> int:
+        return sum(
+            1
+            for x in range(slot.x + 2, slot.x + slot.size - 2)
+            for y in range(slot.y + 2, slot.y + slot.size - 2)
+            if surface.get_at((x, y))[:3] != background
+        )
+
+    assert ink(filled) > 40, "the bottle was not painted"
+    assert ink(empty) == 0, "an empty square came out with something in it"
+    assert ink(locked) > 20, "a locked square has no X"
+    assert surface.get_at(
+        (locked.x + locked.size // 2, locked.y + locked.size // 2)
+    )[:3] != background, "the X does not cross the middle"
 
 
 def _turn_it_over(app, limit: int = 400) -> None:
@@ -1291,8 +1383,17 @@ def test_a_page_shows_the_figure_the_numbers_and_the_rule():
 
     art = screen.art(app)
     assert len(art) == 1 and art[0].art == "sprites/ghoul.png"
-    assert art[0].height == AlmanacScreen.PICTURE_ROWS * app.font.cell_h - 8
-    assert art[0].height > 103, "the figure is no bigger than the sheet"
+    # Doubled, and by a *whole* factor: 108x103 becomes 216x206 at 1:1 pixels,
+    # which is why the painter must not smooth it.
+    assert art[0].height == 206, "the figure was not doubled"
+    assert art[0].smooth is False, "a doubled sprite would be resampled"
+
+    # A window too narrow for the double keeps the figure at its painted size;
+    # it does not split the difference into a blur.
+    _page_text(screen, app, cols=80, rows=24)
+    art = screen.art(app)
+    assert art and art[0].height == 103, "the narrow page did not fall back to 1:1"
+    assert art[0].smooth is True, "1:1 is not a scale at all"
 
 
 def test_the_arrows_walk_between_the_names_the_card_and_the_tabs():

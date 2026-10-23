@@ -32,6 +32,8 @@ from neverdeads_revenge.world.tiles import Tile
 
 from .pattern import PatternBuffer
 from .chrome import ASH, rule
+from ..game.difficulty import BASE_PACK_SLOTS
+from ..game.shop import META_UPGRADES
 from .theme import BACKGROUND, Colour, Style, parse_style
 
 __all__ = [
@@ -46,6 +48,10 @@ __all__ = [
     "log_text",
     "paste_log",
     "sidebar_text",
+    "Slot",
+    "MAX_PACK_SLOTS",
+    "SLOT_SIZE",
+    "SLOT_COLUMNS",
     "paste_sidebar",
     "draw_title",
     "hud_lines",
@@ -332,6 +338,40 @@ class Ink:
     colour: str
 
 
+#: How many things the pack could ever hold: the two everybody starts with and
+#: every slot the shop's pack upgrade sells. The sidebar shows *all* of them, so
+#: the ones not bought yet are a promise rather than a surprise.
+MAX_PACK_SLOTS = BASE_PACK_SLOTS + META_UPGRADES["pack"].max_stacks
+
+#: A square of the pack: a place, not a drawing. The painter puts the bottle in
+#: it -- an item's picture is a fact about the sheet, and the sidebar is a fact
+#: about the run.
+@dataclass(frozen=True)
+class Slot:
+    """One square of the pack, as a place on the frame."""
+
+    x: int
+    y: int
+    size: int
+    #: The draught's item key, or ``None`` for an empty square.
+    key: str | None = None
+    #: A slot the shop has not sold yet: a grey square with an X in it.
+    locked: bool = False
+
+
+#: The pack's squares: how big, how far apart, and how many to a row. Seven to a
+#: row -- one per slot the game can ever sell -- so the belt never changes shape
+#: as the pack grows, and so it fits under the legend at the smallest window
+#: without taking the legend with it.
+SLOT_SIZE = 44
+SLOT_GAP = 2
+SLOT_COLUMNS = 7
+#: Air between the legend and the squares. None on purpose: at the smallest
+#: window the legend and the pack are neighbours, and a line of air here is a
+#: line the groups above would have to give up.
+SLOT_LEAD = 0
+
+
 def sidebar_text(
     state,
     cols: int,
@@ -342,17 +382,21 @@ def sidebar_text(
     small_cell_h: int,
     now: float | None = None,
     pad: bool = False,
-) -> tuple[list[Ink], tuple[int, int, int] | None]:
+) -> tuple[list[Ink], tuple[int, int, int] | None, list[Slot]]:
     """Everything under the HUD's rule, as rows to draw.
 
     The glance groups first -- lower case now, they were shouting in a panel meant
     for a glance, and a small face has no room for headlines anyway -- then the
-    void's line, then a thin rule, then the pointer to the legend. Measured from
-    the same top row the map hands over, so the two cannot drift apart, and
-    measured in the *caller's* cell: both front ends lay this out in their own
-    small face, and how wide a small cell is is the face's business. ``now`` drives
-    the ready state's breath; it defaults so a caller with no clock still gets a
-    prompt drawn.
+    void's line, then a thin rule, then the pointer to the legend, and the pack's
+    squares at the foot. Measured from the same top row the map hands over, so the
+    two cannot drift apart, and measured in the *caller's* cell: both front ends
+    lay this out in their own small face, and how wide a small cell is is the
+    face's business. ``now`` drives the ready state's breath; it defaults so a
+    caller with no clock still gets a prompt drawn.
+
+    The pack is laid out *first* and from the bottom: it is the one part of the
+    panel a player checks mid-fight, so the groups above give way to it rather
+    than the other way round.
     """
     areas = regions(cols, rows)
     sx, sy, sw, _sh = areas["sidebar"]
@@ -364,6 +408,23 @@ def sidebar_text(
     text_w = (sx + sw) * cell_w - text_x - small_cell_w
     chars = max(1, text_w // small_cell_w)
     bottom = rows * cell_h
+
+    # The pack, from the foot up, before anything above it is allowed to grow.
+    slot_rows = (MAX_PACK_SLOTS + SLOT_COLUMNS - 1) // SLOT_COLUMNS
+    slots_height = slot_rows * SLOT_SIZE + (slot_rows - 1) * SLOT_GAP
+    slots_top = bottom - slots_height
+    slots: list[Slot] = []
+    for index in range(MAX_PACK_SLOTS):
+        row, column = divmod(index, SLOT_COLUMNS)
+        slot_x = left + column * (SLOT_SIZE + SLOT_GAP)
+        slot_y = slots_top + row * (SLOT_SIZE + SLOT_GAP)
+        if index < state.pack_capacity:
+            item = state.inventory[index] if index < len(state.inventory) else None
+            slots.append(Slot(slot_x, slot_y, SLOT_SIZE, item.item_id if item else None))
+        else:
+            slots.append(Slot(slot_x, slot_y, SLOT_SIZE, None, locked=True))
+    # And the rows above stop short of them.
+    bottom = slots_top - SLOT_LEAD
 
     y = top
     for kind in ("curses", "gifts", "effects", "draughts", "statuses"):
@@ -426,7 +487,7 @@ def sidebar_text(
                 "grey30",
             )
         )
-    return out, rule
+    return out, rule, slots
 
 
 def log_text(

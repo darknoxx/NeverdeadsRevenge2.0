@@ -19,6 +19,8 @@ catalogue nobody can use.
 
 from __future__ import annotations
 
+import math
+
 from ...game.actors import ENEMIES
 from ...game.armory import WEAPONS, Weapon
 from ...game.armory import stat_lines as weapon_stats
@@ -289,20 +291,19 @@ class AlmanacScreen(Screen):
         """The right-hand page: who it is, its picture, its numbers, its rule."""
         right = x + width - 3
         room = right - left
+        entry = self._selected()
         # The figure stands in its own column, beside the words -- and the words
         # keep what they need first. The widest line on a page is the armour
         # line, and a column that squeezed it into "accura" would be an
         # illustration that cost the page its numbers. A narrow window drops the
-        # column instead: sixteen cells out of forty is a page with no room to
-        # read.
-        figure = self.FIGURE_COLUMN if room >= self.FIGURE_COLUMN + 38 else 0
+        # column instead.
+        figure, factor = self._figure_size(entry, room, buffer, body_rows)
         text_left = left + (figure + 2 if figure else 0)
         text_room = room - (figure + 2 if figure else 0)
-        #: What ``art`` needs to put the figure down: the column, its width, and
-        #: where the page starts. Kept in cells, and multiplied out by whichever
-        #: front end is painting.
-        self._figure = (left, figure, y + 3)
-        entry = self._selected()
+        #: What ``art`` needs to put the figure down: the column, its width, the
+        #: row it starts on, and the whole factor it is drawn at. Kept in cells,
+        #: and multiplied out by whichever front end is painting.
+        self._figure = (left, figure, y + 3, factor)
         if entry.key not in self._known_now(app):
             self.detail_offset = 0
             self._card_total = 0
@@ -335,6 +336,43 @@ class AlmanacScreen(Screen):
             else "Take one up and the page writes itself."
         )
 
+    #: The narrowest a page's words may get. Below this the figure goes rather
+    #: than the numbers -- and 28 is the armour line wrapped once, which is the
+    #: widest thing a page has to say.
+    TEXT_MIN = 28
+
+    def _figure_size(self, entry, room: int, buffer, body_rows: int) -> tuple[int, int]:
+        """How wide the picture's column is, and the *whole* factor it is drawn at.
+
+        A monster is doubled when the page can afford it and drawn at 1:1 when it
+        cannot. Nothing in between: a fractional scale is what makes a painted
+        sprite look resampled, and a bestiary is the one place the drawing is the
+        point. The column is worked out from the same factor, so the figure can
+        never run into the words.
+        """
+        picture = getattr(entry, "picture", None)
+        if not picture or not art_exists(picture):
+            return 0, 1
+        measured = art_size(picture)
+        if measured is None:
+            return 0, 1
+        width, height = measured
+        font = getattr(buffer, "font", None)
+        cell_w = getattr(font, "cell_w", 10) or 10
+        cell_h = getattr(font, "cell_h", 20) or 20
+        tallest = max(1, body_rows * cell_h - 8)
+        # Only a monster is doubled. A blade is painted at the size a card draws
+        # it and a doubled sword would be a sword in a hall of mirrors.
+        factors = (2, 1) if self.tab == 1 else (1,)
+        for factor in factors:
+            column = math.ceil(width * factor / cell_w)
+            if column + 2 + self.TEXT_MIN > room:
+                continue
+            if height * factor > tallest:
+                continue
+            return column, factor
+        return 0, 1
+
     def _lines(self, entry, room: int) -> list[tuple[str, str]]:
         return (
             self.monster_lines(entry, room)
@@ -354,7 +392,9 @@ class AlmanacScreen(Screen):
             (title_of(entry), f"bold {BONE}"),
             (f"{entry.glyph}   {entry.where}", colour),
         ]
-        rows += [(line, BONE if i == 0 else ASH) for i, line in enumerate(stat_lines(entry))]
+        stats = stat_lines(entry)
+        for index, line in enumerate(stats):
+            rows += [(piece, BONE if index == 0 else ASH) for piece in _wrap(line, room)]
         rows.append(("", ""))
         rows.append(("THE RULE", f"bold {PURPLE}"))
         rows += [(line, BONE) for line in _wrap(entry.rule, room)]
@@ -396,7 +436,7 @@ class AlmanacScreen(Screen):
         entry = self._selected()
         if entry.key not in self._known_now(app):
             return []
-        left, column, top = getattr(self, "_figure", (0, 0, 0))
+        left, column, top, factor = getattr(self, "_figure", (0, 0, 0, 1))
         if column <= 0:
             return []
         picture = entry.picture
@@ -406,27 +446,19 @@ class AlmanacScreen(Screen):
         if measured is None:
             return []
         cell_w, cell_h = app.font.cell_w, app.font.cell_h
-        # Monsters are filled to the column's height -- the sheets are painted
-        # between a hundred and a hundred and twenty pixels, and eight rows is
-        # half again that. Blades are painted at the size a card draws them, so
-        # they stop at 1:1; a stretched sword is a sword that has been resampled.
-        tall = self.PICTURE_ROWS * cell_h - 8
-        if self.tab == 2:
-            tall = min(tall, measured[1])
-        # Never wider than the column, so a wide figure does not run over the
-        # divider.
-        wide = tall * measured[0] / max(1, measured[1])
-        if wide > self.FIGURE_COLUMN * cell_w:
-            wide = self.FIGURE_COLUMN * cell_w
-            tall = round(wide * measured[1] / max(1, measured[0]))
+        tall = measured[1] * factor
         if tall <= 0:
             return []
+        # The rows the figure takes, from the factor and not from a fixed band:
+        # a doubled monster is a dozen rows and a 1:1 blade is six.
+        rows = math.ceil(tall / cell_h)
         return [
             Placed(
                 picture,
                 (left + column / 2) * cell_w,
-                (top + self.PICTURE_ROWS) * cell_h - 6,
+                (top + rows) * cell_h - 6,
                 tall,
+                smooth=factor == 1,
             )
         ]
 
