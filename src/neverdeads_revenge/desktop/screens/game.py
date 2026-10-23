@@ -102,7 +102,14 @@ class GameScreen(Screen):
     def draw(self, buffer, app) -> None:
         from ..render import draw_game
 
-        draw_game(buffer, self.state)
+        # A zoomed field is not made of cells: it is a picture twice the size,
+        # drawn over them in ``paint_over``.
+        draw_game(buffer, self.state, zoom=app.field_zoom)
+
+    def paint_over(self, surface, app) -> None:
+        """The field, twice as large, when the settings ask for it."""
+        if app.field_zoom:
+            app.paint_field_zoom(surface, self.state)
 
     # -- input --------------------------------------------------------------
     #: The floor, and the one screen whose arrows are silent.

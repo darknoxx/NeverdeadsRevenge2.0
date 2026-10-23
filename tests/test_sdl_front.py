@@ -3203,6 +3203,77 @@ def test_a_painted_arena_does_not_write_the_cell_floor_at_all():
     assert floor_cells(tiled) > 100, "the tiled room lost its own floor"
 
 
+def test_the_field_zoom_is_a_setting_that_stays():
+    """The zoom is remembered, like the glass: a choice that resets is no choice."""
+    from neverdeads_revenge.desktop.settings import load_settings
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3, no_sound=True)
+    assert app.field_zoom is False, "the field started zoomed"
+
+    assert app.toggle_field_zoom() is True
+    assert load_settings().get("zoom") is True, "the zoom was not remembered"
+
+    assert SdlApp(seed=3, no_sound=True).field_zoom is True
+
+
+def test_the_zoom_doubles_the_field_and_leaves_the_panels_alone():
+    """The room grows, the panels do not: a room is walked in, a panel is read."""
+    import pygame
+
+    from neverdeads_revenge.desktop.render import FIELD_ZOOM, regions
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3, no_sound=True, cols=128, rows=40)
+    app.key("enter")
+    app.key("enter")
+    app.key("escape")
+    app.redraw()
+    plain = app._surface.copy()
+
+    app.toggle_field_zoom()
+    app.tick(1 / 60)
+    zoomed = app._surface
+
+    assert FIELD_ZOOM == 2
+    assert pygame.image.tobytes(plain, "RGB") != pygame.image.tobytes(zoomed, "RGB"), (
+        "the zoomed frame is the same picture"
+    )
+
+    x, y, width, height = regions(128, 40)["sidebar"]
+    panel = pygame.Rect(
+        x * app.font.cell_w,
+        y * app.font.cell_h,
+        width * app.font.cell_w,
+        height * app.font.cell_h,
+    )
+    assert pygame.image.tobytes(plain.subsurface(panel), "RGB") == pygame.image.tobytes(
+        zoomed.subsurface(panel), "RGB"
+    ), "the zoom changed the panels too"
+
+    # And the camera the particles use knows about it: the hero is on the field.
+    point = app.screen_point(app.run.player.position)
+    map_x, map_y, map_w, map_h = regions(128, 40)["map"]
+    assert point is not None, "the hero is not on the zoomed field"
+    assert 0 <= point[0] < map_w * app.font.cell_w
+    assert 0 <= point[1] < map_h * app.font.cell_h
+
+
+def test_the_settings_screen_has_the_zoom_row():
+    from neverdeads_revenge.desktop.screens.settings import SettingsScreen
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3, no_sound=True)
+    screen = SettingsScreen()
+    app.push(screen)
+    labels = [label for label, _value in screen.rows(app)]
+    assert "field zoom x2" in labels, labels
+
+    screen.index = labels.index("field zoom x2")
+    app.key("enter")
+    assert app.field_zoom is True, "the row did not toggle the zoom"
+
+
 def test_the_timings_report_says_where_the_frame_went(capsys):
     """``--timings``: in the terminal and not in the picture.
 

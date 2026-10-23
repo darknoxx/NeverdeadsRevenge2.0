@@ -41,6 +41,7 @@ class SettingsScreen(Screen):
             ("scanlines", app.crt.scanlines),
             ("bloom", app.crt.bloom),
             ("crt curve", app.crt.geometry),
+            ("field zoom x2", app.field_zoom),
             ("sound", not app.sfx.muted),
             ("back", None),
         ]
@@ -66,7 +67,7 @@ class SettingsScreen(Screen):
             y + height - 2,
             # Keyboard words: the buffer translates them to A/B when the pad
             # was the last thing touched.
-            "↑↓ choose   enter toggle   esc back"[: width - 6],
+            "↑↓ pick   enter toggle   esc back"[: width - 6],
             parse_style(ASH),
         )
 
@@ -97,6 +98,9 @@ class SettingsScreen(Screen):
             return
         if label == "sound":
             app.toggle_sound()
+            return
+        if label == "field zoom x2":
+            app.toggle_field_zoom()
             return
         # The glass keys themselves: the same path, the same note, the same
         # saved file. A settings screen with its own copy of the toggles would

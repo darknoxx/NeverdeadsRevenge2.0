@@ -229,14 +229,22 @@ def test_the_settings_menu_is_reachable_from_the_title_row():
     app.key("e")  # the SETTINGS row
     assert type(app.screens[-1]).__name__ == "SettingsScreen"
 
+    screen = app.screens[-1]
+
     def row_down() -> None:
         stick.hat = (0, -1)
         app.tick(1 / 30.0)
         stick.hat = (0, 0)
         app.tick(1 / 30.0)
 
-    # One row down is the scanlines; A flips it, and the file keeps the answer.
-    row_down()
+    def choose(label: str) -> None:
+        # By name, not by counting rows: a row added to the list is not a broken
+        # test. Only down, because every row the test wants is below the first.
+        while screen.rows(app)[screen.index][0] != label:
+            row_down()
+
+    # The scanlines: A flips them, and the file keeps the answer.
+    choose("scanlines")
     before = app.crt.scanlines
     _press(app, stick, 0)
     assert app.crt.scanlines is (not before), "the glass switch did not flip"
@@ -245,9 +253,8 @@ def test_the_settings_menu_is_reachable_from_the_title_row():
 
     assert load_settings()["scanlines"] == app.crt.scanlines, "the switch was not written"
 
-    # And four rows further is the sound.
-    for _ in range(3):
-        row_down()
+    # And further down the list, the sound.
+    choose("sound")
     before = app.sfx.muted
     _press(app, stick, 0)
     assert app.sfx.muted is (not before)

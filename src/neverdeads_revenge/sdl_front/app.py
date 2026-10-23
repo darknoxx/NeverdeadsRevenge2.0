@@ -183,6 +183,11 @@ class SdlApp:
             bloom=bool(saved.get("bloom", True)),
             geometry=bool(saved.get("geometry", False)),
         )
+        #: Whether the overworld's field is drawn twice as large. Not the glass
+        #: and not the panels: a room is walked in, and a panel is read.
+        self.field_zoom = bool(saved.get("zoom", False))
+        #: The small grid the zoomed field is painted into, kept between frames.
+        self._zoom_grid = None
         self.glass = None
         #: Why the last attempt at a GL window failed, for the diagnostics: a CRT
         #: that is not there should say so with the driver's own words.
@@ -472,6 +477,8 @@ class SdlApp:
 
         if self.run is None:
             return None
+        from ..desktop.render import FIELD_ZOOM
+
         return screen_point(
             self.run,
             position,
@@ -479,6 +486,7 @@ class SdlApp:
             self.rows,
             self.font.cell_w,
             self.font.cell_h,
+            zoom=FIELD_ZOOM if self.field_zoom else 1,
         )
 
     def open_battle_scene(self) -> None:
@@ -1642,7 +1650,50 @@ class SdlApp:
                 "scanlines": self.crt.scanlines,
                 "bloom": self.crt.bloom,
                 "geometry": self.crt.geometry,
+                "zoom": self.field_zoom,
             }
+        )
+
+    def toggle_field_zoom(self) -> bool:
+        """The overworld's field at twice the size, or its own, and remembered."""
+        self.field_zoom = not self.field_zoom
+        self._remember_glass()
+        self._dirty = True
+        return self.field_zoom
+
+    def paint_field_zoom(self, surface, state) -> None:
+        """The overworld's field, twice as large, over the cells the panels left.
+
+        The map is drawn into a grid half as wide and half as tall -- the same
+        drawing code, with a smaller camera -- painted as a picture, and doubled
+        on the way to the frame. A character becomes four characters' worth of
+        pixels, which is what a zoom *is*; the panels keep their size because
+        they are read, not walked.
+        """
+        import pygame
+
+        from ..desktop.render import FIELD_ZOOM, draw_field, regions
+
+        map_x, map_y, map_w, map_h = regions(self.cols, self.rows)["map"]
+        small = (max(1, map_w // FIELD_ZOOM), max(1, map_h // FIELD_ZOOM))
+        if self._zoom_grid is None or (self._zoom_grid.cols, self._zoom_grid.rows) != small:
+            from ..desktop.pattern import PatternBuffer
+
+            self._zoom_grid = PatternBuffer(*small, self.font)
+        grid = self._zoom_grid
+        grid.clear()
+        grid.pad = self.pad_active
+        draw_field(grid, state, (0, 0, *small))
+        field = paint(grid, self.font, BACKGROUND)
+        surface.blit(
+            pygame.transform.scale(
+                field,
+                (
+                    small[0] * FIELD_ZOOM * self.font.cell_w,
+                    small[1] * FIELD_ZOOM * self.font.cell_h,
+                ),
+            ),
+            (map_x * self.font.cell_w, map_y * self.font.cell_h),
         )
 
     def open_window(self, *, title: str = "Neverdead's Revenge") -> None:

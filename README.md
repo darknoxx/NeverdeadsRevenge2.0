@@ -324,8 +324,15 @@ always did, and the cursor is only a convenience there.
 ### Settings
 
 The title's **SETTINGS** row (`e`, or **Start** on a pad) is where the glass and
-the sound live now: full screen, scanlines, bloom, the CRT curve, and the sound.
-`F11`, `F2`, `F3` and `F4` still do the same thing from the keyboard.
+the sound live now: full screen, scanlines, bloom, the CRT curve, the field zoom
+and the sound. `F11`, `F2`, `F3` and `F4` still do the same thing from the
+keyboard; the zoom is the menu's, because it is about the room and not about the
+glass.
+
+**Field zoom** draws the overworld's map at twice the size -- a character is four
+characters' worth of pixels, the same drawing with a smaller camera -- and leaves
+the panels and the log at their own size, because a room is walked in and a panel
+is read. It is the overworld's alone: a fight is already drawn to fit its room.
 
 The menus are read sideways: `←` `→` choose, `enter` takes, or press the letter
 of the row you want. The Almanac is the one screen that is read like a page:

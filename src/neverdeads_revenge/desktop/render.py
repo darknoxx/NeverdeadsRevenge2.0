@@ -61,6 +61,10 @@ __all__ = [
 
 #: The sidebar is a fixed strip, exactly as wide as the terminal's.
 SIDEBAR = 34
+
+#: How much larger the overworld's field is drawn when the zoom is on. A whole
+#: number, because a character is a character: half a character is a smear.
+FIELD_ZOOM = 2
 #: The bottom row's height: the log, pasted smaller, and nothing else.
 BOTTOM = 7
 #: What the HUD wraps at, inside the sidebar's content box.
@@ -141,6 +145,7 @@ def screen_point(
     rows: int,
     cell_w: int,
     cell_h: int,
+    zoom: int = 1,
 ) -> tuple[float, float] | None:
     """The centre of a dungeon square, as buffer pixels -- or ``None``.
 
@@ -148,27 +153,45 @@ def screen_point(
     somewhere else on the screen unless the camera happens to say so. Every
     moving pixel needs this translation, and everything that skipped it drew in
     the wrong place (which is exactly what the blood did).
+
+    ``zoom`` is the field's own scale: the map is drawn into a grid ``zoom`` times
+    smaller and blown up on the way to the frame, so a square is ``zoom`` cells
+    wide, and its camera is the small grid's camera and not the frame's.
     """
     areas = regions(cols, rows)
     map_w, map_h = areas["map"][2], areas["map"][3]
-    left, top, view_w, view_h = viewport(state, map_w, map_h)
+    left, top, view_w, view_h = viewport(state, map_w // zoom, map_h // zoom)
     x, y = position
     if not (left <= x < left + view_w and top <= y < top + view_h):
         return None
-    return ((x - left + 0.5) * cell_w, (y - top + 0.5) * cell_h)
+    return (
+        (x - left + 0.5) * cell_w * zoom,
+        (y - top + 0.5) * cell_h * zoom,
+    )
 
 
-def draw_game(buffer: PatternBuffer, state: GameState) -> None:
+def draw_game(buffer: PatternBuffer, state: GameState, zoom: bool = False) -> None:
     """The whole play screen: map, sidebar, and the bottom strip.
 
     The log is *not* drawn here: it is a smaller face than the rest of the
     frame, so it is pasted on afterwards by :func:`paste_log`, straight onto the
     rendered image. What this leaves behind is the panel the log sits on.
+
+    ``zoom`` leaves the field out of the cells entirely: the front end paints it
+    into a grid half the size and doubles it on the way to the frame, so the
+    panels keep their own size and the room grows. A zoomed field is a picture,
+    not a grid, and only a painter can make one.
     """
     buffer.clear()
     areas = regions(buffer.cols, buffer.rows)
-    _draw_map(buffer, state, areas["map"])
+    if not zoom:
+        _draw_map(buffer, state, areas["map"])
     _draw_sidebar(buffer, state, areas["sidebar"])
+
+
+def draw_field(buffer: PatternBuffer, state: GameState, area) -> None:
+    """The map alone, into a grid of the caller's own -- the zoom's small camera."""
+    _draw_map(buffer, state, area)
 
 
 def _draw_map(buffer, state, area) -> None:
