@@ -184,6 +184,9 @@ class SdlApp:
             geometry=bool(saved.get("geometry", False)),
         )
         self.glass = None
+        #: Why the last attempt at a GL window failed, for the diagnostics: a CRT
+        #: that is not there should say so with the driver's own words.
+        self._glass_error: object = None
         #: A frame counter, for the flag that asks for one. Smoothed, because a
         #: number that jitters by ten a frame tells you nothing.
         self.show_fps = fps
@@ -1270,15 +1273,32 @@ class SdlApp:
         # without a context can never grow one. Turning the scanlines back on
         # after starting with them off used to do nothing at all until the next
         # launch -- which is exactly how a player loses the CRT for good.
+        if self._try_glass(pygame, size, flags, base):
+            return
+        # X11 has two roads to GL, and SDL takes GLX by default. Under a
+        # compositor -- gamescope, a Deck in Desktop Mode -- GLX may have no
+        # visual at the game's own mode at all, and the answer was a game with no
+        # CRT and a log line nobody saw. EGL is the road those compositors
+        # actually keep open, and SDL only takes it when it is told to.
+        if sys.platform.startswith("linux") and not os.environ.get("SDL_VIDEO_X11_FORCE_EGL"):
+            pygame.display.quit()
+            os.environ["SDL_VIDEO_X11_FORCE_EGL"] = "1"
+            pygame.display.init()
+            self._window = None
+            if self._try_glass(pygame, size, flags, base):
+                return
+        self._window = pygame.display.set_mode(size, flags)
+        self._fit()
+        if self.show_timings or self.profile_seconds:
+            print(f"crt      not available, plain blit: {self._glass_error}")
+
+    def _try_glass(self, pygame, size, flags, base) -> bool:
+        """One attempt at a window with a context, and the glass on top of it."""
         try:
             import moderngl
 
-            pygame.display.gl_set_attribute(
-                pygame.GL_CONTEXT_MAJOR_VERSION, 2
-            )
-            pygame.display.gl_set_attribute(
-                pygame.GL_CONTEXT_MINOR_VERSION, 1
-            )
+            pygame.display.gl_set_attribute(pygame.GL_CONTEXT_MAJOR_VERSION, 2)
+            pygame.display.gl_set_attribute(pygame.GL_CONTEXT_MINOR_VERSION, 1)
             self._window = pygame.display.set_mode(
                 size, pygame.OPENGL | pygame.DOUBLEBUF | flags
             )
@@ -1290,14 +1310,13 @@ class SdlApp:
                 self._window.get_size(),
                 context=moderngl.create_context(),
             )
+            self._glass_error = None
             self._fit()
-            return
+            return True
         except Exception as error:
             self.glass = None
-            if self.show_timings or self.profile_seconds:
-                print(f"crt      not available, plain blit: {error}")
-        self._window = pygame.display.set_mode(size, flags)
-        self._fit()
+            self._glass_error = error
+            return False
 
     def _toggle_fullscreen(self) -> None:
         """F11: the window's own full screen, then the fit and the viewport.

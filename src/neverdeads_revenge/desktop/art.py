@@ -180,21 +180,22 @@ def exists(name: str) -> bool:
     change while the game runs. On a desk a stat is nothing; on a mounted image
     it is a trip through a userspace daemon, and there were a dozen a frame.
     """
-    address = path(name)
-    known = _EXISTS.get(address)
+    known = _EXISTS.get((ART_ROOT, name))
     if known is None:
-        known = address.exists()
-        _EXISTS[address] = known
+        known = path(name).exists()
+        _EXISTS[(ART_ROOT, name)] = known
     return known
 
 
 #: The sizes already read, by path. The answer is a fact about a file that never
 #: changes under a running game, and this is asked per *frame* -- a full read of a
 #: half-megabyte backdrop sixty times a second was a millisecond nobody needed.
-_SIZES: dict[Path, tuple[int, int]] = {}
+#: Keyed by the root as well as the name, because a test (or a second install)
+#: can point the art somewhere else: the answer belongs to *that* directory.
+_SIZES: dict[tuple[Path, str], tuple[int, int]] = {}
 
 #: And which of them are there at all: the same fact, the same reason.
-_EXISTS: dict[Path, bool] = {}
+_EXISTS: dict[tuple[Path, str], bool] = {}
 
 
 def size(name: str) -> tuple[int, int] | None:
@@ -209,12 +210,11 @@ def size(name: str) -> tuple[int, int] | None:
     Twenty-four bytes and a cache: the old version read the *whole file* to look
     at its first twenty-four, and it is called from the per-frame path.
     """
-    address = path(name)
-    known = _SIZES.get(address)
+    known = _SIZES.get((ART_ROOT, name))
     if known is not None:
         return known
     try:
-        with address.open("rb") as handle:
+        with path(name).open("rb") as handle:
             header = handle.read(24)
     except OSError:
         return None
@@ -224,5 +224,5 @@ def size(name: str) -> tuple[int, int] | None:
         int.from_bytes(header[16:20], "big"),
         int.from_bytes(header[20:24], "big"),
     )
-    _SIZES[address] = measured
+    _SIZES[(ART_ROOT, name)] = measured
     return measured

@@ -187,6 +187,11 @@ class Style:
     dim: bool = False
     reverse: bool = False
     italic: bool = False
+    #: A small integer standing for these six fields, shared by every Style that
+    #: has them. The painter asks "is this cell the same style as the one before
+    #: it?" a few thousand times a frame, and comparing two integers is the
+    #: cheapest way to ask it.
+    key: int = field(default=0, init=False, compare=False, repr=False)
 
     def __post_init__(self) -> None:
         # Normalised on the way in, so a Style is *always* made of the shared
@@ -194,6 +199,30 @@ class Style:
         # triple. Nobody downstream has to ask which kind of colour this is.
         object.__setattr__(self, "fg", as_colour(self.fg) or FOREGROUND)
         object.__setattr__(self, "bg", as_colour(self.bg))
+        object.__setattr__(self, "key", _style_key(self))
+
+    def __reduce__(self):
+        # Through the fields and not the number: a copied style must not carry
+        # the key this process happened to mint, which means nothing elsewhere.
+        return (
+            Style,
+            (self.fg, self.bg, self.bold, self.dim, self.reverse, self.italic),
+        )
+
+
+#: The styles seen so far, by their fields: a ``Style`` is frozen, so two of them
+#: with the same six fields are the same style and can share a number.
+_KEYS: dict[tuple, int] = {}
+
+
+def _style_key(style: Style) -> int:
+    """The number for these fields, minted once and then reused."""
+    fields = (style.fg, style.bg, style.bold, style.dim, style.reverse, style.italic)
+    key = _KEYS.get(fields)
+    if key is None:
+        key = len(_KEYS) + 1
+        _KEYS[fields] = key
+    return key
 
 
 def parse_style(text: str, base: Style | None = None) -> Style:

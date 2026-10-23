@@ -153,15 +153,12 @@ class PatternBuffer:
             x = 0
             while x < self.cols:
                 style = row[x].style
+                key = style.key
                 end = x + 1
-                # Identity first and equality second: a row is written a string
-                # at a time, so the cells of one run usually hold the *same*
-                # Style object -- and six field comparisons per cell was the
-                # largest piece of Python in the frame.
-                while end < self.cols:
-                    other = row[end].style
-                    if other is not style and other != style:
-                        break
+                # An integer per style, minted once: comparing those is the
+                # cheapest way to ask whether the next cell belongs to this run,
+                # and this loop is asked a few thousand times a frame.
+                while end < self.cols and row[end].style.key == key:
                     end += 1
                 yield x, y, row[x:end]
                 x = end
