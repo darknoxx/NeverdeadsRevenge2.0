@@ -20,6 +20,7 @@ import sys
 import time
 from pathlib import Path
 
+from .. import __version__
 from ..persistence import load_meta
 from ..desktop.padmap import DEFAULT as DEFAULT_PAD
 from ..desktop.theme import BACKGROUND, Colour
@@ -159,7 +160,27 @@ class SdlApp:
         # it would on an unscaled display, and the painting covers it exactly -- so
         # there is nothing to fix up afterwards.
         os.environ.setdefault("SDL_WINDOWS_DPI_AWARENESS", "permonitorv2")
+        # The session's own display server, *chosen* rather than inherited. SDL
+        # prefers X11 even inside a Wayland session -- on a Deck that means
+        # gamescope's XWayland -- and the one thing that road did not offer there
+        # was a GL context at the game's own full-screen mode. Wayland is the
+        # road the compositor actually keeps open, and a full screen under it is
+        # a toplevel state rather than a video mode, so there is no mode to match
+        # a visual against. An explicit SDL_VIDEODRIVER still wins: somebody who
+        # has asked for a driver has asked.
+        if (
+            sys.platform.startswith("linux")
+            and os.environ.get("WAYLAND_DISPLAY")
+            and not os.environ.get("SDL_VIDEODRIVER")
+        ):
+            os.environ["SDL_VIDEODRIVER"] = "wayland"
         pygame.init()
+        if not pygame.display.get_init() and os.environ.get("SDL_VIDEODRIVER") == "wayland":
+            # A Wayland variable with no Wayland behind it is still a session
+            # with an X server: take the compatibility layer and say nothing.
+            os.environ.pop("SDL_VIDEODRIVER", None)
+            pygame.quit()
+            pygame.init()
         # The screens decide what a *held* key means -- the floor walks on one, a
         # shelf scrolls on one, and everything else refuses the repeats -- but SDL
         # does not make any unless it is asked, so holding a direction did nothing
@@ -1227,8 +1248,17 @@ class SdlApp:
         except pygame.error:
             drawable = None
         grid = self._grid_size(self.cols * self.font.cell_w, self.rows * self.font.cell_h)
+        try:
+            driver = pygame.display.get_driver()
+        except pygame.error:
+            driver = "none"
         return [
             f"platform      {sys.platform}",
+            f"version       {__version__}",
+            f"video driver  {driver}",
+            f"session       wayland={os.environ.get('WAYLAND_DISPLAY')!r} "
+            f"display={os.environ.get('DISPLAY')!r} "
+            f"session={os.environ.get('XDG_SESSION_TYPE')!r}",
             f"start mode    {mode}",
             f"dpi scale     {self._dpi():.2f}",
             f"desktop       {desktop}",
@@ -1275,22 +1305,49 @@ class SdlApp:
         # launch -- which is exactly how a player loses the CRT for good.
         if self._try_glass(pygame, size, flags, base):
             return
-        # X11 has two roads to GL, and SDL takes GLX by default. Under a
-        # compositor -- gamescope, a Deck in Desktop Mode -- GLX may have no
-        # visual at the game's own mode at all, and the answer was a game with no
-        # CRT and a log line nobody saw. EGL is the road those compositors
-        # actually keep open, and SDL only takes it when it is told to.
-        if sys.platform.startswith("linux") and not os.environ.get("SDL_VIDEO_X11_FORCE_EGL"):
-            pygame.display.quit()
-            os.environ["SDL_VIDEO_X11_FORCE_EGL"] = "1"
-            pygame.display.init()
-            self._window = None
+        # The roads this machine has not been asked down yet, in the order worth
+        # trying them: the other GL backend on X11, and -- when the first attempt
+        # was Wayland -- the compatibility layer and both of its backends. Each
+        # one is a fresh display and a real context; the first that draws wins,
+        # and the game is playable on the ones that do not.
+        for driver, egl in self._glass_roads(pygame):
+            self._restart_display(pygame, driver, egl)
             if self._try_glass(pygame, size, flags, base):
                 return
         self._window = pygame.display.set_mode(size, flags)
         self._fit()
         if self.show_timings or self.profile_seconds:
             print(f"crt      not available, plain blit: {self._glass_error}")
+
+    def _glass_roads(self, pygame) -> list[tuple[str, bool]]:
+        """The display servers worth trying after the first one failed.
+
+        Not a pile of guesses: on Linux there are exactly two ways to a GL
+        context, and both belong to X11's pair -- GLX and EGL. A Wayland session
+        that will not give one is a session whose compatibility layer still
+        might. Off Linux the first road is the only road there is.
+        """
+        if not sys.platform.startswith("linux"):
+            return []
+        try:
+            on_x11 = pygame.display.get_driver() == "x11"
+        except pygame.error:
+            on_x11 = True
+        egl = bool(os.environ.get("SDL_VIDEO_X11_FORCE_EGL"))
+        if on_x11:
+            return [] if egl else [("x11", True)]
+        return [("x11", True), ("x11", False)]
+
+    def _restart_display(self, pygame, driver: str, egl: bool) -> None:
+        """A clean display on a named driver, with the GL road chosen on purpose."""
+        pygame.display.quit()
+        os.environ["SDL_VIDEODRIVER"] = driver
+        if egl:
+            os.environ["SDL_VIDEO_X11_FORCE_EGL"] = "1"
+        else:
+            os.environ.pop("SDL_VIDEO_X11_FORCE_EGL", None)
+        pygame.display.init()
+        self._window = None
 
     def _try_glass(self, pygame, size, flags, base) -> bool:
         """One attempt at a window with a context, and the glass on top of it."""
@@ -1603,9 +1660,15 @@ class SdlApp:
                 self._window.get_size() if self._window is not None else (0, 0)
             )
             print(
-                f"mode     {width}x{height} {'full screen' if self._fullscreen else 'window'}, "
+                f"mode     ndr2 {__version__} {pygame.display.get_driver()} "
+                f"{width}x{height} {'full screen' if self._fullscreen else 'window'}, "
                 f"{self.cols}x{self.rows} cells, "
                 f"{'crt' if self.glass is not None else 'plain blit'}"
+            )
+            print(
+                f"session  wayland={os.environ.get('WAYLAND_DISPLAY')!r} "
+                f"display={os.environ.get('DISPLAY')!r} "
+                f"session={os.environ.get('XDG_SESSION_TYPE')!r}"
             )
         self.redraw()
         clock = pygame.time.Clock()
