@@ -160,27 +160,7 @@ class SdlApp:
         # it would on an unscaled display, and the painting covers it exactly -- so
         # there is nothing to fix up afterwards.
         os.environ.setdefault("SDL_WINDOWS_DPI_AWARENESS", "permonitorv2")
-        # The session's own display server, *chosen* rather than inherited. SDL
-        # prefers X11 even inside a Wayland session -- on a Deck that means
-        # gamescope's XWayland -- and the one thing that road did not offer there
-        # was a GL context at the game's own full-screen mode. Wayland is the
-        # road the compositor actually keeps open, and a full screen under it is
-        # a toplevel state rather than a video mode, so there is no mode to match
-        # a visual against. An explicit SDL_VIDEODRIVER still wins: somebody who
-        # has asked for a driver has asked.
-        if (
-            sys.platform.startswith("linux")
-            and os.environ.get("WAYLAND_DISPLAY")
-            and not os.environ.get("SDL_VIDEODRIVER")
-        ):
-            os.environ["SDL_VIDEODRIVER"] = "wayland"
         pygame.init()
-        if not pygame.display.get_init() and os.environ.get("SDL_VIDEODRIVER") == "wayland":
-            # A Wayland variable with no Wayland behind it is still a session
-            # with an X server: take the compatibility layer and say nothing.
-            os.environ.pop("SDL_VIDEODRIVER", None)
-            pygame.quit()
-            pygame.init()
         # The screens decide what a *held* key means -- the floor walks on one, a
         # shelf scrolls on one, and everything else refuses the repeats -- but SDL
         # does not make any unless it is asked, so holding a direction did nothing
@@ -1307,12 +1287,14 @@ class SdlApp:
         egl_started = bool(os.environ.get("SDL_VIDEO_X11_FORCE_EGL"))
         if self._try_glass(pygame, size, flags, base):
             return
-        # The roads this machine has not been asked down yet, in the order worth
-        # trying them: the other GL backend on X11, and -- when the first attempt
-        # was Wayland -- the compatibility layer and both of its backends. Each
-        # one is a fresh display and a real context; the first that draws wins,
-        # and the game is playable on the ones that do not.
+        # The roads this machine has not been asked down yet, each one *asked in
+        # a child first*: a display server that cannot make a context sometimes
+        # takes the process with it instead of failing, and a driver crash cannot
+        # be caught. The child either exits or it does not; only a road it
+        # survived is taken here.
         for driver, egl in self._glass_roads(pygame):
+            if not self._road_works(driver, egl):
+                continue
             if not self._restart_display(pygame, driver, egl):
                 continue
             if self._try_glass(pygame, size, flags, base):
@@ -1350,10 +1332,54 @@ class SdlApp:
         # everything that runs after this.
         if driver not in ("x11", "wayland", "kmsdrm"):
             return []
+        roads: list[tuple[str, bool]] = []
+        if os.environ.get("WAYLAND_DISPLAY") and driver != "wayland":
+            # The session's own server: a full screen there is a toplevel state
+            # and not a video mode, so there is no mode for a visual to match --
+            # which is the one thing that failed on a Deck under XWayland.
+            roads.append(("wayland", False))
         egl = bool(os.environ.get("SDL_VIDEO_X11_FORCE_EGL"))
         if driver == "x11":
-            return [] if egl else [("x11", True)]
-        return [("x11", True), ("x11", False)]
+            if not egl:
+                roads.append(("x11", True))
+        else:
+            roads.append(("x11", True))
+            roads.append(("x11", False))
+        return roads
+
+    def _road_works(self, driver: str, egl: bool) -> bool:
+        """Ask a child process whether that display server can make a context.
+
+        Out of process because that is the only place a driver crash can be
+        survived: the child exits 0 or it does not, and a negative return code
+        (a signal) is an answer too. The game itself never finds out the hard way.
+        """
+        import subprocess
+
+        if getattr(sys, "frozen", False):
+            command = [sys.executable, "--probe-gl", driver]
+        else:
+            command = [sys.executable, "-m", "neverdeads_revenge", "--probe-gl", driver]
+        if egl:
+            command.append("egl")
+        try:
+            done = subprocess.run(
+                command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=20
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+        if done.returncode != 0 and (self.show_timings or self.profile_seconds):
+            road = driver + (" egl" if egl else "")
+            if done.returncode < 0:
+                # A signal, not an exit code: the driver took the child down.
+                # Worth saying, because it is the difference between "this road
+                # is closed" and "this road killed the process it was asked on".
+                print(f"crt      {road} crashed in the probe (signal {-done.returncode})")
+            else:
+                said = (done.stderr or b"").decode("utf-8", "replace").strip()
+                lines = [line for line in said.splitlines() if line.strip()]
+                print(f"crt      {road} closed: {lines[-1] if lines else 'no reason given'}")
+        return done.returncode == 0
 
     def _restart_display(self, pygame, driver: str, egl: bool) -> bool:
         """A clean display on a named driver, with the GL road chosen on purpose.
