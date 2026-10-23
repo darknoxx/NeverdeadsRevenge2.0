@@ -671,6 +671,7 @@ def test_the_roster_paints_the_hero_on_the_second_front_end():
 
     app = SdlApp(seed=3)
     app.key("enter")  # NEW RUN, onto the roster
+    app.tick(1 / 60)  # the loop paints once a frame; a key marks it out of date
 
     screen = app.screens[-1]
     assert type(screen).__name__ == "HeroSelectScreen", "the roster did not open"
@@ -3245,7 +3246,9 @@ def test_a_still_picture_is_not_painted_again():
     assert app._painted == painted, "a still screen was painted again"
 
     app.key("down")  # the title's cursor, and nothing that animates
-    assert app._painted == painted + 1, "the key did not repaint the screen"
+    assert app._dirty, "the key did not ask for a frame"
+    app.tick(1 / 60)
+    assert app._painted == painted + 1, "the frame the key asked for was not painted"
 
 
 def test_a_hold_bar_keeps_the_frame_moving():

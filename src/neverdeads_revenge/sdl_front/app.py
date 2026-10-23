@@ -198,6 +198,9 @@ class SdlApp:
         #: launcher's shortcut has none). Opened by ``open_window``.
         self._timing_log = None
         self._timing: dict[str, tuple[float, int]] = {}
+        #: Events the window handed over since the last report, and their kinds.
+        self._events = 0
+        self._event_kinds: dict[str, int] = {}
         self._timing_since = time.monotonic()
         #: The grid, made once and cleared from then on. It is *this* app's, so it
         #: is made here rather than on the first frame -- a screen is handed a
@@ -767,7 +770,7 @@ class SdlApp:
                 self._stale.discard(name)
             screen = self.screens[-1]
             if name and screen.key_up(name, KeyPress(False, typed(event)), self):
-                self.redraw()
+                self._dirty = True
         elif event.type == pygame.VIDEORESIZE:
             # The window manager's answer, not ours: the picture is fitted to
             # whatever it says, and the glass hears about it.
@@ -790,7 +793,9 @@ class SdlApp:
             gap = max(1e-4, now - self._last_frame)
             self.frames = (self.frames * 9.0 + (1.0 / gap)) / 10.0
         self._last_frame = now
+        mark = time.perf_counter() if self.show_timings else 0.0
         self._poll_pad(dt)
+        mark = self._note("pad", mark)
         screen = self.screens[-1]
         #: A screen with something playing -- a fight breathing, a hold bar
         #: filling -- has a picture that changes without a key, so it is stepped
@@ -939,10 +944,15 @@ class SdlApp:
             if frames and not name.startswith("draw[")
         )
         painted, self._painted = self._painted, 0
+        events, self._events = self._events, 0
+        kinds = sorted(self._event_kinds.items(), key=lambda one: -one[1])[:2]
+        self._event_kinds.clear()
+        said = " ".join(f"{name} {count}" for name, count in kinds)
         self._say(
             f"{self.frames:5.1f} fps  {painted:3d} painted/s   "
             f"cells {self.grid.cols}x{self.grid.rows}/{self.grid.puts} written   "
-            f"{parts}   ({done:.2f} ms a painted frame)"
+            f"{parts}   ({done:.2f} ms a painted frame)   "
+            f"events {events}{f' ({said})' if said else ''}"
         )
         self._timing.clear()
 
@@ -1472,7 +1482,7 @@ class SdlApp:
             screen = self.screens[-1]
             if kind == "up":
                 if screen.key_up(name, KeyPress(False), self):
-                    self.redraw()
+                    self._dirty = True
             else:
                 self.key(name, KeyPress(repeat))
 
@@ -1501,7 +1511,11 @@ class SdlApp:
         press = event or KeyPress(text=text)
         used = screen.key(name, press, self)
         self._interface_sound(name, bool(used), press)
-        self.redraw()
+        # A key makes the picture out of date; it does not paint it. The loop
+        # paints once a frame, which is the same picture at a fraction of the
+        # work -- and it means a burst of events (a pad repeating, a launcher's
+        # idea of a key) costs one frame, not one frame each.
+        self._dirty = True
         return bool(used)
 
     def _interface_sound(self, name: str, used: bool, event) -> None:
@@ -1646,6 +1660,13 @@ class SdlApp:
             # on a quicker machine would be a different fight.
             self.tick(min(clock.tick(60) / 1000.0, 1 / 30.0))
             for event in pygame.event.get():
+                if self.show_timings:
+                    # How much the window is handing over, and of what: a pad in
+                    # a launcher's hands can arrive as a stream of axis events,
+                    # and a stream of events is a stream of Python objects.
+                    self._events += 1
+                    kind = pygame.event.event_name(event.type)
+                    self._event_kinds[kind] = self._event_kinds.get(kind, 0) + 1
                 self.feed(event)
         if self._timing_log is not None:
             self._timing_log.close()

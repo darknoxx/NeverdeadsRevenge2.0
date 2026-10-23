@@ -22,6 +22,7 @@ from __future__ import annotations
 import re
 
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Iterator
 
 from .theme import Style, style_on
@@ -52,6 +53,7 @@ PAD_WORDS: dict[str, str] = {
 }
 
 
+@lru_cache(maxsize=512)
 def pad_words(text: str) -> str:
     """Say a hint in the buttons the player is actually holding.
 
@@ -59,6 +61,11 @@ def pad_words(text: str) -> str:
     screen answers; a pad is a different set of *names on the same words*. This
     is the translation for the words that appear in hints, and only when the pad
     was the last thing touched -- a keyboard player still reads "esc".
+
+    Memoised, because it runs on *every* line of text a frame while the pad is
+    the last thing touched, and the same handful of hint strings come round
+    again and again. Six regular expressions a line is not a cost a still screen
+    should pay.
     """
     for pattern, word in PAD_WORDS.items():
         text = re.sub(pattern, word, text)
