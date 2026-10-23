@@ -1234,6 +1234,12 @@ class SdlApp:
             f"session       wayland={os.environ.get('WAYLAND_DISPLAY')!r} "
             f"display={os.environ.get('DISPLAY')!r} "
             f"session={os.environ.get('XDG_SESSION_TYPE')!r}",
+            # What a launcher put in front of the game, because "slow only when
+            # Steam starts it" is a question about this and not about the game.
+            f"ld preload    {os.environ.get('LD_PRELOAD', '-')}",
+            f"ld path       {os.environ.get('LD_LIBRARY_PATH', '-')}",
+            f"wrapper       steam={os.environ.get('STEAM_RUNTIME', '-')!r} "
+            f"pressure={os.environ.get('PRESSURE_VESSEL_VERSION', '-')!r}",
             f"start mode    {mode}",
             f"dpi scale     {self._dpi():.2f}",
             f"desktop       {desktop}",

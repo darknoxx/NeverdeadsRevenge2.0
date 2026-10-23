@@ -420,6 +420,9 @@ chmod +x NeverdeadsRevenge2-x86_64.AppImage
 On a Steam Deck: copy the file over in Desktop Mode, `chmod +x` it, then add it
 to Steam under *Games -> Add a Non-Steam Game* and pick it from the list. Start
 it once from the desktop first, so the profile is written where you expect it.
+The image clears what a launcher puts in front of it (`LD_PRELOAD` and the Steam
+runtime's library path) before the game starts: it carries its own Python and
+SDL, and the graphics driver belongs to the operating system.
 It fills the 1280x800 screen -- no bars, every cell a whole number of screen
 pixels -- and the pad works as described above; the Deck's own controls need no
 Steam Input layout of their own.

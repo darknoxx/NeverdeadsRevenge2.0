@@ -4,5 +4,15 @@
 # The payload is a one-folder PyInstaller build, so the binary finds everything
 # it needs in the ``_internal`` directory beside it. The paths are resolved from
 # this script's own location, because an AppImage can be mounted anywhere.
+#
+# Started *by Steam* -- from a shortcut, or from Game Mode -- the game inherits
+# the wrapper's environment: an overlay preloaded into every draw call, and the
+# Steam runtime's own library paths in front of the system's. This image carries
+# its own Python and SDL, and the graphics driver belongs to the operating
+# system; what a wrapper puts in front of those is not part of the game, and a
+# driver that resolves an older C++ runtime through it is a driver that runs at
+# software speed or not at all. The image starts clean.
+unset LD_PRELOAD
+unset LD_LIBRARY_PATH
 here="$(dirname "$(readlink -f "$0")")"
 exec "$here/usr/bin/NeverdeadsRevenge2" "$@"
