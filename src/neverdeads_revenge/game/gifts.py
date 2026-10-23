@@ -106,7 +106,7 @@ GIFTS: dict[str, Gift] = {
     "salt_circle": Gift(
         key="salt_circle",
         name="THE SALT CIRCLE",
-        blurb="wait three turns in a row and nothing can reach you",
+        blurb="the first blow of every fight is refused",
     ),
     "blood_price": Gift(
         key="blood_price",

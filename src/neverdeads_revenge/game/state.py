@@ -407,9 +407,8 @@ class GameState:
     #: THE DEBT OF BLOOD: what the hero has been made to bleed since the last
     #: blow they landed. Owed back on it, then forgotten.
     blood_debt: int = 0
-    #: THE SALT CIRCLE: waits in a row, and the turn of untouchability three of
-    #: them buy.
-    waits_in_a_row: int = 0
+    #: THE SALT CIRCLE: the turn of untouchability the circle draws when a fight
+    #: opens. One blow is refused while it holds.
     salt_ward: int = 0
     #: THE HUNGRY ROAD: the squares the hero has left glass on, oldest first,
     #: and what it will cost whatever follows them onto one. On the run rather
@@ -1000,7 +999,6 @@ class GameState:
         self.momentum = 0
         self.momentum_direction = None
         self.blood_debt = 0
-        self.waits_in_a_row = 0
         self.salt_ward = 0
         self.trail.clear()
         self.helped.clear()

@@ -417,6 +417,13 @@ class Battle:
         #: what answers a turn spent in it. See ``GameState.in_fight``, and
         #: ``_close_the_fight`` for the other end of it.
         state.in_fight = True
+        if state.has_gift("salt_circle"):
+            # THE SALT CIRCLE. The circle is drawn at the threshold and not by
+            # standing still: the first blow of the fight is refused. Raised
+            # here, where a room is *built*, because that is the moment the
+            # hero steps into it -- and because a gift that rewarded waiting
+            # rewarded the one thing a score made of turns cannot afford.
+            state.salt_ward = 1
         if state.ravaging:
             # THE RAVAGING FIRE. Everything that reaches him is already burning
             # when it gets there -- applied here, where a fight is *built*,

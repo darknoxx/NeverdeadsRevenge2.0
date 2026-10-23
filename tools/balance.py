@@ -157,8 +157,15 @@ class Run:
         return not self.escaped and not self.stuck and not self.capped
 
 
-def _towards(state, target) -> Action:
-    """The one move that lands exactly on ``target``, or a wait."""
+def _towards(state, target) -> Action | None:
+    """The one move that lands exactly on ``target``, or ``None`` if it is not
+    a neighbour.
+
+    ``None`` and not a pass: the game has no verb for standing still, and a bot
+    that *did* have one could hide a broken path behind ninety-nine quiet turns.
+    Its callers treat the answer as "no move this frame", which is the honest
+    report.
+    """
     delta = (
         target[0] - state.player.position[0],
         target[1] - state.player.position[1],
@@ -166,7 +173,7 @@ def _towards(state, target) -> Action:
     for action, offset in MOVES.items():
         if offset == delta:
             return action
-    return Action.WAIT
+    return None
 
 
 def _bfs_step(state, goals) -> tuple[int, int] | None:
@@ -313,6 +320,9 @@ def play(
             action = Action.TAKE_FAME if fame else Action.OPEN_CHEST
         elif beside is not None:
             action = _towards(state, beside.position)
+            if action is None:
+                run.stuck = True
+                break
         elif standing_on is not None and not on_chest and _pickable(state, standing_on):
             # Only when there is room for it. A full pack refuses the pickup and
             # the *turn is not spent*, so a bot that asked anyway stood on the
@@ -332,6 +342,11 @@ def play(
             # one costs turns and depth, and a measurement that mixes the
             # detour with the curse measures neither.
             action = _explore(state, can_afford_a_wash)
+            if action is None:
+                # Nothing walkable and nothing to fight: the floor is a wall the
+                # run cannot argue with. Say so rather than spend the clock.
+                run.stuck = True
+                break
 
         perform_action(state, action)
         if state.encounter is not None:
@@ -436,7 +451,7 @@ def _explore(state, can_afford_a_wash: bool, seek_chests: bool = False) -> Actio
         step = _bfs_step(state, [nearest.position])
         if step is not None:
             return _towards(state, step)
-    return Action.WAIT
+    return None
 
 
 #: A *complete kit*, and part of the permanent shelf: three of the five Vigour,

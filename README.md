@@ -136,7 +136,7 @@ one rewrites a piece of the game while it is held:
 | THE DEBT OF BLOOD | what you are made to bleed is owed back on your next blow |
 | THE LAST BREATH | at three health or less: you hit twice as hard and are harder to hit |
 | THE DARK KNOWS | you see every monster on the floor, through the walls |
-| THE SALT CIRCLE | wait three turns in a row and nothing can reach you |
+| THE SALT CIRCLE | the first blow of every fight is refused |
 | THE BLOOD PRICE | every blow you take scatters coin at your feet |
 | THE KINDNESS | whoever you meet hands you something to drink |
 | NOTHING WASTED | a draught you drink shatters into everything beside you |
@@ -268,7 +268,6 @@ the glass itself.
 | --- | --- |
 | arrows, `wasd`, `hjk` | move (`l` is the legend now) |
 | `y` `u` `b` `n` (and Home/PgUp/End/PgDn) | move diagonally |
-| `.` or `space` | wait a turn |
 | `enter` | interact: loot, stairs, spring, chest, or speak |
 | `>` | take the stairs down |
 | `q` | drink the cheapest draught that covers the wound |

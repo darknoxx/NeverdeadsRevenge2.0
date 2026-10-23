@@ -28,6 +28,8 @@ from neverdeads_revenge.game.savegame import SCHEMA_VERSION, SaveError, dump, lo
 from neverdeads_revenge.game.shop import Loadout
 from neverdeads_revenge.game.state import GameState, start_run
 
+from .support import spend_a_turn
+
 
 def a_busy_run() -> GameState:
     """A run with as much in it as a run can hold."""
@@ -57,7 +59,6 @@ def a_busy_run() -> GameState:
     state.momentum = 3
     state.momentum_direction = Direction.EAST
     state.blood_debt = 5
-    state.waits_in_a_row = 2
     state.salt_ward = 1
     # The floor's own bookkeeping: the ledger blade counts kills here, the rules
     # the strange bottles laid, the squares where things died, the window a
@@ -75,7 +76,7 @@ def a_busy_run() -> GameState:
     state.helped = {(state.player.position[0] + 1, state.player.position[1])}
     state.npcs = [make_npc(NPCS["tally"], state.player.position)]
     for _ in range(3):
-        perform_action(state, Action.WAIT)
+        spend_a_turn(state)
     return state
 
 
@@ -190,6 +191,23 @@ def test_the_map_comes_back_whole():
     assert reloaded.dungeon_map.items == state.dungeon_map.items
 
 
+def test_a_direction_survives_the_codec():
+    """``Direction`` is an enum whose *value* is a tuple, and the codec used to
+    write that value raw.
+
+    JSON turned ``(1, 0)`` into ``[1, 0]`` and ``Direction([1, 0])`` is not a
+    direction, so a run saved with MOMENTUM loaded refused to open. Found by
+    removing WAIT -- a saved run could finally be caught mid-charge.
+    """
+    state = a_busy_run()
+    state.momentum = 3
+    state.momentum_direction = Direction.EAST
+
+    reloaded = load(json.loads(json.dumps(dump(state))))
+
+    assert reloaded.momentum_direction is Direction.EAST
+
+
 def test_a_position_is_still_a_position():
     """The reason everything is tagged: ``[1, 2]`` could be a tuple or a list, and
     a position that comes back as a list compares unequal to every other position
@@ -218,7 +236,7 @@ def test_a_resumed_run_can_be_played():
     reloaded = load(json.loads(json.dumps(dump(state))))
 
     before = reloaded.total_turns
-    perform_action(reloaded, Action.WAIT)
+    spend_a_turn(reloaded)
 
     assert reloaded.total_turns == before + 1
     assert not reloaded.over

@@ -13,6 +13,7 @@ from neverdeads_revenge.core.direction import chebyshev
 from neverdeads_revenge.game.actors import ActorKind, ENEMIES, make_enemy
 from neverdeads_revenge.game.actions import (
     Action,
+    advance_world,
     perform_action,
     resolve_player_attack,
 )
@@ -53,8 +54,17 @@ def _let_it_strike(state) -> None:
 
 
 def _wait(state, times: int = 1) -> None:
+    """A turn of the floor, without the hero doing anything with it.
+
+    The verb for standing still is gone, so the world is advanced the way the
+    game advances it after every spent turn -- the enemies, the shadow and the
+    fortress all answer on this beat.
+    """
     for _ in range(times):
-        perform_action(state, Action.WAIT)
+        advance_world(state)
+        # The same two calls a spent turn makes: the world answers, then the
+        # light is worked out again -- the shadow's own three paces included.
+        state.refresh_vision()
 
 
 def _stage_enemy_at_square(state, square, hp: int = 1):

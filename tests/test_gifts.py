@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from neverdeads_revenge.game.actions import Action, perform_action
+from neverdeads_revenge.game.actions import Action, advance_world, perform_action
 from neverdeads_revenge.game.actors import ENEMIES, NOXX, make_enemy
 from neverdeads_revenge.game.curses import CURSES
 from neverdeads_revenge.game.gifts import GIFTS, gift_by_key
@@ -18,6 +18,8 @@ from neverdeads_revenge.game.savegame import dump, load
 from neverdeads_revenge.game.state import RunState, start_run
 from neverdeads_revenge.world.items import make_chest
 from neverdeads_revenge.world.tiles import Tile
+
+from .support import spend_a_turn
 
 
 # -- helpers ------------------------------------------------------------------
@@ -255,7 +257,10 @@ def _fight_until_dead(state) -> None:
     for _ in range(20):
         if state.over:
             return
-        perform_action(state, Action.WAIT)
+        # A real turn, not merely the world's: the borrowed hour banks its
+        # snapshot at the start of a *player* action, and the death this helper
+        # is walking towards has to be undoable.
+        spend_a_turn(state)
         fight = open_fight(state)
         if fight is None:
             continue
@@ -287,7 +292,7 @@ def test_the_borrowed_hour_gives_a_death_back():
 def test_the_hour_is_spent_when_it_is_used():
     state = holding("borrowed_hour")
     state.build_floor(1)
-    perform_action(state, Action.WAIT)
+    spend_a_turn(state)
 
     assert perform_action(state, Action.REWIND).acted
     assert not state.rewind_ready
@@ -296,7 +301,7 @@ def test_the_hour_is_spent_when_it_is_used():
 
 def test_without_the_gift_there_is_no_hour():
     state = holding()
-    perform_action(state, Action.WAIT)
+    spend_a_turn(state)
 
     assert not perform_action(state, Action.REWIND).acted
     assert state.run_state is RunState.PLAYING
@@ -305,7 +310,7 @@ def test_without_the_gift_there_is_no_hour():
 def test_the_hour_comes_back_on_the_next_floor():
     state = holding("borrowed_hour")
     state.build_floor(1)
-    perform_action(state, Action.WAIT)
+    spend_a_turn(state)
     perform_action(state, Action.REWIND)
 
     state.player.position = state.stairs
@@ -321,7 +326,7 @@ def test_a_rewind_puts_the_run_back_the_way_it_was():
     state.gold = 50
     enemy = brute_at(state, 1)
     enemy.stats.damage = (99, 99)
-    perform_action(state, Action.WAIT)
+    spend_a_turn(state)
 
     perform_action(state, Action.REWIND)
 
@@ -342,7 +347,7 @@ def test_a_rewind_leaves_the_queue_holding_the_real_actors():
     """
     state = holding("borrowed_hour")
     state.build_floor(1)
-    perform_action(state, Action.WAIT)
+    spend_a_turn(state)
     perform_action(state, Action.REWIND)
 
     # ``in`` is identity on the queue, which is the whole point of this test.
@@ -364,7 +369,7 @@ def test_a_monster_rewritten_after_the_rewind_is_rewritten_in_the_queue():
     state = holding("borrowed_hour")
     state.build_floor(1)
     enemy = brute_at(state, 1)
-    perform_action(state, Action.WAIT)
+    spend_a_turn(state)
     perform_action(state, Action.REWIND)
 
     restored = [e for e in state.enemies if e.position == enemy.position]

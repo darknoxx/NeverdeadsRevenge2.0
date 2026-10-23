@@ -33,8 +33,6 @@ KEY_BINDINGS: dict[str, Action] = {
     "pageup": Action.MOVE_NE,
     "end": Action.MOVE_SW,
     "pagedown": Action.MOVE_SE,
-    ".": Action.WAIT,
-    "space": Action.WAIT,
     "i": Action.INVENTORY,
     "q": Action.QUAFF,
     "r": Action.REWIND,

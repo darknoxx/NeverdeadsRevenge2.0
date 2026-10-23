@@ -14,6 +14,7 @@ from neverdeads_revenge.game import actions as actions_module
 from neverdeads_revenge.game.actions import (  # noqa: F401
     ENEMY_BITE,
     Action,
+    advance_world,
     perform_action,
     resolve_player_attack,
 )
@@ -855,11 +856,19 @@ def test_moving_into_open_ground_advances_the_position():
     assert state.player.position == open_move.step(before)
 
 
-def test_waiting_costs_a_turn():
-    state = start_run(NOXX, seed=8)
-    before = state.turn
-    assert perform_action(state, Action.WAIT).consumed_turn
-    assert state.turn == before + 1
+def test_there_is_no_verb_for_standing_still():
+    """WAIT is gone: the world only answers something the hero *does*.
+
+    It existed for one gift and one ritual -- three waits to close a salt circle
+    -- and a turn that bought nothing but a monster getting closer was a key
+    nobody pressed. THE SALT CIRCLE is drawn at the threshold now, so nothing in
+    the game depends on a pass.
+    """
+    from neverdeads_revenge.desktop.keys import KEY_BINDINGS
+
+    assert "wait" not in {action.value for action in Action}
+    assert "." not in KEY_BINDINGS, "a key still waits"
+    assert "space" not in KEY_BINDINGS, "a key still waits"
 
 
 def test_player_and_enemy_never_share_a_cell():
@@ -867,7 +876,7 @@ def test_player_and_enemy_never_share_a_cell():
     for _ in range(120):
         if state.over:
             break
-        perform_action(state, Action.WAIT)
+        advance_world(state)
     for enemy in state.living_enemies:
         assert enemy.position != state.player.position
 
@@ -934,9 +943,9 @@ def test_enemies_only_act_when_the_player_can_see_them():
 
     hidden.position = dark
     before = hidden.position
-    # Wait a real turn, otherwise the queue hands control straight back to the
-    # player and the enemy never gets an action to be denied.
-    perform_action(state, Action.WAIT)
+    # A real turn has to pass, otherwise the queue hands control straight back
+    # to the player and the enemy never gets an action to be denied.
+    advance_world(state)
     assert hidden.position == before
 
 
@@ -961,7 +970,7 @@ def test_a_visible_enemy_does_close_in():
     for _ in range(4):
         if state.over or chebyshev(hunter.position, state.player.position) < before_distance:
             break
-        perform_action(state, Action.WAIT)
+        advance_world(state)
     assert chebyshev(hunter.position, state.player.position) < before_distance
 
 
@@ -1005,7 +1014,7 @@ def test_a_faster_enemy_acts_more_often_than_a_slower_one(monkeypatch):
         for _ in range(200):
             if state.over:
                 break
-            perform_action(state, Action.WAIT)
+            advance_world(state)
 
     run_with(1.0, "slow")
     slow_actions = counts["slow"]
@@ -1031,7 +1040,7 @@ def _play_the_fight(state) -> None:
     for _ in range(60):
         if state.over:
             return
-        perform_action(state, Action.WAIT)
+        advance_world(state)
         fight = open_fight(state)
         if fight is None:
             continue
@@ -2039,7 +2048,7 @@ def test_vision_stays_consistent_during_play(seed):
     for i in range(60):
         if state.over:
             break
-        perform_action(state, [Action.WAIT, Action.MOVE_EAST, Action.MOVE_SOUTH][i % 3])
+        perform_action(state, [Action.INVENTORY, Action.MOVE_EAST, Action.MOVE_SOUTH][i % 3])
         assert state.player.position in state.dungeon_map.visible
         assert state.dungeon_map.visible <= state.dungeon_map.explored
 
@@ -2050,7 +2059,7 @@ def test_the_log_never_bloats_without_bound(seed):
     for i in range(200):
         if state.over:
             break
-        perform_action(state, [Action.WAIT, Action.MOVE_NORTH, Action.MOVE_WEST][i % 3])
+        perform_action(state, [Action.INVENTORY, Action.MOVE_NORTH, Action.MOVE_WEST][i % 3])
     assert len(state.log) < 2000
 
 
@@ -2567,7 +2576,7 @@ def test_the_flash_lasts_exactly_one_action():
     resolve_player_attack(state, ghoul)
     assert state.hits
 
-    perform_action(state, Action.WAIT)
+    perform_action(state, Action.INVENTORY)
 
     assert state.hits == [], "the flash outlived its turn"
 

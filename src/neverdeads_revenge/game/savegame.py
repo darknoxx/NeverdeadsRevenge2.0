@@ -84,7 +84,11 @@ def _encode(value: Any) -> Any:
     as monsters that cannot be found on the map they are standing on.
     """
     if isinstance(value, Enum):
-        return {"!enum": type(value).__name__, "value": value.value}
+        # The value goes through the codec too: an enum may *be* a tuple, and
+        # ``Direction.EAST`` is ``(1, 0)`` -- written raw, JSON turned it into a
+        # list, and ``Direction([1, 0])`` is not a direction. Found by a run that
+        # was saved with MOMENTUM loaded.
+        return {"!enum": type(value).__name__, "value": _encode(value.value)}
     if is_dataclass(value) and not isinstance(value, type):
         return {
             "!type": type(value).__name__,
@@ -117,7 +121,7 @@ def _decode(data: Any) -> Any:
         kind = _ENUMS.get(data["!enum"])
         if kind is None:
             raise SaveError(f"unknown enum {data['!enum']!r}")
-        return kind(data["value"])
+        return kind(_decode(data["value"]))
     if "!type" in data:
         kind = _DATACLASSES.get(data["!type"])
         if kind is None:
@@ -213,7 +217,6 @@ def dump(state: GameState) -> dict:
         "momentum": state.momentum,
         "momentum_direction": _encode(state.momentum_direction),
         "blood_debt": state.blood_debt,
-        "waits_in_a_row": state.waits_in_a_row,
         "salt_ward": state.salt_ward,
         "void_available": state.ultimate_available,
         "pack_capacity": state.pack_capacity,
@@ -311,7 +314,6 @@ def load(payload: dict) -> GameState:
         state.momentum = payload.get("momentum", 0)
         state.momentum_direction = _decode(payload.get("momentum_direction"))
         state.blood_debt = payload.get("blood_debt", 0)
-        state.waits_in_a_row = payload.get("waits_in_a_row", 0)
         state.salt_ward = payload.get("salt_ward", 0)
         # The floor's one ask. The summoned things themselves are not carried:
         # they belong to the floor they were asked for, and save-and-quit

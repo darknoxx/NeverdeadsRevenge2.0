@@ -114,7 +114,6 @@ class Action(Enum):
     MOVE_NW = "nw"
     MOVE_SE = "se"
     MOVE_SW = "sw"
-    WAIT = "wait"
     #: Do whatever is under the player: take it, or take the stairs. This is the
     #: verb a key is bound to. The two specific actions below stay because they
     #: are meaningful on their own -- ``>`` is the classic "go down" and does not
@@ -837,12 +836,6 @@ def perform_action(state: GameState, action: Action) -> ActionResult:
     if state.rewind_ready:
         state.snapshot = _snapshot(state)
 
-    # THE SALT CIRCLE counts waits *in a row*, so anything that is not a wait
-    # breaks the run of them. This is the one place every action passes through,
-    # which is why it is here and not in the wait itself.
-    if action is not Action.WAIT:
-        state.waits_in_a_row = 0
-
     match action:
         case Action.INTERACT:
             return _interact(state)
@@ -865,16 +858,10 @@ def perform_action(state: GameState, action: Action) -> ActionResult:
         case _:
             pass
 
-    if action is Action.WAIT:
-        state.say("You wait.", LogKind.PLAIN)
-        # Waiting breaks the line as surely as turning does: a charge that
-        # survived standing still would be a charge with no rule behind it.
-        state.momentum = 0
-        state.momentum_direction = None
-        _hold_the_circle(state)
-        acted, spent = True, True
-    else:
-        acted, spent = _try_move(state, action.direction)
+    # Everything left is a step. There is no longer a verb for standing still:
+    # the world only answers something the hero *does*, and a turn that did
+    # nothing but let the room move was a key nobody pressed.
+    acted, spent = _try_move(state, action.direction)
 
     if state.over:
         return _outcome(state, consumed_turn=spent, acted=acted)
@@ -889,24 +876,6 @@ def perform_action(state: GameState, action: Action) -> ActionResult:
         advance_world(state)
     state.refresh_vision()
     return _outcome(state, consumed_turn=spent, acted=acted)
-
-
-def _hold_the_circle(state: GameState) -> None:
-    """THE SALT CIRCLE. Waiting is the one thing a floor cannot answer.
-
-    Three waits in a row close it, and the turn it closes is untouchable -- the
-    same one-turn window the borrowed face buys, bought instead with the thing a
-    run is scored in. The third wait is what raises it, and the counter resets so
-    the next circle costs three more.
-    """
-    if not state.has_gift("salt_circle"):
-        return
-    state.waits_in_a_row += 1
-    if state.waits_in_a_row < SALT_CIRCLE_WAITS:
-        return
-    state.waits_in_a_row = 0
-    state.salt_ward = 1
-    state.say("You close the circle. Nothing will reach you.", LogKind.GOOD)
 
 
 def _try_move(state: GameState, direction: Direction) -> tuple[bool, bool]:
@@ -2444,9 +2413,6 @@ HOLLOW_ROAD_COST = 2
 #: how much a blow can carry. Five, because a run down a corridor is about that
 #: long before a doorway makes it a decision again.
 MOMENTUM_MAX = 5
-
-#: How many waits in a row close THE SALT CIRCLE.
-SALT_CIRCLE_WAITS = 3
 
 #: What THE LAST BREATH is worth to the enemy's aim: two points of evasion,
 #: which is twenty points off their hit chance, while the hero is cornered.

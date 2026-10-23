@@ -130,7 +130,6 @@ class HelpScreen(_Panel):
 
         rows = [
             ("MOVE      arrows / wasd / hjk / yubn (diagonals)", BONE),
-            ("WAIT      . or space", BONE),
             ("TAKE      enter  (loot, stairs, or speak)", BONE),
             ("DRINK     q      PACK  i      SHEET  c", BONE),
             ("LEGEND    l      REFERENCE  ?      HOUR  r", BONE),

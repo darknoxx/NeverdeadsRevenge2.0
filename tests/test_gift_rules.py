@@ -20,7 +20,6 @@ from neverdeads_revenge.game.actions import (
     HUNGRY_ROAD_TRAIL,
     LAST_BREATH_EVASION,
     MOMENTUM_MAX,
-    SALT_CIRCLE_WAITS,
     Action,
     _player_takes_damage,
     resolve_player_attack,
@@ -174,16 +173,6 @@ def test_the_charge_stops_at_the_ceiling():
     assert state.momentum == MOMENTUM_MAX
 
 
-def test_waiting_loses_the_charge():
-    state = _run("momentum")
-    for _ in range(2):
-        perform_action(state, Action.MOVE_EAST)
-
-    perform_action(state, Action.WAIT)
-
-    assert state.momentum == 0
-
-
 def test_without_the_gift_the_walk_loads_nothing():
     state = _run()
 
@@ -292,7 +281,16 @@ def test_the_cornered_hero_is_harder_to_hit(monkeypatch):
 
 
 # -- THE SALT CIRCLE ----------------------------------------------------------
-def test_three_waits_in_a_row_close_the_circle():
+def test_the_circle_is_closed_when_a_fight_opens():
+    """THE SALT CIRCLE, redrawn: the first blow of every fight is refused.
+
+    It used to be bought with three waits in a row -- on the *floor*, which is
+    the one place where a lost turn buys nothing but a monster getting closer.
+    The circle is drawn at the threshold now, where a refused blow is worth
+    something.
+    """
+    from neverdeads_revenge.game.battle import ATTACK, open_fight
+
     state = _run("salt_circle")
     state.player.stats.hp = 500
     enemy = _beside(state, damage=(5, 5))
@@ -300,46 +298,49 @@ def test_three_waits_in_a_row_close_the_circle():
     # take several turns before this one's blow, and the circle has only one.
     enemy.stats.speed = state.player.speed * 0.9
 
-    for _ in range(SALT_CIRCLE_WAITS):
-        perform_action(state, Action.WAIT)
-
-    # The ward is raised; the line it writes is written when a blow is turned
-    # aside, and blows land in the arena now.
-    from neverdeads_revenge.game.battle import ATTACK, open_fight
-
     fight = open_fight(state, enemy)
     assert fight is not None, "there was no fight to open"
+    assert state.salt_ward == 1, "the circle was not drawn at the threshold"
+
     fight.choose(ATTACK, fight.living_enemies()[0])
 
     assert any(
         "cannot find you" in entry.text and entry.kind is LogKind.PLAIN
         for entry in state.log
-    ), "the third wait did not raise the ward"
+    ), "the first blow was not refused"
 
 
-def test_a_step_breaks_the_run_of_waits():
+def test_the_circle_holds_for_one_blow_only():
+    from neverdeads_revenge.game.battle import ATTACK, open_fight
+
     state = _run("salt_circle")
     state.player.stats.hp = 500
-    _beside(state, damage=(5, 5))
+    enemy = _beside(state, damage=(5, 5), hp=999)
+    enemy.stats.speed = state.player.speed * 0.9
 
-    perform_action(state, Action.WAIT)
-    perform_action(state, Action.WAIT)
-    perform_action(state, Action.MOVE_EAST)
-    perform_action(state, Action.WAIT)
+    fight = open_fight(state, enemy)
+    fight.choose(ATTACK, fight.living_enemies()[0])
+    assert state.salt_ward == 0, "the circle outlived the blow it refused"
 
-    assert not any("cannot find you" in entry.text for entry in state.log)
-    assert state.waits_in_a_row == 1
+    fight.choose(ATTACK, fight.living_enemies()[0])
+
+    assert any("hits you" in entry.text for entry in state.log), (
+        "the second blow was refused as well"
+    )
 
 
-def test_without_the_gift_waiting_buys_nothing():
+def test_without_the_gift_there_is_no_circle():
+    from neverdeads_revenge.game.battle import ATTACK, open_fight
+
     state = _run()
     state.player.stats.hp = 500
-    _beside(state, damage=(5, 5))
+    enemy = _beside(state, damage=(5, 5))
 
-    for _ in range(SALT_CIRCLE_WAITS):
-        perform_action(state, Action.WAIT)
+    fight = open_fight(state, enemy)
+    assert state.salt_ward == 0, "a circle was drawn without the gift"
 
-    assert state.salt_ward == 0
+    fight.choose(ATTACK, fight.living_enemies()[0])
+
     assert not any("cannot find you" in entry.text for entry in state.log)
 
 
