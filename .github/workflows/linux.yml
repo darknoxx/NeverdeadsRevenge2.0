@@ -1,0 +1,86 @@
+name: Linux build
+
+# PyInstaller does not cross-compile, so the AppImage is made on a Linux runner.
+# It also runs the test suite, because a Linux build that has never run the
+# tests is a guess.
+#
+# The runner is pinned to 22.04 on purpose: glibc is forward compatible and not
+# backwards compatible, so a build made against a newer glibc will not start on
+# an older one -- and 22.04 is the version the AppImage tooling expects and the
+# one SteamOS can run.
+#
+# The .AppImage is always attached as a workflow artifact. On a v* tag it is
+# also attached to that release, beside the .exe.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+# Creating a release needs write access to the repository's contents; the
+# default token is read-only on a repository configured that way.
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    env:
+      # The tests drive a real window loop; the dummy driver means no display.
+      SDL_VIDEODRIVER: dummy
+      NEVERDEADS_REVENGE_MUTE: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]" pyinstaller
+
+      - name: Test
+        # Parallel, for the same reason as the Windows build: the suite is on
+        # the critical path of a release.
+        run: python -m pytest -q -n auto --durations=10
+
+      - name: Fetch appimagetool
+        # FUSE is what an AppImage mounts through, and the runner has it. The
+        # fallback is there for runners that do not: extract and run instead of
+        # mounting.
+        run: |
+          mkdir -p build
+          curl -fsSLo build/appimagetool-x86_64.AppImage \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x build/appimagetool-x86_64.AppImage
+          build/appimagetool-x86_64.AppImage --version || {
+            export APPIMAGE_EXTRACT_AND_RUN=1
+            build/appimagetool-x86_64.AppImage --version
+          }
+
+      - name: Build the AppImage
+        run: packaging/linux/build_appimage.sh
+
+      - name: Smoke test the AppImage
+        # Headless and against the real image: the frozen build has its own
+        # copies of the art, the font and the audio extension, and a build that
+        # starts but cannot report its display is a build that will not start on
+        # a Deck.
+        run: |
+          APPIMAGE_EXTRACT_AND_RUN=1 dist/NeverdeadsRevenge2-x86_64.AppImage --display
+
+      - name: Upload the artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeverdeadsRevenge2-linux
+          path: dist/NeverdeadsRevenge2-x86_64.AppImage
+
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/NeverdeadsRevenge2-x86_64.AppImage

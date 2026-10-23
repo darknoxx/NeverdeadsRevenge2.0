@@ -363,7 +363,7 @@ python3 -m venv .venv
 ./ndr2
 ```
 
-`ndr2` runs the windowed game and takes the flags the terminal build had:
+`ndr2` runs the game and takes the flags the terminal build had:
 
 ```sh
 ./ndr2 --seed 42     # the same dungeon, again
@@ -371,6 +371,7 @@ python3 -m venv .venv
 ./ndr2 --sound-log   # every sound decision, to /tmp/ndr2-sound.log
 ./ndr2 --testrun     # the chronicle and the bestiary unlocked, and the purse full
 ./ndr2 --battle-scene  # straight into a fight
+./ndr2 --windowed    # a window instead of the whole screen
 ```
 
 And without a flag: type **`battle4ever`** on the title screen. It grants exactly what
@@ -395,6 +396,41 @@ Same keys, same saves, same settings. `F2`, `F3` and `F4` toggle the scanlines,
 the phosphor glow and the CRT curve; `F11` is fullscreen. A machine that cannot
 make a GL context gets a plain window instead of a refusal to start.
 
+The game opens on the whole screen, and the grid is worked out from the display
+rather than from a fixed window: 1280x800 -- a Steam Deck -- comes out at 128x40
+cells with no bars, 1920x1080 at 96x27 with the picture doubled, 2560x1440 at
+128x36. `--windowed` asks for a window instead, at the size `--scale` gives.
+
+### Linux, and the Steam Deck
+
+Every release carries an AppImage beside the `.exe`. It is one file, it needs no
+installer and no root, and it keeps saves and profile outside itself:
+
+```sh
+chmod +x NeverdeadsRevenge2-x86_64.AppImage
+./NeverdeadsRevenge2-x86_64.AppImage
+```
+
+On a Steam Deck: copy the file over in Desktop Mode, `chmod +x` it, then add it
+to Steam under *Games -> Add a Non-Steam Game* and pick it from the list. Start
+it once from the desktop first, so the profile is written where you expect it.
+It fills the 1280x800 screen -- no bars, every cell a whole number of screen
+pixels -- and the pad works as described above; the Deck's own controls need no
+Steam Input layout of their own.
+
+An AppImage mounts itself through FUSE, which SteamOS does not always ship. If
+the image refuses to start with a message about FUSE, install it (`sudo pacman
+-S fuse2` in a terminal, in Desktop Mode) or run the image without mounting it:
+
+```sh
+APPIMAGE_EXTRACT_AND_RUN=1 ./NeverdeadsRevenge2-x86_64.AppImage
+```
+
+The image is built on Ubuntu 22.04 in CI, which is what the game promises and
+what SteamOS can run. `packaging/linux/build_appimage.sh` makes the same image
+locally, but only for the machine it was built on: glibc is forward compatible,
+not backwards compatible.
+
 The game needs a display: the design is the screen. Headless environments run
 the test suite instead, offscreen:
 
@@ -417,6 +453,9 @@ src/neverdeads_revenge/
     effects.py  the moving pixels: blood, coins, sparks, and the shake
     app.py      the window, the keys, the loop, the settings
     screens/    every menu and dialog, drawn and key-routed
+packaging/                            the frozen builds, one folder per platform
+  windows/    PyInstaller spec for the .exe, and its icon
+  linux/      PyInstaller spec, AppDir pieces and the AppImage script
 tests/                                engine and UI, 1,388 at this writing
 ```
 

@@ -4,42 +4,27 @@ Run it once with the repository's own virtualenv, and commit the result:
 
     ./.venv/bin/python packaging/windows/make_icon.py
 
-An ``.ico`` is a Windows concern; the rest of the project ships an SVG. Qt draws
-the SVG (it is already a dependency) and the container is written here -- an ICO
-is a small header and then the images, and Vista and later read PNGs straight out
-of it, so no image library is needed.
+An ``.ico`` is a Windows concern; the rest of the project ships an SVG. The
+drawing lives in ``packaging/mark.py`` and the container is written here -- an
+ICO is a small header and then the images, and Vista and later read PNGs
+straight out of it, so no image library is needed.
 """
 
 from __future__ import annotations
 
 import struct
+import sys
 from pathlib import Path
 
-from PySide6.QtCore import QByteArray, QBuffer, QIODevice
-from PySide6.QtGui import QImage, QPainter
-from PySide6.QtSvg import QSvgRenderer
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parent))
+
+from mark import SVG, render  # noqa: E402 - the path above has to be set first
 
 #: The sizes Windows asks for: the taskbar, the window, the alt-tab, the shell.
 SIZES = (16, 24, 32, 48, 64, 128, 256)
 
-HERE = Path(__file__).resolve().parent
-ROOT = HERE.parent.parent
-SVG = ROOT / "assets" / "neverdeads-revenge-2.svg"
 OUT = HERE / "neverdeads_revenge.ico"
-
-
-def render(svg_bytes: bytes, size: int) -> bytes:
-    """One size of the mark, as PNG bytes."""
-    renderer = QSvgRenderer(QByteArray(svg_bytes))
-    image = QImage(size, size, QImage.Format.Format_ARGB32)
-    image.fill(0)  # transparent black
-    painter = QPainter(image)
-    renderer.render(painter)
-    painter.end()
-    buffer = QBuffer()
-    buffer.open(QIODevice.OpenModeFlag.WriteOnly)
-    image.save(buffer, "PNG")
-    return bytes(buffer.data())
 
 
 def pack(images: list[tuple[int, bytes]]) -> bytes:

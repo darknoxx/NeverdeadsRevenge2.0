@@ -1,0 +1,8 @@
+#!/bin/sh
+# The AppImage's own entry point: start the game that is inside this image.
+#
+# The payload is a one-folder PyInstaller build, so the binary finds everything
+# it needs in the ``_internal`` directory beside it. The paths are resolved from
+# this script's own location, because an AppImage can be mounted anywhere.
+here="$(dirname "$(readlink -f "$0")")"
+exec "$here/usr/bin/NeverdeadsRevenge2" "$@"
