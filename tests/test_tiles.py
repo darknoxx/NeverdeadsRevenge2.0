@@ -127,7 +127,7 @@ def test_the_litter_is_scattered_and_not_counted():
     the room. The places have to come out of a mix of the two coordinates, so that
     what lands beside what is coincidence and not arithmetic.
     """
-    from neverdeads_revenge.desktop.screens.battle import FLOOR_BONES, _scatter
+    from neverdeads_revenge.desktop.screens.battle_shared import FLOOR_BONES, _scatter
 
     floor = [
         (along, row)
