@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
 from .game.lore import PAGE_COUNT
@@ -118,6 +118,11 @@ class MetaProgress:
     best_depth: int = 0
     best_score: int = 0
     total_kills: int = 0
+    #: Keys this build does not know, kept and written back unchanged. A newer
+    #: build's collection is not this build's to delete: opening the file with
+    #: an older binary, or rolling back, must not cost what the newer one
+    #: already recorded.
+    extra: dict[str, object] = field(default_factory=dict)
 
     def record_page(self, number: int) -> bool:
         """File a page. Returns whether it was new.
@@ -317,6 +322,7 @@ def load_meta(path: Path | None = None) -> MetaProgress:
     # older build is missing whatever was added since, and the version check
     # above would otherwise have thrown the whole file away -- losing a player's
     # high score to add a coin counter.
+    known = {one.name for one in fields(MetaProgress)} - {"extra"}
     try:
         return MetaProgress(
             version=raw["version"],
@@ -351,14 +357,20 @@ def load_meta(path: Path | None = None) -> MetaProgress:
             best_depth=int(raw.get("best_depth", 0)),
             best_score=int(raw.get("best_score", 0)),
             total_kills=int(raw.get("total_kills", 0)),
+            # Everything a newer build wrote that this one has no field for.
+            extra={key: value for key, value in raw.items() if key not in known},
         )
     except (KeyError, TypeError, ValueError):
         return MetaProgress()
 
 
 def save_meta(progress: MetaProgress, path: Path | None = None) -> None:
-    """Write progress to disk atomically."""
-    _write_json(path or save_path(), asdict(progress), indent=2)
+    """Write progress to disk atomically, including fields this build does not know."""
+    data = asdict(progress)
+    extra = data.pop("extra", {})
+    # The known fields win if the same key ever appears twice; an unknown key is
+    # only ever carried.
+    _write_json(path or save_path(), {**extra, **data}, indent=2)
 
 
 #: What ``--testrun`` puts in the purse. The shop's dearest line is in the

@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 
 from neverdeads_revenge.persistence import (
+    SAVE_VERSION,
     SCOREBOARD_SIZE,
     MetaProgress,
     ScoreEntry,
@@ -272,3 +273,29 @@ def test_a_phone_writes_into_its_own_sandbox(monkeypatch, tmp_path: Path):
     # writing into a sandbox that is not there.
     monkeypatch.setenv("NEVERDEADS_REVENGE_HOME", str(tmp_path / "home"))
     assert data_dir() == tmp_path / "home"
+
+
+def test_a_field_from_a_newer_build_is_not_written_away(tmp_path):
+    """A downgrade must not cost what the newer build recorded.
+
+    The file is read by a build that has no field for a collection yet; the
+    collection is not its to delete when it writes the file back.
+    """
+    path = tmp_path / "meta.json"
+    path.write_text(
+        json.dumps(
+            {
+                "version": SAVE_VERSION,
+                "gold": 11,
+                "future_collection": ["a", "b"],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    progress = load_meta(path)
+    save_meta(progress, path)
+
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    assert raw["gold"] == 11
+    assert raw["future_collection"] == ["a", "b"]

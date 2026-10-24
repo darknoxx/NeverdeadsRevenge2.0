@@ -4324,3 +4324,61 @@ def test_the_pad_can_hold_a_to_erase_everything():
     assert screen.key("hold", Event(), app) is True
     assert seen == [("hold", True)], "the hold never heard the pad"
     assert app.popped, "the hold was answered and the card stayed up"
+
+
+def test_a_dialog_is_a_window_and_the_room_stays_around_it():
+    """The box covers its own cells and nothing else.
+
+    The old stack pass treated any screen with a ``paint_over`` as a room and
+    rooted the frame at the dialog, so the dungeon, the sidebar and the log all
+    went black behind a card. A dialog is an overlay: what it does not cover is
+    still the game.
+    """
+    import pygame
+
+    from neverdeads_revenge.desktop.screens.dialogs import ConfirmScreen
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    app = SdlApp(seed=3)
+    app.feed(_pressed(pygame.K_n))
+    app.feed(_pressed(pygame.K_RETURN))
+    app.feed(_pressed(pygame.K_ESCAPE))
+    app.redraw()
+    before = app._surface.copy()
+
+    card = ConfirmScreen("A TEST", "A box over the floor.")
+    app.push(card)
+    app.redraw()
+
+    cell_w, cell_h = app.font.cell_w, app.font.cell_h
+    x, y, width, height = card._frame(app.cols, app.rows, cell_w, cell_h)
+    box = pygame.Rect(x * cell_w, y * cell_h, width * cell_w, height * cell_h)
+    after = app._surface
+    for py in range(3, after.get_height() - 3, 9):
+        for px in range(3, after.get_width() - 3, 9):
+            if box.collidepoint(px, py):
+                continue
+            assert after.get_at((px, py)) == before.get_at((px, py)), (
+                f"the frame outside the dialog changed at {(px, py)}"
+            )
+    middle = (after.get_width() // 2, after.get_height() // 2)
+    assert after.get_at(middle) != before.get_at(middle), "the box was not drawn"
+
+
+def test_a_run_that_will_not_open_is_kept_beside_the_slot():
+    """An unreadable save is set aside, not deleted: a loader bug must not eat it."""
+    from neverdeads_revenge.persistence import clear_run, run_path, save_run
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    clear_run()
+    backup = run_path().with_name(run_path().name + ".bak")
+    backup.unlink(missing_ok=True)
+    save_run({"version": 1, "hero": "noxx"})  # parses, but is not a run
+
+    app = SdlApp(seed=3)
+    app.continue_run()
+
+    assert app.run is None, "a broken save became a run"
+    assert not run_path().exists(), "the unreadable slot was left in place"
+    assert backup.exists(), "the run was deleted instead of set aside"
+    backup.unlink(missing_ok=True)

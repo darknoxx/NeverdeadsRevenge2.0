@@ -730,12 +730,12 @@ class SdlApp:
         being played lives in memory, and a copy left lying on disk would be the
         run the player *had* the next time they sat down. A save this build cannot
         read -- written by another version, or half written when the machine went
-        down -- is thrown away rather than thrown, because a dungeon that will not
-        open is not a crash, it is an empty slot.
+        down -- is set aside rather than thrown: the slot opens empty, and the
+        file is still there to be looked at.
         """
         from ..desktop.screens.game import GameScreen
         from ..game.savegame import load
-        from ..persistence import clear_run, load_run
+        from ..persistence import clear_run, load_run, run_path
 
         payload = load_run()
         if not payload:
@@ -743,7 +743,13 @@ class SdlApp:
         try:
             state = load(payload)
         except Exception:
-            clear_run()
+            # A loader that fails is a bug until proven otherwise, and deleting
+            # the run would hide it. The slot is emptied; the file is kept.
+            path = run_path()
+            try:
+                os.replace(path, path.with_name(path.name + ".bak"))
+            except OSError:
+                clear_run()
             return
         clear_run()
         self.run = state
@@ -861,34 +867,26 @@ class SdlApp:
             self.grid.clear()
         self.grid.pad = self.pad_active
         mark = time.perf_counter() if self._timing_now else 0.0
-        # An opaque modal: nothing under it is drawn. A menu is a panel, not a
-        # window onto the dungeon, so the topmost modal roots the stack -- the
-        # same rule the Qt build keeps, and the reason a dialog is not a
-        # see-through ghost of the fight behind it.
-        start = 0
-        for index, screen in enumerate(self.screens):
-            if not getattr(screen, "modal", False):
-                continue
-            # A dialog is a window and lets the floor show through it. A *room*
-            # is not: paint lands after the grid, so a painted floor under a box
-            # would be painted over the box and the dialog would vanish. Those
-            # stay solid, which is what they have always done.
-            painted = any(
-                hasattr(below, "paint_over") for below in self.screens[start:index]
-            )
-            if getattr(screen, "opaque", True) or painted:
-                start = index
+        # A dialog is a window, not a room: the stack under it is drawn in full,
+        # and the box is laid on the finished frame afterwards. Everything the
+        # box does not cover stays exactly as it was. An opaque menu is a room
+        # and roots the stack at itself, as it always did.
         top = len(self.screens) - 1
-        for index, screen in enumerate(self.screens[start:], start):
+        overlay = top if top > 0 and self._is_dialog(top) else None
+        content = top if overlay is None else self._content_under(overlay)
+
+        start = 0
+        for index in range(content + 1):
+            screen = self.screens[index]
+            if getattr(screen, "modal", False) and getattr(screen, "opaque", True):
+                start = index
+        for index in range(start, content + 1):
             # A dialog under a dialog is waiting its turn: only the topmost one
             # is drawn, so three cards pushed by one announcement are three
             # cards read in turn instead of three boxes on top of each other.
-            if (
-                index != top
-                and getattr(screen, "modal", False)
-                and not getattr(screen, "opaque", True)
-            ):
+            if index != content and self._is_dialog(index):
                 continue
+            screen = self.screens[index]
             if self._timing_now:
                 # Which screen the cells went to: a stack can hold the room and
                 # the fight, and "cells 24" does not say whose 24 it was.
@@ -901,26 +899,31 @@ class SdlApp:
         # A screen may bring its own paper: the arena's painted room goes *under*
         # the cells, so the panels, the log and the sidebar sit on it instead of
         # on a black field beside it.
+        # What the frame is made of is the screen *under* the dialog, not the
+        # dialog: a box has no room behind it to paint.
+        base_screen = self.screens[content]
         base = BACKGROUND
-        paper = getattr(self.screens[-1], "paper", None)
+        paper = getattr(base_screen, "paper", None)
         if paper is not None:
             # A screen with no painting to show answers None, and flat paper is
             # what the frame wanted all along.
             base = paper(self.cols, self.rows, self.font) or BACKGROUND
         self._surface = paint(self.grid, self.font, base)
         mark = self._note("paint", mark)
-        self._small_face()
+        self._small_face(base_screen)
         mark = self._note("small", mark)
         # And a screen may paint straight onto the frame once the grid is drawn:
         # that is where the art lives -- sprites do not fit in a character cell.
         # It is called `paint_over` and not `paste`, which is Qt's name for the
         # same pass, because the Qt screens in this same stack have a `paste` too
         # and it wants a QImage: one name for two media is one crash waiting.
-        paint_over = getattr(self.screens[-1], "paint_over", None)
+        paint_over = getattr(base_screen, "paint_over", None)
         if paint_over is not None:
             paint_over(self._surface, self)
         mark = self._note("art", mark)
-        self._blit_art()
+        self._blit_art(base_screen)
+        if overlay is not None:
+            self._paint_overlay(self.screens[overlay])
         # And the pixels that are not the room: sparks thrown by whatever just
         # happened, drawn last so they land on top of everything.
         self.effects.draw(self._surface)
@@ -934,6 +937,35 @@ class SdlApp:
         self._dirty = False
         self._painted_at = time.monotonic()
         self._painted += 1
+
+    def _is_dialog(self, index: int) -> bool:
+        """Whether the screen at ``index`` is a box drawn over the stack."""
+        screen = self.screens[index]
+        return bool(getattr(screen, "modal", False)) and not getattr(
+            screen, "opaque", True
+        )
+
+    def _content_under(self, overlay: int) -> int:
+        """The screen a dialog stands on, skipping other waiting dialogs."""
+        index = overlay - 1
+        while index > 0 and self._is_dialog(index):
+            index -= 1
+        return max(0, index)
+
+    def _paint_overlay(self, screen) -> None:
+        """Lay a dialog's box over the finished frame.
+
+        Its own cells are opaque; every cell it does not use stays transparent,
+        which is the whole difference between a window and a room.
+        """
+        from ..desktop.pattern import PatternBuffer
+
+        grid = PatternBuffer(self.cols, self.rows, self.font)
+        grid.clear()
+        grid.pad = self.pad_active
+        screen.draw(grid, self)
+        self._surface.blit(paint(grid, self.font, None), (0, 0))
+        self._blit_art(screen)
 
     def _note(self, name: str, mark: float) -> float:
         """Book the milliseconds since ``mark`` under ``name``, and pass it on.
@@ -1003,7 +1035,7 @@ class SdlApp:
             except OSError:
                 self._run_log = None
 
-    def _small_face(self) -> None:
+    def _small_face(self, screen) -> None:
         """The sidebar's lower rows and the combat log, one size down.
 
         The Qt build draws these straight onto the frame after the grid, and this
@@ -1017,7 +1049,6 @@ class SdlApp:
         from ..desktop.render import log_text, sidebar_text
         from ..desktop.theme import BACKGROUND, parse_style
 
-        screen = self.screens[-1]
         if not getattr(screen, "smaller_face", False) or self.run is None:
             return
         face = self.font_small
@@ -1093,7 +1124,7 @@ class SdlApp:
                     glyph, (left + 3 + index * face.cell_w, top + 2)
                 )
 
-    def _blit_art(self) -> None:
+    def _blit_art(self, screen) -> None:
         """The pictures a screen asked for, put where it asked for them.
 
         The same ``Placed`` records the Qt build blits, read by a painter that has
@@ -1104,7 +1135,7 @@ class SdlApp:
 
         from .paint import load
 
-        for piece in self.screens[-1].art(self):
+        for piece in screen.art(self):
             art = load(piece.art)
             if art is None:
                 continue
