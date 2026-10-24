@@ -427,6 +427,62 @@ class _Ring:
             self._buf = bytearray()
 
 
+class _Mixer:
+    """SDL_mixer, for the platform miniaudio does not build on.
+
+    There is no Android wheel of miniaudio, and pygame's own mixer is already in
+    every APK this game ships -- SDL2_mixer is a dependency of the pygame recipe.
+    So the *engine* is chosen by what is there, and the game keeps speaking the
+    same names: the gains are baked into the wav files when they are installed, so
+    a plain mixer plays the same relative loudness the ring buffer would have.
+
+    A mixer and not a ring because SDL_mixer already *is* the ring, with channels
+    and a real answer to "how busy am I" -- and on a phone that answer is the
+    thing that decides whether a blow sounds or is dropped.
+    """
+
+    #: More channels than a fight uses at once, and fewer than a mixer wastes.
+    CHANNELS = 12
+
+    def __init__(self) -> None:
+        self.pygame = None
+        self._sounds: dict[str, object] = {}
+        try:
+            import pygame
+
+            if not pygame.mixer.get_init():
+                pygame.mixer.init(
+                    frequency=22050, size=-16, channels=2, buffer=512
+                )
+            pygame.mixer.set_num_channels(self.CHANNELS)
+            self.pygame = pygame
+        except Exception:  # noqa: BLE001 - a silent machine is a working machine
+            self.pygame = None
+
+    @property
+    def ok(self) -> bool:
+        return self.pygame is not None
+
+    def play(self, name: str, path: Path, urgent: bool) -> None:
+        """Play one clip on a free channel; steal one only when it is urgent."""
+        if self.pygame is None:
+            return
+        sound = self._sounds.get(name)
+        if sound is None:
+            try:
+                sound = self.pygame.mixer.Sound(str(path))
+            except (self.pygame.error, OSError):
+                return
+            self._sounds[name] = sound
+        channel = self.pygame.mixer.find_channel(force=urgent)
+        if channel is not None:
+            channel.play(sound)
+
+    def stop(self) -> None:
+        if self.pygame is not None:
+            self.pygame.mixer.stop()
+
+
 class Sfx:
     """One ring buffer, and a device that owns its own audio thread.
 
@@ -444,6 +500,9 @@ class Sfx:
         self._clips: dict[str, Clip | None] = {}
         self._ring = _Ring()
         self._device: Any = None
+        #: SDL_mixer, when there is no miniaudio to build a ring for. One of the
+        #: two is what makes a noise; neither is not a failure.
+        self._mixer = _Mixer() if _Library.get() is None else None
         #: Failures in a row, so a hiccup does not silence the session.
         self._failures = 0
         #: Told, with the new flag, when the session gives up entirely -- the
@@ -465,8 +524,13 @@ class Sfx:
             # diagnostic that only appears once something has gone wrong is a
             # diagnostic nobody can tell is switched on.
             lib = _Library.get()
+            engine = (
+                "mixer"
+                if self._mixer is not None and self._mixer.ok
+                else ("miniaudio" if lib else "none")
+            )
             self._note(
-                f"--- sound log: library={'miniaudio' if lib else 'none'} "
+                f"--- sound log: library={engine} "
                 f"device={'open' if self._device else 'closed'} "
                 f"muted={self._muted} backlog-limit={MAX_BACKLOG * 1000:.0f}ms ---"
             )
@@ -475,7 +539,9 @@ class Sfx:
     @property
     def available(self) -> bool:
         """Whether this machine can make a noise at all. False means silence."""
-        return _Library.get() is not None
+        return _Library.get() is not None or (
+            self._mixer is not None and self._mixer.ok
+        )
 
     @property
     def muted(self) -> bool:
@@ -492,6 +558,8 @@ class Sfx:
             # And muting does not leave half a fight queued up behind a device
             # that is about to be stopped.
             self._ring.clear()
+            if self._mixer is not None:
+                self._mixer.stop()
 
     def toggle(self) -> bool:
         """Flip the mute and report the new state."""
@@ -500,7 +568,11 @@ class Sfx:
 
     def play(self, name: str) -> None:
         """Queue a sound. Returns immediately, always."""
-        if self._muted or self._thread is None or self._device is None:
+        if self._muted or self._thread is None:
+            return
+        if self._device is None and not (
+            self._mixer is not None and self._mixer.ok
+        ):
             # The device check is why this is three conditions and not two:
             # without it, an urgent sound -- a level-up, a death -- would pump
             # a ring no device is draining, on a machine whose open failed and
@@ -553,6 +625,11 @@ class Sfx:
                 f"DROP {name} ({clip.seconds * 1000:.0f}ms) "
                 f"backlog={backlog * 1000:.0f}ms"
             )
+            return
+
+        if self._mixer is not None and self._mixer.ok:
+            self._note(f"PLAY {name} ({clip.seconds * 1000:.0f}ms) mixer")
+            self._mixer.play(name, clip.path, urgent=name in URGENT)
             return
 
         self._note(

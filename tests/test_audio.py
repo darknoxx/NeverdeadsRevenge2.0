@@ -286,9 +286,24 @@ def _drain(sfx: Sfx) -> None:
 
 
 # -- a machine without a library ---------------------------------------------
-def test_a_machine_without_the_library_is_silent_and_harmless(_libraryless):
+class _NoMixer:
+    """A machine where SDL_mixer will not open either -- the old terminal case."""
+
+    ok = False
+
+    def play(self, name, path, urgent):  # noqa: ARG002 - the shape is the point
+        raise AssertionError("a mixer that will not open was asked to play")
+
+    def stop(self) -> None:
+        return None
+
+
+def test_a_machine_without_either_engine_is_silent_and_harmless(
+    _libraryless, monkeypatch
+):
     """The common case, and the one that has to be perfect: most machines
     running a terminal game have nothing to play a sound with."""
+    monkeypatch.setattr(audio, "_Mixer", _NoMixer)
     sfx = Sfx()
 
     assert not sfx.available
@@ -297,6 +312,48 @@ def test_a_machine_without_the_library_is_silent_and_harmless(_libraryless):
     _drain(sfx)
     sfx.close()
     assert sfx._ring.pending_frames() == 0
+
+
+class _RecordingMixer:
+    """A mixer that reports what it was handed, for the routing test."""
+
+    ok = True
+    played: list[tuple[str, str, bool]] = []
+
+    def __init__(self) -> None:
+        _RecordingMixer.played = []
+
+    def play(self, name, path, urgent):  # noqa: ARG002 - the shape is the point
+        _RecordingMixer.played.append((name, path.name, urgent))
+
+    def stop(self) -> None:
+        return None
+
+
+def test_without_the_library_the_pygame_mixer_takes_over(_libraryless, monkeypatch):
+    """Android has no miniaudio wheel: the APK's sound is SDL_mixer's.
+
+    Same names, same clips, same drop rule -- the *engine* is chosen by what the
+    machine has, and a build without the ring is a build with sound, not a silent
+    one.
+    """
+    monkeypatch.setattr(audio, "_Mixer", _RecordingMixer)
+    # The suite mutes the session; this test is about where a *played* clip goes.
+    monkeypatch.delenv(audio.MUTE_ENV, raising=False)
+    sfx = Sfx(muted=False)
+
+    assert sfx.available
+    assert sfx._mixer is not None and sfx._mixer.ok
+
+    sfx.play("hit")
+    _drain(sfx)
+
+    assert _RecordingMixer.played, "the mixer was never handed the clip"
+    name, path, urgent = _RecordingMixer.played[0]
+    assert name == "hit"
+    assert path == "hit.wav", path
+    assert urgent is False
+    sfx.close()
 
 
 # -- the device is opened once, and reused -----------------------------------
