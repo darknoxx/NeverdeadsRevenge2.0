@@ -2162,6 +2162,10 @@ def _equip(state: GameState, item: GroundItem) -> None:
         # it is lying on the floor: a catalogue of what you walked past is not a
         # catalogue of what you have.
         state.found_weapons.append(item.item_id)
+    if item.slot == "armour" and item.item_id not in state.found_armours:
+        # THE WARDROBE. A coat is known the moment it is on -- and taking one up
+        # puts it on, so the same act that changes the numbers writes the page.
+        state.found_armours.append(item.item_id)
 
     changes = ", ".join(item.modifiers.describe())
     detail = f" ({changes})" if changes else ""

@@ -145,6 +145,16 @@ def test_a_floor_that_has_been_drawn_still_saves():
     assert_same(state, reloaded)
 
 
+def test_the_coats_a_run_wore_come_back():
+    """The wardrobe's page is written from the run, so the run remembers it."""
+    state = a_busy_run()
+    state.found_armours = ["hide", "warden"]
+
+    reloaded = load(json.loads(json.dumps(dump(state))))
+
+    assert reloaded.found_armours == ["hide", "warden"]
+
+
 def test_a_whole_run_comes_back_field_for_field():
     """The test that makes the generic codec safe."""
     state = a_busy_run()

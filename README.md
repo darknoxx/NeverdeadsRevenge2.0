@@ -216,8 +216,9 @@ than to a perfect one.)
 
 ## Between the runs
 
-- **The Almanac** is one book with two halves, opened from the title (`a`) or
-  from the pause menu mid-run.
+- **The Almanac** is one book with four chapters, opened from the title (`a`) or
+  from the pause menu mid-run. `←` `→` turn the tabs, or **LB**/**RB** with a
+  pad, or `c` `b` `a` `w` to land on one directly.
   - **The chronicle** collects **37 torn pages** found on the floors. Each page
     is prose, and once found it is in the book for good; the chronicle shows the
     full text of every page you have, and marks the ones you have not.
@@ -237,6 +238,13 @@ than to a perfect one.)
     adds and what it opens, where it comes from, and the house's paragraph on
     it. The pickup card says the page was written, so the find is announced once
     and not twice.
+  - **The wardrobe** has a page for every coat in the game -- **10**, sorted the
+    same way -- and a page is written the first time a run *puts one on*. Taking
+    a coat up puts it on (what you took off stays on the floor), so the same act
+    that changes the numbers writes the page. The page shows the painted coat at
+    1:1, what it adds, where it comes from, a line of what it is, and the
+    house's paragraph. Until a coat is worn its name is a row of question marks,
+    like the blades'.
 - **The board** keeps every finished run, best first, with the name you left.
 - **Fame** is score: a chest's curse taken for the reward pays you nothing, but
   a chest's reward *left* for the curse pays a point of fame, which raises the

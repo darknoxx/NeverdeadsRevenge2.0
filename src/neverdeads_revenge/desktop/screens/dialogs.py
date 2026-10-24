@@ -79,7 +79,10 @@ class _Dialog(Screen):
     #: The rows a picture may take at the top of the box: six of a twenty-pixel
     #: row is a blade at the size it was painted, so the card shows the drawing
     #: rather than a thumbnail of it.
-    PICTURE_ROWS = 6
+    #: Seven rows, so a sheet painted at 128 pixels stands at its own size: the
+    #: cap is ``rows * cell_h - 6``, and six rows cut it to 114 -- a ninth off
+    #: every drawing, which is exactly the resampling the sheets avoid.
+    PICTURE_ROWS = 7
 
     #: What the box shows above its words, when it has something to show.
     picture: str | None = None

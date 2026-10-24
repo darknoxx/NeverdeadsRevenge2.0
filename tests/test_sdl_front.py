@@ -3259,6 +3259,75 @@ def test_the_zoom_doubles_the_field_and_leaves_the_panels_alone():
     assert 0 <= point[1] < map_h * app.font.cell_h
 
 
+def test_the_almanac_has_a_wardrobe_tab_for_the_coats():
+    """The fourth book: what is on the hero's back, written when it was put on."""
+    from neverdeads_revenge.desktop.screens.almanac import AlmanacScreen
+    from neverdeads_revenge.game.wardrobe import ARMOURS
+
+    app = _app_with_a_run()
+    app.open_almanac()
+    screen = app.screens[-1]
+    assert len(AlmanacScreen.TABS) == 4
+    assert AlmanacScreen.TABS[3] == "WARDROBE"
+
+    screen.tab = 3
+    assert len(ARMOURS) == 10
+    assert screen.known_armours(app) == set(), "the wardrobe started open"
+
+    app.progress.record_armour("hide")
+    screen.select("hide")
+    app.redraw()
+
+    assert screen.known_armours(app) == {"hide"}
+    page = " ".join(text for text, _style in screen.armour_lines(screen._selected(), 44))
+    assert "Something else's skin" in page, page
+    assert "THIN HIDE" in page, page
+
+    placed = screen.art(app)
+    assert placed, "the coat has no picture on its page"
+    assert placed[0].art == "sprites/items/hide.png", placed[0].art
+
+
+def test_every_coat_page_is_locked_until_the_coat_is_worn():
+    from neverdeads_revenge.game.wardrobe import ARMOURS
+
+    app = _app_with_a_run()
+    app.open_almanac()
+    screen = app.screens[-1]
+    screen.tab = 3
+    app.redraw()
+
+    assert screen.known_armours(app) == set()
+    drawn = "".join(cell.char or " " for row in app.grid.cells for cell in row)
+    assert "???" in drawn, "the locked wardrobe shows no locked names"
+    assert "THORN COAT" not in drawn, "a locked coat is named anyway"
+
+
+def test_taking_a_coat_up_writes_its_page_and_says_so():
+    from neverdeads_revenge.desktop.screens.dialogs import InfoScreen
+    from neverdeads_revenge.world.items import ITEMS, make_item
+
+    app = _app_with_a_run()
+    state = app.run
+    state.dungeon_map.add_item(state.player.position, make_item(ITEMS["hide"]))
+
+    app.key("enter")  # take it up, which puts it on
+
+    assert app.progress.wardrobe == ["hide"], "the page was not written"
+    card = app.screens[-1]
+    assert isinstance(card, InfoScreen), type(card).__name__
+    assert "Wardrobe" in card._text, card._text
+
+
+def test_the_almanac_tells_a_pad_about_the_shoulders():
+    app = _app_with_a_run()
+    app.open_almanac()
+    screen = app.screens[-1]
+
+    assert "LB/RB" in screen._hint(True), screen._hint(True)
+    assert "LB/RB" not in screen._hint(False)
+
+
 def test_the_pause_menu_has_the_field_zoom():
     """The room's own size is a pause-menu switch: it is about the floor."""
     from neverdeads_revenge.desktop.screens.pause import PauseScreen
@@ -3986,9 +4055,9 @@ def test_a_painted_blade_has_a_picture_and_an_unpainted_one_has_the_placeholder(
 def test_every_thing_that_can_be_picked_up_has_a_picture():
     """The card is where a thing is met, so nothing may open with a blank band.
 
-    A blade has its own sheet; a bottle has one named for its key; and the coats
-    and the amulets share the kind's drawing for now -- one coat's face is still
-    one coat's face, and that is the deal the picture makes.
+    A blade has its own sheet, a bottle one named for its key, and a coat one
+    named for its key too since the wardrobe was painted; the amulets share the
+    kind's drawing for now, and that is the deal the picture makes.
     """
     from neverdeads_revenge.desktop.art import exists, item_icon
     from neverdeads_revenge.world.items import ITEMS
@@ -4002,11 +4071,17 @@ def test_every_thing_that_can_be_picked_up_has_a_picture():
             missing.append(key)
     assert missing == [], f"no picture for {missing}"
 
-    # And the shared ones are shared, not a copy per item.
-    from neverdeads_revenge.desktop.art import AMULET_ART, ARMOUR_ART
+    # Every coat has a face of its own now, named for its key.
+    from neverdeads_revenge.desktop.art import AMULET_ART
 
-    assert item_icon(ITEMS["hide"]) == ARMOUR_ART
-    assert item_icon(ITEMS["warden"]) == ARMOUR_ART
+    coats = [
+        key for key, template in ITEMS.items() if template.slot == "armour"
+    ]
+    assert len(coats) == 10, coats
+    for key in coats:
+        assert item_icon(ITEMS[key]) == f"sprites/items/{key}.png", key
+
+    # And the amulets are still one drawing for the whole kind.
     assert item_icon(ITEMS["ember"]) == AMULET_ART
     assert item_icon(ITEMS["potion"]) == "sprites/items/potion.png"
 

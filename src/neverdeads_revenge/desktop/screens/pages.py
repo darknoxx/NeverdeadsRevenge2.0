@@ -19,6 +19,7 @@ from ..art import exists as art_exists
 __all__ = [
     "write_the_page",
     "write_the_weapon",
+    "write_the_armour",
     "the_page",
     "the_weapon_page",
 ]
@@ -55,6 +56,11 @@ def write_the_page(app, key: str) -> bool:
 def write_the_weapon(app, key: str) -> bool:
     """File one blade's page in the Armory."""
     return _write(app, "record_weapon", key)
+
+
+def write_the_armour(app, key: str) -> bool:
+    """File one coat's page in the Wardrobe."""
+    return _write(app, "record_armour", key)
 
 
 def the_page(key: str, on_done=None):

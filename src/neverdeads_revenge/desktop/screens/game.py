@@ -21,7 +21,7 @@ from neverdeads_revenge.game.state import GameState
 from ..keys import KEY_BINDINGS
 from ..padmap import FLOOR as FLOOR_PAD
 from .base import Screen
-from .pages import the_page, write_the_page, write_the_weapon
+from .pages import the_page, write_the_armour, write_the_page, write_the_weapon
 from .dialogs import (
     KindlyScreen,
     FAME,
@@ -90,6 +90,8 @@ class GameScreen(Screen):
         #: that a page was just written -- one card, not two.
         self._filed_weapons: set[str] = set()
         self._new_weapons: set[str] = set()
+        self._filed_armours: set[str] = set()
+        self._new_armours: set[str] = set()
 
     def key_sound(self, name: str) -> str | None:
         """The sound this press makes: a refusal has one, a click has another."""
@@ -231,6 +233,7 @@ class GameScreen(Screen):
         self._file_pages(app)
         self._file_monsters(app)
         self._file_weapons(app)
+        self._file_armours(app)
 
         if result.prompt is not None:
             self._ask(result, app)
@@ -260,6 +263,9 @@ class GameScreen(Screen):
             # twice and asking to be dismissed twice.
             text = f"{text}\n\nA page has been written in the Armory."
             self._new_weapons.discard(template.key)
+        elif template.key in self._new_armours:
+            text = f"{text}\n\nA page has been written in the Wardrobe."
+            self._new_armours.discard(template.key)
         app.push(
             InfoScreen(
                 CARD_TITLES.get(template.kind, "A THING"),
@@ -474,6 +480,19 @@ class GameScreen(Screen):
             self._filed_weapons.add(key)
             if write_the_weapon(app, key):
                 self._new_weapons.add(key)
+
+    def _file_armours(self, app) -> None:
+        """Write the Wardrobe page of anything just put on.
+
+        Same rule as the armory, and the same moment: a coat is known when it is
+        worn -- mid-run, with the old one lying on the floor beside it.
+        """
+        for key in self.state.found_armours:
+            if key in self._filed_armours:
+                continue
+            self._filed_armours.add(key)
+            if write_the_armour(app, key):
+                self._new_armours.add(key)
 
     def _file_pages(self, app) -> None:
         """Bank a found page at once, and open it.

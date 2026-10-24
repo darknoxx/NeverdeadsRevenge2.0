@@ -205,6 +205,10 @@ class GameState:
     #: first held. The Armory's record, and deliberately narrower than "seen":
     #: a blade lying on the floor is not one the hero knows.
     found_weapons: list[str] = field(default_factory=list)
+    #: Coats this run has put on, for the Wardrobe's page. The same shape as
+    #: ``found_weapons``: the book is written from the run, and the run only
+    #: remembers what it met so the screen can tell what is new.
+    found_armours: list[str] = field(default_factory=list)
     #: Whether the weapon's *first blow* rule has been paid this fight. A fact
     #: about the fight and not about each monster, which is what the blade says.
     first_blow_spent: bool = False

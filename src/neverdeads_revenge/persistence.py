@@ -109,6 +109,9 @@ class MetaProgress:
     #: Blades whose page in the Armory has been written, by item key. The same
     #: kind of thing again: a blade is met, not bought and not scored.
     armory: list[str] = field(default_factory=list)
+    #: Coats whose page in the Wardrobe has been written, by item key. The third
+    #: collection, and the same rule: a coat is worn, not seen.
+    wardrobe: list[str] = field(default_factory=list)
     #: Lifetime run statistics.
     runs_started: int = 0
     runs_won: int = 0
@@ -148,6 +151,14 @@ class MetaProgress:
             return False
         self.armory.append(key)
         self.armory.sort()
+        return True
+
+    def record_armour(self, key: str) -> bool:
+        """Write one coat's page. Returns whether it was new."""
+        if not key or key in self.wardrobe:
+            return False
+        self.wardrobe.append(key)
+        self.wardrobe.sort()
         return True
 
     def record_run(
@@ -334,6 +345,7 @@ def load_meta(path: Path | None = None) -> MetaProgress:
             pages=[int(number) for number in raw.get("pages", [])],
             bestiary=[str(key) for key in raw.get("bestiary", [])],
             armory=[str(key) for key in raw.get("armory", [])],
+            wardrobe=[str(key) for key in raw.get("wardrobe", [])],
             runs_started=int(raw.get("runs_started", 0)),
             runs_won=int(raw.get("runs_won", 0)),
             best_depth=int(raw.get("best_depth", 0)),
@@ -374,6 +386,9 @@ def unlock_everything(progress: MetaProgress) -> None:
     progress.bestiary = sorted(ENEMIES)
     progress.armory = sorted(
         key for key, template in ITEMS.items() if template.slot == "weapon"
+    )
+    progress.wardrobe = sorted(
+        key for key, template in ITEMS.items() if template.slot == "armour"
     )
 
 

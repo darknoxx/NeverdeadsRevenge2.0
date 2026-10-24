@@ -1,9 +1,10 @@
-"""The Almanac: the chronicle, the monsters, and the blades that cut them.
+"""The Almanac: the chronicle, the monsters, the blades and the coats.
 
-Three books in one cover, because they answer the same question from three
-sides. The chronicle is what the old lords left behind; the bestiary is what is
-still down there, written down the moment it is first killed; the armory is what
-is lying about to kill it with, written down the moment it is first taken up.
+Four books in one cover, because they answer the same question from four sides.
+The chronicle is what the old lords left behind; the bestiary is what is still
+down there, written down the moment it is first killed; the armory is what is
+lying about to kill it with, written down the moment it is first taken up; the
+wardrobe is what to wear while doing it, written down the moment it is put on.
 
 Both collections are *earned*: a page is blank until the run has met the thing,
 so the books fill as the player survives. That is the whole reason they are
@@ -26,6 +27,8 @@ from ...game.armory import WEAPONS, Weapon
 from ...game.armory import stat_lines as weapon_stats
 from ...game.bestiary import ENTRIES, Entry, stat_lines, title_of
 from ...game.lore import PAGE_COUNT, TITLE, numeral, page
+from ...game.wardrobe import ARMOURS, Armour
+from ...game.wardrobe import stat_lines as armour_stats
 from ...world.items import ITEMS
 from ..art import Placed, exists as art_exists, size as art_size
 from ..chrome import ASH, BONE, BLOOD, PURPLE, box, rule
@@ -54,7 +57,7 @@ def _clip(text: str, width: int) -> str:
 
 
 class AlmanacScreen(Screen):
-    """Three books, one cover."""
+    """Four books, one cover."""
 
     modal = True
     #: Back closes the book, the shoulders turn the tab page, the triggers page
@@ -62,10 +65,10 @@ class AlmanacScreen(Screen):
     PAD = ALMANAC_PAD
     pad_scroll = True
 
-    #: The three, in the order they are read: the story, then what it is about,
-    #: then what you do about it. The other order would open the book on a list
-    #: of things that have not happened yet.
-    TABS = ("CHRONICLE", "BESTIARY", "ARMORY")
+    #: The four, in the order they are read: the story, then what it is about,
+    #: then what you do about it -- the blades and the coats. The other order
+    #: would open the book on a list of things that have not happened yet.
+    TABS = ("CHRONICLE", "BESTIARY", "ARMORY", "WARDROBE")
 
     #: How wide a collection's index is, in cells -- a third of the page and no
     #: wider, so the page never gets the narrow half. The longest name is
@@ -107,6 +110,7 @@ class AlmanacScreen(Screen):
         self.offset = 0
         self.index = 0
         self.weapon_index = 0
+        self.armour_index = 0
         self.list_offset = 0
         self.detail_offset = 0
         #: The size of the body as of the last draw: the key handler needs it to
@@ -146,21 +150,36 @@ class AlmanacScreen(Screen):
         """The blades whose page has been written."""
         return set(getattr(app.progress, "armory", ()))
 
+    @staticmethod
+    def known_armours(app) -> set[str]:
+        """The coats whose page has been written."""
+        return set(getattr(app.progress, "wardrobe", ()))
+
     def _entries(self) -> tuple:
         """The pages of the collection that is open."""
-        return ENTRIES if self.tab == 1 else WEAPONS
+        return {1: ENTRIES, 2: WEAPONS, 3: ARMOURS}.get(self.tab, ())
 
     def _known_now(self, app) -> set[str]:
-        return self.known(app) if self.tab == 1 else self.known_weapons(app)
+        return {
+            1: self.known,
+            2: self.known_weapons,
+            3: self.known_armours,
+        }[self.tab](app)
 
     def _cursor(self) -> int:
-        return self.index if self.tab == 1 else self.weapon_index
+        return {
+            1: self.index,
+            2: self.weapon_index,
+            3: self.armour_index,
+        }[self.tab]
 
     def _set_cursor(self, value: int) -> None:
         if self.tab == 1:
             self.index = value
-        else:
+        elif self.tab == 2:
             self.weapon_index = value
+        else:
+            self.armour_index = value
 
     def _selected(self):
         pages = self._entries()
@@ -185,14 +204,14 @@ class AlmanacScreen(Screen):
         else:
             self._collection(buffer, app, x, y, width, body_rows)
         rule(buffer, x + 1, y + height - 2, width - 2, ASH)
-        hint = self._hint()
+        hint = self._hint(getattr(buffer, "pad", False))
         # The arrow is the same "there is more below" the reading panels use: a
         # page that is quietly missing its last paragraph is a page that lied.
         more = "  ▼" if self._more else ""
         buffer.text(x + 3, y + height - 1, (hint + more)[: width - 6], parse_style(ASH))
 
     def _tabs(self, buffer, app, x: int, y: int, width: int) -> None:
-        """The three tabs, with the one you are *in* lit.
+        """The four tabs, with the one you are *in* lit.
 
         The bracket says which book is open; the reverse says the keyboard is up
         here choosing. Two different facts, and a player needs both: a tab bar
@@ -215,8 +234,10 @@ class AlmanacScreen(Screen):
             count = f"{len(app.progress.pages)} of {PAGE_COUNT} pages"
         elif self.tab == 1:
             count = f"{len(self.known(app))} of {len(ENTRIES)} written"
-        else:
+        elif self.tab == 2:
             count = f"{len(self.known_weapons(app))} of {len(WEAPONS)} found"
+        else:
+            count = f"{len(self.known_armours(app))} of {len(ARMOURS)} found"
         buffer.text(x + width - 3 - len(count), y + 1, count, parse_style(ASH))
 
     # -- the chronicle ------------------------------------------------------
@@ -374,11 +395,11 @@ class AlmanacScreen(Screen):
         return 0, 1
 
     def _lines(self, entry, room: int) -> list[tuple[str, str]]:
-        return (
-            self.monster_lines(entry, room)
-            if self.tab == 1
-            else self.weapon_lines(entry, room)
-        )
+        if self.tab == 1:
+            return self.monster_lines(entry, room)
+        if self.tab == 2:
+            return self.weapon_lines(entry, room)
+        return self.armour_lines(entry, room)
 
     def monster_lines(self, entry: Entry, room: int) -> list[tuple[str, str]]:
         """One monster's page as lines, top to bottom.
@@ -412,6 +433,21 @@ class AlmanacScreen(Screen):
         """One blade's page: its numbers first, because that is what it is for."""
         colour = ITEMS[entry.key].color
         stats, where = weapon_stats(entry)
+        rows: list[tuple[str, str]] = [(entry.name.upper(), f"bold {BONE}")]
+        for i, line in enumerate(_wrap(f"{entry.glyph}   {stats}", room)):
+            rows.append((line, colour if i == 0 else ASH))
+        rows.append((where, ASH))
+        rows.append(("", ""))
+        rows.append(("WHAT IT IS", f"bold {PURPLE}"))
+        rows += [(line, BONE) for line in _wrap(entry.what, room)]
+        rows.append(("", ""))
+        rows += [(line, "grey60") for line in _wrap(entry.lore, room)]
+        return rows
+
+    def armour_lines(self, entry: Armour, room: int) -> list[tuple[str, str]]:
+        """One coat's page: its numbers first, because that is what it is for."""
+        colour = ITEMS[entry.key].color
+        stats, where = armour_stats(entry)
         rows: list[tuple[str, str]] = [(entry.name.upper(), f"bold {BONE}")]
         for i, line in enumerate(_wrap(f"{entry.glyph}   {stats}", room)):
             rows.append((line, colour if i == 0 else ASH))
@@ -463,10 +499,19 @@ class AlmanacScreen(Screen):
         ]
 
     # -- input --------------------------------------------------------------
-    def _hint(self) -> str:
-        """What the arrows do *here*, which is a different sentence per place."""
+    def _hint(self, pad: bool = False) -> str:
+        """What the arrows do *here*, which is a different sentence per place.
+
+        With a pad the tab row says the shoulders, because that is the button a
+        hand is on while it reads: the arrows walk the list, the shoulders turn
+        the book.
+        """
         if self.focus == "tabs":
-            return "←→ tab   ↓ open   esc close"
+            return (
+                "LB/RB tab   ↓ open   B close"
+                if pad
+                else "←→ tab   ↓ open   esc close"
+            )
         if self.tab == 0:
             return "→ bestiary   ↑↓ scroll   ↑ at top: tabs   esc close"
         if self.focus == "page":
@@ -491,10 +536,10 @@ class AlmanacScreen(Screen):
             if self.focus == "page":
                 self.focus = "list"
             return True
-        if name in ("c", "b", "a"):
+        if name in ("c", "b", "a", "w"):
             # Shortcuts, not part of the arrow language: each names a book and
             # lands the keyboard in it.
-            self._open({"c": 0, "b": 1, "a": 2}[name])
+            self._open({"c": 0, "b": 1, "a": 2, "w": 3}[name])
             return True
         if name == "tab":
             self._switch((self.tab + 1) % len(self.TABS))
