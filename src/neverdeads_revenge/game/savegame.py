@@ -205,6 +205,14 @@ def dump(state: GameState) -> dict:
         "kill_points_bonus": state.kill_points_bonus,
         "sacrificed": state.sacrificed,
         "revenge_stacks": state.revenge_stacks,
+        # The permanent purchases that are numbers rather than items: the
+        # cellar's healing and the four bloodlines. They are the run's own
+        # rules, so they have to come back with it.
+        "heal_bonus": state.heal_bonus,
+        "bleed_on_crit": state.bleed_on_crit,
+        "freeze_chance": state.freeze_chance,
+        "pushback_chance": state.pushback_chance,
+        "ember_chance": state.ember_chance,
         "floors_cleared": state.floors_cleared,
         "inventory": [_encode(item) for item in state.inventory],
         "curses": [_encode(curse) for curse in state.curses],
@@ -297,6 +305,13 @@ def load(payload: dict) -> GameState:
         state.kill_points_bonus = int(payload.get("kill_points_bonus", 0))
         state.sacrificed = bool(payload.get("sacrificed", False))
         state.revenge_stacks = payload["revenge_stacks"]
+        # ``get`` for all five: a run saved before they were carried resumes
+        # without them, which is exactly the run it was -- they start at nothing.
+        state.heal_bonus = float(payload.get("heal_bonus", 0.0))
+        state.bleed_on_crit = int(payload.get("bleed_on_crit", 0))
+        state.freeze_chance = float(payload.get("freeze_chance", 0.0))
+        state.pushback_chance = float(payload.get("pushback_chance", 0.0))
+        state.ember_chance = float(payload.get("ember_chance", 0.0))
         state.floors_cleared = payload["floors_cleared"]
         state.inventory = [_decode(item) for item in payload["inventory"]]
         state.curses = [_decode(curse) for curse in payload["curses"]]

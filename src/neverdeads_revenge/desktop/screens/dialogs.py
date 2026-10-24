@@ -373,6 +373,12 @@ class DeleteProgressScreen(_Dialog):
         super().draw(buffer, app)
 
     def key(self, name, event, app) -> bool:
+        if name == "hold":
+            # A held A is the pad's word for DELETE; the release settles whether
+            # it was a hold or a tap.
+            if self.hold.press("hold", event.isAutoRepeat()):
+                self.finish(app, True)
+            return True
         if event.isAutoRepeat():
             return True
         if name == "escape":

@@ -37,7 +37,15 @@ def a_busy_run() -> GameState:
         NOXX,
         seed=7,
         loadout=Loadout(
-            upgrades={"vigour": 2, "haste": 1, "lantern": 1},
+            upgrades={
+                "vigour": 2,
+                "haste": 1,
+                "lantern": 1,
+                # The two permanent purchases that are numbers rather than
+                # items: without them the round-trip never sees the fields.
+                "cellar": 1,
+                "bleeding_edge": 1,
+            },
             pending=("bite", "hide", "patient_knife", "potion", "elixir"),
             wilds=("greed", "second_wind", "borrowed_face"),
         ),

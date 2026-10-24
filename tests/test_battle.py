@@ -212,12 +212,15 @@ def test_a_refused_verb_costs_nothing():
     battle = Battle(state, [enemy])
     battle.begin()
     before = len(battle.state.log)
+    turns, clock = battle.state.total_turns, battle.state.turn
 
     events = battle.choose(SPECIAL, special=LEFT_HAND)
 
     assert any("Not yet" in line for line in lines(events))
     assert not strikes(events), "the floor moved after a refusal"
     assert len(battle.state.log) > before, "the refusal was not said"
+    assert battle.state.total_turns == turns, "a refusal cost a turn"
+    assert battle.state.turn == clock, "a refusal moved the clock"
 
 
 def test_drinking_is_the_packs_own_arithmetic():
@@ -1427,7 +1430,10 @@ def test_every_command_in_a_fight_costs_a_turn():
     for _ in range(3):
         if battle.over:
             break
-        battle.choose(ATTACK, battle.enemies[0])
+        # A blow at a corpse is a refused verb, not a turn: aim at whoever is
+        # still standing, or the test measures the old bug instead of the rule.
+        target = next(one for one in battle.enemies if one.stats.alive)
+        battle.choose(ATTACK, target)
         commands += 1
 
     assert commands == 3, "the duel ended too early to measure"

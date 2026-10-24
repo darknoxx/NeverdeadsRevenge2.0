@@ -2742,3 +2742,16 @@ def test_frail_bites_a_hero_who_never_wore_armour():
 
     assert state.player.armor == -2
     assert state.player.hurt(5) == 7, "the curse did nothing to an unarmoured hero"
+
+
+def test_a_debt_does_not_cross_the_stairs():
+    """THE DEBT is owed for this floor's wounds, not the next floor's."""
+    from neverdeads_revenge.game.actors import NOXX
+    from neverdeads_revenge.game.state import start_run
+
+    state = start_run(NOXX, seed=3)
+    state.debt = 5
+
+    state.build_floor(2)
+
+    assert state.debt == 0, "the next floor paid a debt it never owed"

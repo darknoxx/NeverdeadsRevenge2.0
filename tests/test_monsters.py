@@ -309,6 +309,28 @@ def test_the_judge_reads_every_curse_aloud():
     assert state.player.hp <= hp - 2, "two curses cost less than two health"
 
 
+def test_a_judge_can_read_the_last_of_him():
+    """The judge deals damage without a blow, so it has to call the death too.
+
+    A fight that only set its own flag left ``run_state`` playing and the hero
+    alive at zero health: the screen said dead, the save said alive.
+    """
+    from neverdeads_revenge.game.curses import CURSES
+    from neverdeads_revenge.game.state import RunState
+
+    state = _run()
+    state.add_curse(CURSES["wither"])
+    judge = _monster(state, "judge", "judge")
+    judge.stats.hp = judge.stats.max_hp = 999
+    state.player.stats.hp = 1
+    battle = _battle(state, [judge])
+
+    battle.choose("attack", judge)
+
+    assert not state.player.alive, "the judge left a corpse standing"
+    assert state.run_state is RunState.DEAD, "the run did not know it had ended"
+
+
 def test_the_leech_barely_feels_steel_and_comes_apart_at_a_wound():
     from neverdeads_revenge.game.actions import inflict, tick_statuses
     from neverdeads_revenge.game.actors import HEROES

@@ -261,6 +261,20 @@ def test_bought_gear_is_worn_at_the_first_step():
     assert state.player.equipment["armour"].item_id == "hide"
 
 
+def test_two_blades_for_one_hand_both_arrive():
+    """Two purchases for one slot: the last is worn, the other goes in the pack.
+
+    Before the first floor there is nowhere to set the replaced blade down, and
+    a purchase that vanished because a slot was already full would be a purchase
+    the shop should not have sold.
+    """
+    state = start_run(NOXX, seed=3, loadout=Loadout(pending=("bite", "tooth")))
+
+    assert state.player.equipment["weapon"].item_id == "tooth"
+    assert [item.item_id for item in state.inventory] == ["bite"]
+    assert {"bite", "tooth"} <= set(state.found_weapons)
+
+
 def test_gear_changes_the_numbers_it_says_it_does():
     plain = start_run(NOXX, seed=3)
     armed = start_run(NOXX, seed=3, loadout=Loadout(pending=("bite", "hide")))

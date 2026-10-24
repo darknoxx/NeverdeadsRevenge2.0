@@ -1029,6 +1029,9 @@ class GameState:
         self.momentum = 0
         self.momentum_direction = None
         self.blood_debt = 0
+        # THE DEBT is owed for this floor's wounds: it would buff a fight the
+        # dead were never in if it crossed the stairs.
+        self.debt = 0
         self.salt_ward = 0
         self.trail.clear()
         self.helped.clear()
@@ -1372,8 +1375,23 @@ def _receive(state: GameState, template) -> None:
     item = make_item(template)
     if template.slot is None:
         state.inventory.append(item)
-    else:
-        state.player.equipment[template.slot] = item
+        return
+
+    previous = state.player.equipment.get(template.slot)
+    state.player.equipment[template.slot] = item
+    # Finding it is knowing it: the armory and the wardrobe keep the page for a
+    # piece that was bought, not only for one that was picked up off the floor.
+    if template.slot == "weapon" and item.item_id not in state.found_weapons:
+        state.found_weapons.append(item.item_id)
+    if template.slot == "armour" and item.item_id not in state.found_armours:
+        state.found_armours.append(item.item_id)
+    if previous is not None:
+        # Two things for one slot: the last one bought is worn, the one it
+        # replaced goes into the pack. Before the first floor there is no ground
+        # to set it down on, and a purchase that vanished would be a purchase
+        # the shop should not have sold.
+        state.inventory.append(previous)
+        state.say(f"The {previous.name} goes into the pack.", LogKind.SYSTEM)
 
 
 def _apply_pending(state: GameState, keys) -> None:

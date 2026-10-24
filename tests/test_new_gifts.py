@@ -108,3 +108,26 @@ def test_without_the_knitting_walking_closes_nothing():
                 break
 
     assert state.player.hp == 1
+
+
+def test_the_knitting_cannot_undo_a_bleeding_death():
+    """A gift that closes wounds is not a gift that undoes a death."""
+    from neverdeads_revenge.game.curses import CURSES
+    from neverdeads_revenge.game.state import RunState
+
+    state = _empty_floor()
+    state.gifts.add("slow_knitting")
+    state.add_curse(CURSES["bleed"])
+    state.player.stats.hp = 1
+    # The next step is both a bleed step (every 10) and a knitting step (every
+    # 20): the old code healed the body the bleed had just finished.
+    state.player.steps = SLOW_KNITTING_EVERY - 1
+
+    for action in (Action.MOVE_EAST, Action.MOVE_WEST, Action.MOVE_NORTH):
+        before = state.player.position
+        perform_action(state, action)
+        if state.player.position != before:
+            break
+
+    assert state.player.hp == 0, "the step did not bleed him out"
+    assert state.run_state is RunState.DEAD, "the knitting healed a dead hero"

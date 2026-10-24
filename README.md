@@ -52,13 +52,14 @@ what you carry, and by spending the ground you are standing on.
   be turned back one turn, and the death screen offers it one last time: `r`
   takes the death back.
 
-### The three heroes
+### The four heroes
 
 | | name | title | the shape of it |
 | --- | --- | --- | --- |
 | **N** | Noxx | the swift one | Quick hands, quicker feet. Wins fights he should lose: strike, vanish, come back before they can swing. Fragile, but every opening is lethal. REVENGE: **BLACK TIDE** (speed). |
 | **Y** | Yeti | the unmoved | Slow as a glacier and about as easy to move. Does not dodge and does not rush; everything that reaches him goes through the armour first, and most things do not. REVENGE: **FROZEN FORTRESS** (armour). |
 | **W** | Walkyrion | the even blade | No weakness worth naming and no trick worth relying on. Strikes on time, takes the hit he has to, and is still standing when the screaming stops. REVENGE: **AURAL BLADE** (damage). |
+| **I** | Inferno | the short fuse | Hits hardest and dies soonest. Every blow is a gamble, and the fire only makes the odds louder. REVENGE: **WILD FIRE** (crit). |
 
 ## What is down there
 
@@ -69,9 +70,9 @@ what you carry, and by spending the ground you are standing on.
   mistake everybody makes once. The **pack holds two things** to start with;
   the shop sells slots up to seven, each dearer than the last, and a full pack
   leaves the loot where it lies and says why.
-- **Thirteen weapons** (the rusted tooth, the grey bite, the long hunger, the
-  patient knife...) and **ten pieces of armour** (the thin hide, the rune
-  plate, the ashfall cloak...), each with its own modifiers.
+- **Twenty-six weapons** (the rusted tooth, the grey bite, the long hunger, the
+  frostbite...) and **ten pieces of armour** (the thin hide, the rune plate,
+  the ashfall cloak...), each with its own modifiers.
 - **Five strange draughts**, none of them medicine: each lays a rule on the
   floor and lasts only until the stairs. THE THIN VEIL (nothing looks at you
   until you strike), THE KINDLED BREATH (every blow you land sets it burning),
@@ -479,16 +480,17 @@ src/neverdeads_revenge/
     theme.py    the palette, and Rich styles translated
     pattern.py  the grid of characters, and how it is read
     render.py   where the sidebar, the log and the plate go
+    screens/    every menu and dialog, drawn and key-routed
   sdl_front/                          the window, and the pixels
-    crt.py      the shader: integer scaling, scanlines, bloom, geometry
-    render.py   the map, the sidebar and the log strip, as cells
+    glass.py    the shader: integer scaling, scanlines, bloom, geometry
+    arena.py    the painted arena: figures, bars and numbers
+    paint.py    cells onto a surface, and the frame's paper
     effects.py  the moving pixels: blood, coins, sparks, and the shake
     app.py      the window, the keys, the loop, the settings
-    screens/    every menu and dialog, drawn and key-routed
 packaging/                            the frozen builds, one folder per platform
   windows/    PyInstaller spec for the .exe, and its icon
   linux/      PyInstaller spec, AppDir pieces and the AppImage script
-tests/                                engine and UI, 1,388 at this writing
+tests/                                engine and UI, over 1,600 at this writing
 ```
 
 The engine (`core/`, `world/`, `game/`) never imports a UI. The game is a

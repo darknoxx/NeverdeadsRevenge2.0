@@ -544,20 +544,24 @@ class Battle:
         if self.over:
             return events
         self._hero_up = False
-        self._turns.append(self.hero)
-        # And the clock. A fight used to be *free*: no turn, no time, no score --
-        # which made killing score-positive and the speed bonus a lie, because
-        # ``KILL_SCORE`` is calibrated against "a fight costs fifty to ninety
-        # points" and it cost nothing at all. One hero command is one turn here,
-        # exactly as one step is one turn on the floor.
-        self.state.turn += 1
-        self.state.total_turns += 1
         #: BETWEEN BLOWS: until the end of this round, nothing finds the hero.
         self._unseen = False
         #: THE HOARFROST: until the end of this round, whoever lands a blow on him
         #: takes the cold home with them.
         self._frost = False
         if self._hero_acts(command, target, events, special):
+            # A turn is spent by *doing*. The clock and the order strip move
+            # only after the verb was paid for -- a refused draught must not
+            # cost score, and the round the arena plays is the round that
+            # happened.
+            self._turns.append(self.hero)
+            # And the clock. A fight used to be *free*: no turn, no time, no
+            # score -- which made killing score-positive and the speed bonus a
+            # lie, because ``KILL_SCORE`` is calibrated against "a fight costs
+            # fifty to ninety points" and it cost nothing at all. One hero
+            # command is one turn here, exactly as one step is one on the floor.
+            self.state.turn += 1
+            self.state.total_turns += 1
             self._advance(events)
         return events
 
@@ -745,6 +749,11 @@ class Battle:
             LogKind.DAMAGE,
         )
         self.hero.stats.hp = max(0, self.hero.stats.hp - words)
+        if self.hero.stats.hp <= 0:
+            # The judge is the one monster that deals damage without a blow, so
+            # it is the one place that has to call the death itself: a run that
+            # only set the arena's flag would resume as a living corpse.
+            self.state.die("The judge reads the last of him out loud.")
         self.state.hits.append(self.hero.position)
         self._splice(before, events)
 

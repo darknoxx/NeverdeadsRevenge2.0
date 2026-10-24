@@ -36,7 +36,7 @@ from .actors import (
     make_fortress,
     pick_enemy_template,
 )
-from .combat import apply_revenge, attack
+from .combat import AttackOutcome, apply_revenge, attack
 from .curses import TOUCH_CURSES, CURSES, curse_by_key
 from .draughts import draught_by_key
 from .difficulty import (
@@ -962,6 +962,10 @@ def _try_move(state: GameState, direction: Direction) -> tuple[bool, bool]:
     _after_step(state, origin, direction)
     _collect_coin(state)
     _bleed(state)
+    if state.over:
+        # The bleed can finish him. Nothing after a death heals the body, and
+        # the step still spent the world's turn -- the caller reads ``over``.
+        return True, True
     _knit(state)
     if state.has_draught("carrion_tongue") and target in state.death_squares:
         # THE CARRION TONGUE. A square where something died feeds the hero who
@@ -1095,6 +1099,9 @@ def _knit(state: GameState) -> None:
     footnote.
     """
     if not state.has_gift("slow_knitting"):
+        return
+    if state.over or not state.player.alive:
+        # A gift that closes wounds is not a gift that undoes a death.
         return
     if state.player.steps % SLOW_KNITTING_EVERY:
         return
