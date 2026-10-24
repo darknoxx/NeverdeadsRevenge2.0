@@ -1,32 +1,30 @@
 # Waiting to be ported
 
-The Qt build's tests, parked here while the Qt build is being removed. They are
-`.pending` and not `.py` so that nothing collects them: they import modules that
-are gone (`desktop.buffer`, `desktop.app`, `desktop.font`) and they will not run
-until each one has been looked at.
+The Qt build's screen tests, parked while the Qt build was removed. They are
+`.pending` and not `.py` so that nothing collects them.
 
-This is what is left of the port, in the order the failures come:
+**64 of the 140 are ported** and live in `tests/test_screens.py` -- the title,
+the prologue, the pause, the dialogs and the simple menus. The harness now sends
+a tap as a down *and* an up (the app marks a key held through a screen change
+stale), draws through `_blit_art(screen)`, and uses `desktop.pattern` instead of
+the old `buffer`.
 
-* ``test_desktop.py`` (27 tests) -- the window, the whole-number scaling and the
-  key bindings. Most of it is about the Qt *window*, which no longer exists; the
-  parts that are about cells (the pattern buffer, the layout rules) belong in the
-  SDL suite and should be moved there one at a time.
-* ``test_screens.py.pending`` (144 tests) -- the menus, the dialogs and the arena,
-  driven a key at a time. Already re-harnessed onto the SDL app (see the header of
-  the file): the app, the font, the blitter, the old key spellings and a
-  ``pixelColor`` shim. What is left is three mechanical things and a judgement:
+What is left, and why it needs a glance per test:
 
-  1. Several tests import Qt *inside* the test (``from PySide6.QtCore import
-     Qt``), which shadows the shim. Delete those lines and the module-level shim
-     takes over.
-  2. ``from neverdeads_revenge.desktop.buffer import PatternBuffer`` is now
-     ``...desktop.pattern...``.
-  3. ``screen = SdlArena(battle)`` is right for anything that looks at *pixels* --
-     the SDL arena is the painter -- and wrong for anything that calls the
-     screen's own machinery (``_choose``, ``_figures``), which wants
-     ``BattleScreen(battle)``. A glance per test, not a rule.
-  4. And the two ``..._on_qt`` tests at the end are mine and are duplicates of
-     what already lives in ``tests/test_sdl_front.py``: drop them.
+1. **`SdlArena(battle)` vs `BattleScreen(battle)`.** The SDL arena is the
+   painter; anything that calls the screen's own machinery (`_choose`,
+   `_figures`, `aiming`, `picking`) wants `BattleScreen`. Fourteen tests call
+   methods the painter does not have.
+2. **Deleted Qt hooks.** `_paste_shadow` / `_paste_figure` and the two
+   `..._on_qt` tests are from the old painter. Drop the hooks' tests; keep the
+   rule if it still exists in `SdlArena`/`Stage`.
+3. **Renamed APIs.** `SdlApp._tick` -> `tick`, `_buffer` -> `grid`, the effects
+   module is `sdl_front.effects`, `VOID` and `ChronicleScreen` were renamed,
+   `Action.WAIT` is gone (there is no wait verb: take a step), `ShopScreen`'s
+   body size moved, and `SdlTurning` no longer carries its battle.
+4. **A few flow assertions** were written for the old title/arena flow; check
+   them against the screen that is actually there.
 
-Everything here is coverage that the SDL suite does not have yet -- the menus,
-the dialogs, the level-up, the shop, the chronicle -- so it is worth the walk.
+Everything in this file is coverage the current suite does not have -- the arena
+and its wounds, the shop, the pack, the chronicle and level-up -- so it is worth
+the walk.
