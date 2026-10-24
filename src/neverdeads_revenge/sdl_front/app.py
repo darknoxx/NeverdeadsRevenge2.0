@@ -53,6 +53,21 @@ MIN_ROWS = 24
 #: couple of hundred pixels of nothing on every side.
 TARGET_COLS = 110
 
+#: A handheld is not a small desktop. Its panel is small and *dense* -- 1240
+#: pixels across four inches -- so a hundred and twenty columns of ten-pixel
+#: characters is a page of fine print. The grid aims wider instead, and the
+#: minimum drops with it or the scale could never reach two. Against 1240x1080
+#: this answers 62x27 at scale 2: the original 960x540 design, doubled, pixel for
+#: pixel, with the sidebar narrowed to its share of the width.
+HANDHELD_TARGET_COLS = 64
+HANDHELD_MIN_COLS = 56
+HANDHELD_MIN_ROWS = 20
+
+
+def on_a_handheld() -> bool:
+    """Whether this process is the Android build, by the variable p4a sets."""
+    return bool(os.environ.get("ANDROID_PRIVATE"))
+
 
 class KeyPress:
     """A key press, in the shape the screens already ask for.
@@ -249,8 +264,14 @@ class SdlApp:
             from ..desktop.screens.title import TitleScreen
 
             self.screens = [TitleScreen()]
-        self.cols = max(MIN_COLS, cols)
-        self.rows = max(MIN_ROWS, rows)
+        #: Which panel this is, because the grid is a question of *size* and a
+        #: handheld's pixels are not a desktop's.
+        self.handheld = on_a_handheld()
+        self.min_cols = HANDHELD_MIN_COLS if self.handheld else MIN_COLS
+        self.min_rows = HANDHELD_MIN_ROWS if self.handheld else MIN_ROWS
+        self.target_cols = HANDHELD_TARGET_COLS if self.handheld else TARGET_COLS
+        self.cols = max(self.min_cols, cols)
+        self.rows = max(self.min_rows, rows)
         self.effects = SdlEffects()
         #: The glass, which is the same object: a landed blow shakes the *frame*,
         #: and the frame is this application's own. The arena asks ``view.shake``
@@ -1194,15 +1215,15 @@ class SdlApp:
         return max(
             1,
             min(
-                width // (MIN_COLS * self.font.cell_w),
-                height // (MIN_ROWS * self.font.cell_h),
+                width // (self.min_cols * self.font.cell_w),
+                height // (self.min_rows * self.font.cell_h),
             ),
         )
 
     def _scale_for(self, width: int, height: int) -> int:
         """The one scale: the biggest that lands the grid near the target width."""
         ceiling = self._max_scale(width, height)
-        target = max(1, round(width / (TARGET_COLS * self.font.cell_w)))
+        target = max(1, round(width / (self.target_cols * self.font.cell_w)))
         return max(1, min(target, ceiling))
 
     def _grid_size(self, width: int, height: int) -> tuple[int, int]:
@@ -1215,8 +1236,8 @@ class SdlApp:
         at 2560x1440 it comes out at 128x36, which is a full screen and no bars.
         """
         scale = self._scale_for(width, height)
-        cols = max(MIN_COLS, width // (self.font.cell_w * scale))
-        rows = max(MIN_ROWS, height // (self.font.cell_h * scale))
+        cols = max(self.min_cols, width // (self.font.cell_w * scale))
+        rows = max(self.min_rows, height // (self.font.cell_h * scale))
         return cols, rows
 
     @property

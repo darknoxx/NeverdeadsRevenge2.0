@@ -405,9 +405,17 @@ saves it at once, and answers with a sound.
 
 The game is drawn by SDL and pygame. It was built twice for a while -- once on Qt
 and once on SDL -- and the SDL one won: it plays the same run, draws the same
-room, and builds for Windows and (in time) for Android, which Qt did not. So
-there is one front end now, and `./ndr2` starts it -- one door, one name, one
-parser, and the only launcher in the directory.
+room, and builds for Windows and for Android, which Qt did not. So there is one
+front end now, and `./ndr2` starts it -- one door, one name, one parser, and the
+only launcher in the directory.
+
+Android is the same code and the same screens, packaged as an APK with
+buildozer (`packaging/android/`, and `main.py` at the top for p4a); it is built
+by hand, not by the release workflow. A handheld's panel is small and dense, so
+the grid aims at **62 columns** there instead of 110: at 1240x1080 that is
+62x27 at scale 2, the original 960x540 design doubled, with the sidebar narrowed
+to its share of the width. `python-for-android` needs the NDK 25b and its own
+toolchain; `packaging/android/README.md` has the whole recipe.
 
 ```sh
 ./ndr2 --seed 3 --fps                       # the frame counter, bottom right

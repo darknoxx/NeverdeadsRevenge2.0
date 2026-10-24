@@ -2835,6 +2835,50 @@ def test_windowed_keeps_the_grid_it_was_given(monkeypatch):
     assert app.fullscreen is False
 
 
+def test_a_handheld_aims_at_bigger_cells_than_a_desktop(monkeypatch):
+    """A dense four-inch panel is not a desktop: 1240x1080 wants 62x27, not 124x54.
+
+    1240 pixels across four inches is fine print at ten pixels a column, and the
+    game's own shapes were laid out for a 960-wide window. On the Android build
+    the grid aims wider (64 columns) and its minimum drops with it, so the scale
+    can reach two: that is the original design, doubled, pixel for pixel -- and
+    the sidebar keeps to its share of the width, which gives the map 40 cells
+    instead of 28.
+    """
+    from neverdeads_revenge.desktop.render import regions, sidebar_width
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    monkeypatch.setenv("ANDROID_PRIVATE", "/data/user/0/neverdeads/files")
+    handheld = SdlApp(seed=3, no_sound=True)
+
+    assert handheld.handheld is True
+    assert handheld._scale_for(1240, 1080) == 2
+    assert handheld._grid_size(1240, 1080) == (62, 27)
+    assert sidebar_width(62) == 22
+    assert regions(62, 27)["map"] == (0, 0, 40, 20)
+
+    monkeypatch.delenv("ANDROID_PRIVATE")
+    desktop = SdlApp(seed=3, no_sound=True)
+
+    assert desktop.handheld is False
+    assert desktop._scale_for(1280, 800) == 1
+    assert desktop._grid_size(1280, 800) == (128, 40)
+
+
+def test_the_sidebar_keeps_its_share_of_a_narrow_grid():
+    """A handheld's grid is narrower, not smaller: the sidebar gives the map room."""
+    from neverdeads_revenge.desktop.render import SIDEBAR, regions, sidebar_width
+
+    assert sidebar_width(96) == SIDEBAR, "the designed width moved"
+    assert sidebar_width(128) == SIDEBAR, "a wide grid got a wider sidebar"
+    assert sidebar_width(62) == 22
+    assert sidebar_width(40) == 18, "the sidebar has no floor"
+
+    cols, rows, width, _height = regions(62, 27)["sidebar"]
+    assert width == 22
+    assert cols == 40, "the sidebar is not to the right of the map"
+
+
 def test_the_grid_comes_from_the_window_like_the_qt_build(monkeypatch):
     """A 1440p screen full of dungeon instead of two bars: the Qt build's rule.
 

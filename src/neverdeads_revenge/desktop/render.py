@@ -65,6 +65,18 @@ SIDEBAR = 34
 #: How much larger the overworld's field is drawn when the zoom is on. A whole
 #: number, because a character is a character: half a character is a smear.
 FIELD_ZOOM = 2
+
+
+def sidebar_width(cols: int) -> int:
+    """The sidebar's width, as the *share* of the grid it was designed for.
+
+    Thirty-four cells is the designed width at ninety-six columns -- the grid the
+    sidebar was laid out for -- so it is that share the game keeps, and a narrower
+    grid gets a narrower sidebar and more map. At ninety-six (or more) this answers
+    thirty-four, which is exactly what it always did; a handheld's sixty-odd
+    columns get twenty-two, and the dungeon gains twelve columns of view.
+    """
+    return max(18, min(SIDEBAR, round(cols * SIDEBAR / 96)))
 #: The bottom row's height: the log, pasted smaller, and nothing else.
 BOTTOM = 7
 #: What the HUD wraps at, inside the sidebar's content box.
@@ -112,12 +124,13 @@ def regions(cols: int, rows: int) -> dict[str, tuple[int, int, int, int]]:
     to share it and moved into the sidebar, which is why their width constants
     are gone.
     """
-    map_w = max(1, cols - SIDEBAR)
+    sidebar = sidebar_width(cols)
+    map_w = max(1, cols - sidebar)
     map_h = max(1, rows - BOTTOM)
     bottom_y = map_h
     return {
         "map": (0, 0, map_w, map_h),
-        "sidebar": (map_w, 0, SIDEBAR, rows),
+        "sidebar": (map_w, 0, sidebar, rows),
         "bottom": (0, bottom_y, map_w, BOTTOM),
         "log": (0, bottom_y, map_w, BOTTOM),
     }

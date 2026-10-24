@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import os
 
+import pygame
 from pygame import SRCALPHA, Surface
 
 from ..desktop.theme import BACKGROUND, Colour
@@ -183,6 +184,14 @@ class SdlFont:
         # grid. Four zeroes make the glyph's own pixels the only ones with
         # anything in them, which is what a blit wants.
         image.fill(bg if bg is not None else (0, 0, 0, 0))
+        # The display's own format, so every blit of this cell is a *blend* and
+        # not a blend plus a per-pixel conversion. It is the difference between a
+        # frame costing two milliseconds and thirty on a machine with no SIMD
+        # blitters, which is what an ARM build of this pygame has.
+        try:
+            image = image.convert_alpha()
+        except pygame.error:  # pragma: no cover - no display to convert to
+            pass
         if self.renderer == "freetype":
             self._blit_freetype(image, char, ink, bold, italic)
         else:
