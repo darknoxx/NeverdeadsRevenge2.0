@@ -10,7 +10,6 @@ import pytest
 
 from neverdeads_revenge.core.direction import Direction, chebyshev
 from neverdeads_revenge.core.rng import Rng
-from neverdeads_revenge.game import actions as actions_module
 from neverdeads_revenge.game.actions import (  # noqa: F401
     ENEMY_BITE,
     Action,
@@ -1005,7 +1004,9 @@ def test_a_faster_enemy_acts_more_often_than_a_slower_one(monkeypatch):
     scheduler in isolation.
     """
     counts = {"slow": 0, "fast": 0}
-    real_take_turn = actions_module.take_turn
+    from neverdeads_revenge.game.actions import turn as actions_turn
+
+    real_take_turn = actions_turn.take_turn
 
     def counting_take_turn(state, actor):
         if actor.name == "slow":
@@ -1014,7 +1015,7 @@ def test_a_faster_enemy_acts_more_often_than_a_slower_one(monkeypatch):
             counts["fast"] += 1
         return real_take_turn(state, actor)
 
-    monkeypatch.setattr(actions_module, "take_turn", counting_take_turn)
+    monkeypatch.setattr(actions_turn, "take_turn", counting_take_turn)
 
     def run_with(enemy_speed: float, label: str) -> None:
         state = start_run(NOXX, seed=17)

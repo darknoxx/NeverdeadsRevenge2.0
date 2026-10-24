@@ -264,7 +264,9 @@ def test_the_cornered_hero_is_harder_to_hit(monkeypatch):
         seen.update(kwargs)
         return AttackOutcome(hit=False, crit=False, damage=0, killed=False, dodged=True)
 
-    monkeypatch.setattr(actions_module, "attack", spy)
+    from neverdeads_revenge.game.actions import combat as actions_combat
+
+    monkeypatch.setattr(actions_combat, "attack", spy)
 
     state = _run("last_breath")
     enemy = _beside(state)

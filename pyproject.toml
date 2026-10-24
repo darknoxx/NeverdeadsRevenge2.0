@@ -63,6 +63,11 @@ line-length = 100
 # with its own cleanup, rather than as one unreadable commit.
 select = ["E4", "E7", "E9", "F", "B"]
 
+[tool.ruff.lint.per-file-ignores]
+# The package facade re-exports the private helpers its own tests and the arena
+# drive by name; that is the point of it, so F401 is not a finding there.
+"src/neverdeads_revenge/game/actions/__init__.py" = ["F401"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
