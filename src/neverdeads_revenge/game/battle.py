@@ -85,7 +85,6 @@ __all__ = [
     "VERBS",
     "Battle",
     "Flourish",
-    "Guarded",
     "Mended",
     "Special",
     "Over",
@@ -192,13 +191,6 @@ class Mended:
 
 
 @dataclass(frozen=True, slots=True)
-class Guarded:
-    """The hero set his feet: everything aimed at him this round is halved."""
-
-    name: str
-
-
-@dataclass(frozen=True, slots=True)
 class Over:
     """The fight is decided. ``escaped`` is leaving on your own terms."""
 
@@ -207,7 +199,7 @@ class Over:
 
 
 #: Everything a fight can say to a screen.
-Event = Said | Struck | ShadowStruck | Flourish | Guarded | Mended | Over
+Event = Said | Struck | ShadowStruck | Flourish | Mended | Over
 
 
 def open_fight(state: GameState, trigger: Actor | None = None) -> Battle | None:

@@ -6,7 +6,6 @@ import math
 from ...game.battle import (
     Mended,
     Flourish,
-    Guarded,
     Over,
     Said,
     ShadowStruck,
@@ -412,14 +411,6 @@ class BattlePlayback:
                     app.effects.spark(
                         point, FLAIR_COLOURS.get(event.flair, "#ffffff"), 26
                     )
-            return
-        if isinstance(event, Guarded):
-            # A guard is the hero's turn and carries his *name*: the strip is
-            # about actors, and there is exactly one actor a guard can belong to.
-            self._took_a_turn(self.battle.hero)
-            point = self._point_of(self.battle.hero, app)
-            if point is not None:
-                app.effects.spark(point, "grey70", count=8)
             return
         if isinstance(event, Over):
             if not event.won and not event.escaped:

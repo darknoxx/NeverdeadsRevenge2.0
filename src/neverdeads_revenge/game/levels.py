@@ -134,7 +134,6 @@ class Gain:
     damage: int = 0
     armor: int = 0
     speed: float = 0.0
-    crit_chance: float = 0.0
 
     def __add__(self, other: Gain) -> Gain:
         return Gain(
@@ -142,7 +141,6 @@ class Gain:
             damage=self.damage + other.damage,
             armor=self.armor + other.armor,
             speed=self.speed + other.speed,
-            crit_chance=self.crit_chance + other.crit_chance,
         )
 
     @property
@@ -160,8 +158,6 @@ class Gain:
             parts.append(f"+{self.armor} armour")
         if self.speed:
             parts.append(f"+{self.speed:.2f} speed")
-        if self.crit_chance:
-            parts.append(f"+{self.crit_chance:.0%} crit")
         return ", ".join(parts) if parts else "nothing worth writing down"
 
 
@@ -259,5 +255,3 @@ def apply_gain(player: Actor, gain: Gain) -> None:
         player.stats.armor += gain.armor
     if gain.speed:
         player.stats.speed += gain.speed
-    if gain.crit_chance:
-        player.stats.crit_chance += gain.crit_chance
