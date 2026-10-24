@@ -9,7 +9,7 @@ the two: copy each export to the name the arena asks for, and say what it did.
 
 The monsters are exported from the front (they face the hero, who stands below
 them on screen) and the heroes from behind (they face away, at the monsters).
-Both are only ever *asked* for by name: `desktop/sprites.py` draws the letter
+Both are only ever *asked* for by name: `desktop/art.py` draws the letter
 when a name has no picture, which is what makes this a copy rather than a build
 step -- a missing export is a letter on the floor, not a broken fight.
 
@@ -253,7 +253,10 @@ def main(argv: list[str] | None = None) -> int:
     pygame.display.set_mode((64, 64))
 
     args = argv if argv is not None else sys.argv[1:]
-    source = Path(args[0] if args else "~/Vibecoding/grafiken_kampfsystem").expanduser()
+    if not args:
+        print("usage: install_sprites.py <export folder>", file=sys.stderr)
+        return 2
+    source = Path(args[0]).expanduser()
     missing = []
     # Three tables, and where each one's exports live in the sheets folder: the
     # models and the portraits sit at the top of it, and the wound symbols have

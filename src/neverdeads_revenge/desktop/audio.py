@@ -532,7 +532,14 @@ class Sfx:
             try:
                 if name is None:
                     return
-                self._play_now(name)
+                try:
+                    self._play_now(name)
+                except Exception as exc:  # noqa: BLE001 - one sound is not the mixer
+                    # A bad clip or a bad frame is not a reason to stop listening:
+                    # the thread dying would leave every later sound in the queue
+                    # forever, with nothing to say why.
+                    self._note(f"FAILED {name}: {type(exc).__name__}: {exc}")
+                    self._count_failure()
             finally:
                 self._queue.task_done()
 

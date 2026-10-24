@@ -45,10 +45,6 @@ class SdlEffects:
         self._shake = 0.0
         self._left = 0.0
 
-    @property
-    def active(self) -> bool:
-        return bool(self.particles)
-
     def clear(self) -> None:
         self.particles.clear()
 

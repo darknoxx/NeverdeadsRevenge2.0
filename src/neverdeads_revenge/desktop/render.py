@@ -39,7 +39,6 @@ from .theme import Colour, Style, parse_style
 __all__ = [
     "SIDEBAR",
     "BOTTOM",
-    "HUD_WIDTH",
     "Ink",
     "regions",
     "viewport",
@@ -51,7 +50,6 @@ __all__ = [
     "MAX_PACK_SLOTS",
     "SLOT_SIZE",
     "SLOT_COLUMNS",
-    "draw_title",
     "hud_lines",
     "marks_names",
     "log_style",
@@ -489,7 +487,7 @@ def sidebar_text(
     # again once the floor has had it. The pulse is luminance on purpose -- the
     # shader's bloom is already a reading of brightness, so the glow needs no new
     # pass.
-    prompt = _void_prompt(state, time.time() if now is None else now)
+    prompt = _void_prompt(state, time.monotonic() if now is None else now)
     if prompt is not None:
         text, colour = prompt
         if y + small_cell_h <= bottom:
@@ -727,18 +725,6 @@ EMBER = Colour(0x4A, 0x12, 0x0C)
 EMBER_INK = Colour(0xFF, 0xB0, 0x2E)
 
 
-def ultimate_ready(state: GameState) -> bool:
-    """Whether the hero's ask is live: available, off cooldown, and the level
-    is there. Read by the prompt and by the app's breathing tick, so the pulse
-    and the promise cannot disagree about what state they are in."""
-    return (
-        state.ultimate_available
-        and state.atritas is None
-        and state.fortress is None
-        and state.level >= state.ultimate_level
-    )
-
-
 def _void_prompt(state: GameState, now: float) -> tuple[str, Colour] | None:
     """The sidebar's promise of the dark, in the state it is in.
 
@@ -837,20 +823,3 @@ def marks_names(state: GameState, kind: str) -> list[str]:
 
 
 # -- the title ----------------------------------------------------------------
-def draw_title(buffer: PatternBuffer, subtitle: str, hint: str) -> None:
-    """The title screen: the name in the block font, and a line under it."""
-    from .blocks import render_word
-
-    buffer.clear()
-    art = render_word("NEVERDEAD'S")
-    art += render_word("REVENGE")
-    top = max(1, (buffer.rows - (len(art) * 2 + 6)) // 2)
-    y = top
-    for line in art:
-        x = max(0, (buffer.cols - len(line)) // 2)
-        buffer.text(x, y, line, parse_style("bold #a855f7"))
-        y += 1
-    y += 2
-    buffer.text(max(0, (buffer.cols - len(subtitle)) // 2), y, subtitle, parse_style("grey70"))
-    y += 2
-    buffer.text(max(0, (buffer.cols - len(hint)) // 2), y, hint, parse_style("white"))

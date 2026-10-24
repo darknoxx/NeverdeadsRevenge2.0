@@ -20,7 +20,7 @@ needed it is a font the second screen has to reach into that screen to borrow.
 
 from __future__ import annotations
 
-__all__ = ["BLOCK", "ROWS", "LETTER_GAP", "render_word", "render_letter"]
+__all__ = ["BLOCK", "ROWS", "LETTER_GAP", "render_word"]
 
 #: The alphabet the font carries, as five rows of ``█`` and space.
 #:
@@ -105,15 +105,3 @@ def render_word(word: str, scale: int = 1) -> list[str]:
     return big
 
 
-def render_letter(char: str, style: str = "") -> str:
-    """One character as block art, optionally coloured, or an empty string.
-
-    A single letter rather than a word, so there is no gap to place and no
-    baseline to align -- which is why it is a second function and not a flag on
-    the first.
-    """
-    rows = render_word(char)
-    if not rows:
-        return ""
-    art = "\n".join(rows)
-    return f"[{style}]{art}[/]" if style else art

@@ -76,7 +76,6 @@ class MetaUpgrade:
 
     key: str
     name: str
-    description: str
     price: int = 0
     #: Flat change per stack.
     max_hp: int = 0
@@ -150,7 +149,6 @@ META_UPGRADES: dict[str, MetaUpgrade] = {
     "vigour": MetaUpgrade(
         key="vigour",
         name="Vigour",
-        description="the body remembers being killed and grows back thicker",
         # Five stacks now, on a ladder that climbs: more to save for, without
         # making the same three steps cheaper. Health is linear against a
         # scaling dungeon, so it is the one axis safe to widen.
@@ -162,7 +160,6 @@ META_UPGRADES: dict[str, MetaUpgrade] = {
     "haste": MetaUpgrade(
         key="haste",
         name="Haste",
-        description="the feet remember the way out",
         # Three, not four: speed is *actions*, and the whole turn economy is
         # what a fourth stack would quietly solve.
         price=220,
@@ -173,7 +170,6 @@ META_UPGRADES: dict[str, MetaUpgrade] = {
     "whetstone": MetaUpgrade(
         key="whetstone",
         name="Whetstone",
-        description="the blade is kept by a hand that has done this before",
         price=140,
         damage=1,
         max_stacks=3,
@@ -181,7 +177,6 @@ META_UPGRADES: dict[str, MetaUpgrade] = {
     "edge": MetaUpgrade(
         key="edge",
         name="Edge",
-        description="you have learned where the soft parts are",
         price=180,
         crit=0.05,
         max_stacks=3,
@@ -189,7 +184,6 @@ META_UPGRADES: dict[str, MetaUpgrade] = {
     "cellar": MetaUpgrade(
         key="cellar",
         name="Cellar",
-        description="the bottles under the house have had longer to work",
         # The fourth of the small permanent axes, and the first that touches the
         # *supply* rather than the hero: everything the shop sold until now made
         # the body, the blade or the pack better, and nothing made the medicine
@@ -208,7 +202,6 @@ META_UPGRADES: dict[str, MetaUpgrade] = {
     "lantern": MetaUpgrade(
         key="lantern",
         name="Lantern",
-        description="a light that does not go out when the run does",
         price=180,
         sight=1,
         max_stacks=1,
@@ -216,7 +209,6 @@ META_UPGRADES: dict[str, MetaUpgrade] = {
     "focus": MetaUpgrade(
         key="focus",
         name="Focus",
-        description="the purse holds one more trick",
         # The dearest ceiling in the game is ten, and the shop sells up to five
         # more: a hero who has bought all of it holds fifteen, which is one big
         # trick and a small one. Priced under the whetstone at the first step
@@ -232,7 +224,6 @@ META_UPGRADES: dict[str, MetaUpgrade] = {
     "pack": MetaUpgrade(
         key="pack",
         name="Pack",
-        description="another thing you can carry, and another after that",
         # 100, 150, 200, 250, 300: dearer each time, but by a step rather than
         # by a multiple. Five of them take the pack from two to seven, which is
         # still the whole allowance a run gets -- for 1000 coin rather than
@@ -251,7 +242,6 @@ META_UPGRADES: dict[str, MetaUpgrade] = {
         key="bleeding_edge",
         note_for=lambda n: f"a crit's wound is {n} stacks deep",
         name="Bleeding Edge",
-        description="a wound you open with a lucky blow keeps opening",
         price=180,
         hero="noxx",
         max_stacks=3,
@@ -260,7 +250,6 @@ META_UPGRADES: dict[str, MetaUpgrade] = {
         key="hoarfrost",
         note_for=lambda n: f"{round(HOARFROST_PER_STACK * n * 100)}% chance to freeze whoever strikes you",
         name="Hoarfrost",
-        description="whoever strikes you takes the cold home",
         price=180,
         hero="yeti",
         max_stacks=3,
@@ -269,7 +258,6 @@ META_UPGRADES: dict[str, MetaUpgrade] = {
         key="bell_ring",
         note_for=lambda n: f"{round(BELL_RING_PER_STACK * n * 100)}% chance to throw what you hit",
         name="Ring of the Bell",
-        description="your blows throw what they land on",
         price=180,
         hero="walkyrion",
         max_stacks=3,
@@ -281,7 +269,6 @@ META_UPGRADES: dict[str, MetaUpgrade] = {
             "alight what you hit"
         ),
         name="Emberheart",
-        description="what he lands on does not stop burning",
         price=180,
         hero="inferno",
         max_stacks=3,
@@ -289,7 +276,6 @@ META_UPGRADES: dict[str, MetaUpgrade] = {
     "blood_deal": MetaUpgrade(
         key="blood_deal",
         name="Blood Bargain",
-        description="paid once, in the only currency that never comes back",
         price=0,  # sold through WILD_OFFERS, which carries its own price
         max_hp=-4,
         speed=0.15,

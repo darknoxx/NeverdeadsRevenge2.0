@@ -27,20 +27,6 @@ class CrtSettings:
     bloom: bool = True
     geometry: bool = False
 
-    def cycle(self) -> None:
-        """Step through the presets: full, plain, scanlines-only, geometry."""
-        if self.geometry:
-            self.geometry = False
-        elif self.bloom:
-            self.bloom = False
-        elif self.scanlines:
-            self.scanlines = False
-        else:
-            self.scanlines = True
-            self.bloom = True
-            self.geometry = True
-
-
 VERTEX = """
 #version 120
 attribute vec2 position;

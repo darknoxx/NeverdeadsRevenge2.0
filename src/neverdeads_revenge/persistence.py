@@ -1,8 +1,8 @@
 """Persistent player data: what survives between runs.
 
-Milestone 1 writes the file but does not yet fill it. The point of building it
-now is that the shape is fixed: later upgrades and hero unlocks only need an
-entry in :data:`META_UPGRADES`, not a change to how a run starts.
+The purse, the upgrades, the collections and the scoreboard all live here; a
+new one is a field and, if it is bought, an entry in :data:`META_UPGRADES`.
+Fields this build does not know are carried through untouched.
 
 The save file lives in the XDG data directory so it follows the platform
 convention rather than landing in the source tree.

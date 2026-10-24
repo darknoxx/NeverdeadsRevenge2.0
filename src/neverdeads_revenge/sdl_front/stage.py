@@ -278,10 +278,6 @@ class Stage:
         return self._stones[key]
 
     # -- and the room in one picture ----------------------------------------
-    def _cell(self, field) -> tuple[int, int]:
-        """The cell the room is measured in, off the field it was built from."""
-        return (int(field["cell_w"]), int(field["cell_h"]))
-
     # -- what is standing on it ---------------------------------------------
     def health(
         self, surface, figures, font, shown, hero, fades, scales=None, poses=None

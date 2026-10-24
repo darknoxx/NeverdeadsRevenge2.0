@@ -512,12 +512,6 @@ class Hero:
     #: What REVENGE grants this hero for every kill. See :class:`Trait`.
     trait: Trait = Trait.SPEED
     #: Permanent modifiers applied when the run starts, keyed by meta upgrade.
-    unlocked: bool = True
-
-    @property
-    def average_damage(self) -> float:
-        return self.stats.average_damage
-
 
 #: The dark's own petrol: Noxx's, and the shadow he casts. One constant because
 #: they are one colour, and a hero and his shadow drifting apart in the palette

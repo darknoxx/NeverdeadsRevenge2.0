@@ -19,9 +19,7 @@ __all__ = [
     "ASH",
     "PURPLE",
     "box",
-    "centre_box",
     "menu",
-    "banner",
     "rule",
 ]
 
@@ -85,26 +83,6 @@ def box(
     if title:
         text = f" {title} "
         buffer.text(x + 2, y, text[: width - 4], parse_style(f"bold {BONE}"))
-
-
-def centre_box(
-    buffer: PatternBuffer,
-    width: int,
-    height: int,
-    title: str | None = None,
-    border: str = BLOOD,
-) -> tuple[int, int]:
-    """A box in the middle of the buffer. Returns its top-left corner."""
-    x = max(0, (buffer.cols - width) // 2)
-    y = max(0, (buffer.rows - height) // 2)
-    box(buffer, x, y, width, height, title, border)
-    return x, y
-
-
-def banner(buffer: PatternBuffer, y: int, text: str, style: str = f"bold {BONE}") -> None:
-    """One centred line."""
-    x = max(0, (buffer.cols - len(text)) // 2)
-    buffer.text(x, y, text, parse_style(style))
 
 
 def rule(buffer: PatternBuffer, x: int, y: int, width: int, style: str = ASH) -> None:

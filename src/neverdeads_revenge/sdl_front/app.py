@@ -1762,7 +1762,9 @@ class SdlApp:
             # Every beat in this game is written against a thirtieth of a second,
             # so that is the frame this loop asks for: a fight that played faster
             # on a quicker machine would be a different fight.
-            self.tick(min(clock.tick(60) / 1000.0, 1 / 30.0))
+            elapsed = clock.tick(60) / 1000.0
+            # The keys first, then the frame: the pad is polled inside ``tick``,
+            # and a key handled after the paint would be a frame late beside it.
             for event in pygame.event.get():
                 if self._timing_now:
                     # How much the window is handing over, and of what: a pad in
@@ -1772,6 +1774,7 @@ class SdlApp:
                     kind = pygame.event.event_name(event.type)
                     self._event_kinds[kind] = self._event_kinds.get(kind, 0) + 1
                 self.feed(event)
+            self.tick(min(elapsed, 1 / 30.0))
         if self._run_log is not None:
             self._run_log.close()
             self._run_log = None

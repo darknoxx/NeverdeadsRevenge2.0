@@ -92,20 +92,6 @@ class Colour(NamedTuple):
         """The colour as ``#rrggbb``, the way ``QColor.name()`` spells it."""
         return f"#{self.r:02x}{self.g:02x}{self.b:02x}"
 
-    # And the three Qt *readers*, spelled the way Qt spells them, so code that
-    # painstakingly unpacks a colour into its channels -- the wall gradient does
-    # exactly that -- reads the same whether it is holding this or a QColor. The
-    # goal is a seam nobody has to think about, and the cheapest way there is to
-    # answer to both vocabularies.
-    def red(self) -> int:
-        return self.r
-
-    def green(self) -> int:
-        return self.g
-
-    def blue(self) -> int:
-        return self.b
-
     def lighter(self, toward_white: float = 0.5) -> Colour:
         """A brighter version of itself: a step toward white.
 
@@ -173,8 +159,6 @@ def as_colour(value) -> Colour | None:
         return Colour.parse(value)
     if isinstance(value, (tuple, list)) and len(value) == 3:
         return Colour(*value)
-    if hasattr(value, "red") and hasattr(value, "green") and hasattr(value, "blue"):
-        return Colour(value.red(), value.green(), value.blue())
     return None
 
 
