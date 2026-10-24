@@ -22,6 +22,7 @@ care which library owns the pixels.
 from __future__ import annotations
 
 import os
+import time
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
@@ -30,6 +31,7 @@ import pygame  # noqa: E402
 import pytest  # noqa: E402
 
 from neverdeads_revenge.desktop import art  # noqa: E402
+from neverdeads_revenge.sdl_front.arena import SdlArena  # noqa: E402
 
 from neverdeads_revenge.game.state import RunState  # noqa: E402
 
@@ -126,6 +128,9 @@ class _Shot:
 
     def pixelColor(self, x: int, y: int) -> _Colour:  # noqa: N802
         return _Colour(self.surface.get_at((int(x), int(y))))
+
+    def constBits(self) -> bytes:  # noqa: N802
+        return pygame.image.tostring(self.surface, "RGBA")
 
     def width(self) -> int:
         return self.surface.get_width()
@@ -1556,10 +1561,10 @@ class _Quiet:
     """
 
     def __init__(self, font):
-        from neverdeads_revenge.desktop.effects import Effects
+        from neverdeads_revenge.sdl_front.effects import SdlEffects
 
         self.font = font
-        self.effects = Effects(font.cell_w, font.cell_h)
+        self.effects = SdlEffects()
 
     def play(self, name):  # noqa: D102 - an app has one
         pass
@@ -1617,5 +1622,751 @@ def test_the_order_strip_says_who_acts_next(app, font):
     assert "ORDER" in written, "there is no order strip at all"
     assert battle.hero.glyph in written, "the hero is not in the order"
     assert battle.enemies[0].glyph in written, "the monster is not in the order"
+
+
+def _is_colour(colour, rgb, tolerance: int = 60) -> bool:
+    """Whether a pixel is (roughly) the colour the dungeon draws something in."""
+    channels = (
+        (colour.r, colour.g, colour.b)
+        if hasattr(colour, "r")
+        else (colour.red(), colour.green(), colour.blue())
+    )
+    alpha = colour.a if hasattr(colour, "a") else colour.alpha()
+    return all(abs(a - b) <= tolerance for a, b in zip(channels, rgb, strict=True)) and alpha > 0
+
+
+def _time_a_round(font, count: int = 3, *, dt: float = 1 / 30.0) -> float:
+    """How many seconds one round of ``count`` monsters costs the player."""
+    from neverdeads_revenge.sdl_front.arena import SdlArena
+
+    battle = arena(count=count)
+    battle.state.player.stats.hp = 9999
+    battle.state.player.stats.max_hp = 9999
+    for enemy in battle.enemies:
+        enemy.stats.hp = 9999
+        enemy.stats.damage = (0, 0)
+        # No riders either. A monster that poisons narrates two lines more than
+        # one that does not -- news the player wants, and a number this test
+        # must not read as the fight being slow. The question here is the
+        # clock, and which monster the seed deals should not be part of it.
+        enemy.inflicts = ()
+    screen = SdlArena(battle)
+    app = _Quiet(font)
+    for _ in range(60):  # anything quicker than the hero gets its turn first
+        if not screen.busy:
+            break
+        screen.step(dt, app)
+    screen.arena.verb = 0
+    screen.arena._choose(app)
+    frames = 0
+    while screen.busy and frames < 400:
+        screen.step(dt, app)
+        frames += 1
+    return frames * dt
+
+
+def figure_baseline(figure, font) -> int:
+    """Where a figure's feet are, as the stage draws them."""
+    from neverdeads_revenge.desktop.screens.battle import THICKNESS
+
+    return int(figure.row * font.cell_h) - THICKNESS
+
+
+def hold_enter(app, until: str | None = None, seconds: float = 2.0) -> None:
+    """Hold enter: a press, and the hardware repeat stream Qt sends for it.
+    Stops early once ``until`` names the top screen; gives up after
+    ``seconds``."""
+
+    start = time.monotonic()
+    press(app, Qt.Key.Key_Return)
+    while time.monotonic() - start < seconds:
+        if until is not None and top(app) == until:
+            return
+        time.sleep(0.02)
+        press(app, Qt.Key.Key_Return, repeat=True)
+
+
+def release(window, key) -> None:
+    """The key came up -- the desktop sees what the terminal had to guess."""
+    event = pygame.event.Event(pygame.KEYUP, key=_CODES[key], mod=0)
+    event.repeat = False
+    window.feed(event)
+
+
+def sprite_for(name: str) -> _Picture:
+    return _Picture(art.size(f"sprites/{name}.png"))
+
+
+
+def test_a_held_enter_reads_through_the_repeat_stream(app):
+    """The hold lives on auto-repeat events; eating repeats anywhere above the
+    screens starves it (and that bug ate them at the window layer). One press,
+    then the hardware stream Qt really sends -- the screen must go."""
+
+
+    app.prologue_seen = False
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)
+    assert top(app) == "PrologueScreen"
+
+    start = time.monotonic()
+    press(app, Qt.Key.Key_Return)
+    while time.monotonic() - start < 1.6 and top(app) == "PrologueScreen":
+        time.sleep(0.033)
+        press(app, Qt.Key.Key_Return, repeat=True)
+
+    assert top(app) == "GameScreen", "a held enter starved at the window"
+
+
+def test_a_monster_killed_by_its_own_wound_is_let_go_like_any_other(app, font):
+    """The fade is owed to a *death*, and the room only ever heard about the
+    ones a sword did.
+
+    A monster that bled to death kept its zero health and stayed standing: the
+    fight was over, the room was quiet, and the corpse was still in it -- which
+    is a fight with no monster in it and a monster in it. The flag the fade
+    hangs off was set by a killing *blow* and by nothing else, and a wound that
+    finishes something is not a blow. It is a death like any other.
+    """
+    from neverdeads_revenge.sdl_front.arena import SdlArena
+
+    battle = arena(count=2)
+    screen = SdlArena(battle)
+    other, wounded = battle.enemies
+    other.stats.hp = 999  # so the hero's own swing is not what finishes it
+    wounded.stats.hp = 1
+    wounded.statuses["bleed"] = 1
+
+    screen.arena.verb = 0  # ATTACK at the first of them
+    screen.arena._choose(app)
+    for _ in range(240):  # the wounds bite last, after the blows have played
+        screen.step(1 / 30.0, app)
+        if id(wounded) in screen.arena._dying:
+            break
+
+    assert not wounded.stats.alive, "the wound did not finish it"
+    assert id(wounded) in screen.arena._dying, "the wound's kill was never seen as a death"
+    for _ in range(5):  # a few frames of the going, which is half a second
+        screen.step(1 / 30.0, app)
+    assert screen.arena._fade(id(wounded)) < 1.0, "the corpse is still standing in the room"
+
+
+def test_a_round_does_not_keep_the_player_waiting(font):
+    """A fight is only boring in the gap between the decision and the answer.
+
+    This is the number that says the gap is short: a round of three monsters,
+    measured on the fight's own clock, is about a second. It used to be three
+    and a half, and most of the difference was the fight narrating at the speed
+    it strikes -- a line is read at a glance and does not need to be watched.
+    """
+    from neverdeads_revenge.desktop.screens.battle import BEAT, LINE_BEAT
+
+    assert LINE_BEAT < BEAT, "a line holds the stage as long as a blow does"
+    one = _time_a_round(font, count=1)
+    three = _time_a_round(font, count=3)
+    assert one < 1.4, f"a round of one monster took {one:.2f}s"
+    assert three < 2.2, f"a round of three monsters took {three:.2f}s"
+
+
+def test_a_wound_is_a_badge_on_the_plate_and_not_a_light_on_the_monster(app, font):
+    """Worn, not thrown -- and now *written down* rather than shone.
+
+    A wound used to be a pool of colour the figure stood in, which said
+    "something is eating this one" and could not say which wound, or how many of
+    them. The plate can: the sheets' own symbol for each one, beside the life
+    bar, in a row.
+
+    Read as pixels, three ways. The room does not change when a wound arrives --
+    nothing is lit any more -- the plate does, and a second wound pushes the row
+    *further right* rather than landing on top of the first, which is what
+    "side by side" means and is the only part of it a colour count could not see.
+    """
+    from neverdeads_revenge.sdl_front.arena import SdlArena
+    from neverdeads_revenge.game.actions import inflict
+
+    battle = arena(count=1)
+    screen = SdlArena(battle)
+    hero = battle.hero
+    cols, rows = 96, 27  # what `drawn` renders at, and what the plate is sized by
+    _, plain = drawn(screen, app, font)
+    ground = screen.arena._areas(cols, rows)["ground"]
+    plate = screen.arena._areas(cols, rows)["plate"]
+
+    def changed(image, area, base=None) -> list[int]:
+        """The columns in one band where a frame differs from another one."""
+        was = plain if base is None else base
+        x0, y0, width, height = area
+        return [
+            x
+            for x in range(x0 * font.cell_w, (x0 + width) * font.cell_w)
+            if any(
+                image.pixelColor(x, y) != was.pixelColor(x, y)
+                for y in range(y0 * font.cell_h, (y0 + height) * font.cell_h)
+            )
+        ]
+
+    inflict(battle.state, hero, ("burn",))
+    screen.arena._catching_up(hero)  # the room has been *shown* the wound (see below)
+    _, burning = drawn(screen, app, font)
+    assert not changed(burning, ground), "the wound is still lighting the room"
+    assert changed(burning, plate), "the wound was not shown on the plate"
+    first = max(changed(burning, plate))
+
+    inflict(battle.state, hero, ("chill",))
+    screen.arena._catching_up(hero)
+    _, both = drawn(screen, app, font)
+    assert max(changed(both, plate)) > first, (
+        "the second wound did not line up beside the first"
+    )
+
+    # And the monsters keep theirs, at the end of their own bars: without that,
+    # taking the light away would have made a wounded monster one that nothing
+    # on screen says is wounded.
+    bare = drawn(screen, app, font)[1]
+    inflict(battle.state, battle.enemies[0], ("poison",))
+    screen.arena._catching_up(battle.enemies[0])
+    _, poisoned = drawn(screen, app, font)
+    assert changed(poisoned, ground, bare), (
+        "the monster's wound is not on the floor with it"
+    )
+    assert not changed(poisoned, plate, bare), (
+        "a monster's wound was written on the player's plate"
+    )
+
+    # And the plate *goes away* when the trick list is up -- the list is drawn
+    # across the whole strip -- so the row must go with it: it is painted in
+    # pixels, after the grid, and a badge over a panel that is not there is a
+    # badge over somebody else's menu.
+    screen.arena.picking = True
+    hero.statuses.clear()
+    screen.arena._catching_up(hero)
+    _, listed_bare = drawn(screen, app, font)
+    hero.statuses["burn"] = 1
+    screen.arena._catching_up(hero)
+    _, listed_wound = drawn(screen, app, font)
+    assert bytes(listed_bare.constBits()) == bytes(listed_wound.constBits()), (
+        "a badge is hanging over the list of tricks"
+    )
+
+
+def test_a_wound_more_than_one_stack_carries_its_depth(app, font):
+    """The number on the badge, and only once there is more than one.
+
+    Read as a *difference*: the same wound at two stacks and at one differs in
+    exactly one place -- the badge's corner -- which is the honest way to test a
+    digit nobody wants to parse out of pixels.
+    """
+    from neverdeads_revenge.sdl_front.arena import SdlArena
+
+    battle = arena(count=1)
+    screen = SdlArena(battle)
+    hero = battle.hero
+    hero.statuses["bleed"] = 3
+
+    hero.status_stacks["bleed"] = 2
+    screen.arena._catching_up(hero)
+    _, two = drawn(screen, app, font)
+
+    hero.status_stacks["bleed"] = 1
+    screen.arena._catching_up(hero)
+    _, one = drawn(screen, app, font)
+
+    assert bytes(two.constBits()) != bytes(one.constBits()), (
+        "two stacks look exactly like one"
+    )
+
+    hero.statuses.clear()
+    screen.arena._catching_up(hero)
+    _, clean = drawn(screen, app, font)
+    assert bytes(clean.constBits()) != bytes(one.constBits()), (
+        "the badge stayed after the wound had gone"
+    )
+
+
+def test_a_wound_reaches_the_room_only_when_the_blow_lands(app, font):
+    """The animation first, and every display after it.
+
+    Which is the rule the whole arena is built on and the one this row broke:
+    the rules resolve a turn at once, so the *status* is on the monster the
+    moment the hero presses the key -- and the fight must not say so until the
+    sword has arrived. A badge that turned up during the swing is the fight
+    telling the player the ending of the sentence they are in the middle of.
+
+    Read at the swing and at the impact, and the swing is the hard half: the
+    monster has the wound already, in the rules, and the room is still not
+    allowed to have seen it.
+    """
+    from neverdeads_revenge.sdl_front.arena import SdlArena
+    from neverdeads_revenge.world.items import ITEMS, make_item
+
+    battle = arena(count=1)
+    screen = SdlArena(battle)
+    target = battle.enemies[0]
+    target.stats.hp = 999
+    # A blade that leaves something in: the wound is the *attack's*, and an
+    # attack that wounds nobody would test nothing.
+    battle.hero.equipment["weapon"] = make_item(ITEMS["wound"])
+
+    screen.arena.verb = 0  # ATTACK
+    screen.arena._choose(app)
+
+    assert "bleed" in target.statuses, "the blade did not land its wound at all"
+    assert screen.arena._worn(target) == (), "the wound was shown before the blow landed"
+
+    for _ in range(30):  # past the impact, which is where the sword arrives
+        screen.step(1 / 30.0, app)
+
+    assert "bleed" in screen.arena._worn(target), "the wound never reached the room"
+
+
+def test_escape_from_the_arrow_gives_the_five_back(app):
+    """The aim is a step in a menu and not a trap: escape walks it backwards,
+    one panel at a time, and the trick that was picked is still picked when the
+    list comes back."""
+
+    from neverdeads_revenge.sdl_front.arena import SdlArena
+
+    battle = arena(count=3)
+    screen = SdlArena(battle)
+    screen._queue = []
+    app.screens = [screen]
+
+    press(app, Qt.Key.Key_S, "s")
+    press(app, Qt.Key.Key_Return)
+    assert screen.arena.aiming
+
+    press(app, Qt.Key.Key_Escape)
+    assert not screen.arena.aiming and screen.arena.picking, "escape did not give the five back"
+
+    press(app, Qt.Key.Key_Escape)
+    assert not screen.arena.picking and not screen.arena.aiming, "escape did not give the verbs back"
+
+
+def test_the_aim_keeps_saying_what_is_being_aimed(app, font):
+    """While the arrow is out, the player is still choosing an *attack*: what is
+    about to be thrown at one of them stays in front of them."""
+    from neverdeads_revenge.sdl_front.arena import SdlArena
+    from neverdeads_revenge.game.specials import LEFT_HAND, special_by_key
+
+    battle = arena(count=2)
+    screen = SdlArena(battle)
+    screen.arena.aiming = True
+    screen.arena._picked = LEFT_HAND
+    buffer, _ = drawn(screen, app, font)
+
+    written = "".join(cell.char for row in buffer.cells for cell in row)
+    assert special_by_key(LEFT_HAND).effect in written, (
+        "the aim did not say what was being aimed"
+    )
+
+
+def test_the_arena_does_not_offer_a_way_out_that_is_not_there(app, font):
+    """The plate used to say "esc leave the arena", and escape has not left the
+    arena since the fall of M1: in the room it is the line about there being no
+    way out but through, and in a menu it is one step back. A footer promising a
+    key that does nothing is worse than no footer."""
+    from neverdeads_revenge.sdl_front.arena import SdlArena
+
+    battle = arena(count=1)
+    screen = SdlArena(battle)
+    buffer, _ = drawn(screen, app, font)
+    written = "".join(cell.char for row in buffer.cells for cell in row)
+    assert "leave the arena" not in written, "the plate still offers a way out"
+    assert "esc" not in written, "the plate is still talking about escape"
+
+    screen.arena.picking = True
+    buffer, _ = drawn(screen, app, font)
+    written = "".join(cell.char for row in buffer.cells for cell in row)
+    assert "esc" in written, "the menus lost their way back"
+
+
+def test_the_arena_draws_whatever_art_there_is(app, font):
+    """Every figure is on the floor: as a picture if the sheets have one, as its
+    letter if they do not.
+
+    Both halves are asserted because both are the truth the game lives with --
+    the art is optional and the alphabet is not. A fight is never missing a
+    fighter, only sometimes missing a picture of one.
+    """
+    from neverdeads_revenge.sdl_front.arena import SdlArena
+    from neverdeads_revenge.desktop.theme import parse_style
+
+    battle = arena(count=3)
+    screen = SdlArena(battle)
+    _, image = drawn(screen, app, font)
+    figures = screen.arena._figures(96, 27, font)
+
+    for figure in figures:
+        if figure.art is not None:
+            # The staging carries the art's *name*; the picture is loaded here,
+            # the way a painter loads it.
+            art = sprite_for(figure.actor.name)
+            left = figure.cx - art.width() // 2
+            top = figure_baseline(figure, font) - art.height()
+            inked = sum(
+                1
+                for y in range(top, top + art.height(), 3)
+                for x in range(left, left + art.width(), 3)
+                if image.pixelColor(x, y).alpha() > 0
+            )
+            assert inked > 40, f"the picture of {figure.actor.name} was not drawn"
+            continue
+        ink = parse_style(figure.colour).fg
+        found = [
+            y
+            for y in range(image.height())
+            if any(
+                _is_colour(image.pixelColor(x, y), (ink.red(), ink.green(), ink.blue()))
+                for x in range(image.width())
+            )
+        ]
+        assert found, f"{figure.actor.name} has neither a picture nor a letter"
+        assert found[-1] - found[0] > font.cell_h, "the letter is not a letter"
+
+
+def test_the_arena_names_who_the_arrow_is_on(app, font):
+    """The one place a monster's name is written on a panel and not spoken in the
+    log: a name under a figure would be a label on the room, but this is the
+    *choice*, and a choice has to be readable."""
+    from neverdeads_revenge.sdl_front.arena import SdlArena
+
+    battle = arena(count=3)
+    screen = SdlArena(battle)
+    screen.arena.aiming = True
+    buffer, _ = drawn(screen, app, font)
+
+    written = "".join(cell.char for row in buffer.cells for cell in row)
+    assert battle.enemies[screen.arena.target].name[:6] in written, (
+        "the panel did not say who the arrow was on"
+    )
+
+
+def test_the_arena_reads_out_a_lesson(app):
+    """A trick learned in a fight is said *in* the fight.
+
+    The arena plays the run's own log, so the line a kill wrote on the map is the
+    line a kill writes here -- which is why the announcement lives in the rules
+    and not in the menu: it has one text and two rooms to be read in.
+    """
+
+    from neverdeads_revenge.sdl_front.arena import SdlArena
+    from neverdeads_revenge.game.levels import kills_for_level
+
+    # The dark answers at seven here and not at one: with `--testrun` every trick
+    # is learned from the start, and a level that teaches nothing (correctly)
+    # says nothing either.
+    battle = arena(count=1, ultimate_level=7)
+    battle.state.kills = kills_for_level(2) - 1  # one kill short of level two
+    battle.state.level = 1
+    battle.enemies[0].stats.hp = 1
+    screen = SdlArena(battle)
+    app.screens = [screen]
+
+    seen: list[str] = []
+    guard = 0
+    while guard < 400 and app.screens and app.screens[-1] is screen:
+        guard += 1
+        if screen.busy:
+            app.tick(0.1)
+            seen += [line.text for line in screen.arena.lines]
+            continue
+        if battle.over:
+            break
+        press(app, Qt.Key.Key_Return)  # ATTACK: the arrow comes out
+        press(app, Qt.Key.Key_Return)  # and the blow goes in
+
+    assert any("learned!" in text for text in seen), f"the arena never said it: {seen}"
+
+
+def test_the_arena_stages_the_actors_it_is_fighting(font):
+    """The models are the monsters, not a mock-up of them.
+
+    A fight against three vipers is three v's in their own colour, and the hero
+    is the hero: the stage reads the actors the fight will spend.
+    """
+    from neverdeads_revenge.sdl_front.arena import SdlArena
+
+    battle = arena(count=3)
+    screen = SdlArena(battle)
+    figures = screen.arena._figures(96, 27, font)
+
+    assert [figure.actor for figure in figures] == [*battle.enemies, battle.hero]
+    assert [figure.glyph for figure in figures] == [
+        enemy.glyph for enemy in battle.enemies
+    ] + [battle.hero.glyph]
+
+
+def test_the_command_panel_names_what_the_blade_does(app, font):
+    """The weapon's own wounds, beside the verb that swings it.
+
+    In the colours the room draws them in, so the menu and the monsters speak the
+    same vocabulary and the player learns it once -- and `( = X` when his hand is
+    empty, which is worth saying, because fighting bare-handed is a choice.
+    """
+    from types import SimpleNamespace
+
+    from neverdeads_revenge.desktop.screens.battle import STATUS_COLOURS
+    from neverdeads_revenge.desktop.theme import parse_style
+    from neverdeads_revenge.world.items import ITEMS
+
+    battle = arena(count=1)
+    screen = SdlArena(battle)
+
+    def panel():
+        buffer, _ = drawn(screen, app, font)
+        for row in buffer.cells:
+            text = "".join(cell.char for cell in row)
+            if "( = " in text:
+                return row, text
+        return [], ""
+
+    _, written = panel()
+    assert "( = X" in written, "a bare hand goes unmentioned"
+
+    blade = next(
+        one for one in ITEMS.values() if one.kind == "weapon" and one.inflicts
+    )
+    # A blade is anything with `inflicts` on it: the screen reads the slot, not
+    # the factory, so this is the whole of what it needs to be.
+    battle.state.player.equipment["weapon"] = SimpleNamespace(inflicts=blade.inflicts)
+
+    row, written = panel()
+    for key in blade.inflicts:
+        assert key in written, f"the blade's {key} is not named"
+        at = written.index(key)
+        inks = {row[col].style.fg.name() for col in range(at, at + len(key))}
+        assert parse_style(STATUS_COLOURS[key]).fg.name() in inks, (
+            f"{key} is not written in its own colour"
+        )
+
+
+def test_the_five_can_be_walked_across_as_well_as_down(app):
+    """The list is two columns: up and down move inside one, left and right take
+    the choice into the other -- and a jump that would land outside the list
+    stays where it is rather than wrapping round to somewhere unrelated."""
+
+    from neverdeads_revenge.sdl_front.arena import SdlArena
+
+    battle = arena(count=1)
+    screen = SdlArena(battle)
+    app.screens = [screen]
+    screen.arena.picking = True
+    rows = screen.arena._list_rows(app)
+
+    press(app, Qt.Key.Key_Down)
+    assert screen.arena.special == 1
+    press(app, Qt.Key.Key_Right)
+    assert screen.arena.special == 1 + rows, "the right arrow did not cross a column"
+    press(app, Qt.Key.Key_Left)
+    assert screen.arena.special == 1, "the left arrow did not come back"
+    screen.arena.special = 0
+    press(app, Qt.Key.Key_Left)
+    assert screen.arena.special == 0, "the choice wandered out of the list"
+
+
+def test_the_list_only_holds_what_he_has_learned(app, font):
+    """A list of names the player cannot use is a list of spoilers.
+
+    Learned is not the same question as *available*, and the menu needs both: a
+    trick spent in **this** fight is still on the list -- dimmed, because it is
+    his and it comes back next fight -- and a trick he has not reached yet is not
+    on it at all. What the player cannot have is not what the player is offered.
+    """
+    from neverdeads_revenge.sdl_front.arena import SdlArena
+    from neverdeads_revenge.game.actors import HEROES
+    from neverdeads_revenge.game.battle import Battle
+    from neverdeads_revenge.game.specials import LEFT_HAND
+    from neverdeads_revenge.game.state import start_run
+
+    state = start_run(HEROES["noxx"], 3, ultimate_level=7)
+    state.level = 2  # the knife, and nothing else
+    battle = Battle(state, state.enemies[:1])
+    screen = SdlArena(battle)
+    screen.arena.picking = True
+    buffer, _ = drawn(screen, app, font)
+    written = "".join(cell.char for row in buffer.cells for cell in row)
+
+    assert [one.key for one in battle.learned()] == [LEFT_HAND]
+    assert "THE LEFT HAND" in written, "the one he has learned is missing"
+    assert "ORB OF PTAMERA" not in written, "a trick he has not learned is on the list"
+
+
+def test_the_list_says_what_the_chosen_trick_does(app, font):
+    """The facts under the names, in the readable ink.
+
+    Scroll to a trick and the panel tells you what it does before you spend a
+    turn on it: the fight's own voice underneath is a voice, and a voice is not
+    an instruction.
+    """
+    from neverdeads_revenge.sdl_front.arena import SdlArena
+
+    battle = arena(count=1)
+    screen = SdlArena(battle)
+    screen.arena.picking = True
+    screen.arena.special = 2
+    buffer, _ = drawn(screen, app, font)
+
+    written = "".join(cell.char for row in buffer.cells for cell in row)
+    assert battle.specials()[2].effect in written, "the panel did not say what it does"
+    assert battle.specials()[2].blurb[:20] in written, "the panel lost its voice"
+
+
+def test_the_order_strip_does_not_jump_when_the_hero_swings(app):
+    """The turn in flight stays at the front of the strip while he swings.
+
+    The queue charges the hero for his turn *before* he takes it -- that is how
+    `_advance` finds him -- so a strip read straight off the paces loses him the
+    moment his blow lands and slides him back in when the room settles: the row
+    shifts a step left and then a step right again. This is that, pinned.
+    """
+    from neverdeads_revenge.sdl_front.arena import SdlArena
+
+    battle = arena(count=1)
+    # A monster that is slower than he is and survives the blow: then the round
+    # is his alone, and the strip has no honest reason to move -- which is the
+    # thing being pinned. (It passed before because the sword killed the viper
+    # outright, so the round *was* his alone; that is luck and not a rule.)
+    battle.enemies[0].stats.speed = 0.5
+    battle.enemies[0].stats.hp = 999
+    screen = SdlArena(battle)
+    screen._queue = []
+    screen._beat = 0.0
+    screen.arena.verb = 0
+    screen.arena._choose(app)
+
+    heads: list = []
+    for _ in range(80):
+        assert screen.arena._order, "the strip emptied itself"
+        heads.append(screen.arena._order[0])
+        if not screen.busy:
+            break
+        screen.step(1 / 30.0, app)
+
+    assert all(one is battle.hero for one in heads), (
+        f"the strip left him mid-swing: {[one.glyph for one in heads]}"
+    )
+
+
+def test_the_order_strip_moves_on_to_whoever_is_next(app):
+    """And it does move on: once the turn being taken is *taken*, the head is
+    whoever the queue says is up. Dropped up to and including them, so a turn
+    whose events are not all blows does not leave the strip one behind."""
+    from neverdeads_revenge.sdl_front.arena import SdlArena
+
+    battle = arena(count=1)
+    # A monster quick enough to act *after* him in the same round: with the
+    # floor's own slow ones the hero is up again immediately, and rightly so.
+    battle.enemies[0].stats.speed = 9.0
+    screen = SdlArena(battle)
+    screen._queue = []
+    screen._beat = 0.0
+    screen.arena.verb = 0
+    screen.arena._choose(app)
+
+    assert screen.arena._order and screen.arena._order[0] is battle.hero, "not his turn first"
+    head = screen.arena._order[0]
+    for _ in range(80):
+        screen.step(1 / 30.0, app)
+        if screen.arena._order and screen.arena._order[0] is not head:
+            break
+
+    assert screen.arena._order, "the strip emptied itself"
+    assert screen.arena._order[0] is battle.enemies[0], (
+        f"the strip is on {screen.arena._order[0].glyph}, not on the monster that acts next"
+    )
+
+
+def test_the_prologue_scrolls_and_a_hold_lets_it_go(app):
+
+
+    app.prologue_seen = False
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)
+    assert top(app) == "PrologueScreen"
+
+    screen = app.screens[-1]
+    before = screen.offset
+    press(app, Qt.Key.Key_Down)
+    assert screen.offset > before, "the story did not move"
+    press(app, Qt.Key.Key_Space)
+    assert screen.offset > before + 1, "space did not page it"
+
+    hold_enter(app, until="GameScreen")
+    assert top(app) == "GameScreen", "a proper hold did not let the premise go"
+
+
+def test_the_trick_is_picked_before_the_monster_is(app):
+    """The order every fight in this genre ever had: the move, and then the mark.
+
+    SPECIAL opens the five, taking one of the five opens the *arrow*, and the
+    arrow is what spends the turn. A trick chosen in a list and spent on whoever
+    happened to be standing under a cursor is a choice the player never made --
+    the panel is still the one that says what is being thrown, and the floor is
+    the one that says at whom.
+    """
+
+    from neverdeads_revenge.sdl_front.arena import SdlArena
+
+    battle = arena(count=3)
+    screen = SdlArena(battle)
+    screen._queue = []  # the opening round is not what this test is about
+    app.screens = [screen]
+
+    press(app, Qt.Key.Key_S, "s")
+    assert screen.arena.picking, "SPECIAL did not open the five"
+
+    press(app, Qt.Key.Key_Return)
+    assert not screen.arena.picking, "the list stayed open after a trick was taken"
+    assert screen.arena.aiming, "the trick was spent without a monster being picked"
+    assert screen.arena._picked == battle.specials()[0].key, "a different trick was armed"
+    assert not screen.busy, "the turn was spent before the arrow was laid on anyone"
+
+
+def test_the_voids_glass_closes_with_the_shadow():
+    """The reveal is drawn, not remembered: a wall across the floor is shown
+    while Atritas walks, and gone the moment he sinks back -- even though
+    nobody ever walked there."""
+    from neverdeads_revenge.desktop.render import _cell_content
+    from neverdeads_revenge.game.actions import Action, advance_world, perform_action
+    from neverdeads_revenge.game.actors import HEROES
+    from neverdeads_revenge.game.state import start_run
+    from neverdeads_revenge.world.tiles import Tile
+
+    state = start_run(HEROES["noxx"], 3, ultimate_level=1)
+    far = (state.dungeon_map.width - 2, state.dungeon_map.height - 2)
+    state.dungeon_map.set_tile(far, Tile.WALL)
+
+    perform_action(state, Action.ULTIMATE)
+    glyph, _ = _cell_content(far, state)
+    assert glyph == Tile.WALL.glyph, "the glass showed nothing"
+
+    for _ in range(40):
+        advance_world(state)
+    assert state.atritas is None
+
+    glyph, _ = _cell_content(far, state)
+    assert glyph == " ", "the glass outlived the shadow"
+
+
+def test_three_taps_dismiss_nothing(app):
+    """A hold is a hold. Three quick presses -- the thing a fidget does on the
+    way to a real hold -- used to walk straight through the premise, because a
+    terminal could only guess that a hold was over by silence. The desktop is
+    told when the key came up; taps bank nothing."""
+
+    app.prologue_seen = False
+    press(app, Qt.Key.Key_Return)
+    press(app, Qt.Key.Key_Return)
+    assert top(app) == "PrologueScreen"
+
+    for _ in range(3):
+        press(app, Qt.Key.Key_Return)
+        release(app, Qt.Key.Key_Return)
+
+    assert top(app) == "PrologueScreen", "taps walked through the premise"
+
+    # a hold still works, right after the taps
+    hold_enter(app, until="GameScreen")
+    assert top(app) == "GameScreen"
 
 

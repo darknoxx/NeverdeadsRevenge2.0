@@ -408,6 +408,8 @@ class ShopScreen(Screen):
         self.message = ""
         self.offers = []
         self.offset = 0
+        #: Filled by the first draw; a key before that must still find a pair.
+        self._body_size = (0, 0)
 
     def _restock(self, app) -> None:
         # A fresh book has never rolled its wild shelf, because the shelf only

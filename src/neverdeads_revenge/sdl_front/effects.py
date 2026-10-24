@@ -156,6 +156,10 @@ class SdlEffects:
             surface.blit(speck, (round(one.x), round(one.y)))
 
     # -- the shake ----------------------------------------------------------
+    def is_shaking(self) -> bool:
+        """Whether the glass is still moving under a blow."""
+        return self._shake > 0.0
+
     def shake(self, strength: float = 2.0, seconds: float = 0.2) -> None:
         """A blow landed: shake the frame that hard, for that long.
 
