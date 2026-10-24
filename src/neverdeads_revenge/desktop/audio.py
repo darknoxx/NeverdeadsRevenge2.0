@@ -397,7 +397,16 @@ class _Ring:
             # buffer is silence at the end, not a truncation.
             if len(self._buf) < len(frames):
                 self._buf += b"\x00" * (len(frames) - len(self._buf))
-            self._buf = bytearray(self._sum(bytes(self._buf), frames))
+            queued = bytes(self._buf)
+
+        # Mix outside the lock. The device's callback drains this ring on its own
+        # thread, and holding the lock through a Python sample loop was long
+        # enough to starve it into a dropout. The worker is the only writer, so
+        # the buffer can only have *shrunk* while we were away.
+        mixed = self._sum(queued, frames)
+        with self._lock:
+            drained = len(queued) - len(self._buf)
+            self._buf = bytearray(mixed[drained:])
 
     @staticmethod
     def _sum(queued: bytes, arriving: bytes) -> bytes:
