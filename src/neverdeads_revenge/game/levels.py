@@ -67,9 +67,7 @@ __all__ = [
 #: be eighteen -- and the ceiling is a promise no run has to reach.
 LEVEL_COSTS: tuple[int, ...] = (
     3, 4, 5, 6, 7, 8, 9, 11, 12, 14,  # levels 2 to 11
-    15, 17, 19, 20, 22, 24, 26, 28, 30, 32,  # 12 to 21
-    34, 36, 38, 40, 43, 45, 48, 50, 53, 55,  # 22 to 31
-    58, 61, 63, 66, 69, 72, 75, 78, 81, 84,  # 32 to 41
+    15, 17, 19, 20, 22, 24, 26, 28, 30,  # 12 to 20
 )
 
 #: The level a run stops teaching at.

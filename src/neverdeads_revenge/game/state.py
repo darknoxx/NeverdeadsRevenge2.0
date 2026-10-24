@@ -59,6 +59,7 @@ from .gifts import GIFTS
 from .lore import PAGE_COUNT
 from .npcs import NPCS
 from .shop import META_UPGRADES, Loadout
+from .text import the as _the
 
 __all__ = [
     "LogEntry",
@@ -1357,11 +1358,6 @@ def _apply_upgrades(state: GameState, upgrades: dict[str, int]) -> None:
     # A run starts whole. Bought health you do not have is not bought health,
     # and the blood bargain's whole point is that the missing part is gone.
     player.stats.hp = player.stats.max_hp
-
-
-def _the(name: str) -> str:
-    """``the`` before a name that needs one, and not before one that has it."""
-    return name if name.startswith("the ") else f"the {name}"
 
 
 def _receive(state: GameState, template) -> None:

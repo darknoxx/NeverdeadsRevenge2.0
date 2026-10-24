@@ -15,7 +15,6 @@ saying something and this is how to hear it.
 
 from __future__ import annotations
 
-import random
 import sys
 from statistics import mean, median
 
@@ -26,7 +25,7 @@ from neverdeads_revenge.game.state import start_run
 __all__ = ["report", "simulate"]
 
 #: Who the fights are fought with, and how deep the floors go.
-HEROES_TO_TRY = ("noxx", "yeti", "walkyrion")
+HEROES_TO_TRY = ("noxx", "yeti", "walkyrion", "inferno")
 DEPTHS = (1, 3, 5, 7, 9)
 
 
@@ -42,7 +41,7 @@ def _meet_something(state):
     living = [enemy for enemy in state.enemies if enemy.stats.alive]
     if not living:
         return False
-    enemy = random.choice(living)
+    enemy = state.rng.pick(living)
     for direction in Direction:
         if direction is Direction.NONE:
             continue
