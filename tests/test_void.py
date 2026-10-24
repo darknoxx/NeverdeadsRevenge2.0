@@ -7,7 +7,6 @@ here, because each of them is also the edge the player measures it by.
 
 from __future__ import annotations
 
-import pytest
 
 from neverdeads_revenge.core.direction import chebyshev
 from neverdeads_revenge.game.actors import ActorKind, ENEMIES, make_enemy
@@ -40,7 +39,6 @@ def _let_it_strike(state) -> None:
     over rather than rolling anything on the map. One hero turn is all it takes
     for the round to come round to the monster.
     """
-    from neverdeads_revenge.game.actions import resolve_player_attack
     from neverdeads_revenge.game.battle import ATTACK, open_fight
 
     fight = open_fight(state)
@@ -85,7 +83,7 @@ def test_the_void_refuses_the_low_levels():
     state.level = 1  # the start; the void answers at ten
 
     before_turns = state.total_turns
-    result = perform_action(state, Action.ULTIMATE)
+    perform_action(state, Action.ULTIMATE)
 
     assert state.atritas is None
     assert state.ultimate_available is True
@@ -112,7 +110,7 @@ def test_a_testrun_runs_answer_early():
     """`--testrun` lowers the gate so a test can hear the whole song."""
     state = _run(ultimate_level=1)
 
-    result = perform_action(state, Action.ULTIMATE)
+    perform_action(state, Action.ULTIMATE)
     # Consumes a turn: the scheduler answers the cast, so the shadow is real.
     assert state.atritas is not None, "the void refused its one ask"
 
@@ -213,7 +211,6 @@ def test_a_bump_against_the_shadow_costs_nothing():
 
     before = state.total_turns
     logs = {entry.text for entry in state.log}
-    from neverdeads_revenge.core.direction import Direction as _D
 
     perform_action(state, _move_towards(atritas.position, state.player.position))
     logs |= {entry.text for entry in state.log}
@@ -292,7 +289,7 @@ def test_the_shadow_blinks_beside_its_prey():
 
     _wait(state, 3)  # the first swing lands on the shadow's own beat
 
-    assert not enemy.alive is None  # it swung either way
+    assert enemy.alive is not None  # it swung either way
     assert chebyshev(atritas.position, enemy.position) == 1, (
         f"the shadow struck from {atritas.position}, not from beside its prey"
     )
@@ -954,7 +951,6 @@ def test_bleeding_edge_makes_a_crits_wound_as_deep_as_the_bloodline():
     ceiling the wounds have.
     """
     from neverdeads_revenge.game.actors import HEROES
-    from neverdeads_revenge.game.actions import perform_action
     from neverdeads_revenge.game.state import start_run
     from neverdeads_revenge.world.tiles import Tile
 

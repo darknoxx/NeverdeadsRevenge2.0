@@ -21,7 +21,7 @@ from neverdeads_revenge.game.shop import (
 from neverdeads_revenge.world.items import ITEMS
 
 from ..art import Placed, weapon_icon
-from ..chrome import ASH, BONE, BLOOD, PURPLE, box, menu, rule
+from ..chrome import ASH, BONE, BLOOD, PURPLE, box, rule
 from ..padmap import PACK as PACK_MAP
 from ..theme import parse_style
 from .base import Screen

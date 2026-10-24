@@ -20,7 +20,7 @@ import sys
 from statistics import mean, median
 
 from neverdeads_revenge.game.actors import HEROES
-from neverdeads_revenge.game.battle import ATTACK, Battle
+from neverdeads_revenge.game.battle import ATTACK
 from neverdeads_revenge.game.state import start_run
 
 __all__ = ["report", "simulate"]

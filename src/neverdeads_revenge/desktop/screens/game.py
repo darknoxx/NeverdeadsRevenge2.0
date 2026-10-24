@@ -24,7 +24,6 @@ from .base import Screen
 from .pages import the_page, write_the_armour, write_the_page, write_the_weapon
 from .dialogs import (
     KindlyScreen,
-    FAME,
     OPEN,
     ChestScreen,
     NpcScreen,
@@ -292,7 +291,6 @@ class GameScreen(Screen):
         into once the run is over.
         """
         from neverdeads_revenge.game.gifts import gift_by_key
-        from neverdeads_revenge.game.shop import describe_item
         from neverdeads_revenge.world.items import ITEMS
 
         from ..art import curse_icon, gift_icon

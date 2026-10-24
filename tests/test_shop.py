@@ -356,7 +356,7 @@ def test_greed_doubles_the_coin_and_toughens_the_monsters():
     assert greedy.enemies, "the floor should still have monsters on it"
     assert all(
         enemy.max_hp > plain_enemy.max_hp
-        for enemy, plain_enemy in zip(greedy.enemies, plain.enemies)
+        for enemy, plain_enemy in zip(greedy.enemies, plain.enemies, strict=True)
     )
 
 

@@ -1613,7 +1613,6 @@ class SdlApp:
         settings are written down as they change, so the choice survives the
         window.
         """
-        import pygame
 
         if name == "f11":
             self._toggle_fullscreen()

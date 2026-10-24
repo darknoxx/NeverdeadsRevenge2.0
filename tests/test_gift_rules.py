@@ -11,7 +11,6 @@ that keeps it fair: what happens *without* it.
 
 from __future__ import annotations
 
-import pytest
 
 from neverdeads_revenge.core.direction import Direction
 from neverdeads_revenge.game import actions as actions_module
@@ -317,6 +316,10 @@ def test_the_circle_holds_for_one_blow_only():
     state.player.stats.hp = 500
     enemy = _beside(state, damage=(5, 5), hp=999)
     enemy.stats.speed = state.player.speed * 0.9
+    # The second blow has to *land* for the circle to be the thing that failed:
+    # a miss would leave the same empty log for a different reason.
+    enemy.stats.accuracy = 99
+    state.player.stats.evasion = 0
 
     fight = open_fight(state, enemy)
     fight.choose(ATTACK, fight.living_enemies()[0])

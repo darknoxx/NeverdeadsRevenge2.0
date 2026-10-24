@@ -44,7 +44,13 @@ pyinstaller --noconfirm --clean packaging/linux/neverdeads_revenge.spec
 rm -rf "$appdir"
 install -d "$appdir/usr/bin" "$appdir/usr/share/icons/hicolor/256x256/apps"
 cp -a "dist/$name/." "$appdir/usr/bin/"
-install -m 0644 "$here/$slug.desktop" "$appdir/$slug.desktop"
+# One desktop entry, generated from the same template the installer fills in:
+# the AppImage's Exec is the frozen binary, the installer's is its launcher.
+sed -e "s|@NAME@|Neverdead's Revenge 2.0|g" \
+    -e "s|@EXEC@|$name|g" \
+    -e "s|@SLUG@|$slug|g" \
+    "$root/assets/$slug.desktop.in" > "$appdir/$slug.desktop"
+chmod 0644 "$appdir/$slug.desktop"
 install -m 0644 "$here/$slug.png" "$appdir/$slug.png"
 install -m 0644 "$here/$slug.png" \
     "$appdir/usr/share/icons/hicolor/256x256/apps/$slug.png"

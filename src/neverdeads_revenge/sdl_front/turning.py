@@ -16,7 +16,7 @@ the arena was built on.
 from __future__ import annotations
 
 from ..desktop.screens.base import Screen
-from ..desktop.screens.encounter import BLOW, EncounterScreen, Letter, Turn
+from ..desktop.screens.encounter import BLOW, EncounterScreen, Letter
 from ..desktop.theme import parse_style
 
 __all__ = ["SdlTurning"]

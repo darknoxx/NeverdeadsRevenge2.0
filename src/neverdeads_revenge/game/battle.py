@@ -36,7 +36,6 @@ from .actions import (
     resolve_enemy_attack,
     resolve_player_attack,
     tick_statuses,
-    ultimate_refusal,
 )
 from .actors import NOTARY_BILL, NOTARY_MINIMUM, Actor
 from .combat import AttackOutcome

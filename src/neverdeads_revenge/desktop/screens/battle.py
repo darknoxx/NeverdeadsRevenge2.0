@@ -42,8 +42,6 @@ from ...game.battle import (
 )
 from ...game.specials import (
     PAINT_THE_WALLS_RED,
-    SPECIALS,
-    Special,
     special_by_key,
 )
 from ...game.statuses import status_by_key
@@ -924,10 +922,6 @@ class BattleScreen(Screen):
             return 0.0
         return max(0.0, 1.0 - age / GONE_LIFE)
 
-    def _worn(self, actor) -> list[str]:
-        """Which wounds somebody is wearing, in a stable order."""
-        return sorted(key for key in actor.statuses if key in STATUS_ICONS)
-
     def _knockback(self, figure: Staged, cell_h: int) -> int:
         """How far up the room a shoved figure is, right now.
 
@@ -1001,10 +995,7 @@ class BattleScreen(Screen):
         """The grid this screen is drawn into: its own record, or the app's."""
         if self._size is not None:
             return self._size
-        buffer = getattr(app, "_buffer", None)
-        if buffer is None:
-            return (0, 0)
-        return (buffer.cols, buffer.rows)
+        return (int(getattr(app, "cols", 0)), int(getattr(app, "rows", 0)))
 
     def key(self, name: str, event, app) -> bool:
         if name == "m":
@@ -2263,7 +2254,7 @@ class BattleScreen(Screen):
         figure = self._figure_of(actor, app)
         if figure is None:
             return None
-        cell_w, cell_h = app.font.cell_w, app.font.cell_h
+        _, cell_h = app.font.cell_w, app.font.cell_h
         # Rounded, because a figure may stand on half a row and a pixel a
         # painter is handed is a whole one.
         return (figure.cx, int(figure.row * cell_h))

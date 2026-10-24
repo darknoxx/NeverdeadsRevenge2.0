@@ -30,8 +30,6 @@ from neverdeads_revenge.game.battle import (
     SIPHON,
     Battle,
     Flourish,
-    Guarded,
-    Mended,
     Over,
     Said,
     Struck,
@@ -320,7 +318,6 @@ def test_nothing_to_drink_is_not_a_turn():
     state.inventory.clear()
     state.player.stats.hp = max(1, state.player.max_hp // 2)
     battle = Battle(state, take(state))
-    hp = state.player.stats.hp
 
     events = battle.choose(ITEM)
 
@@ -482,7 +479,7 @@ def test_a_fight_takes_whoever_is_standing_with_it():
     trigger = enemies[0]
     hero = state.player.position
     # Two of them near the hero, and one on the far side of the floor.
-    for enemy, offset in zip(enemies[1:], ((1, 0), (0, 1))):
+    for enemy, offset in zip(enemies[1:], ((1, 0), (0, 1)), strict=False):
         enemy.position = (hero[0] + offset[0], hero[1] + offset[1])
     far = state.enemies[4] if len(state.enemies) > 4 else None
     if far is not None:
@@ -816,7 +813,7 @@ def test_the_roundhouse_takes_the_whole_room():
     battle.choose(SPECIAL, battle.enemies[0], special=ROUNDHOUSE)
 
     assert all(
-        enemy.stats.hp < was for enemy, was in zip(battle.enemies, before)
+        enemy.stats.hp < was for enemy, was in zip(battle.enemies, before, strict=True)
     ), "one of them was out of the spin"
 
 
@@ -1111,7 +1108,9 @@ def test_the_kill_lines_wait_for_the_killing_blow():
     level = [line for line in said if line.text.startswith("Level 2")]
     assert level, "the kill did not pay a level"
     assert all(line.waits for line in level), "the level line was read at the swing"
-    killed = [line for line in said if "kill" in line.text]
+    # The verb changes with the size of the blow ("kill", "obliterate"), so the
+    # line is found by the monster it names, not by one spelling of the verb.
+    killed = [line for line in said if "ghoul" in line.text]
     assert killed and all(line.waits for line in killed), "the kill line ran ahead"
 
 
@@ -1180,7 +1179,7 @@ def test_the_five_arrive_with_levels():
         ]
 
     # One name a level, two to eight, in the order the menu reads them.
-    for level, expected in enumerate(SPECIALS, start=2):
+    for level, _ in enumerate(SPECIALS, start=2):
         assert names_at(level) == [one.key for one in SPECIALS[: level - 1]], (
             f"level {level} did not hand over exactly one more trick"
         )

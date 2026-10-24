@@ -106,7 +106,6 @@ def test_a_grid_of_cells_paints_where_the_cells_are():
     and that is what is asked.
     """
     font, paint = _sdl()
-    pygame = __import__("pygame")
 
     grid = PatternBuffer(8, 3)
     grid.put(0, 0, "#", parse_style("red"))
@@ -1598,7 +1597,6 @@ def test_a_blade_that_has_not_been_taken_up_has_no_page():
 def test_taking_a_blade_up_writes_its_page_and_says_so_on_the_card():
     """One card, not two: the pickup card is where the blade is introduced, so
     the page is announced in the same breath."""
-    from neverdeads_revenge.game.actors import HEROES
     from neverdeads_revenge.sdl_front.app import SdlApp
     from neverdeads_revenge.world.items import ITEMS, make_item
 
@@ -2101,7 +2099,7 @@ def test_a_saved_run_can_be_picked_back_up():
     from neverdeads_revenge.sdl_front.app import SdlApp
 
     state = start_run(HEROES["noxx"], 3)
-    state.dungeon_map  # built with the run; nothing else needed to save it
+    _ = state.dungeon_map  # built with the run; nothing else needed to save it
     save_run(dump(state))
 
     app = SdlApp(seed=3)
@@ -2623,7 +2621,6 @@ def test_a_glass_key_says_what_it_did():
     same row. Either way it matters: a CRT setting that changed with no
     acknowledgement is a key that might not have worked.
     """
-    import time
 
     import pygame
 
@@ -2782,7 +2779,7 @@ def test_the_arena_can_be_one_painting_instead_of_tiles():
     arena = painted.screens[-1]
     cols, rows = arena.arena._dims(painted)
     areas = arena.arena._areas(cols, rows)
-    cell_w, cell_h = painted.font.cell_w, painted.font.cell_h
+    _, cell_h = painted.font.cell_w, painted.font.cell_h
     _, wall_y, _, _ = areas["wall"]
     _, ground_y, _, ground_h = areas["ground"]
     box = (
@@ -2878,7 +2875,7 @@ def test_the_whole_stage_can_be_lifted_by_a_row_at_a_time():
     finally:
         rules.STAGE_LIFT = was
     assert len(here) == len(floor)
-    for lifted, sat in zip(here, floor):
+    for lifted, sat in zip(here, floor, strict=True):
         assert lifted.actor is sat.actor
         moved = sat.row - lifted.row
         # Together, where the room allows it. A figure pinned to the painting's
@@ -3003,7 +3000,7 @@ def test_the_paintings_torches_are_lit_and_the_light_breathes():
             # each clock, and resampling it can land one unit under the other. Two
             # frames of the same *light* may differ by a rounding; they may not
             # differ by the light being taken away.
-            assert all(a >= b - 3 for a, b in zip(now, was)), (
+            assert all(a >= b - 3 for a, b in zip(now, was, strict=True)), (
                 f"the light darkened ({x}, {y}): {was} -> {now}"
             )
 
@@ -3179,7 +3176,6 @@ def test_the_almanac_has_a_wardrobe_tab_for_the_coats():
 
 
 def test_every_coat_page_is_locked_until_the_coat_is_worn():
-    from neverdeads_revenge.game.wardrobe import ARMOURS
 
     app = _app_with_a_run()
     app.open_almanac()
@@ -3382,7 +3378,6 @@ def test_a_figure_can_stand_between_rows():
     hero = next(one for one in figures if one.actor is arena.battle.hero)
     assert len(monsters) == 3, "this is the three-monster staging"
 
-    middle, left, right = monsters[1], monsters[0], monsters[2]
     # Asked with the room's horizon *out* of the way, because that line can pin the
     # middle lane -- and a pinned row is a row on the artwork, not a row of the
     # staging. What this test owns is the *shape*: half a row of nudge for the
@@ -3425,7 +3420,6 @@ def test_the_panels_are_painted_over_the_hero_and_not_under_him():
     takes his shadow with him in the same breath, which is the other half of the
     promise -- a shadow inside the band would be a shadow on the panel.
     """
-    import pygame
 
     from neverdeads_revenge.sdl_front.arena import SdlArena
     from neverdeads_revenge.sdl_front.app import SdlApp
@@ -3552,7 +3546,6 @@ def test_the_composition_is_the_same_at_every_window_shape():
     the monsters actually stand on. Both halves are asked here, because one without
     the other is a room that looks right and stands in the wrong place.
     """
-    import pygame
 
     from neverdeads_revenge.desktop.screens.battle import (
         HERO_CLEARANCE,
@@ -3690,7 +3683,6 @@ def test_the_torches_burn_where_the_painting_put_them():
     pixels the glow adds are where the artwork's torch is, not where some other
     arithmetic remembers it.
     """
-    import pygame
 
     from neverdeads_revenge.sdl_front.app import SdlApp
     from neverdeads_revenge.sdl_front.paint import load

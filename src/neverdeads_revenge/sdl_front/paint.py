@@ -16,7 +16,7 @@ from pygame import SRCALPHA, Rect, Surface
 
 from ..desktop import art
 from ..desktop.pattern import PatternBuffer
-from ..desktop.theme import BACKGROUND, Colour
+from ..desktop.theme import BACKGROUND
 from .font import SdlFont
 
 __all__ = ["load", "paint"]

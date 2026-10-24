@@ -68,7 +68,7 @@ SEED = 20261018
 
 
 def _lerp(a, b, t: float):
-    return tuple(round(x + (y - x) * t) for x, y in zip(a, b))
+    return tuple(round(x + (y - x) * t) for x, y in zip(a, b, strict=True))
 
 
 def _shade(colour, factor: float):
@@ -298,7 +298,7 @@ def draw(seed: int = SEED) -> pygame.Surface:
     floor_y = int(HEIGHT * FLOOR_AT)
     back_wall(surface, rng)
     weather(surface, rng)
-    for doorway_x, column_x in zip(DOORWAY_X, COLUMN_X):
+    for doorway_x, column_x in zip(DOORWAY_X, COLUMN_X, strict=True):
         doorway(surface, int(WIDTH * doorway_x), 132, int(HEIGHT * 0.13), floor_y)
         pilaster(
             surface,

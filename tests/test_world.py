@@ -9,6 +9,7 @@ from neverdeads_revenge.world.generator import (
     ESCAPE_DEPTH,
     Rect,
     _reachable,
+    enemy_count,
     generate_floor,
 )
 from neverdeads_revenge.world.map import DungeonMap
@@ -684,3 +685,13 @@ def test_drawing_a_wall_does_not_make_one():
             drawn += 1
             assert not dungeon.is_walkable(pos), pos
     assert drawn, "nothing was drawn as wall, so this proved nothing"
+
+
+def test_the_spring_field_and_the_budget_are_what_they_say():
+    """A floor reports its first spring, and never more monsters than its budget."""
+    for seed in range(12):
+        floor = generate_floor(Rng(seed), depth=6)
+        assert (floor.spring is None) == (not floor.springs), seed
+        if floor.springs:
+            assert floor.spring == floor.springs[0], seed
+        assert len(floor.spawn_points) <= enemy_count(6), seed

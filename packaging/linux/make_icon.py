@@ -2,6 +2,7 @@
 
 Run it once with the repository's own virtualenv, and commit the result:
 
+    ./.venv/bin/pip install PySide6   # a one-off tool, not a runtime dependency
     ./.venv/bin/python packaging/linux/make_icon.py
 
 An AppImage wants a PNG whose name matches the ``Icon=`` line of its desktop

@@ -132,8 +132,8 @@ class AlmanacScreen(Screen):
         answer is the page, not the list it is in.
         """
         pages = self._entries()
-        for number, page in enumerate(pages):
-            if page.key == key:
+        for number, entry in enumerate(pages):
+            if entry.key == key:
                 self._set_cursor(number)
                 self.focus = "page"
                 self.detail_offset = 0

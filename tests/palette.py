@@ -42,10 +42,12 @@ def truecolor(name: str) -> tuple[int, int, int]:
     try:
         return NAMED[name]
     except KeyError:
-        raise AssertionError(f"no truecolour for {name!r}; add it to tests/palette.py")
+        raise AssertionError(
+            f"no truecolour for {name!r}; add it to tests/palette.py"
+        ) from None
 
 
 def distance(left: str, right: str) -> int:
     """Squared RGB distance, the same measure the palette tests use."""
     a, b = truecolor(left), truecolor(right)
-    return sum((x - y) ** 2 for x, y in zip(a, b))
+    return sum((x - y) ** 2 for x, y in zip(a, b, strict=True))

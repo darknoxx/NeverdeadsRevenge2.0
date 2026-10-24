@@ -7,7 +7,6 @@ ten buttons, two sticks and a hat, and the same names the screens already answer
 
 from __future__ import annotations
 
-import json
 
 import pytest
 

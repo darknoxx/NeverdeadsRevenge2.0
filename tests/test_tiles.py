@@ -18,7 +18,6 @@ from pathlib import Path
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
-import pytest  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 MAKE_TILES = ROOT / "tools" / "make_tiles.py"
@@ -147,7 +146,7 @@ def test_the_litter_is_scattered_and_not_counted():
     gaps = []
     for row in crowded:
         columns = [along for along, there in floor if there == row]
-        gaps.extend(second - first for first, second in zip(columns, columns[1:]))
+        gaps.extend(second - first for first, second in zip(columns, columns[1:], strict=False))
     assert len(set(gaps)) > 3, "the bones land on a lattice"
     assert min(gaps) < FLOOR_BONES // 2, "nothing ever lands near anything else"
 

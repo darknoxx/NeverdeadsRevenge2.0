@@ -34,7 +34,7 @@ from .pattern import BLANK, PatternBuffer
 from .chrome import ASH, rule
 from ..game.difficulty import BASE_PACK_SLOTS
 from ..game.shop import META_UPGRADES
-from .theme import BACKGROUND, Colour, Style, parse_style
+from .theme import Colour, Style, parse_style
 
 __all__ = [
     "SIDEBAR",
@@ -46,13 +46,11 @@ __all__ = [
     "screen_point",
     "draw_game",
     "log_text",
-    "paste_log",
     "sidebar_text",
     "Slot",
     "MAX_PACK_SLOTS",
     "SLOT_SIZE",
     "SLOT_COLUMNS",
-    "paste_sidebar",
     "draw_title",
     "hud_lines",
     "marks_names",
@@ -174,7 +172,7 @@ def draw_game(buffer: PatternBuffer, state: GameState, zoom: bool = False) -> No
     """The whole play screen: map, sidebar, and the bottom strip.
 
     The log is *not* drawn here: it is a smaller face than the rest of the
-    frame, so it is pasted on afterwards by :func:`paste_log`, straight onto the
+    frame, so it is drawn afterwards by the small face pass, straight onto the
     rendered image. What this leaves behind is the panel the log sits on.
 
     ``zoom`` leaves the field out of the cells entirely: the front end paints it
@@ -341,7 +339,7 @@ def _draw_sidebar(buffer, state, area) -> None:
 
     Everything under that rule belongs to the small face -- the glance groups
     and the legend -- which is pasted straight onto the frame afterwards
-    (:func:`paste_sidebar`). The old blank row between stats and rule is gone
+    (:func:`sidebar_text`). The old blank row between stats and rule is gone
     too: a rule drawn directly under the last stat stands closer than a
     paragraph gap, and the panel was half air.
     """

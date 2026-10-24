@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .actors import ENEMIES, EnemyTemplate
+from .actors import ENEMIES, NOTARY_BILL, NOTARY_MINIMUM, EnemyTemplate
 
 __all__ = ["Entry", "ENTRIES", "entry", "stat_lines", "title_of"]
 
@@ -171,7 +171,8 @@ _LORE: dict[str, tuple[str, str, str, str, str]] = {
     "notary": (
         "notary",
         "floor 5",
-        "Its health is the floor's kills: 12, plus 6 for every kill already made here.",
+        f"Its health is the floor's kills: max({NOTARY_MINIMUM}, "
+        f"{NOTARY_BILL} x kills already made here).",
         "Kill it before the floor is cleared. Afterwards it is a wall with your name on it.",
         "The house keeps books. This is what turns the pages: a small, patient thing with ink on its fingers. It is paid in deaths — the more of the house's guests you have already dismissed, the more of a case it has against you.",
     ),
@@ -277,7 +278,9 @@ def stat_lines(page: Entry) -> tuple[str, str, str]:
     template: EnemyTemplate = ENEMIES[page.key]
     stats = template.stats
     health = (
-        "HP 12 + 6 a kill" if page.key == "notary" else f"HP {stats.max_hp}"
+        f"HP max({NOTARY_MINIMUM}, {NOTARY_BILL} x kills)"
+        if page.key == "notary"
+        else f"HP {stats.max_hp}"
     )
     return (
         f"{health}   damage {stats.damage[0]}-{stats.damage[1]}   speed {stats.speed:.2f}",

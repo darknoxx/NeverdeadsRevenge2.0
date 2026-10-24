@@ -975,6 +975,9 @@ ENEMIES: dict[str, EnemyTemplate] = {
         # Never rolled: the floor spawns it deliberately, or not at all. See
         # ``world/generator.py``.
         weight=0.0,
+        # It only starts hunting from the fifth floor down, which is what its
+        # page has always said; the weight is what keeps it out of the roll.
+        min_depth=5,
     ),
     # -- the ones that ask a question instead of hitting harder ---------------
     #

@@ -53,8 +53,10 @@ def test_a_page_reads_its_numbers_off_the_monster_that_is_in_play():
 def test_the_notarys_page_says_it_bills_the_floor():
     """Its health is a formula, so a page that printed the template's sixteen
     would be the one page in the book that lied."""
+    from neverdeads_revenge.game.actors import NOTARY_BILL, NOTARY_MINIMUM
+
     first, _second, _third = bestiary.stat_lines(bestiary.entry("notary"))
-    assert "a kill" in first
+    assert f"max({NOTARY_MINIMUM}, {NOTARY_BILL}" in first
 
 
 def test_every_page_has_a_rule_and_a_way_to_answer_it():
@@ -96,3 +98,12 @@ def test_the_book_outlives_the_run(tmp_path):
     save_meta(progress, path)
 
     assert load_meta(path).bestiary == ["ghoul"]
+
+
+def test_the_notary_page_quotes_the_formula_the_floor_uses():
+    from neverdeads_revenge.game.actors import NOTARY_BILL, NOTARY_MINIMUM
+    from neverdeads_revenge.game.bestiary import entry, stat_lines
+
+    page = entry("notary")
+    assert f"max({NOTARY_MINIMUM}, {NOTARY_BILL}" in page.rule
+    assert f"HP max({NOTARY_MINIMUM}, {NOTARY_BILL}" in stat_lines(page)[0]

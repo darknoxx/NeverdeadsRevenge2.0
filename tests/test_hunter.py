@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from neverdeads_revenge.core.direction import chebyshev
 from neverdeads_revenge.core.rng import Rng
-from neverdeads_revenge.game.actions import advance_world, take_turn
+from neverdeads_revenge.game.actions import take_turn
 from neverdeads_revenge.game.actors import ENEMIES, HEROES, NOXX, make_enemy
 from neverdeads_revenge.game.gifts import GIFTS
 from neverdeads_revenge.game.state import start_run

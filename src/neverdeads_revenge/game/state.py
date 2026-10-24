@@ -32,7 +32,6 @@ from .actors import (
     Actor,
     ActorKind,
     Hero,
-    make_atritas,
     make_enemy,
     make_hero,
     make_npc,
@@ -57,8 +56,8 @@ from .difficulty import (
     potency,
 )
 from .gifts import GIFTS
-from .lore import PAGE_COUNT, numeral
-from .npcs import NPCS, Npc, npc_by_key
+from .lore import PAGE_COUNT
+from .npcs import NPCS
 from .shop import META_UPGRADES, Loadout
 
 __all__ = [

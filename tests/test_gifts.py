@@ -8,9 +8,8 @@ number off a table.
 
 from __future__ import annotations
 
-import pytest
 
-from neverdeads_revenge.game.actions import Action, advance_world, perform_action
+from neverdeads_revenge.game.actions import Action, perform_action
 from neverdeads_revenge.game.actors import ENEMIES, NOXX, make_enemy
 from neverdeads_revenge.game.curses import CURSES
 from neverdeads_revenge.game.gifts import GIFTS, gift_by_key

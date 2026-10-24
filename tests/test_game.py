@@ -590,7 +590,6 @@ def test_crit_rate_is_about_right():
 
 def test_crit_multiplies_damage():
     hero = make_hero(NOXX, (0, 0))
-    target = Actor("t", ActorKind.ENEMY, Stats(max_hp=9999, hp=9999, armor=0), (1, 0))
     rng = Rng(3)
     plain, crits = [], []
     for _ in range(3000):
@@ -750,7 +749,7 @@ def test_the_armour_trait_actually_stops_damage():
     apply_revenge(unarmoured, 0)
     apply_revenge(yeti, yeti.trait.cap)
 
-    before_plain, before_armoured = unarmoured.hp, yeti.hp
+    before_plain = unarmoured.hp
     rng_plain, rng_armoured = Rng(7), Rng(7)
     for _ in range(60):
         attack(ghoul, unarmoured, rng_plain)
@@ -1354,7 +1353,7 @@ def test_wither_takes_a_quarter_of_your_health_for_good():
     from neverdeads_revenge.game.curses import CURSES
 
     state = start_run(NOXX, seed=1)
-    before_hp, before_max = state.player.hp, state.player.max_hp
+    before_max = state.player.max_hp
 
     state.add_curse(CURSES["wither"])
 
@@ -1548,7 +1547,6 @@ def test_a_floor_with_every_price_paid_holds_no_chests():
 def test_a_wraiths_touch_never_repeats_a_curse_you_carry():
     """Same reason as the chest: the touch is meant to leave something *new*
     behind, and half of the four touch curses do not stack."""
-    from neverdeads_revenge.game.actions import take_turn
     from neverdeads_revenge.game.curses import CURSES, TOUCH_CURSES
 
     state = start_run(NOXX, seed=3)
@@ -1605,7 +1603,6 @@ def test_the_question_names_the_price_and_not_the_reward():
 
 
 def test_opening_pays_the_price_and_hands_over_the_reward():
-    from neverdeads_revenge.game.curses import CURSES
 
     state = start_run(NOXX, seed=1)
     _put_a_chest(state, curse="wither", contents="edge")
@@ -1820,7 +1817,6 @@ def test_equipment_armour_actually_stops_a_hit():
     """``Actor.hurt`` has to pass the worn armour down, not just report it."""
     state = start_run(NOXX, seed=1)
     player = state.player
-    ghoul = make_enemy(ENEMIES["ghoul"], (1, 0))
 
     bare = make_hero(NOXX, (0, 0))
     player.equipment["armour"] = make_item(ITEMS["hide"])
@@ -2452,7 +2448,6 @@ def test_only_the_wraith_leaves_a_curse_behind():
 
 
 def test_a_wraiths_touch_can_leave_a_curse():
-    from neverdeads_revenge.game.actions import take_turn
 
     state = start_run(NOXX, seed=3)
     wraith = _wraith_beside(state)
@@ -2491,7 +2486,6 @@ def test_a_missed_touch_leaves_nothing():
 def test_the_wraiths_touch_is_never_wither():
     """A quarter of your health taken by a random blow in a corridor is not a
     price, it is a mugging. WITHER belongs on a chest, where it was read first."""
-    from neverdeads_revenge.game.actions import take_turn
     from neverdeads_revenge.game.curses import TOUCH_CURSES
 
     assert "wither" not in TOUCH_CURSES
@@ -2514,7 +2508,6 @@ def test_the_wraiths_touch_is_never_wither():
 def test_the_touch_is_rare():
     """Rare enough that a run can pass without it, often enough that a wraith is
     something you would rather not be touched by."""
-    from neverdeads_revenge.game.actions import take_turn
 
     hits = 0
     cursed = 0
@@ -2535,7 +2528,6 @@ def test_the_touch_is_rare():
 
 def test_a_killing_blow_does_not_curse_a_corpse():
     """The player is already dead. Cursing them is one more line nobody reads."""
-    from neverdeads_revenge.game.actions import take_turn
 
     state = start_run(NOXX, seed=3)
     wraith = _wraith_beside(state)
@@ -2682,7 +2674,6 @@ def test_fame_and_the_nameless_run_are_both_wagers():
 
 def test_taking_fame_pays_the_price_and_leaves_the_reward():
     """The curse is taken, the loot is not, and the name goes on the run."""
-    from neverdeads_revenge.world.items import ITEMS, make_chest
 
     state = start_run(NOXX, seed=1)
     _put_a_chest(state, curse="dim", contents="edge")

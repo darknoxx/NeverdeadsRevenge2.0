@@ -118,22 +118,6 @@ def _literals_in_the_code() -> set[str]:
                     if arg.value:
                         named.add(arg.value)
     return named
-    for path in sorted(source.rglob("*.py")):
-        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-            if not isinstance(node, ast.Call):
-                continue
-            func = node.func
-            called = (
-                func.attr
-                if isinstance(func, ast.Attribute)
-                else getattr(func, "id", None)
-            )
-            if called != "play":
-                continue
-            for arg in node.args:
-                if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
-                    if arg.value:
-                        named.add(arg.value)
 
     assert len(named) > 20, f"the sweep found almost nothing: {sorted(named)}"
     for name in sorted(named):
@@ -487,7 +471,7 @@ def test_the_callback_drains_what_the_device_asks_for(devices):
 def test_an_empty_buffer_is_silence(devices):
     """An empty buffer is a device with nothing queued, which happens every time
     the player goes quiet for longer than the longest clip."""
-    sfx = Sfx()
+    Sfx()
     generator = devices[-1].started[0]
 
     silence = generator.send(200)

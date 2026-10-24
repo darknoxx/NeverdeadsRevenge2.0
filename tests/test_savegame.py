@@ -20,7 +20,6 @@ import pytest
 from neverdeads_revenge.core.direction import Direction
 from neverdeads_revenge.core.rng import Rng
 from neverdeads_revenge.core.turn_queue import TurnQueue
-from neverdeads_revenge.game.actions import Action, perform_action
 from neverdeads_revenge.game.actors import NOXX, make_npc
 from neverdeads_revenge.game.curses import CURSES
 from neverdeads_revenge.game.npcs import NPCS
@@ -117,7 +116,7 @@ def assert_same(left, right, path: str = "") -> None:
             )
     elif isinstance(left, list):
         assert len(left) == len(right), f"{path}: {len(left)} vs {len(right)}"
-        for index, (a, b) in enumerate(zip(left, right)):
+        for index, (a, b) in enumerate(zip(left, right, strict=True)):
             assert_same(a, b, f"{path}[{index}]")
     elif isinstance(left, dict):
         assert left.keys() == right.keys(), f"{path}: different keys"
@@ -125,7 +124,7 @@ def assert_same(left, right, path: str = "") -> None:
             assert_same(left[key], right[key], f"{path}[{key!r}]")
     elif isinstance(left, tuple):
         assert len(left) == len(right), f"{path}: {len(left)} vs {len(right)}"
-        for index, (a, b) in enumerate(zip(left, right)):
+        for index, (a, b) in enumerate(zip(left, right, strict=True)):
             assert_same(a, b, f"{path}[{index}]")
     else:
         assert left == right, f"{path}: {left!r} != {right!r}"

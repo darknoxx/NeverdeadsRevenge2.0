@@ -12,7 +12,7 @@ needs a confirmation is a setting nobody changes.
 
 from __future__ import annotations
 
-from ..chrome import ASH, BONE, BLOOD, PURPLE, box, rule
+from ..chrome import ASH, BONE, BLOOD, box, rule
 from ..padmap import SETTINGS
 from ..theme import parse_style
 from .base import Screen

@@ -43,6 +43,13 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]" pyinstaller
 
+      - name: Lint
+        run: python -m ruff check src tests tools
+
+      - name: Check the version
+        # On a tag, this also asserts that v<version> is the tag being built.
+        run: python tools/check_version.py
+
       - name: Test
         # Parallel, for the same reason as the Windows build: the suite is on
         # the critical path of a release.

@@ -29,6 +29,8 @@ dev = [
     # runs on every release. Parallel workers are four cores of a runner doing in
     # four minutes what one was doing in twelve.
     "pytest-xdist>=3.6",
+    # The linter is a dev dependency so CI and a contributor run the same one.
+    "ruff>=0.17,<0.18",
 ]
 
 [project.scripts]
@@ -50,6 +52,16 @@ include = [
     "src/neverdeads_revenge/desktop/tiles/*.png",
     "src/neverdeads_revenge/desktop/backdrops/*.png",
 ]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+# A ratchet, not a wish list: these are the rules the tree is clean under today.
+# Import sorting, docstring style and the rest can be added one at a time, each
+# with its own cleanup, rather than as one unreadable commit.
+select = ["E4", "E7", "E9", "F", "B"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -10,9 +10,8 @@ away, so the switches have one home and the pause is the door.
 
 from __future__ import annotations
 
-from ..chrome import ASH, BLOOD, box, menu
+from ..chrome import BLOOD, box, menu
 from ..padmap import PAUSE as PAUSE_PAD
-from ..theme import parse_style
 from .base import Screen
 
 __all__ = ["PauseScreen"]

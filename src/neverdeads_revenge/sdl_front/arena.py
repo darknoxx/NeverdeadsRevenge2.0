@@ -31,7 +31,6 @@ from __future__ import annotations
 
 import math
 
-from ..desktop.art import size as art_size
 from ..desktop.screens.base import Screen
 from ..desktop.screens.battle import (
     ARROW,
@@ -183,7 +182,6 @@ class SdlArena(Screen):
         font = app.font
         figures = self.arena._figures(cols, rows, font)
         field = self.arena._field(cols, rows, font.cell_w, font.cell_h)
-        areas = self.arena._areas(cols, rows)
         fades = {id(one.actor): self.arena._fade(id(one.actor)) for one in figures}
         # Every figure's pose once, before anything is drawn: the bars need to know
         # how big a monster is being drawn, and they go over the figures. A pose is

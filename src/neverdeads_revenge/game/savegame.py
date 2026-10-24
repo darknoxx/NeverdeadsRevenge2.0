@@ -36,7 +36,6 @@ from .lore import PAGE_COUNT
 from .actors import Actor, ActorKind, HEROES, Stats, Trait
 from .curses import Curse
 from .difficulty import BASE_PACK_SLOTS
-from .npcs import NPCS
 from .levels import kill_points_for
 from .state import GameState, LogEntry, LogKind, RunState
 

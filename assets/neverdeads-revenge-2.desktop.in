@@ -9,5 +9,5 @@ Icon=@SLUG@
 # The game is windowed: it opens its own CRT fullscreen and takes the keys in
 # there, so no terminal is asked for and none is wanted.
 Categories=Game;RolePlaying;
-Keywords=roguelite;roguelike;crt;desktop;pyside6;game;
+Keywords=roguelite;roguelike;crt;desktop;sdl;game;
 StartupNotify=false

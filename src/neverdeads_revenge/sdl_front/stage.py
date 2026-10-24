@@ -28,10 +28,7 @@ import math
 from ..desktop.art import size as art_size
 from ..desktop.screens.battle import (
     FAR_LIGHT,
-    MONSTER_BADGE,
     THICKNESS,
-    WALL_FAR,
-    WALL_NEAR,
     BattleScreen,
 )
 from ..desktop.theme import parse_style

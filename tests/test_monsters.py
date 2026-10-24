@@ -260,7 +260,6 @@ def test_the_idle_sleeps_until_it_is_woken():
 
 def test_the_twin_that_is_left_stops_grieving():
     from neverdeads_revenge.game.actions import _on_death
-    from neverdeads_revenge.game.actors import Stats
 
     state = _run()
     first = _monster(state, "twin", "twin")
@@ -293,7 +292,6 @@ def test_the_debt_is_paid_by_the_next_room():
 
 
 def test_the_judge_reads_every_curse_aloud():
-    from neverdeads_revenge.game.actions import perform_action, Action
     from neverdeads_revenge.game.curses import CURSES
 
     state = _run()

@@ -35,7 +35,6 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
-from ..theme import parse_style
 from .base import Screen
 
 __all__ = ["EncounterScreen", "Letter", "Ring", "Streak", "Turn"]
@@ -190,7 +189,6 @@ class EncounterScreen(Screen):
         if origin is None:
             return None
         ox, oy = origin
-        blow = parse_style(BLOW).fg
 
         dim = DIM * _clamp((self.age - DIM_FROM) / (DIM_TO - DIM_FROM))
 

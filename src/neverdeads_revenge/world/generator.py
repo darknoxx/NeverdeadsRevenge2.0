@@ -299,7 +299,7 @@ def _build_rooms(
         _carve_room(dungeon_map, room)
         rooms.append(room)
 
-    for previous, current in zip(rooms, rooms[1:]):
+    for previous, current in zip(rooms, rooms[1:], strict=False):
         _corridor_between(dungeon_map, previous.center, current.center)
     return rooms
 
@@ -426,6 +426,9 @@ def generate_floor(
         for pos in crowd:
             pool.remove(pos)
             spawn_points.append(pos)
+    # The crowd can take the last step over the line; the floor's promise is
+    # the budget, not "about the budget".
+    spawn_points = spawn_points[:enemy_budget]
 
     # The hunter, sometimes, on ground nothing else is standing on. Placed
     # before the spring, the npcs and the loot so that the spring's tile rule
@@ -458,6 +461,9 @@ def generate_floor(
         )
         if second is not None:
             springs.append(second)
+    # ``spring`` is the first one, and the list is all of them: a floor where
+    # the first roll missed and the second landed must not report no spring.
+    spring = springs[0] if springs else None
 
     # Somebody, sometimes. Placed before the loot so the loot's plain-floor rule
     # keeps their cell clear the same way it keeps the spring's -- and the
@@ -664,7 +670,7 @@ def _scatter_loot(
         for _ in range(rare_find_count(rng, depth))
     ]
 
-    for pos, item in zip(rng.shuffled(open_floor), to_place):
+    for pos, item in zip(rng.shuffled(open_floor), to_place, strict=False):
         dungeon_map.add_item(pos, item)
         placed[pos] = item
     return placed
