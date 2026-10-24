@@ -102,6 +102,8 @@ class SdlArena(Screen):
         #: The faces the damage numbers are drawn in, one per size, made when the
         #: first number needs one.
         self._faces: dict[int, object] = {}
+        #: The wound symbols at the size a plate asks for, made once each.
+        self._badges: dict[tuple[int, int, int], object] = {}
         #: One transparent surface to wash the room with, kept and refilled: a
         #: landed blow throws a colour over everything for a few frames.
         self._overlay = None
@@ -628,7 +630,12 @@ class SdlArena(Screen):
             x = round(start + index * step + (slot - width) / 2.0)
             y = round(middle - height / 2.0)
             if width != art.get_width() or height != art.get_height():
-                surface.blit(pygame.transform.smoothscale(art, (width, height)), (x, y))
+                cache_key = (id(art), width, height)
+                fitted = self._badges.get(cache_key)
+                if fitted is None:
+                    fitted = pygame.transform.smoothscale(art, (width, height))
+                    self._badges[cache_key] = fitted
+                surface.blit(fitted, (x, y))
             else:
                 surface.blit(art, (x, y))
             depth = self.arena.depths.get(id(actor), {}).get(key, 1)

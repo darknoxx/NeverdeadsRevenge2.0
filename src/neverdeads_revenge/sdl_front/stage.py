@@ -91,6 +91,9 @@ class Stage:
     def __init__(self) -> None:
         self._washes: dict[tuple[int, int, int], object] = {}
         self._shadow: object | None = None
+        #: The pool at the sizes the figures ask for; scaling it per figure per
+        #: frame was a smoothscale of every shadow on the floor.
+        self._shadow_sizes: dict[tuple[int, int], object] = {}
         #: The stones, shaded, and the whole wall built out of them -- both kept,
         #: because masonry does not change and a shear is not something to do
         #: every frame. Keyed by what they were asked for.
@@ -100,6 +103,9 @@ class Stage:
         #: is four megapixels and scaling that per frame is a crawl.
         self._fitted: dict[tuple[int, int], object] = {}
         self._lamp: object | None = None
+        #: The torch's glow at the sizes its breath asks for, rounded to two
+        #: pixels so the ramp is cached instead of rescaled every frame.
+        self._glow_sizes: dict[int, object] = {}
         #: The pictures at the sizes a *pose* asks for: the room has two depths,
         #: so there are two of these per figure and they are made once.
         #: Keyed by (art, scale) and, for the echo, which tint of it.
@@ -337,7 +343,11 @@ class Stage:
         width = max(24.0, float(figure.cells * font.cell_w) * 1.25)
         height = max(6.0, width * 0.24)
         pool = self._pool()
-        scaled = pygame.transform.smoothscale(pool, (round(width), round(height)))
+        size = (round(width), round(height))
+        scaled = self._shadow_sizes.get(size)
+        if scaled is None:
+            scaled = pygame.transform.smoothscale(pool, size)
+            self._shadow_sizes[size] = scaled
         scaled.set_alpha(round(255 * fade))
         # A shadow under the *drawn* figure: a monster that has lunged at the hero
         # leaves no pool behind it on the floor it came from.
@@ -465,8 +475,11 @@ class Stage:
         wobble = 0.5 + 0.5 * math.sin(clock * 3.7 + 1.0)
         for fx, fy in TORCHES:
             scale = 0.86 + 0.24 * breath + 0.06 * wobble
-            side = max(8, round(220 * scale))
-            lit = pygame.transform.smoothscale(pool, (side, side))
+            side = max(8, round(220 * scale / 2) * 2)
+            lit = self._glow_sizes.get(side)
+            if lit is None:
+                lit = pygame.transform.smoothscale(pool, (side, side))
+                self._glow_sizes[side] = lit
             surface.blit(
                 lit,
                 (
