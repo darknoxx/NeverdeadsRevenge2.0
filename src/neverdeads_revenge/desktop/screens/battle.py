@@ -644,11 +644,11 @@ class Staged:
 
 
 class BattleScreen(Screen):
+    """The stage, and one fight, played a beat at a time."""
+
     #: The pad's four faces are the four verbs; B backs out one level and never
     #: flees; R3 inspects what is being fought, Back opens the book.
     PAD = BATTLE_PAD
-
-    """The stage, and one fight, played a beat at a time."""
 
     def __init__(self, battle: Battle) -> None:
         self.battle = battle
@@ -781,6 +781,109 @@ class BattleScreen(Screen):
         #: hero raises one, and only one at a time -- a wall and an aura at once
         #: would be two answers to one turn.
         self._flourish: tuple[str, float] | None = None
+
+    # -- the picture the painter reads --------------------------------------
+    # SdlArena is a painter, not a second screen. These names are the whole of
+    # what it may ask for; everything with a leading underscore below is the
+    # screen's own business. They are read-only except ``wash``, which the
+    # painter clears when the flash has faded.
+    @property
+    def clock(self) -> float:
+        """How far the fight's playback has run, in seconds."""
+        return self._clock
+
+    @property
+    def wash(self):
+        """The full-frame colour a landed blow is washed with, or ``None``."""
+        return self._wash
+
+    @wash.setter
+    def wash(self, value) -> None:
+        self._wash = value
+
+    @property
+    def popups(self):
+        """The damage numbers currently on their way up."""
+        return self._popups
+
+    @property
+    def hurts(self):
+        """Which figures are flashing, and in what colour."""
+        return self._hurts
+
+    @property
+    def knocked(self):
+        """Which figures are shoved, and when they land."""
+        return self._knocked
+
+    @property
+    def sinking(self):
+        """Which figures are falling out of the room."""
+        return self._sinking
+
+    @property
+    def shown(self):
+        """How much of each figure's health the room has shown."""
+        return self._shown
+
+    @property
+    def depths(self):
+        """How deep each figure stands, for the bars and badges."""
+        return self._depths
+
+    @property
+    def strikes(self):
+        """The blows in flight, and their beats."""
+        return self._strikes
+
+    @property
+    def drift(self):
+        """How much the room is drifting under the playback."""
+        return self._drift
+
+    def dims(self, app):
+        """The grid the screen is drawn into."""
+        return self._dims(app)
+
+    def floor_row(self, cols: int, rows: int) -> int:
+        """The row the room's floor is on."""
+        return self._floor_row(cols, rows)
+
+    def worn(self, actor):
+        """The wounds the room has shown on this actor so far."""
+        return self._worn(actor)
+
+    def figures(self, cols: int, rows: int, font):
+        """The staged figures for this window."""
+        return self._figures(cols, rows, font)
+
+    def areas(self, cols: int, rows: int):
+        """Where the panels, lines and plate sit, in cells."""
+        return self._areas(cols, rows)
+
+    def field(self, cols: int, rows: int, cell_w: int, cell_h: int):
+        """The floor in pixels."""
+        return self._field(cols, rows, cell_w, cell_h)
+
+    def fade(self, actor_id: int) -> float:
+        """How much of a figure is still in the room, 0 to 1."""
+        return self._fade(actor_id)
+
+    def strike_pose(self, figure, figures, home, cell_w, cell_h):
+        """Where a striker is mid-blow, or ``None`` if standing still."""
+        return self._strike_pose(figure, figures, home, cell_w, cell_h)
+
+    def knockback(self, figure, cell_h: int) -> int:
+        """How far up the room a shoved figure is."""
+        return self._knockback(figure, cell_h)
+
+    def jolt(self, figure) -> int:
+        """How far a struck figure is shaking."""
+        return self._jolt(figure)
+
+    def verdict_panel(self, cols: int, rows: int, font):
+        """The panel a finished fight leaves, and where it lands."""
+        return self._verdict_panel(cols, rows, font)
 
     # -- the contract -------------------------------------------------------
     def draw(self, buffer: PatternBuffer, app, ground: bool = True) -> None:

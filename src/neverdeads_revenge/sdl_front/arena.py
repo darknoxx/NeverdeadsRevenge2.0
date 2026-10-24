@@ -119,7 +119,7 @@ class SdlArena(Screen):
         if not self.backdrop:
             return None
         return self._stage.paper(
-            cols, rows, font, float(self.arena._floor_row(cols, rows) * font.cell_h)
+            cols, rows, font, float(self.arena.floor_row(cols, rows) * font.cell_h)
         )
 
     # -- the first pass -----------------------------------------------------
@@ -141,7 +141,7 @@ class SdlArena(Screen):
         # pixels. The painting is fitted to this line rather than the staging being
         # fitted to the painting -- so the monsters stand on the row the game's own
         # layout puts them on, and the artwork is placed to agree.
-        floor_px = float(self.arena._floor_row(buffer.cols, buffer.rows) * buffer.font.cell_h)
+        floor_px = float(self.arena.floor_row(buffer.cols, buffer.rows) * buffer.font.cell_h)
         #: The wall, as the *placed* painting draws it: the one line the staging has
         #: to be told, because only the front end knows where the artwork ended up.
         self.arena.stage_horizon = (
@@ -157,7 +157,7 @@ class SdlArena(Screen):
             # belt to that pair of braces, and it is cheap.
             self._bare_ground(buffer)
         cell_w = max(1, buffer.font.cell_w)
-        for figure in self.arena._figures(buffer.cols, buffer.rows, buffer.font):
+        for figure in self.arena.figures(buffer.cols, buffer.rows, buffer.font):
             if figure.art is not None:
                 continue
             x = int(figure.cx) // cell_w
@@ -178,11 +178,11 @@ class SdlArena(Screen):
         Called `paint_over` rather than `paste` because the Qt screens this app
         reuses have a `paste` of their own, and it takes a QImage.
         """
-        cols, rows = self.arena._dims(app)
+        cols, rows = self.arena.dims(app)
         font = app.font
-        figures = self.arena._figures(cols, rows, font)
-        field = self.arena._field(cols, rows, font.cell_w, font.cell_h)
-        fades = {id(one.actor): self.arena._fade(id(one.actor)) for one in figures}
+        figures = self.arena.figures(cols, rows, font)
+        field = self.arena.field(cols, rows, font.cell_w, font.cell_h)
+        fades = {id(one.actor): self.arena.fade(id(one.actor)) for one in figures}
         # Every figure's pose once, before anything is drawn: the bars need to know
         # how big a monster is being drawn, and they go over the figures. A pose is
         # where, how solid *and* how deep -- see ``_pose``.
@@ -208,14 +208,14 @@ class SdlArena(Screen):
                 surface,
                 surface.get_width(),
                 surface.get_height(),
-                self.arena._clock,
-                float(self.arena._floor_row(cols, rows) * app.font.cell_h),
+                self.arena.clock,
+                float(self.arena.floor_row(cols, rows) * app.font.cell_h),
             )
         self._stage.health(
             surface,
             figures,
             font,
-            self.arena._shown,
+            self.arena.shown,
             self.battle.hero,
             fades,
             scales,
@@ -265,7 +265,7 @@ class SdlArena(Screen):
         for figure in figures:
             if figure.chosen:
                 self._arrow(surface, app, figure)
-        for popup in self.arena._popups:
+        for popup in self.arena.popups:
             self._number(surface, font, popup)
         if self.arena.verdict is not None:
             self._verdict(surface, font, cols, rows)
@@ -280,8 +280,8 @@ class SdlArena(Screen):
         """
         import pygame
 
-        for art, x, bottom, when in self.arena._sinking:
-            age = self.arena._clock - when
+        for art, x, bottom, when in self.arena.sinking:
+            age = self.arena.clock - when
             if not (0.0 <= age <= SINK_LIFE):
                 continue
             image = load(art)
@@ -315,8 +315,8 @@ class SdlArena(Screen):
         """
         import pygame
 
-        for art, x, bottom, when in self.arena._drift:
-            age = self.arena._clock - when
+        for art, x, bottom, when in self.arena.drift:
+            age = self.arena.clock - when
             if not (0.0 <= age <= DRIFT_LIFE):
                 continue
             image = self._drift_faces.get(art)
@@ -354,7 +354,7 @@ class SdlArena(Screen):
         Everybody else is standing still and goes in the middle.
         """
         hero = self.battle.hero
-        strikes = self.arena._strikes
+        strikes = self.arena.strikes
         behind = [f for f in figures if id(f.actor) in strikes and f.actor is not hero]
         front = [f for f in figures if id(f.actor) in strikes and f.actor is hero]
         middle = [f for f in figures if f not in behind and f not in front]
@@ -404,10 +404,10 @@ class SdlArena(Screen):
             surface.blit(image, where)
         # And the flash of a blow that has just landed: the same figure, in the
         # trick's own colour, for the fifth of a second the jolt lasts.
-        hurt = self.arena._hurts.get(id(figure.actor))
+        hurt = self.arena.hurts.get(id(figure.actor))
         if hurt is None:
             return
-        age = self.arena._clock - hurt[0]
+        age = self.arena.clock - hurt[0]
         if not (0.0 <= age <= JOLT):
             return
         flash = image.copy()
@@ -427,7 +427,7 @@ class SdlArena(Screen):
         same surface and put back a little out of line.
         """
         band = max(6, image.get_height() // 16)
-        phase = self.arena._clock * 3.0
+        phase = self.arena.clock * 3.0
         width, height = image.get_size()
         for y in range(0, height, band):
             rows = min(band, height - y)
@@ -450,17 +450,17 @@ class SdlArena(Screen):
         raise_px = 0
         if figure.actor.stats.alive:
             raise_px = round(
-                math.sin(self.arena._clock * BOB_SPEED + figure.phase) * BOB_HEIGHT
+                math.sin(self.arena.clock * BOB_SPEED + figure.phase) * BOB_HEIGHT
             )
         home = round(figure.row * cell_h - THICKNESS)
-        home -= self.arena._knockback(figure, cell_h)
+        home -= self.arena.knockback(figure, cell_h)
         cx, baseline, opacity = figure.cx, home - raise_px, 1.0
         scale = 1.0
-        pose = self.arena._strike_pose(figure, figures, home, cell_w, cell_h)
+        pose = self.arena.strike_pose(figure, figures, home, cell_w, cell_h)
         if pose is not None:
             cx, baseline, opacity, scale = pose
         else:
-            cx += self.arena._jolt(figure)
+            cx += self.arena.jolt(figure)
         return cx, baseline, opacity * fade, scale
 
     def _arrow(self, surface, app, figure) -> None:
@@ -478,7 +478,7 @@ class SdlArena(Screen):
         # Above the *bar* and not merely above the figure: the stripe and the arrow
         # are both facts about this monster and cannot share a line.
         _left, bar_top, _width, _height = bar_box(figure, app.font)
-        bob = round(math.sin(self.arena._clock * 5.0) * 2) - 1
+        bob = round(math.sin(self.arena.clock * 5.0) * 2) - 1
         centre = round(figure.cx - len(ARROW) * face.cell_w / 2)
         above = bar_top - face.cell_h - bob
         # A dark copy under a bright one, the same two passes every letter in this
@@ -528,7 +528,7 @@ class SdlArena(Screen):
         """
         from ..desktop.pattern import BLANK
 
-        x0, y0, width, height = self.arena._areas(buffer.cols, buffer.rows)["ground"]
+        x0, y0, width, height = self.arena.areas(buffer.cols, buffer.rows)["ground"]
         for row in range(y0, y0 + height):
             line = buffer.cells[row]
             for column in range(x0, x0 + width):
@@ -575,10 +575,10 @@ class SdlArena(Screen):
             # The list of tricks covers the whole strip, plate and all, and this
             # row is *pixels*: it would hang over a panel that is no longer there.
             return
-        worn = self.arena._worn(self.battle.hero)
+        worn = self.arena.worn(self.battle.hero)
         if not worn:
             return
-        x, y, width, height = self.arena._areas(cols, rows)["plate"]
+        x, y, width, height = self.arena.areas(cols, rows)["plate"]
         if height < 4 or width < 12:
             return
         font = app.font
@@ -611,7 +611,7 @@ class SdlArena(Screen):
 
         pairs = [
             (key, load(f"sprites/status/{STATUS_ICONS[key]}.png"))
-            for key in self.arena._worn(actor)
+            for key in self.arena.worn(actor)
             if key in STATUS_ICONS
         ]
         pairs = [(key, art) for key, art in pairs if art is not None]
@@ -631,7 +631,7 @@ class SdlArena(Screen):
                 surface.blit(pygame.transform.smoothscale(art, (width, height)), (x, y))
             else:
                 surface.blit(art, (x, y))
-            depth = self.arena._depths.get(id(actor), {}).get(key, 1)
+            depth = self.arena.depths.get(id(actor), {}).get(key, 1)
             if depth >= 2:
                 self._stamp(surface, app, str(depth), x + width, y + height, size)
 
@@ -698,14 +698,14 @@ class SdlArena(Screen):
         """
         import pygame
 
-        wash = self.arena._wash
+        wash = self.arena.wash
         if wash is None:
             return
-        age = self.arena._clock - wash.when
+        age = self.arena.clock - wash.when
         if age < 0:
             return
         if age > FLASH_LIFE:
-            self.arena._wash = None
+            self.arena.wash = None
             return
         if self._overlay is None or self._overlay.get_size() != surface.get_size():
             self._overlay = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
@@ -719,7 +719,7 @@ class SdlArena(Screen):
         The panel is the arena's own -- the same box, the same rule, the same
         hint -- asked for as cells, painted by the grid painter, and laid on top.
         """
-        panel, x, y = self.arena._verdict_panel(cols, rows, font)
+        panel, x, y = self.arena.verdict_panel(cols, rows, font)
         surface.blit(paint(panel, font), (x * font.cell_w, y * font.cell_h))
 
     # -- the fight ----------------------------------------------------------
