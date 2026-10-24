@@ -2370,3 +2370,63 @@ def test_three_taps_dismiss_nothing(app):
     assert top(app) == "GameScreen"
 
 
+
+
+def test_a_blows_number_waits_for_the_impact(app):
+    """The number is written at the swing and read at the blow.
+
+    The rules resolve a turn at once; the room must not. A number that appears
+    while the sword is still in the air is the ending of the sentence before the
+    player has read it, which is the one rule the whole playback is built on.
+    """
+    from neverdeads_revenge.sdl_front.arena import SdlArena
+
+    battle = arena(count=1)
+    screen = SdlArena(battle)
+    target = battle.enemies[0]
+    target.stats.hp = 999
+    target.stats.evasion = 0
+    battle.hero.stats.accuracy = 99
+
+    screen.arena.verb = 0  # ATTACK
+    screen.arena._choose(app)
+
+    # The events are played a beat at a time; the blow is written on the swing's
+    # beat, with a negative age, so the number is *set* before it is *read*.
+    for _ in range(20):
+        screen.step(1 / 30.0, app)
+        if screen.arena.popups:
+            break
+
+    assert screen.arena.popups, "no number was written at the swing"
+    assert all(one.age < 0 for one in screen.arena.popups), (
+        "the number was readable before the blow landed"
+    )
+
+    for _ in range(30):  # past the impact
+        screen.step(1 / 30.0, app)
+
+    assert any(one.age >= 0 for one in screen.arena.popups), "the number never arrived"
+
+
+def test_a_killed_monster_is_let_go_when_the_blow_lands(app):
+    """The rules kill at the swing; the room lets the figure go at the blow."""
+    from neverdeads_revenge.sdl_front.arena import SdlArena
+
+    battle = arena(count=1)
+    screen = SdlArena(battle)
+    target = battle.enemies[0]
+    target.stats.hp = 1
+    target.stats.evasion = 0
+    battle.hero.stats.accuracy = 99
+
+    screen.arena.verb = 0  # ATTACK
+    screen.arena._choose(app)
+
+    assert not target.stats.alive, "the blow did not finish it"
+    assert screen.arena.fade(id(target)) == 1.0, "the room let go at the decision"
+
+    for _ in range(40):  # past the impact and into the sink
+        screen.step(1 / 30.0, app)
+
+    assert screen.arena.fade(id(target)) < 1.0, "the room never let the figure go"
