@@ -1297,17 +1297,38 @@ class GameState:
             self.say(f"The dark takes its toll: {paid} coins.", LogKind.BAD)
 
     def continue_through_the_door(self) -> None:
-        """Push on. The wager rises and the next ten floors begin."""
+        """Push on. Both wagers rise and the next ten floors begin.
+
+        The purse is a wager too, not just the score: the mode is for the player
+        who does not care about the board as much as the coin, and a door that
+        only risks the number on the summary would have nothing to say to them.
+        The deeper floors pay more because the coin multiplier rises, and the
+        bank is the only way to keep what those floors paid.
+        """
         if not self.door_pending:
             return
         self.door_pending = False
         self.door_ring += 1
         self.risk_multiplier *= 1.25
+        self.coin_multiplier *= 1.25
         self.say(
-            f"The door opens. Risk x{self.risk_multiplier:.2f}.",
+            f"The door opens. Risk x{self.risk_multiplier:.2f}, "
+            f"coin x{self.coin_multiplier:.2f}.",
             LogKind.GOOD,
         )
         self.descend()
+
+    @property
+    def gold_kept(self) -> int:
+        """What the run gets to take home when it ends.
+
+        A normal run banks its purse even in death -- coin is the currency that
+        outlives the attempt. The Tenth Door is the exception the door is built
+        on: only a bank keeps the purse, and a death takes it with the risk.
+        """
+        if not self.tenth_door:
+            return self.gold
+        return self.gold if self.banked else 0
 
     # -- scoring ------------------------------------------------------------
     @property

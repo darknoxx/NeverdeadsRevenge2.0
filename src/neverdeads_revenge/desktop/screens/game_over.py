@@ -44,11 +44,21 @@ def _summary_lines(state) -> list[tuple[str, str]]:
     lines.append((f"Kill score      {state.kill_score}",
                   "bold white" if state.kill_score else ASH))
     lines.append((f"Level reached   {state.level}", BONE))
-    lines.append((f"Coins banked    {state.gold}", BONE))
+    kept = getattr(state, "gold_kept", state.gold)
+    lines.append((f"Coins banked    {kept}", BONE))
+    if kept != state.gold:
+        lines.append((f"Coins lost      {state.gold - kept}", "bold red"))
     lines.append((f"Turns taken     {state.total_turns}", BONE))
     lines.append((f"Cells walked    {state.player.steps}", BONE))
     lines.append((f"Speed bonus     {state.speed_bonus:+d}",
                   "bold green" if state.speed_bonus else ASH))
+    if getattr(state, "tenth_door", False):
+        lines.append(
+            (
+                f"Coin multiplier {state.coin_multiplier:.2f}x",
+                "bold green" if state.coin_multiplier > 1 else ASH,
+            )
+        )
     if state.fame:
         lines.append((f"Fame            {state.fame}  "
                       f"(worth {state.score_multiplier:.2f}x)", "bold green"))

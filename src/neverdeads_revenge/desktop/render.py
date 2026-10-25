@@ -657,7 +657,7 @@ def hud_lines(state: GameState) -> list[tuple[str, str]]:
     if state.tenth_door:
         score = (
             f"Floor {state.depth}  Risk x{state.risk_multiplier:.2f}"
-            f"  Score {state.score}"
+            f"  Coin x{state.coin_multiplier:.2f}  Score {state.score}"
         )
     else:
         score = f"Floor {state.depth}/{ESCAPE_DEPTH}  Score {state.score}"

@@ -136,6 +136,7 @@ def test_pushing_on_multiplies_the_run_and_descends():
     assert state.depth == 11
     assert state.door_pending is False
     assert state.risk_multiplier == 1.25
+    assert state.coin_multiplier == 1.25
     assert state.door_ring == 2
     assert state.dungeon_map.tile_at(state.exit_pos) is Tile.STAIRS_DOWN
 
@@ -146,11 +147,51 @@ def test_banking_keeps_the_score_it_had_and_does_not_pay_the_rift_bonus():
     perform_action(state, Action.DESCEND)
     before = state.score
 
+    state.gold = 40
     state.bank()
 
     assert state.run_state is RunState.ESCAPED
     assert state.banked is True
     assert state.score == before, "banking must not invent a new score"
+    assert state.gold_kept == 40, "banking must keep the purse"
+
+
+def test_death_takes_the_purse_and_the_coin_multiplier_raises_it():
+    from neverdeads_revenge.game.state import RunState
+
+    state = _begin()
+    state.gold = 40
+    state.player.position = state.exit_pos
+    perform_action(state, Action.DESCEND)
+    state.continue_through_the_door()
+    state.gold = 60
+
+    assert state.coin_multiplier == 1.25
+    assert state.gold_kept == 0, "only a bank keeps the Tenth Door purse"
+
+    state.run_state = RunState.DEAD
+    assert state.gold_kept == 0
+
+    state.tenth_door = False
+    assert state.gold_kept == 60, "an ordinary run still banks its purse"
+
+
+def test_the_summary_shows_what_the_door_kept_and_what_it_took():
+    from neverdeads_revenge.desktop.screens.game_over import _summary_lines
+
+    state = _begin()
+    state.gold = 40
+    state.player.position = state.exit_pos
+    perform_action(state, Action.DESCEND)
+    state.continue_through_the_door()
+    state.gold = 60
+    state.run_state = RunState.DEAD
+
+    text = " ".join(line for line, _style in _summary_lines(state))
+
+    assert "Coins banked    0" in text
+    assert "Coins lost      60" in text
+    assert "Coin multiplier 1.25x" in text
 
 
 def test_the_door_fields_survive_a_save():

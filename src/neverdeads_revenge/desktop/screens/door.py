@@ -36,6 +36,7 @@ class DoorScreen(Screen):
         return [
             f"FLOOR {state.depth}   RING {state.door_ring}",
             f"RUN SCORE {state.score}   RISK x{state.risk_multiplier:.2f}",
+            f"PURSE {state.gold}   COIN x{state.coin_multiplier:.2f}",
             "",
             "The door is open, and the next ten floors are worth more.",
             "Bank what the run has made, or carry it through.",
@@ -75,8 +76,8 @@ class DoorScreen(Screen):
 
         for i, text in enumerate(
             [
-                "Banking ends the run and keeps the number it has.",
-                "Pushing on multiplies the run by 1.25 and loses it all on death.",
+                "Banking ends the run and keeps both the number and the purse.",
+                "Pushing on raises both by 1.25; death takes the purse and the run.",
             ]
         ):
             buffer.text(

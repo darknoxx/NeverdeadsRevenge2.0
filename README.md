@@ -67,8 +67,9 @@ Once a run has escaped through the rift, the title offers **THE TENTH DOOR**:
 the same dungeon, started on floor 10 with the house's credit -- level 18 and
 three pieces from the deep. Every tenth floor from there is a landing with one
 question. **Bank the run** and take the number it has, or **push on**: the next
-ten floors are worth 1.25x more, and death takes the whole wager. The first
-slice ends at the door; ring rules and boons come after it.
+ten floors are worth 1.25x more and pay 1.25x coin, but death takes the whole
+wager -- score and purse both. Banking is the only way to keep the coin. The
+first slice ends at the door; ring rules and boons come after it.
 
 ## What is down there
 

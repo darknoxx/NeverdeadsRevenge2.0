@@ -273,7 +273,7 @@ class AppStack:
             depth=state.depth,
             score=state.score,
             kills=state.kills,
-            gold=state.gold,
+            gold=state.gold_kept,
             won=state.run_state is RunState.ESCAPED,
             name=name,
             hero=state.hero.key,
