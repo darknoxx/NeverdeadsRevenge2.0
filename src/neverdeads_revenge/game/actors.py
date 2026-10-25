@@ -17,6 +17,7 @@ from neverdeads_revenge.world.modifiers import Modifiers
 
 from .difficulty import enemy_speed, potency, weight_at_depth
 from .npcs import NPC_COLOR, NPC_GLYPH, Npc
+from .affixes import name_with
 from .statuses import status_by_key
 
 __all__ = [
@@ -302,6 +303,12 @@ class Actor:
     #: the echo wears the *front* of the hero whose run it is, because it walks
     #: towards the player rather than away.
     art: str | None = None
+    #: The name the sheets file it under, when the display name has an aspect in
+    #: front of it. Empty for everything the dark has not touched.
+    base_name: str = ""
+    #: The aspects on it, by key. One is already a sentence; two is a paragraph,
+    #: so the rule is one for now and the field leaves room for the second.
+    affixes: tuple[str, ...] = ()
     #: Cells entered since the run started. A run total, like ``total_turns``,
     #: and a statistic rather than a score input: the score rewards time, and
     #: walking further is the opposite of that.
@@ -1263,10 +1270,14 @@ ENEMIES: dict[str, EnemyTemplate] = {
 }
 
 
-def make_enemy(template: EnemyTemplate, position: Pos) -> Actor:
-    """Create a fresh actor from an enemy template."""
+def make_enemy(
+    template: EnemyTemplate, position: Pos, *, affixes: tuple[str, ...] = ()
+) -> Actor:
+    """Create a fresh actor from an enemy template, with the dark's marks on it."""
     return Actor(
-        name=template.name,
+        name=name_with(template.name, affixes),
+        base_name=template.name,
+        affixes=affixes,
         key=template.key,
         kind=ActorKind.ENEMY,
         # Copy for the same reason as make_hero: templates outlive every actor.

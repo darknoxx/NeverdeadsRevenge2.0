@@ -29,6 +29,15 @@ from .life import (
 )
 
 
+#: What an aspect does when its blow lands. A table, not another branch in the
+#: attack: a new aspect is one entry here and one entry in ``game/affixes.py``.
+ENEMY_AFFIX_RULES = {
+    "fire_kissed": lambda state, attacker, target: inflict(
+        state, target, ("burn",)
+    ),
+}
+
+
 def resolve_player_attack(
     state: GameState,
     target: Actor,
@@ -288,6 +297,10 @@ def resolve_enemy_attack(
     _player_takes_damage(state, attacker, outcome)
     if outcome.hit and not outcome.killed:
         inflict(state, player, attacker.inflicts)
+        for affix in attacker.affixes:
+            rule = ENEMY_AFFIX_RULES.get(affix)
+            if rule is not None:
+                rule(state, attacker, player)
         if attacker.self_inflicts:
             # THE ALREADY-DYING: the blow opens a wound on the thing that threw
             # it. A monster that is a race against itself, and the race is the

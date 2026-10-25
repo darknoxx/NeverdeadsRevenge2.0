@@ -110,6 +110,8 @@ class Stage:
         #: so there are two of these per figure and they are made once.
         #: Keyed by (art, scale) and, for the echo, which tint of it.
         self._scaled: dict[tuple, object] = {}
+        #: The pool of light under an aspect, made once per colour and size.
+        self._auras: dict[tuple[str, int, int], object] = {}
 
     # -- the art ------------------------------------------------------------
     def tile(self, name: str):
@@ -533,6 +535,41 @@ class Stage:
                 )
             self._shadow = pool
         return self._shadow
+
+    def affix_glow(self, surface, figure, colour: str, clock: float, cell_h: int) -> None:
+        """A small pool of the aspect's colour under a marked figure.
+
+        Added to the floor rather than laid over it, and in three rings: a flat
+        disc of transparent colour reads as a stain, and a light reads as
+        something burning under the figure. The sprite itself is untouched -- the
+        drawing is the monster's and stays its own.
+        """
+        import pygame
+
+        width = max(32, round(figure.size * 1.35))
+        height = max(10, round(width / 4.0))
+        breath = int((0.5 + 0.5 * math.sin(clock * 3.0 + figure.phase)) * 3.0)
+        key = (colour, width, height, breath)
+        glow = self._auras.get(key)
+        if glow is None:
+            rgb = pygame.Color(colour)
+            glow = pygame.Surface((width, height), pygame.SRCALPHA)
+            for factor, strength in ((1.0, 0.30), (0.72, 0.50), (0.44, 0.75)):
+                inner_w = max(2, round(width * factor))
+                inner_h = max(2, round(height * factor))
+                lit = tuple(round(channel * strength) for channel in (rgb.r, rgb.g, rgb.b))
+                layer = pygame.Surface((inner_w, inner_h), pygame.SRCALPHA)
+                pygame.draw.ellipse(layer, (*lit, 255), layer.get_rect())
+                glow.blit(layer, ((width - inner_w) // 2, (height - inner_h) // 2))
+            self._auras[key] = glow
+        surface.blit(
+            glow,
+            (
+                round(figure.cx - width / 2.0),
+                round(figure.row * cell_h - height / 5.0),
+            ),
+            special_flags=pygame.BLEND_RGB_ADD,
+        )
 
     def figure(self, figure, scale: float = 1.0):
         """A figure's picture, loaded -- and, when a pose asks, resized.

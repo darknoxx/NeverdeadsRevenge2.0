@@ -243,7 +243,7 @@ class BattleStage:
             echo = getattr(enemy, "behaviour", "") == "echo"
             # Its own picture when its name is not the file: the echo wears the
             # front of a hero, and the file is a portrait, not a monster.
-            art = enemy.art or _picture(enemy.name)
+            art = enemy.art or _picture(enemy.base_name or enemy.name)
             if echo:
                 # The lane beside the hero rather than the one it was given: at
                 # the hero's height, the middle lane is behind his head, and a
@@ -267,6 +267,7 @@ class BattleStage:
                     colour=enemy.color,
                     size=size,
                     cx=cx,
+                    affix=enemy.affixes[0] if enemy.affixes else None,
                     row=(
                         hero_row - ECHO_STEP
                         if echo

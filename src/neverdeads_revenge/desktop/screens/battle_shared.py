@@ -347,6 +347,7 @@ class Staged:
         "cells",
         "chosen",
         "art",
+        "affix",
         "phase",
     )
 
@@ -361,6 +362,7 @@ class Staged:
         cells: int,
         chosen: bool = False,
         art: str | None = None,
+        affix: str | None = None,
         phase: float = 0.0,
     ) -> None:
         self.actor = actor
@@ -372,6 +374,9 @@ class Staged:
         #: name and not an image, because the staging is what both front ends
         #: read and a picture is the painter's to hold.
         self.art = art
+        #: Which aspect the figure wears, if any: the painter gives it an aura
+        #: and the name already carries the word.
+        self.affix = affix
         self.glyph = glyph
         self.colour = colour
         self.size = size

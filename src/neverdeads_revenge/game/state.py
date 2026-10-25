@@ -27,6 +27,7 @@ from neverdeads_revenge.world.map import DungeonMap, GroundItem
 from neverdeads_revenge.world.modifiers import Modifiers
 from neverdeads_revenge.world.tiles import Tile
 
+from .affixes import enemy_affixes
 from .actors import (
     ENEMIES,
     Actor,
@@ -953,10 +954,21 @@ class GameState:
             # like a run total -- and the old score, which counted steps, was
             # quietly counting only that one floor too.
 
-        self.enemies = [
-            make_enemy(pick_enemy_template(self.rng, depth), pos)
-            for pos in floor.spawn_points
-        ]
+        # The aspects roll on their own dice: the floor's monsters are drawn
+        # exactly as they always were, and only the name changes when the dark
+        # has been at one.
+        marks = Rng(self.seed * 1009 + depth * 97)
+
+        def one(pos):
+            template = pick_enemy_template(self.rng, depth)
+            affixes = (
+                enemy_affixes(marks, depth)
+                if template.behaviour == "aggressive"
+                else ()
+            )
+            return make_enemy(template, pos, affixes=affixes)
+
+        self.enemies = [one(pos) for pos in floor.spawn_points]
         if floor.hunter is not None:
             # Scaled by hand, because it is not drawn from the table: the
             # potency curve lives in ``pick_enemy_template``, and a hunter that

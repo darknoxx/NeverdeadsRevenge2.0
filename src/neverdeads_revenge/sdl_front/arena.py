@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import math
 
+from ..game.affixes import AFFIXES
 from ..desktop.screens.base import Screen
 from ..desktop.screens.battle import (
     ARROW,
@@ -373,6 +374,14 @@ class SdlArena(Screen):
                 figure, figures, fade, app.font.cell_w, app.font.cell_h
             )
         cx, baseline, opacity, scale = pose
+        if figure.affix and figure.affix in AFFIXES:
+            self._stage.affix_glow(
+                surface,
+                figure,
+                AFFIXES[figure.affix].colour,
+                self.arena.clock,
+                app.font.cell_h,
+            )
         image = self._stage.figure(figure, scale)
         if image is None:
             return
