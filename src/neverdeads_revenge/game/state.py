@@ -1645,16 +1645,22 @@ def _grant_credit(state: GameState, seed: int) -> None:
 def _roll_credit(state: GameState, seed: int) -> None:
     """Take exactly the three pieces the house is offering this roll."""
     credit = Rng(seed * 1019 + 883 + state.credit_roll * 17)
-    deep = [
-        key
-        for key, template in ITEMS.items()
-        if template.chest_only
-        and template.kind in ("weapon", "armour", "amulet")
+    deep = {
+        kind: [
+            key
+            for key, template in ITEMS.items()
+            if template.chest_only and template.kind == kind
+        ]
+        for kind in ("weapon", "armour", "amulet")
+    }
+    every = [key for keys in deep.values() for key in keys]
+    # One of each, always. Three weapons and no coat is not a loan a player can
+    # wear; the house is buying a body, not a dice cup.
+    chosen = [
+        credit.pick(deep[kind] or every)
+        for kind in ("weapon", "armour", "amulet")
     ]
-    state.credit_gear = [
-        _receive(state, ITEMS[key])
-        for key in credit.shuffled(deep)[:CREDIT_PACKS]
-    ]
+    state.credit_gear = [_receive(state, ITEMS[key]) for key in chosen]
 
 
 def _apply_upgrades(state: GameState, upgrades: dict[str, int]) -> None:

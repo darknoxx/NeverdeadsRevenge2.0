@@ -12,6 +12,8 @@ the first step of the run.
 from __future__ import annotations
 
 from ...game.state import CREDIT_REROLL, GameState
+from ...world.items import ITEMS
+from ..art import Placed, exists as art_exists, item_icon, size as art_size
 from ..chrome import ASH, BONE, BLOOD, PURPLE, box
 from ..theme import parse_style
 from .base import Screen
@@ -34,6 +36,10 @@ class CreditScreen(Screen):
         self.state = state
         self.index = 0
         self.message = ""
+        #: Where the three sprites stand, in cells: set by ``draw`` and read by
+        #: ``art`` on the same frame, because a picture is pixels and the layout
+        #: is cells.
+        self._slots: list[tuple[float, int]] = []
 
     def _item_lines(self, width: int) -> list[str]:
         lines: list[str] = []
@@ -47,7 +53,7 @@ class CreditScreen(Screen):
 
     def draw(self, buffer, app) -> None:
         state = self.state
-        width = min(buffer.cols - 8, 70)
+        width = min(buffer.cols - 8, 84)
         height = min(buffer.rows - 4, 19)
         x, y = (buffer.cols - width) // 2, (buffer.rows - height) // 2
         box(
@@ -69,10 +75,38 @@ class CreditScreen(Screen):
         ):
             buffer.text(x + 3, y + 2 + i, text[: width - 6], parse_style(BONE))
 
-        row = y + 5
-        for line in self._item_lines(width):
-            buffer.text(x + 3, row, line[: width - 6], parse_style(ASH))
-            row += 1
+        # Three columns, each with its own sprite above its name. The sprite
+        # band is five rows; the name and its numbers sit under the feet.
+        inside = width - 6
+        column = max(18, inside // 3)
+        left = x + 3
+        self._slots = []
+        for number, item in enumerate(state.credit_gear):
+            centre = left + column * number + column / 2
+            self._slots.append((centre, y + 10))
+            name = item.name[: column - 1]
+            buffer.text(
+                left + column * number,
+                y + 11,
+                name,
+                parse_style(f"bold {BONE}"),
+            )
+            buffer.text(
+                left + column * number,
+                y + 12,
+                item.kind[: column - 1],
+                parse_style(PURPLE),
+            )
+            detail = ", ".join(item.modifiers.describe())
+            for line_number, text in enumerate(
+                wrap(detail, column - 1)[:2]
+            ):
+                buffer.text(
+                    left + column * number,
+                    y + 13 + line_number,
+                    text,
+                    parse_style(ASH),
+                )
 
         rerolled = state.credit_rerolled
         options = [
@@ -108,6 +142,42 @@ class CreditScreen(Screen):
                 self.message[: width - 6],
                 parse_style(ASH),
             )
+
+    def art(self, app) -> list[Placed]:
+        """The three pieces, by their own drawings.
+
+        The card is the first time the player sees what the house is lending;
+        three names are a list, three pictures are a set of equipment. A weapon
+        has its own sheet, a coat and an amulet share the kind's drawing until
+        they are painted one apiece.
+        """
+        if not self._slots:
+            return []
+        cell_w, cell_h = app.font.cell_w, app.font.cell_h
+        placed: list[Placed] = []
+        for (centre, bottom_row), item in zip(
+            self._slots, self.state.credit_gear, strict=False
+        ):
+            template = ITEMS.get(item.item_id)
+            if template is None:
+                continue
+            picture = item_icon(template)
+            if picture is None or not art_exists(picture):
+                continue
+            measured = art_size(picture)
+            if measured is None:
+                continue
+            # One size for all three, so a coat does not read as a smaller
+            # promise than a sword.
+            placed.append(
+                Placed(
+                    picture,
+                    centre * cell_w,
+                    bottom_row * cell_h - 2,
+                    96,
+                )
+            )
+        return placed
 
     # -- input --------------------------------------------------------------
     def key(self, name, event, app) -> bool:

@@ -23,6 +23,11 @@ def test_the_loan_is_three_named_pieces_and_a_purse():
     state = _begin()
 
     assert len(state.credit_gear) == 3
+    assert {item.kind for item in state.credit_gear} == {
+        "weapon",
+        "armour",
+        "amulet",
+    }, "the house lent two of one kind and none of another"
     assert all(item.name for item in state.credit_gear)
     assert state.gold == CREDIT_GOLD
     assert state.credit_rerolled is False
@@ -39,6 +44,11 @@ def test_one_reroll_costs_fifty_and_takes_the_old_pieces_back():
     assert state.credit_rerolled is True
     assert state.credit_roll == 1
     assert len(state.credit_gear) == 3
+    assert {item.kind for item in state.credit_gear} == {
+        "weapon",
+        "armour",
+        "amulet",
+    }
     for old in before:
         assert old not in state.inventory
         assert all(
@@ -157,3 +167,25 @@ def test_the_daily_door_is_free_because_its_dice_do_not_change(tmp_path, monkeyp
     assert app.run.daily
     assert app.progress.gold == 0
     assert type(app.screens[-1]).__name__ == "CreditScreen"
+
+
+def test_the_card_paints_the_coat_as_well_as_the_blade():
+    from types import SimpleNamespace
+
+    from neverdeads_revenge.desktop.pattern import PatternBuffer
+
+    state = _begin()
+    screen = CreditScreen(state)
+    buffer = PatternBuffer(80, 30, SimpleNamespace(cell_w=10, cell_h=20))
+    screen.draw(buffer, None)
+
+    placed = screen.art(SimpleNamespace(font=SimpleNamespace(cell_w=10, cell_h=20)))
+
+    from neverdeads_revenge.desktop.art import item_icon
+    from neverdeads_revenge.world.items import ITEMS
+
+    expected = {
+        item_icon(ITEMS[item.item_id]) for item in state.credit_gear
+    }
+    assert len(placed) == 3
+    assert {one.art for one in placed} == expected
