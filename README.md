@@ -69,9 +69,10 @@ three pieces from the deep and a 50-coin purse. The door costs **50 coin from
 the permanent purse** to open; leaving at the credit card therefore costs the
 entry, which is what stops the starting roll from being rerolled for free. The
 daily is free: its seed and its credit are the same all day, so a restart
-cannot roll them again. The three pieces are shown by name before the first
-step; one reroll of the set costs the 50 coin, once. Every tenth floor from there is a landing with one
-question. **Bank the run** and take the number it has, or **push on**: the next
+cannot roll them again. The three pieces are always one weapon, one coat and
+one amulet, shown with their paintings and names before the first step; one
+reroll of the set costs the 50 coin, once. Every tenth floor from there is a
+landing with one question. **Bank the run** and take the number it has, or **push on**: the next
 ten floors are worth 1.25x more and pay 1.25x coin, but death takes the whole
 wager -- score and purse both. Banking is the only way to keep the coin.
 
