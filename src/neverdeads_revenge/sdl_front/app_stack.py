@@ -467,6 +467,12 @@ class AppStack:
         )
         self.effects.clear()
         self.screens = [GameScreen(self.run)]
+        if tenth_door and self.run.credit_gear:
+            # The loan is shown before the first step: three names, and one
+            # paid reroll for a player who does not like the house's dice.
+            from ..desktop.screens.credit import CreditScreen
+
+            self.push(CreditScreen(self.run))
         self.redraw()
 
     def continue_run(self) -> None:

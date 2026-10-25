@@ -84,6 +84,8 @@ __all__ = [
     "DOOR_ENEMY_BASE",
     "DOOR_ENEMY_CAP",
     "door_enemy_count",
+    "CREDIT_GOLD",
+    "CREDIT_REROLL",
 ]
 
 VIEW_RADIUS = 9
@@ -107,6 +109,13 @@ DOOR_EVERY = 10
 #: teeth, not the crowd.
 DOOR_ENEMY_BASE = 10
 DOOR_ENEMY_CAP = 20
+
+#: The house's purse at the door. One reroll is exactly its price; the choice
+#: is whether to spend the loan on another set of pieces or keep the coin.
+CREDIT_GOLD = 50
+
+#: What one more roll of the deep costs.
+CREDIT_REROLL = 50
 
 
 def door_enemy_count(depth: int) -> int:
@@ -230,6 +239,13 @@ class GameState:
     banked: bool = False
     #: The daily date this run belongs to, or empty for an ordinary door.
     daily: str = ""
+    #: The pieces the house lent this run, by object. Kept so a reroll can take
+    #: back exactly those pieces rather than guess by item id.
+    credit_gear: list[GroundItem] = field(default_factory=list)
+    #: Which roll of the credit dice this is, and whether the one paid reroll
+    #: has been spent.
+    credit_roll: int = 0
+    credit_rerolled: bool = False
     #: The current ring's weather, by key. Empty on the threshold floor.
     ring_rule: str = ""
     #: The three boons on offer at the door the player is standing before.
@@ -1342,6 +1358,33 @@ class GameState:
             self.gold -= paid
             self.say(f"The dark takes its toll: {paid} coins.", LogKind.BAD)
 
+    def reroll_credit(self) -> str:
+        """Pay the house and take back the three pieces for three others.
+
+        One paid roll per run. The pieces are removed by identity, not by item
+        key, because a shop blade can share a key with a piece of the loan and
+        the loan is the only thing the house is taking back.
+        """
+        if self.credit_rerolled:
+            return "The house has already rolled again."
+        if self.gold < CREDIT_REROLL:
+            return f"The house wants {CREDIT_REROLL} coin."
+        self.gold -= CREDIT_REROLL
+        for item in self.credit_gear:
+            if item.slot and self.player.equipment.get(item.slot) is item:
+                del self.player.equipment[item.slot]
+            if item in self.inventory:
+                self.inventory.remove(item)
+        self.credit_gear = []
+        self.credit_roll += 1
+        self.credit_rerolled = True
+        _roll_credit(self, self.seed)
+        self.say(
+            f"The house rolls again. {CREDIT_REROLL} coin, and the pieces change.",
+            LogKind.SYSTEM,
+        )
+        return "The house rolls again."
+
     def open_door(self) -> None:
         """Stand before the door and lay out what this ring is offering."""
         self.door_pending = True
@@ -1581,21 +1624,31 @@ def _grant_credit(state: GameState, seed: int) -> None:
     state.level = CREDIT_LEVEL
     state.kill_points = kill_points_for(CREDIT_LEVEL)
     state.player.stats.hp = state.player.stats.max_hp
+    state.gold += CREDIT_GOLD
+    state.credit_roll = 0
+    state.credit_rerolled = False
+    _roll_credit(state, seed)
+    state.say(
+        "The house lends you a name it has already spent: "
+        f"level {CREDIT_LEVEL}, three pieces from the deep, "
+        f"and {CREDIT_GOLD} coin.",
+        LogKind.GOOD,
+    )
 
-    credit = Rng(seed * 1019 + 883)
+
+def _roll_credit(state: GameState, seed: int) -> None:
+    """Take exactly the three pieces the house is offering this roll."""
+    credit = Rng(seed * 1019 + 883 + state.credit_roll * 17)
     deep = [
         key
         for key, template in ITEMS.items()
         if template.chest_only
         and template.kind in ("weapon", "armour", "amulet")
     ]
-    for key in credit.shuffled(deep)[:CREDIT_PACKS]:
+    state.credit_gear = [
         _receive(state, ITEMS[key])
-    state.say(
-        "The house lends you a name it has already spent: "
-        f"level {CREDIT_LEVEL}, and three pieces from the deep.",
-        LogKind.GOOD,
-    )
+        for key in credit.shuffled(deep)[:CREDIT_PACKS]
+    ]
 
 
 def _apply_upgrades(state: GameState, upgrades: dict[str, int]) -> None:
@@ -1647,7 +1700,7 @@ def _apply_upgrades(state: GameState, upgrades: dict[str, int]) -> None:
     player.stats.hp = player.stats.max_hp
 
 
-def _receive(state: GameState, template) -> None:
+def _receive(state: GameState, template) -> GroundItem:
     """Put an item where it belongs: what has no slot in the pack, the rest worn.
 
     The test is the *slot* and not the kind: a strange draught is not a draught
@@ -1657,7 +1710,7 @@ def _receive(state: GameState, template) -> None:
     item = make_item(template)
     if template.slot is None:
         state.inventory.append(item)
-        return
+        return item
 
     previous = state.player.equipment.get(template.slot)
     state.player.equipment[template.slot] = item
@@ -1674,6 +1727,7 @@ def _receive(state: GameState, template) -> None:
         # the shop should not have sold.
         state.inventory.append(previous)
         state.say(f"The {previous.name} goes into the pack.", LogKind.SYSTEM)
+    return item
 
 
 def _apply_pending(state: GameState, keys) -> None:

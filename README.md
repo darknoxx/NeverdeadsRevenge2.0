@@ -64,9 +64,10 @@ what you carry, and by spending the ground you are standing on.
 ### The Tenth Door
 
 Once a run has escaped through the rift, the title offers **THE TENTH DOOR**:
-the same dungeon, started on floor 10 with the house's credit -- level 18 and
-three pieces from the deep. Every tenth floor from there is a landing with one
-question. **Bank the run** and take the number it has, or **push on**: the next
+the same dungeon, started on floor 10 with the house's credit -- level 18,
+three pieces from the deep and a 50-coin purse. The three pieces are shown by
+name before the first step; one reroll of the set costs the 50 coin, once.
+Every tenth floor from there is a landing with one question. **Bank the run** and take the number it has, or **push on**: the next
 ten floors are worth 1.25x more and pay 1.25x coin, but death takes the whole
 wager -- score and purse both. Banking is the only way to keep the coin.
 

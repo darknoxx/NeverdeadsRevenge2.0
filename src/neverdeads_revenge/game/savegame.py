@@ -183,6 +183,9 @@ def dump(state: GameState) -> dict:
         "depth": state.depth,
         "tenth_door": state.tenth_door,
         "daily": state.daily,
+        "credit_gear": [_encode(item) for item in state.credit_gear],
+        "credit_roll": state.credit_roll,
+        "credit_rerolled": state.credit_rerolled,
         "door_ring": state.door_ring,
         "risk_multiplier": state.risk_multiplier,
         "door_pending": state.door_pending,
@@ -274,6 +277,11 @@ def load(payload: dict) -> GameState:
         state.depth = payload["depth"]
         state.tenth_door = bool(payload.get("tenth_door", False))
         state.daily = str(payload.get("daily", ""))
+        state.credit_gear = [
+            _decode(item) for item in payload.get("credit_gear", [])
+        ]
+        state.credit_roll = int(payload.get("credit_roll", 0))
+        state.credit_rerolled = bool(payload.get("credit_rerolled", False))
         state.door_ring = int(payload.get("door_ring", 1))
         state.risk_multiplier = float(payload.get("risk_multiplier", 1.0))
         state.door_pending = bool(payload.get("door_pending", False))
