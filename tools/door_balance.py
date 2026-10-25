@@ -31,8 +31,10 @@ def ring_for_depth(depth: int) -> int:
 
 
 def report(seed: int = 3, fights: int = 2) -> None:
+    boon = "iron_heart"
     print(
-        f"seed {seed}: Tenth Door, credit level 18, no boons, {fights} fights a floor"
+        f"seed {seed}: Tenth Door, credit level 18, one boon ({boon}), "
+        f"specials on, {fights} fights a floor"
     )
     print(
         f"{'hero':11s} {'floor':5s} {'ring':4s} {'rule':16s} "
@@ -50,6 +52,8 @@ def report(seed: int = 3, fights: int = 2) -> None:
                 seed,
                 tenth_door=True,
                 ring_rule=rule_key if rule is not None else "",
+                boon=boon,
+                use_specials=True,
             )
             if not results:
                 continue

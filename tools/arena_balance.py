@@ -19,7 +19,7 @@ import sys
 from statistics import mean, median
 
 from neverdeads_revenge.game.actors import HEROES
-from neverdeads_revenge.game.battle import ATTACK
+from neverdeads_revenge.game.battle import ATTACK, SPECIAL
 from neverdeads_revenge.game.state import start_run
 
 __all__ = ["report", "simulate"]
@@ -63,6 +63,8 @@ def simulate(
     *,
     tenth_door: bool = False,
     ring_rule: str = "",
+    boon: str = "",
+    use_specials: bool = False,
 ) -> list[tuple[int, int, float]]:
     """Play the fights a run really meets: ``(crowd, rounds, health lost)``.
 
@@ -87,6 +89,10 @@ def simulate(
         if ring_rule:
             state.ring_rule = ring_rule
             state.build_floor(depth)
+        if boon:
+            from neverdeads_revenge.game.boons import apply
+
+            apply(state, boon)
     else:
         for _ in range(depth - 1):
             state.player.stats.hp = state.player.max_hp
@@ -110,7 +116,23 @@ def simulate(
             living = fight.living_enemies()
             if not living:
                 break
-            fight.choose(ATTACK, living[0])
+            special = None
+            if use_specials:
+                ready = [
+                    one
+                    for one in fight.learned()
+                    if fight.special_available(one)
+                ]
+                if ready:
+                    # Spend the dearest affordable trick: the barometer is
+                    # asking what a player with the kit can do, not what a
+                    # player who forgets it can.
+                    special = max(ready, key=lambda one: one.cost)
+            if special is None:
+                fight.choose(ATTACK, living[0])
+            else:
+                target = living[0] if special.needs_target else None
+                fight.choose(SPECIAL, target, special=special.key)
         lost = (state.player.max_hp - state.player.stats.hp) / max(
             1, state.player.max_hp
         )
