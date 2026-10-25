@@ -61,6 +61,15 @@ what you carry, and by spending the ground you are standing on.
 | **W** | Walkyrion | the even blade | No weakness worth naming and no trick worth relying on. Strikes on time, takes the hit he has to, and is still standing when the screaming stops. REVENGE: **AURAL BLADE** (damage). |
 | **I** | Inferno | the short fuse | Hits hardest and dies soonest. Every blow is a gamble, and the fire only makes the odds louder. REVENGE: **WILD FIRE** (crit). |
 
+### The Tenth Door
+
+Once a run has escaped through the rift, the title offers **THE TENTH DOOR**:
+the same dungeon, started on floor 10 with the house's credit -- level 18 and
+three pieces from the deep. Every tenth floor from there is a landing with one
+question. **Bank the run** and take the number it has, or **push on**: the next
+ten floors are worth 1.25x more, and death takes the whole wager. The first
+slice ends at the door; ring rules and boons come after it.
+
 ## What is down there
 
 ### Loot and gear

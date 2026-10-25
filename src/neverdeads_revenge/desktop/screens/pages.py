@@ -14,12 +14,15 @@ from __future__ import annotations
 from ...game.armory import stat_lines
 from ...game.armory import weapon as armory_weapon
 from ...game.bestiary import entry as bestiary_entry
+from ...world.affixes import AFFIXES
 from ..art import exists as art_exists
 
 __all__ = [
     "write_the_page",
     "write_the_weapon",
     "write_the_armour",
+    "write_the_aspect",
+    "the_aspect_card",
     "the_page",
     "the_weapon_page",
 ]
@@ -61,6 +64,49 @@ def write_the_weapon(app, key: str) -> bool:
 def write_the_armour(app, key: str) -> bool:
     """File one coat's page in the Wardrobe."""
     return _write(app, "record_armour", key)
+
+
+def write_the_aspect(app, key: str, affix: str) -> bool:
+    """Note one aspect on a monster's page. Returns whether it was new.
+
+    The page already exists -- the monster was killed to meet it -- so this is
+    the margin note rather than a second page. It still saves at once: what the
+    dark did to a monster is worth as much as the monster.
+    """
+    progress = getattr(app, "progress", None)
+    record = getattr(progress, "record_aspect", None)
+    if record is None or not record(key, affix):
+        return False
+    play = getattr(app, "play", None)
+    if play is not None:
+        play("rare_item")
+    save = getattr(app, "save_progress", None)
+    if save is not None:
+        save()
+    return True
+
+
+def the_aspect_card(key: str, affix: str, on_done=None):
+    """The card for an aspect met for the first time, or ``None``.
+
+    Not a page: the monster's page is already written and already being shown.
+    This is the line underneath it -- the same ghoul, and the dark has been at
+    it -- which is the thing the player has actually not seen before.
+    """
+    from .dialogs import InfoScreen
+
+    entry = bestiary_entry(key)
+    aspect = AFFIXES.get(affix)
+    if entry is None or aspect is None:
+        return None
+    return InfoScreen(
+        "THE ALMANAC",
+        f"{aspect.adjective} {entry.name}",
+        f"A new aspect has been written.\n\n{aspect.blurb}\n\n"
+        f"It is the same {entry.name}. The dark has been at it.",
+        picture=entry.picture if art_exists(entry.picture) else None,
+        on_done=on_done,
+    )
 
 
 def the_page(key: str, on_done=None):

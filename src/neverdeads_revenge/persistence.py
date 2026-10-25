@@ -112,6 +112,10 @@ class MetaProgress:
     #: Coats whose page in the Wardrobe has been written, by item key. The third
     #: collection, and the same rule: a coat is worn, not seen.
     wardrobe: list[str] = field(default_factory=list)
+    #: Aspects met, by monster key: the dark's variants are a collection of their
+    #: own. A page still belongs to the monster -- the ghoul is one entry -- and
+    #: this is the margin note that says which versions of it the run has met.
+    aspects: dict[str, list[str]] = field(default_factory=dict)
     #: Lifetime run statistics.
     runs_started: int = 0
     runs_won: int = 0
@@ -164,6 +168,22 @@ class MetaProgress:
             return False
         self.wardrobe.append(key)
         self.wardrobe.sort()
+        return True
+
+    def record_aspect(self, key: str, affix: str) -> bool:
+        """Note that a monster has been met in one of the dark's aspects.
+
+        Returns whether it was new, for the same reason the page methods do:
+        the caller has a card to raise and a sound to make, and neither belongs
+        to the second time the same ghoul comes at you on fire.
+        """
+        if not key or not affix:
+            return False
+        seen = self.aspects.setdefault(key, [])
+        if affix in seen:
+            return False
+        seen.append(affix)
+        seen.sort()
         return True
 
     def record_run(
@@ -352,6 +372,15 @@ def load_meta(path: Path | None = None) -> MetaProgress:
             bestiary=[str(key) for key in raw.get("bestiary", [])],
             armory=[str(key) for key in raw.get("armory", [])],
             wardrobe=[str(key) for key in raw.get("wardrobe", [])],
+            aspects={
+                str(key): [str(one) for one in value]
+                for key, value in (
+                    raw.get("aspects", {})
+                    if isinstance(raw.get("aspects"), dict)
+                    else {}
+                ).items()
+                if isinstance(value, list)
+            },
             runs_started=int(raw.get("runs_started", 0)),
             runs_won=int(raw.get("runs_won", 0)),
             best_depth=int(raw.get("best_depth", 0)),

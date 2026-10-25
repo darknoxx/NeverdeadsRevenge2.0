@@ -30,8 +30,13 @@ def clean_name(raw: str) -> str:
 def _summary_lines(state) -> list[tuple[str, str]]:
     """The run, added up. The same lines the terminal summary printed."""
     won = state.run_state.name == "ESCAPED"
+    banked = bool(getattr(state, "banked", False))
     lines: list[tuple[str, str]] = []
-    if won:
+    if banked:
+        lines.append(
+            (f"Banked at the door on floor {state.depth}", "bold bright_cyan")
+        )
+    elif won:
         lines.append((f"Out of the dark on floor {state.depth}", "bold bright_cyan"))
     else:
         lines.append((f"Floor reached  {state.depth}", "bold cyan"))
@@ -48,7 +53,9 @@ def _summary_lines(state) -> list[tuple[str, str]]:
         lines.append((f"Fame            {state.fame}  "
                       f"(worth {state.score_multiplier:.2f}x)", "bold green"))
     lines.append((f"Score           {state.score}", f"bold {PURPLE}"))
-    if won:
+    if banked:
+        lines.append(("The door keeps what it was given.", "italic"))
+    elif won:
         lines.append(("You were not granted death.", "italic"))
     return lines
 
@@ -73,7 +80,11 @@ class GameOverScreen(Screen):
         width = min(buffer.cols - 6, 46)
         height = len(lines) + 8
         x, y = (buffer.cols - width) // 2, max(0, (buffer.rows - height) // 2)
-        title = "VICTORY" if self.won else "YOU DIED"
+        title = (
+            "BANKED"
+            if getattr(self.state, "banked", False)
+            else ("VICTORY" if self.won else "YOU DIED")
+        )
         box(buffer, x, y, width, height, title=title, border=BLOOD, fill=True)
         for i, (text, style) in enumerate(lines):
             buffer.text(x + 3, y + 2 + i, text[: width - 6], parse_style(style))

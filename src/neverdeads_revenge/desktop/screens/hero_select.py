@@ -64,8 +64,9 @@ PORTRAIT_HEIGHT = 90
 class HeroSelectScreen(Screen):
     """Choose a hero. Returns the key through the app's callback."""
 
-    def __init__(self) -> None:
+    def __init__(self, tenth_door: bool = False) -> None:
         self.index = 0
+        self.tenth_door = tenth_door
         #: Where the hero's picture goes, in pixels: the centre of the card and
         #: the line the figure stands on. Decided in ``draw`` and handed out by
         #: ``art``, because the grid pass knows the card's rows and the frame is
@@ -88,7 +89,16 @@ class HeroSelectScreen(Screen):
         width = min(buffer.cols - 8, 76)
         height = min(buffer.rows - 4, 22)
         x, y = (buffer.cols - width) // 2, (buffer.rows - height) // 2
-        box(buffer, x, y, width, height, title="CHOOSE", border=BLOOD, fill=True)
+        box(
+            buffer,
+            x,
+            y,
+            width,
+            height,
+            title="THE TENTH DOOR" if self.tenth_door else "CHOOSE",
+            border=BLOOD,
+            fill=True,
+        )
 
         rows = _stat_rows(hero) if hero is not None else []
         stats_top = y + height - len(rows) - 2 if rows else y + height - 3
@@ -173,7 +183,7 @@ class HeroSelectScreen(Screen):
         if name in ("enter", "space"):
             hero = self.current
             if hero is not None:
-                app.begin_run(hero.key)
+                app.begin_run(hero.key, tenth_door=self.tenth_door)
             return True
         if name == "escape":
             app.pop()

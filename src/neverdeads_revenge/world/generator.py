@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from neverdeads_revenge.core.direction import Pos
 from neverdeads_revenge.core.rng import Rng
 
+from .affixes import weapon_affixes
 from .items import (
     GIFT_CHANCE,
     MIMIC_CHANCE,
@@ -344,6 +345,8 @@ def generate_floor(
     npc_keys: tuple[str, ...] = (),
     gift_keys: tuple[str, ...] = (),
     page_keys: tuple[int, ...] = (),
+    affix_rng: Rng | None = None,
+    endless: bool = False,
 ) -> GeneratedFloor:
     """Build one complete, validated dungeon floor.
 
@@ -353,6 +356,8 @@ def generate_floor(
         width, height: Map dimensions.
         room_attempts: How many random rooms to try before giving up.
         enemy_budget: Overrides the enemy count. Defaults to scaling with depth.
+        endless: Keep stairs past the normal escape depth. The Tenth Door uses
+            this so its tenth floor is a landing rather than the end.
         curse_keys: Which curses a chest may hold. Passed in rather than imported
             for the same reason ``filled_slots`` is.
         filled_slots: Equipment slots the player already has something in. What a
@@ -384,8 +389,13 @@ def generate_floor(
 
     player_start = start_room.center
     exit_pos = exit_room.center
-    # The deepest floor holds the way out rather than a way further in.
-    exit_tile = Tile.RIFT if depth >= ESCAPE_DEPTH else Tile.STAIRS_DOWN
+    # The deepest floor holds the way out rather than a way further in. The
+    # Tenth Door is the exception: its tenth, twentieth and later floors are
+    # landings before a door, and a rift there would end the mode at the floor
+    # it was supposed to open on.
+    exit_tile = (
+        Tile.RIFT if depth >= ESCAPE_DEPTH and not endless else Tile.STAIRS_DOWN
+    )
     dungeon_map.set_tile(exit_pos, exit_tile)
 
     # Spawn candidates: interior floor of every room, minus the player's room so
@@ -487,6 +497,7 @@ def generate_floor(
         gift_keys,
         page_keys,
         blocked=tuple(pos for pos, _ in npcs),
+        affix_rng=affix_rng,
     )
 
     return GeneratedFloor(
@@ -580,6 +591,7 @@ def _scatter_loot(
     gift_keys: tuple[str, ...] = (),
     page_keys: tuple[int, ...] = (),
     blocked: tuple[Pos, ...] = (),
+    affix_rng: Rng | None = None,
 ) -> dict[Pos, GroundItem]:
 
     """Drop the floor's draughts, equipment and chests.
@@ -608,12 +620,23 @@ def _scatter_loot(
     # Separate pools, rolled separately and then placed together. One shared
     # table would let equipment crowd out the healing the whole game is balanced
     # around, which is exactly what happened the first time.
+    def piece(template):
+        """A floor item, with the dark's mark on it if the deep dice said so.
+
+        An item that already names its own aspect (a curated deep find) keeps
+        it; the roll only writes on a blank one.
+        """
+        if template.affixes or affix_rng is None:
+            return make_item(template)
+        marks = weapon_affixes(affix_rng, depth, template.kind)
+        return make_item(template, affixes=marks)
+
     to_place: list[GroundItem] = [
         make_item(roll_item(rng, depth, kinds=("draught",)))
         for _ in range(loot_count(depth))
     ]
     to_place += [
-        make_item(roll_item(rng, depth, kinds=("weapon", "armour")))
+        piece(roll_item(rng, depth, kinds=("weapon", "armour")))
         for _ in range(equipment_count(depth))
     ]
     # And the strange draughts, from their own pool: five bottles that lay a
@@ -644,14 +667,22 @@ def _scatter_loot(
             holding_a_gift = (
                 not mimic and bool(gifts) and rng.chance(GIFT_CHANCE)
             )
+            contents = (
+                None
+                if holding_a_gift
+                else roll_chest_contents(rng, depth, filled_slots)
+            )
+            marks = None
+            if affix_rng is not None and contents is not None:
+                if not contents.affixes:
+                    marks = weapon_affixes(affix_rng, depth, contents.kind)
             to_place.append(
                 make_chest(
                     key,
-                    None if holding_a_gift else roll_chest_contents(
-                        rng, depth, filled_slots
-                    ),
+                    contents,
                     gift=gifts.pop() if holding_a_gift else None,
                     mimic=mimic,
+                    affixes=marks,
                 )
             )
     # The chronicle, torn up and scattered. Drawn without replacement from what
@@ -666,7 +697,7 @@ def _scatter_loot(
     # The same two questions are asked of it: what are you missing, and how deep
     # is this.
     to_place += [
-        make_item(roll_chest_contents(rng, depth, filled_slots))
+        piece(roll_chest_contents(rng, depth, filled_slots))
         for _ in range(rare_find_count(rng, depth))
     ]
 

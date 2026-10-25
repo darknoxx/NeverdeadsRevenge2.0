@@ -654,7 +654,13 @@ def hud_lines(state: GameState) -> list[tuple[str, str]]:
     amulet_name = amulet.name.split()[-1][:_SHORT_NAME] if amulet else "—"
     lines.append((f"{_SLOT_GLYPH['amulet']} {amulet_name}", "bold white"))
 
-    score = f"Floor {state.depth}/{ESCAPE_DEPTH}  Score {state.score}"
+    if state.tenth_door:
+        score = (
+            f"Floor {state.depth}  Risk x{state.risk_multiplier:.2f}"
+            f"  Score {state.score}"
+        )
+    else:
+        score = f"Floor {state.depth}/{ESCAPE_DEPTH}  Score {state.score}"
     if state.fame:
         score += f"  x{state.score_multiplier:.2f}"
     lines.append((score, "bold cyan"))
@@ -663,6 +669,8 @@ def hud_lines(state: GameState) -> list[tuple[str, str]]:
         lines.append(("r take the hour back", "bold green"))
     if state.at_the_rift:
         lines.append(("The rift hums.", "bold bright_cyan"))
+    if state.at_a_door and state.on_exit:
+        lines.append(("The tenth door waits.", "bold bright_cyan"))
 
     # Gold alone, now: the pack is a belt of squares at the foot of the panel,
     # and a counter beside the purse was saying the same thing twice -- once

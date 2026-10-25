@@ -211,10 +211,14 @@ class BattleScreen(BattlePlayback, BattlePanels, BattleStage, Screen):
         #: finished letting the body go: a page over the death would be the book
         #: covering the fight it describes.
         self._pages_due: list[str] = []
+        #: The aspect cards, after the pages: a first kill and the dark's mark
+        #: are two notes, and the page is the larger one.
+        self._aspects_due: list[tuple[str, str]] = []
         self._page_at: float | None = None
         #: What this screen has already looked at, so the same kill is not filed
         #: on every frame it is drawn.
         self._filed: set[str] = set()
+        self._filed_aspects: set[tuple[str, str]] = set()
         #: The verdict the fight has earned and not yet *shown*. It waits for the
         #: book: a page written by the last blow is read before the room says who
         #: won, or the player leaves on the verdict and the page is never seen.

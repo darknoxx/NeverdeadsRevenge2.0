@@ -359,10 +359,10 @@ class AppStack:
         self.progress.muted = self.sfx.muted
         self.save_progress()
 
-    def open_hero_select(self) -> None:
+    def open_hero_select(self, *, tenth_door: bool = False) -> None:
         from ..desktop.screens.hero_select import HeroSelectScreen
 
-        self.push(HeroSelectScreen())
+        self.push(HeroSelectScreen(tenth_door=tenth_door))
 
     def _a_seed(self) -> int:
         """The seed for the run about to begin.
@@ -377,7 +377,7 @@ class AppStack:
             return self.seed
         return random.SystemRandom().randrange(2**32)
 
-    def begin_run(self, hero_key: str) -> None:
+    def begin_run(self, hero_key: str, *, tenth_door: bool = False) -> None:
         from ..desktop.screens.game import GameScreen
 
         if not self.prologue_seen:
@@ -387,12 +387,18 @@ class AppStack:
             self.prologue_seen = True
             from ..desktop.screens.prologue import PrologueScreen
 
-            self.push(PrologueScreen(on_done=lambda: self.begin_run(hero_key)))
+            self.push(
+                PrologueScreen(
+                    on_done=lambda: self.begin_run(
+                        hero_key, tenth_door=tenth_door
+                    )
+                )
+            )
             return
         from ..game.actors import HEROES
         from ..game.lore import PAGE_COUNT
         from ..game.shop import loadout_from
-        from ..game.state import start_run
+        from ..game.state import DOOR_EVERY, start_run
 
         loadout = loadout_from(self.progress)
         self.save_progress()
@@ -407,6 +413,8 @@ class AppStack:
                 for number in range(1, PAGE_COUNT + 1)
                 if number not in self.progress.pages
             ),
+            tenth_door=tenth_door,
+            start_depth=DOOR_EVERY if tenth_door else 1,
         )
         self.effects.clear()
         self.screens = [GameScreen(self.run)]

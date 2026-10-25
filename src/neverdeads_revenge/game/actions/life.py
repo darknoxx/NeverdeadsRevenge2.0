@@ -332,6 +332,14 @@ def _on_death(state: GameState, enemy: Actor) -> None:
         # monster is the moment it is *known*. What the page says is the book's
         # business; that there is one is the dungeon's.
         state.defeated.append(enemy.key)
+    if enemy.kind is ActorKind.ENEMY and enemy.key and enemy.affixes:
+        # The page is the monster's; the aspect is a note in its margin. It is
+        # recorded on the kill for the same reason the page is: a variant that
+        # walked past the hero is not one the book can describe.
+        for affix in enemy.affixes:
+            met = (enemy.key, affix)
+            if met not in state.aspects_met:
+                state.aspects_met.append(met)
     state.deaths.append(enemy.position)
     # THE CARRION TONGUE reads this long after the blood has been cleared: a
     # square where something died is a square that feeds, for the whole floor.

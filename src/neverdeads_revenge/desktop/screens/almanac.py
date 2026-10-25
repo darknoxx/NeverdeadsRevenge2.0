@@ -29,6 +29,7 @@ from ...game.bestiary import ENTRIES, Entry, stat_lines, title_of
 from ...game.lore import PAGE_COUNT, TITLE, numeral, page
 from ...game.wardrobe import ARMOURS, Armour
 from ...game.wardrobe import stat_lines as armour_stats
+from ...world.affixes import AFFIXES
 from ...world.items import ITEMS
 from ..art import Placed, exists as art_exists, size as art_size
 from ..chrome import ASH, BONE, BLOOD, PURPLE, box, rule
@@ -341,7 +342,7 @@ class AlmanacScreen(Screen):
                 parse_style(ASH),
             )
             return
-        rows = self._lines(entry, text_room)
+        rows = self._lines(entry, text_room, app)
         self._card_total = len(rows)
         self.detail_offset = max(0, min(self.detail_offset, max(0, len(rows) - body_rows)))
         self._more = self.detail_offset + body_rows < len(rows)
@@ -394,14 +395,16 @@ class AlmanacScreen(Screen):
             return column, factor
         return 0, 1
 
-    def _lines(self, entry, room: int) -> list[tuple[str, str]]:
+    def _lines(self, entry, room: int, app=None) -> list[tuple[str, str]]:
         if self.tab == 1:
-            return self.monster_lines(entry, room)
+            return self.monster_lines(entry, room, app)
         if self.tab == 2:
             return self.weapon_lines(entry, room)
         return self.armour_lines(entry, room)
 
-    def monster_lines(self, entry: Entry, room: int) -> list[tuple[str, str]]:
+    def monster_lines(
+        self, entry: Entry, room: int, app=None
+    ) -> list[tuple[str, str]]:
         """One monster's page as lines, top to bottom.
 
         The figure is *not* in here: it is painted in pixels beside these words
@@ -422,6 +425,20 @@ class AlmanacScreen(Screen):
         rows.append(("", ""))
         rows.append(("HOW IT IS ANSWERED", f"bold {PURPLE}"))
         rows += [(line, BONE) for line in _wrap(entry.answer, room)]
+        seen = (
+            getattr(getattr(app, "progress", None), "aspects", {})
+            if app is not None
+            else {}
+        ).get(entry.key, ())
+        if seen:
+            rows.append(("", ""))
+            rows.append(("ASPECTS MET", f"bold {PURPLE}"))
+            for key in seen:
+                aspect = AFFIXES.get(key)
+                if aspect is None:
+                    continue
+                line = f"{aspect.adjective} — {aspect.blurb}"
+                rows += [(piece, ASH) for piece in _wrap(line, room)]
         rows.append(("", ""))
         # The lore is the part of the page a player reads for pleasure, so it is
         # grey rather than ash: dim enough to sit under the rule and the numbers,

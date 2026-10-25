@@ -996,6 +996,7 @@ def make_chest(
     gift: str | None = None,
     *,
     mimic: bool = False,
+    affixes: tuple[str, ...] | None = None,
 ) -> GroundItem:
     """A locked chest owing ``curse_key``, holding ``contents`` or ``gift``.
 
@@ -1013,7 +1014,9 @@ def make_chest(
         color=CHEST_COLOR,
         kind="chest",
         curse=curse_key,
-        contents=make_item(contents) if contents is not None else None,
+        contents=(
+            make_item(contents, affixes=affixes) if contents is not None else None
+        ),
         gift=gift,
         mimic=mimic,
     )

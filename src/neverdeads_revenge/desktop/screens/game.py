@@ -21,7 +21,14 @@ from neverdeads_revenge.game.state import GameState
 from ..keys import KEY_BINDINGS
 from ..padmap import FLOOR as FLOOR_PAD
 from .base import Screen
-from .pages import the_page, write_the_armour, write_the_page, write_the_weapon
+from .pages import (
+    the_aspect_card,
+    the_page,
+    write_the_armour,
+    write_the_aspect,
+    write_the_page,
+    write_the_weapon,
+)
 from .dialogs import (
     KindlyScreen,
     OPEN,
@@ -85,6 +92,7 @@ class GameScreen(Screen):
         #: The monsters this screen has already filed a page for, so a step does
         #: not re-read the whole list of the run's dead on every keypress.
         self._filed: set[str] = set()
+        self._filed_aspects: set[tuple[str, str]] = set()
         #: The same for the Armory's blades, and the keys whose card should say
         #: that a page was just written -- one card, not two.
         self._filed_weapons: set[str] = set()
@@ -236,6 +244,11 @@ class GameScreen(Screen):
 
         if result.prompt is not None:
             self._ask(result, app)
+            return
+        if run.door_pending:
+            from .door import DoorScreen
+
+            app.push(DoorScreen(run))
             return
         if result.died or result.escaped:
             self._game_over(app, won=result.escaped)
@@ -462,6 +475,16 @@ class GameScreen(Screen):
             if not write_the_page(app, key):
                 continue
             card = the_page(key)
+            if card is not None:
+                app.push(card)
+        for key, affix in self.state.aspects_met:
+            met = (key, affix)
+            if met in self._filed_aspects:
+                continue
+            self._filed_aspects.add(met)
+            if not write_the_aspect(app, key, affix):
+                continue
+            card = the_aspect_card(key, affix)
             if card is not None:
                 app.push(card)
 

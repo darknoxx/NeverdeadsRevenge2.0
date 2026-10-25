@@ -181,6 +181,11 @@ def dump(state: GameState) -> dict:
         "seed": state.seed,
         "rng": _encode(state.rng.state()),
         "depth": state.depth,
+        "tenth_door": state.tenth_door,
+        "door_ring": state.door_ring,
+        "risk_multiplier": state.risk_multiplier,
+        "door_pending": state.door_pending,
+        "banked": state.banked,
         "map": _encode(state.dungeon_map),
         "player": _encode(state.player),
         "enemies": [_encode(enemy) for enemy in state.enemies],
@@ -199,6 +204,7 @@ def dump(state: GameState) -> dict:
         "defeated": list(state.defeated),
         "found_weapons": list(state.found_weapons),
         "found_armours": list(state.found_armours),
+        "aspects_met": [list(met) for met in state.aspects_met],
         "level": state.level,
         "kill_points": state.kill_points,
         "kill_points_bonus": state.kill_points_bonus,
@@ -261,6 +267,11 @@ def load(payload: dict) -> GameState:
         state = GameState(hero=hero, rng=Rng(payload["seed"]), seed=payload["seed"])
         state.rng.restore(_decode(payload["rng"]))
         state.depth = payload["depth"]
+        state.tenth_door = bool(payload.get("tenth_door", False))
+        state.door_ring = int(payload.get("door_ring", 1))
+        state.risk_multiplier = float(payload.get("risk_multiplier", 1.0))
+        state.door_pending = bool(payload.get("door_pending", False))
+        state.banked = bool(payload.get("banked", False))
         state.dungeon_map = _decode(payload["map"])
         state.player = _decode(payload["player"])
         state.enemies = [_decode(enemy) for enemy in payload["enemies"]]
@@ -296,6 +307,11 @@ def load(payload: dict) -> GameState:
         ]
         state.found_armours = [
             str(key) for key in payload.get("found_armours", [])
+        ]
+        state.aspects_met = [
+            (str(met[0]), str(met[1]))
+            for met in payload.get("aspects_met", [])
+            if isinstance(met, (list, tuple)) and len(met) == 2
         ]
         state.level = payload["level"]
         # A save from before the purse: filled rather than empty, because the

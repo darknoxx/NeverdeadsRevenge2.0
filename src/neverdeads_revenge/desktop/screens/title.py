@@ -48,6 +48,10 @@ class TitleScreen(Screen):
         items = [("n", "NEW RUN")]
         if app.has_saved_run():
             items.append(("c", "CONTINUE"))
+        if getattr(app.progress, "runs_won", 0) >= 1:
+            # The door is not a mode you are shown before you have earned it:
+            # it opens for a player who has already stepped into the rift once.
+            items.append(("t", "TENTH DOOR"))
         items += [
             ("s", "SHOP"),
             ("h", "SCORES"),
@@ -160,14 +164,19 @@ class TitleScreen(Screen):
         texts = [
             f"[{label}]" if i == index else label for i, (_key, label) in enumerate(items)
         ]
-        x = max(0, (buffer.cols - len("   ".join(texts))) // 2)
+        # Two cells and not three, unless the line has grown a door and can no
+        # longer afford it: one cell still reads as a gap, and a menu that runs
+        # off the edge of the smallest grid is not a menu.
+        gap = 2
+        if sum(len(text) for text in texts) + gap * (len(texts) - 1) > buffer.cols:
+            gap = 1
+        x = max(0, (buffer.cols - sum(len(text) for text in texts)
+                    - gap * (len(texts) - 1)) // 2)
         for i, (_key, _label) in enumerate(items):
             chosen = i == index
             style = parse_style(f"bold {BONE}") if chosen else parse_style(ASH)
             buffer.text(x, y, texts[i], style)
-            # Two cells and not three: eight rows (CONTINUE included) have to
-            # fit one line at the smallest grid the game allows.
-            x += len(texts[i]) + 2
+            x += len(texts[i]) + gap
 
     @staticmethod
     def _centre(buffer, y: int, text: str, style: str) -> None:
@@ -234,6 +243,8 @@ class TitleScreen(Screen):
             app.open_hero_select()
         elif key == "c":
             app.continue_run()
+        elif key == "t":
+            app.open_hero_select(tenth_door=True)
         elif key == "s":
             app.open_shop()
         elif key == "h":

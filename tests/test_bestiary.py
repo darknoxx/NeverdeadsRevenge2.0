@@ -107,3 +107,71 @@ def test_the_notary_page_quotes_the_formula_the_floor_uses():
     page = entry("notary")
     assert f"max({NOTARY_MINIMUM}, {NOTARY_BILL}" in page.rule
     assert f"HP max({NOTARY_MINIMUM}, {NOTARY_BILL}" in stat_lines(page)[0]
+
+
+# -- the dark's margin notes ------------------------------------------------
+def test_an_aspect_is_written_on_the_first_kill_of_that_variant():
+    state = start_run(HEROES["noxx"], seed=3)
+    enemy = make_enemy(ENEMIES["ghoul"], (1, 1), affixes=("fire_kissed",))
+    state.enemies.append(enemy)
+    state.turn_queue.add(enemy)
+
+    _on_death(state, enemy)
+
+    assert ("ghoul", "fire_kissed") in state.aspects_met
+    assert state.defeated == ["ghoul"], "the page is still one per monster"
+
+
+def test_the_book_keeps_aspects_per_monster_and_not_twice():
+    progress = MetaProgress()
+
+    assert progress.record_aspect("ghoul", "fire_kissed")
+    assert not progress.record_aspect("ghoul", "fire_kissed")
+    progress.record_aspect("ghoul", "frostbound")
+    progress.record_aspect("ooze", "darkness_touched")
+
+    assert progress.aspects["ghoul"] == ["fire_kissed", "frostbound"]
+    assert progress.aspects["ooze"] == ["darkness_touched"]
+
+
+def test_the_aspects_outlive_the_run(tmp_path):
+    path = tmp_path / "meta.json"
+    progress = MetaProgress()
+    progress.record_aspect("ghoul", "fire_kissed")
+    save_meta(progress, path)
+
+    assert load_meta(path).aspects == {"ghoul": ["fire_kissed"]}
+
+
+def test_the_page_shows_the_aspects_that_have_been_met():
+    from types import SimpleNamespace
+
+    from neverdeads_revenge.desktop.screens.almanac import AlmanacScreen
+    from neverdeads_revenge.game.bestiary import entry
+
+    progress = MetaProgress()
+    progress.record_aspect("ghoul", "fire_kissed")
+    progress.record_aspect("ghoul", "frostbound")
+    app = SimpleNamespace(progress=progress)
+
+    text = " ".join(
+        line
+        for line, _style in AlmanacScreen().monster_lines(
+            entry("ghoul"), 44, app
+        )
+    )
+
+    assert "ASPECTS MET" in text
+    assert "fire-kissed" in text
+    assert "frostbound" in text
+
+
+def test_the_aspect_card_says_the_ghoul_is_the_same_ghoul():
+    from neverdeads_revenge.desktop.screens.pages import the_aspect_card
+
+    card = the_aspect_card("ghoul", "darkness_touched")
+
+    assert card is not None
+    assert card._name == "darkness-touched ghoul"
+    assert "The dark has been at it." in card._text
+    assert "does not leave" in card._text

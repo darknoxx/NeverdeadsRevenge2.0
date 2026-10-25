@@ -137,3 +137,33 @@ def test_the_darkness_touched_depthless_deepens_its_wound():
     assert target.status_stacks.get("bleed", 0) >= 2, (
         "the dark did not deepen the bleeding"
     )
+
+
+def test_deep_dice_name_blades_but_not_bottles_or_armour():
+    from neverdeads_revenge.core.rng import Rng
+    from neverdeads_revenge.world.affixes import weapon_affixes
+
+    rng = Rng(11)
+    marks = [weapon_affixes(rng, 10, "weapon") for _ in range(120)]
+
+    assert any(marks), "the deep dice never marked a blade"
+    assert all(len(one) <= 1 for one in marks), "two aspects on one blade"
+    assert all(not one or one[0] in AFFIXES for one in marks)
+    assert weapon_affixes(rng, 5, "weapon") == (), "the shallow floors are clean"
+    assert weapon_affixes(rng, 10, "draught") == ()
+    assert weapon_affixes(rng, 10, "armour") == ()
+
+
+def test_a_deep_floor_can_hand_over_a_named_blade():
+    from neverdeads_revenge.core.rng import Rng
+    from neverdeads_revenge.world.generator import generate_floor
+
+    floor = generate_floor(
+        Rng(3),
+        depth=7,
+        affix_rng=Rng(3 * 1013 + 7 * 101),
+    )
+
+    marked = [item for item in floor.items.values() if item.affixes]
+    assert marked, "the deep floor had no marked blade"
+    assert all(item.kind == "weapon" for item in marked)

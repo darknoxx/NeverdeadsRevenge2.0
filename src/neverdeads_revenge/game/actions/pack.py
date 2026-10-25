@@ -341,21 +341,13 @@ def _try_descend(state: GameState) -> ActionResult:
         state.escape()
         return _outcome(state, consumed_turn=False, acted=False)
 
-    state.floors_cleared += 1
-    state.build_floor(state.depth + 1)
-    # A floor is a new purse. The points do not trickle back between fights --
-    # that is what makes spending them a decision -- but walking into a floor
-    # empty-handed and staying empty-handed is not a decision, it is a corner.
-    state.kill_points = state.kill_points_max
+    if state.at_a_door:
+        # The stairs are a landing, not a descent. The screen that asks the
+        # question is the game's; the state only says that the question is open.
+        state.door_pending = True
+        return _outcome(state, consumed_turn=False, acted=False)
 
-    if state.toll_per_floor:
-        # After the descent, so it reads as the price of the floor rather than
-        # as something that happened on the last one. It can empty the purse but
-        # not go below it: a debt the run cannot pay is not a toll.
-        paid = min(state.toll_per_floor, state.gold)
-        state.gold -= paid
-        state.say(f"The dark takes its toll: {paid} coins.", LogKind.BAD)
-
+    state.descend()
     return _outcome(state, consumed_turn=False, acted=False)
 
 

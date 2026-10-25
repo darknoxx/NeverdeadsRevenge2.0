@@ -20,6 +20,7 @@ __all__ = [
     "AFFIXES",
     "AFFIX_FROM_DEPTH",
     "enemy_affixes",
+    "weapon_affixes",
     "name_with",
 ]
 
@@ -113,3 +114,22 @@ def enemy_affixes(rng, depth: int) -> tuple[str, ...]:
         return ()
     keys = tuple(AFFIXES)
     return (rng.pick(keys),)
+
+
+#: The first floor a weapon can carry a mark. The same as the monsters': the
+#: early floors teach the weapon, the deep ones teach what the dark did to it.
+WEAPON_AFFIX_FROM_DEPTH = 6
+
+
+def weapon_affixes(rng, depth: int, kind: str) -> tuple[str, ...]:
+    """Which aspect a deep weapon carries, if any.
+
+    Same shape as :func:`enemy_affixes`, and the same separate-dice rule: the
+    generator's own stream must not move because a blade got a name.
+    """
+    if kind != "weapon" or depth < WEAPON_AFFIX_FROM_DEPTH:
+        return ()
+    chance = min(0.30, 0.10 + 0.02 * (depth - WEAPON_AFFIX_FROM_DEPTH))
+    if not rng.chance(chance):
+        return ()
+    return (rng.pick(tuple(AFFIXES)),)

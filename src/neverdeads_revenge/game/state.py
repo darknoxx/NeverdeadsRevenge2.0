@@ -42,6 +42,8 @@ from .actors import (
 from .combat import apply_revenge
 from .levels import (
     SACRIFICED_KILL_POINTS,
+    apply_gain,
+    gains_between,
     kill_points_for,
     kills_to_next,
 )
@@ -74,10 +76,24 @@ __all__ = [
     "TURN_BUDGET_PER_FLOOR",
     "SPEED_BONUS_PER_TURN",
     "CLEANSE_COST",
+    "CREDIT_LEVEL",
+    "CREDIT_PACKS",
+    "DOOR_EVERY",
 ]
 
 VIEW_RADIUS = 9
 """How far the player can see, in cells."""
+
+#: The level the house lends a guest at the Tenth Door. It is the level a good
+#: run reaches by floor ten, granted whole rather than paid kill by kill,
+#: because the door is a wager and not a head start on the tutorial.
+CREDIT_LEVEL = 18
+
+#: How many pieces of deep gear the house hands over with the credit.
+CREDIT_PACKS = 3
+
+#: The Tenth Door is every tenth floor: ten, twenty, thirty, and onward.
+DOOR_EVERY = 10
 
 #: The health at which THE LAST BREATH turns on: at or below it, the hero's blows
 #: land twice and the enemies' find them harder to reach.
@@ -181,6 +197,19 @@ class GameState:
     rng: Rng
     seed: int
     depth: int = 1
+    #: Whether this run went through the Tenth Door. The mode is a rule about
+    #: what a stair means and what a tenth floor means, not a second game.
+    tenth_door: bool = False
+    #: How many doors the run has passed. One at the start, and one every ten
+    #: floors after it.
+    door_ring: int = 1
+    #: What the next door multiplies the run's score by. The wager.
+    risk_multiplier: float = 1.0
+    #: A door has been reached and is waiting for the player's answer.
+    door_pending: bool = False
+    #: Set when the player banks. The summary reads it rather than guessing
+    #: from the run state, because an escape and a bank are different endings.
+    banked: bool = False
     dungeon_map: DungeonMap = field(default_factory=lambda: DungeonMap(width=1, height=1))
     player: Actor = None  # type: ignore[assignment]
     enemies: list[Actor] = field(default_factory=list)
@@ -210,6 +239,10 @@ class GameState:
     #: ``found_weapons``: the book is written from the run, and the run only
     #: remembers what it met so the screen can tell what is new.
     found_armours: list[str] = field(default_factory=list)
+    #: Aspects met on a kill, by monster and aspect key. A list rather than a
+    #: dict because this is the run's log, not the book: the Almanac decides what
+    #: is new and writes it down.
+    aspects_met: list[tuple[str, str]] = field(default_factory=list)
     #: Whether the weapon's *first blow* rule has been paid this fight. A fact
     #: about the fight and not about each monster, which is what the blade says.
     first_blow_spent: bool = False
@@ -941,6 +974,10 @@ class GameState:
             # generator can still refuse: a floor with nowhere to put them hands
             # back the floor it has, which is better than monsters in the walls.
             enemy_budget=enemy_count(depth) + self.extra_enemies,
+            # Loot aspects roll on their own dice too, so a floor's layout is
+            # bit-for-bit what it was before the dark started naming blades.
+            affix_rng=Rng(self.seed * 1013 + depth * 101),
+            endless=self.tenth_door,
         )
         self.dungeon_map = floor.map
 
@@ -1083,6 +1120,11 @@ class GameState:
             )
 
         self.say(f"You descend to floor {depth}.", LogKind.SYSTEM)
+        if self.tenth_door and depth % DOOR_EVERY == 0:
+            self.say(
+                "A door stands in the wall, and the number on it is yours.",
+                LogKind.GOOD,
+            )
         if floor.is_final:
             self.say("A rift tears the dark open, and beyond it: air.", LogKind.GOOD)
         if self.enemies:
@@ -1220,6 +1262,53 @@ class GameState:
         self.run_state = RunState.ESCAPED
         self.say("You step into the rift. The emptiness lets you go.", LogKind.GOOD)
 
+    def bank(self) -> None:
+        """Take the run's score and leave through the Tenth Door.
+
+        Not an escape: the rift pays a bonus for finishing the ten floors, and
+        a bank is a decision made at a door the run chose to reach. The score is
+        the score it had when the player stopped.
+        """
+        self.banked = True
+        self.door_pending = False
+        self.run_state = RunState.ESCAPED
+        self.say(
+            "You bank the run. The door closes behind you, and the number stays.",
+            LogKind.GOOD,
+        )
+
+    @property
+    def at_a_door(self) -> bool:
+        """Whether this floor ends at a Tenth Door rather than plain stairs."""
+        return self.tenth_door and self.depth % DOOR_EVERY == 0
+
+    def descend(self) -> None:
+        """Take the stairs. One method, so a door and a step agree."""
+        self.floors_cleared += 1
+        self.build_floor(self.depth + 1)
+        # A floor is a new purse. The points do not trickle back between fights
+        # -- that is what makes spending them a decision -- but walking into a
+        # floor empty-handed and staying empty-handed is not a decision, it is
+        # a corner.
+        self.kill_points = self.kill_points_max
+        if self.toll_per_floor:
+            paid = min(self.toll_per_floor, self.gold)
+            self.gold -= paid
+            self.say(f"The dark takes its toll: {paid} coins.", LogKind.BAD)
+
+    def continue_through_the_door(self) -> None:
+        """Push on. The wager rises and the next ten floors begin."""
+        if not self.door_pending:
+            return
+        self.door_pending = False
+        self.door_ring += 1
+        self.risk_multiplier *= 1.25
+        self.say(
+            f"The door opens. Risk x{self.risk_multiplier:.2f}.",
+            LogKind.GOOD,
+        )
+        self.descend()
+
     # -- scoring ------------------------------------------------------------
     @property
     def base_score(self) -> int:
@@ -1273,8 +1362,17 @@ class GameState:
         score at the same depth, so a screen full of numbers can never rank an
         escape below a run that died on floor ten one step from the rift.
         """
-        escape = ESCAPE_BONUS if self.run_state is RunState.ESCAPED else 0
+        escape = (
+            ESCAPE_BONUS
+            if self.run_state is RunState.ESCAPED and not self.tenth_door
+            else 0
+        )
         total = self.base_score + self.speed_bonus + self.kill_score + escape
+        if self.tenth_door:
+            # The wager is on the whole run, not on the next floor alone. A
+            # player who pushes through a door is saying the run is worth more
+            # now, and the summary has to agree with the door that said it.
+            total *= self.risk_multiplier
         return round(total * self.score_multiplier)
 
 
@@ -1285,6 +1383,9 @@ def start_run(
     upgrades: dict[str, int] | None = None,
     pages: tuple[int, ...] | None = None,
     ultimate_level: int | None = None,
+    *,
+    tenth_door: bool = False,
+    start_depth: int = 1,
 ) -> GameState:
     """Begin a fresh run with ``hero``.
 
@@ -1298,9 +1399,13 @@ def start_run(
         pages: The chronicle pages still to be found, from the book. Left out,
             every page is still out there -- which is right for a new book and
             for every test that is not about the collection.
+        tenth_door: Start the endless mode: the house's credit and a landing on
+            the tenth floor instead of a floor-one hero.
+        start_depth: The floor to build first. One everywhere except the door.
     """
     loadout = loadout or Loadout()
     state = GameState(hero=hero, rng=Rng(seed), seed=seed)
+    state.tenth_door = tenth_door
     state.kill_points = kill_points_for(state.level)
     if ultimate_level is not None:
         state.ultimate_level = ultimate_level
@@ -1319,8 +1424,39 @@ def start_run(
     _apply_upgrades(state, permanent)
     _apply_pending(state, loadout.pending)
     _apply_wilds(state, loadout.wilds)
-    state.build_floor(1)
+    if tenth_door:
+        _grant_credit(state, seed)
+    state.build_floor(start_depth)
     return state
+
+
+def _grant_credit(state: GameState, seed: int) -> None:
+    """The house's loan: a level-eighteen guest and three deep pieces.
+
+    Rolled on its own dice so the floor the loan is spent on is the same floor
+    the seed would have built anyway. The gear is chest-tier on purpose: the
+    Tenth Door is not a tutorial, and a loan of floor-one iron would be a joke
+    the door tells at the player's expense.
+    """
+    apply_gain(state.player, gains_between(1, CREDIT_LEVEL))
+    state.level = CREDIT_LEVEL
+    state.kill_points = kill_points_for(CREDIT_LEVEL)
+    state.player.stats.hp = state.player.stats.max_hp
+
+    credit = Rng(seed * 1019 + 883)
+    deep = [
+        key
+        for key, template in ITEMS.items()
+        if template.chest_only
+        and template.kind in ("weapon", "armour", "amulet")
+    ]
+    for key in credit.shuffled(deep)[:CREDIT_PACKS]:
+        _receive(state, ITEMS[key])
+    state.say(
+        "The house lends you a name it has already spent: "
+        f"level {CREDIT_LEVEL}, and three pieces from the deep.",
+        LogKind.GOOD,
+    )
 
 
 def _apply_upgrades(state: GameState, upgrades: dict[str, int]) -> None:

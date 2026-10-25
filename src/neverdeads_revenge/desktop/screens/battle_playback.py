@@ -19,7 +19,7 @@ from ...game.statuses import status_by_key
 from ..art import exists as art_exists
 from ..art import size as art_size
 from ..theme import parse_style
-from .pages import the_page, write_the_page
+from .pages import the_aspect_card, the_page, write_the_aspect, write_the_page
 
 
 from .battle_shared import (
@@ -460,7 +460,17 @@ class BattlePlayback:
             self._filed.add(key)
             if write_the_page(app, key):
                 self._pages_due.append(key)
-        if self.busy or not self._pages_due:
+        for key, affix in self.battle.state.aspects_met:
+            met = (key, affix)
+            if met in self._filed_aspects:
+                continue
+            self._filed_aspects.add(met)
+            if write_the_aspect(app, key, affix):
+                self._aspects_due.append(met)
+        if self.busy or self._card_open:
+            self._page_at = None
+            return
+        if not self._pages_due and not self._aspects_due:
             self._page_at = None
             return
         if self._page_at is None:
@@ -469,7 +479,11 @@ class BattlePlayback:
         if self._clock < self._page_at:
             return
         self._page_at = None
-        card = the_page(self._pages_due.pop(0), on_done=self._card_read)
+        if self._pages_due:
+            card = the_page(self._pages_due.pop(0), on_done=self._card_read)
+        else:
+            key, affix = self._aspects_due.pop(0)
+            card = the_aspect_card(key, affix, on_done=self._card_read)
         if card is not None:
             self._card_open = True
             app.push(card)
@@ -490,7 +504,7 @@ class BattlePlayback:
         """
         if self.verdict or self._outcome is None:
             return
-        if self.busy or self._pages_due or self._card_open:
+        if self.busy or self._pages_due or self._aspects_due or self._card_open:
             return
         self.verdict = self._outcome
         self._outcome = None

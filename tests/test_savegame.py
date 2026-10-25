@@ -152,6 +152,19 @@ def test_a_floor_that_has_been_drawn_still_saves():
     assert_same(state, reloaded)
 
 
+def test_the_aspects_a_run_met_come_back():
+    """The margin notes are part of the run's record, so they travel with it."""
+    state = a_busy_run()
+    state.aspects_met = [("ghoul", "fire_kissed"), ("ooze", "frostbound")]
+
+    reloaded = load(json.loads(json.dumps(dump(state))))
+
+    assert reloaded.aspects_met == [
+        ("ghoul", "fire_kissed"),
+        ("ooze", "frostbound"),
+    ]
+
+
 def test_the_coats_a_run_wore_come_back():
     """The wardrobe's page is written from the run, so the run remembers it."""
     state = a_busy_run()
