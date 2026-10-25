@@ -70,7 +70,7 @@ what you carry, and by spending the ground you are standing on.
   mistake everybody makes once. The **pack holds two things** to start with;
   the shop sells slots up to seven, each dearer than the last, and a full pack
   leaves the loot where it lies and says why.
-- **Twenty-six weapons** (the rusted tooth, the grey bite, the long hunger, the
+- **Twenty-seven weapons** (the rusted tooth, the grey bite, the long hunger, the
   frostbite...) and **ten pieces of armour** (the thin hide, the rune plate,
   the ashfall cloak...), each with its own modifiers.
 - **Five strange draughts**, none of them medicine: each lays a rule on the

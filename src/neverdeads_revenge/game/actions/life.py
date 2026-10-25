@@ -310,6 +310,14 @@ def _on_death(state: GameState, enemy: Actor) -> None:
     # encounter for -- and the arena refuses that fight, because it asks the
     # *health*. The player presses into a corpse and nothing happens.
     enemy.alive = False
+    if "darkness_touched" in enemy.affixes:
+        # The dark it carried does not leave when it does: the room it died in
+        # stays a little smaller for the rest of the floor.
+        state.sight_penalty = min(3, state.sight_penalty + 1)
+        state.say(
+            "The dark it carried stays behind. The room is smaller.",
+            LogKind.BAD,
+        )
     if state.encounter is enemy:
         # And nothing is owed any more. A monster that died before its fight was
         # opened leaves a floor that would otherwise owe a battle to a corpse:

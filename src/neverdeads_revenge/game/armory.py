@@ -44,8 +44,13 @@ class Weapon:
 
     @property
     def picture(self) -> str:
-        """The painted blade, by the item key the sheets are named for."""
-        return f"sprites/weapons/{self.key}.png"
+        """The painted blade, by the item key the sheets are named for.
+
+        An aspect variant shares the base blade's painting until it has one of
+        its own; the difference is the page and the rule, not a second sword.
+        """
+        paint = "depthless" if self.key == "depthless_dark" else self.key
+        return f"sprites/weapons/{paint}.png"
 
 
 #: ``key -> (name, what it is, the paragraph)``.
@@ -74,6 +79,11 @@ _PAGES: dict[str, tuple[str, str, str]] = {
         "the depthless",
         "The wound build's endgame: three damage a turn from the wounds alone, and more every time the cut deepens.",
         "The blade with no reflection. It opens two wounds at once — one that bleeds fast and one that rots slow — and the thing it cuts never quite knows which is worse.",
+    ),
+    "depthless_dark": (
+        "the darkness-touched depthless",
+        "The depthless's two wounds and the dark's one rule: the bleeding it opens is a stack deeper, and does not close.",
+        "The same blade with no reflection, and something else looking back out of it. It bleeds and it rots, and the wound it leaves keeps working after the fight has stopped — the house does not write down what the dark added, only that the guest took it up.",
     ),
     "first_blow": (
         "the first blow",

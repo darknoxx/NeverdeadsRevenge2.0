@@ -35,6 +35,23 @@ ENEMY_AFFIX_RULES = {
     "fire_kissed": lambda state, attacker, target: inflict(
         state, target, ("burn",)
     ),
+    "frostbound": lambda state, attacker, target: inflict(
+        state, target, ("chill",)
+    ),
+}
+
+#: And what an aspect does when the *hero's* blade carries it. The depthless
+#: already opens a wound; darkness-touched makes that wound one deeper.
+WEAPON_AFFIX_RULES = {
+    "fire_kissed": lambda state, target, player: inflict(
+        state, target, ("burn",), source=player
+    ),
+    "frostbound": lambda state, target, player: inflict(
+        state, target, ("chill",), source=player
+    ),
+    "darkness_touched": lambda state, target, player: inflict(
+        state, target, ("bleed",), stacks=1, source=player
+    ),
 }
 
 
@@ -148,6 +165,10 @@ def resolve_player_attack(
         if first and state.has_gift("open_wound"):
             opening += ("bleed",)
         inflict(state, target, opening, source=state.player)
+        for affix in state.player.weapon_affixes:
+            rule = WEAPON_AFFIX_RULES.get(affix)
+            if rule is not None:
+                rule(state, target, state.player)
         if outcome.crit and state.bleed_on_crit:
             # BLEEDING EDGE. A lucky blow opens a wound as deep as the bloodline
             # is: one stack, two, three -- the ceiling the wounds have. It used

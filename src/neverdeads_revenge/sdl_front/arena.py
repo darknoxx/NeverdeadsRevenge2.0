@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import math
 
-from ..game.affixes import AFFIXES
+from ..world.affixes import AFFIXES
 from ..desktop.screens.base import Screen
 from ..desktop.screens.battle import (
     ARROW,

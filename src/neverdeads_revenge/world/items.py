@@ -16,6 +16,7 @@ from dataclasses import dataclass
 
 from neverdeads_revenge.core.rng import Rng
 
+from .affixes import name_with
 from .map import GroundItem
 from .modifiers import Modifiers
 
@@ -89,6 +90,9 @@ class ItemTemplate:
     #: Statuses a blow from this weapon leaves running, by key. Same idea: names,
     #: not rules. See :mod:`game.statuses`.
     inflicts: tuple[str, ...] = ()
+    #: The aspects the dark left on it, by key. A template may carry one, which
+    #: is how a named deep find is spelled; a roll may pass another later.
+    affixes: tuple[str, ...] = ()
     #: Damage dealt back to whatever lands a blow on the wearer. Only
     #: coats have it, and it is the one property that acts when the player
     #: is *hit* rather than when they swing.
@@ -840,6 +844,22 @@ ITEMS: dict[str, ItemTemplate] = {
         chest_only=True,
         weight_growth=1.2,
     ),
+    "depthless_dark": ItemTemplate(
+        key="depthless_dark",
+        name="the darkness-touched depthless",
+        affixes=("darkness_touched",),
+        glyph=WEAPON_GLYPH,
+        color=WEAPON_COLOR,
+        kind="weapon",
+        slot="weapon",
+        # The deep version of the only two-status blade: the wound it opens does
+        # not close. Same drawing, same numbers -- the dark is the difference.
+        modifiers=Modifiers(damage=4, speed=-0.10),
+        inflicts=("bleed", "poison"),
+        chest_only=True,
+        weight=0.7,
+        weight_growth=1.2,
+    ),
     "warden": ItemTemplate(
         key="warden",
         name="warden plate",
@@ -999,11 +1019,15 @@ def make_chest(
     )
 
 
-def make_item(template: ItemTemplate) -> GroundItem:
-    """Create a floor item from a template."""
+def make_item(
+    template: ItemTemplate, *, affixes: tuple[str, ...] | None = None
+) -> GroundItem:
+    """Create a floor item from a template, with the dark's marks on it."""
+    marks = template.affixes if affixes is None else affixes
     return GroundItem(
         item_id=template.key,
-        name=template.name,
+        name=name_with(template.name, marks),
+        affixes=marks,
         glyph=template.glyph,
         color=template.color,
         heal=template.heal,

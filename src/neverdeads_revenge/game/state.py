@@ -27,7 +27,7 @@ from neverdeads_revenge.world.map import DungeonMap, GroundItem
 from neverdeads_revenge.world.modifiers import Modifiers
 from neverdeads_revenge.world.tiles import Tile
 
-from .affixes import enemy_affixes
+from ..world.affixes import enemy_affixes
 from .actors import (
     ENEMIES,
     Actor,

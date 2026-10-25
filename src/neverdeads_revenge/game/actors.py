@@ -17,7 +17,7 @@ from neverdeads_revenge.world.modifiers import Modifiers
 
 from .difficulty import enemy_speed, potency, weight_at_depth
 from .npcs import NPC_COLOR, NPC_GLYPH, Npc
-from .affixes import name_with
+from ..world.affixes import name_with
 from .statuses import status_by_key
 
 __all__ = [
@@ -395,6 +395,12 @@ class Actor:
         """
         weapon = self.equipment.get("weapon")
         return weapon.inflicts if weapon is not None else ()
+
+    @property
+    def weapon_affixes(self) -> tuple[str, ...]:
+        """The aspects the blade in his hand carries, or nothing."""
+        weapon = self.equipment.get("weapon")
+        return weapon.affixes if weapon is not None else ()
 
     @property
     def speed(self) -> float:

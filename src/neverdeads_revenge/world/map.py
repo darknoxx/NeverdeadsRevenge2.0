@@ -31,6 +31,8 @@ class GroundItem:
     kind: str = "draught"
     #: Which equipment slot it fills, or ``None`` for something you drink.
     slot: str | None = None
+    #: The aspects the dark left on it, by key. Empty for almost everything.
+    affixes: tuple[str, ...] = ()
     #: What wearing it changes. Frozen, so one shared empty instance is fine.
     modifiers: Modifiers = Modifiers()
     #: A chest's curse, by key. Only ``game/`` knows what the key means, which

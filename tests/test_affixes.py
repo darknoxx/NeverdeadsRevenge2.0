@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from neverdeads_revenge.game.actors import ENEMIES, HEROES, make_enemy
 from neverdeads_revenge.game.actions.combat import resolve_enemy_attack
-from neverdeads_revenge.game.affixes import AFFIXES
+from neverdeads_revenge.world.affixes import AFFIXES
 from neverdeads_revenge.game.state import start_run
 
 
@@ -47,7 +47,10 @@ def test_only_the_deep_floors_are_touched():
         state = start_run(HEROES["noxx"], seed=seed)
         state.build_floor(6)
         if any(one.affixes for one in state.enemies):
-            assert all(one.affixes == ("fire_kissed",) for one in state.enemies if one.affixes)
+            for one in state.enemies:
+                if one.affixes:
+                    assert len(one.affixes) == 1
+                    assert one.affixes[0] in AFFIXES
             break
     else:
         raise AssertionError("thirty deep floors and not one touched monster")
@@ -84,3 +87,53 @@ def test_the_painter_gives_a_marked_figure_light_on_the_floor():
     before = surface.get_at((100, 6 * 16))
     Stage().affix_glow(surface, Figure(), "#ff7a2a", 0.0, 16)
     assert surface.get_at((100, 6 * 16)) != before, "the aura painted nothing"
+
+
+def test_a_frostbound_blow_chills():
+    state = start_run(HEROES["noxx"], seed=3)
+    enemy = make_enemy(ENEMIES["ghoul"], (1, 0), affixes=("frostbound",))
+    enemy.stats.accuracy = 99
+    state.player.stats.evasion = 0
+
+    outcome = resolve_enemy_attack(state, enemy, state.player)
+
+    assert outcome is not None and outcome.hit
+    assert "chill" in state.player.statuses, "the frost did not take"
+
+
+def test_the_darkness_touched_leaves_the_room_smaller():
+    from neverdeads_revenge.game.actions.life import _on_death
+
+    state = start_run(HEROES["noxx"], seed=3)
+    enemy = make_enemy(ENEMIES["ghoul"], state.player.position, affixes=("darkness_touched",))
+    enemy.stats.hp = 0
+    state.enemies = [enemy]
+    before = state.sight_penalty
+
+    _on_death(state, enemy)
+
+    assert state.sight_penalty == before + 1, "the dark left no shadow"
+    assert any("smaller" in entry.text for entry in state.log)
+
+
+def test_the_darkness_touched_depthless_deepens_its_wound():
+    from neverdeads_revenge.game.actions.combat import resolve_player_attack
+    from neverdeads_revenge.world.items import ITEMS, make_item
+
+    state = start_run(HEROES["noxx"], seed=3)
+    blade = make_item(ITEMS["depthless_dark"])
+    state.player.equipment["weapon"] = blade
+    state.player.stats.accuracy = 99
+    target = make_enemy(ENEMIES["ghoul"], (1, 0))
+    target.stats.hp = 999
+    target.stats.evasion = 0
+
+    assert blade.name == "the darkness-touched depthless"
+    assert blade.affixes == ("darkness_touched",)
+
+    outcome = resolve_player_attack(state, target)
+
+    assert outcome.hit, "the blade has to land to open the wound"
+    assert target.status_stacks.get("bleed", 0) >= 2, (
+        "the dark did not deepen the bleeding"
+    )

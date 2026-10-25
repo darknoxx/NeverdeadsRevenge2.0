@@ -53,6 +53,24 @@ AFFIXES: dict[str, Affix] = {
         threat=1.0,
         blurb="It burns what it touches.",
     ),
+    "darkness_touched": Affix(
+        key="darkness_touched",
+        adjective="darkness-touched",
+        colour="#8b5cf6",
+        particle="smoke",
+        tags=frozenset({"dark"}),
+        threat=1.2,
+        blurb="The dark it carries does not leave when it does.",
+    ),
+    "frostbound": Affix(
+        key="frostbound",
+        adjective="frostbound",
+        colour="#8fd8ff",
+        particle="snow",
+        tags=frozenset({"frost"}),
+        threat=1.0,
+        blurb="It freezes the hand that reaches for it.",
+    ),
 }
 
 #: The first floor an aspect can be met on. The early floors stay clean: an
@@ -62,8 +80,20 @@ AFFIX_FROM_DEPTH = 6
 
 
 def name_with(name: str, affixes: tuple[str, ...]) -> str:
-    """The name a player reads: the aspects, then the thing they are on."""
+    """The name a player reads: the aspects, then the thing they are on.
+
+    A weapon's name already starts with "the", and the aspect goes *after* it:
+    "the darkness-touched depthless", never "darkness-touched the depthless".
+    """
     words = [AFFIXES[key].adjective for key in affixes if key in AFFIXES]
+    if not words:
+        return name
+    # A template may already spell the whole name (a named deep find); the rule
+    # must not put the adjective on it twice.
+    if name.startswith(f"the {words[0]} ") or name.startswith(f"{words[0]} "):
+        return name
+    if name.startswith("the "):
+        return "the " + " ".join([*words, name[4:]])
     return " ".join([*words, name])
 
 

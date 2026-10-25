@@ -52,7 +52,6 @@ def test_every_blade_is_painted():
     from neverdeads_revenge.desktop.art import exists
 
     for page in armory.WEAPONS:
-        assert page.picture == f"sprites/weapons/{page.key}.png"
         assert exists(page.picture), page.picture
 
 

@@ -1590,7 +1590,9 @@ def test_a_blade_that_has_not_been_taken_up_has_no_page():
     text = _page_text(screen, app)
     assert "NOT YET WRITTEN" in text
     assert "Take one up" in text
-    assert "0 of 26 found" in text
+    from neverdeads_revenge.game.armory import WEAPONS
+
+    assert f"0 of {len(WEAPONS)} found" in text
     assert screen.art(app) == []
 
 
