@@ -104,3 +104,56 @@ def test_the_credit_and_its_reroll_survive_a_save():
     assert [item.name for item in reloaded.credit_gear] == [
         item.name for item in state.credit_gear
     ]
+
+
+def test_the_door_costs_meta_coin_before_the_loan_is_shown(tmp_path, monkeypatch):
+    """The entry fee is what makes leaving the credit card a bad trade."""
+    from neverdeads_revenge.persistence import MetaProgress
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    app = SdlApp(seed=3, no_sound=True)
+    app.progress = MetaProgress(runs_won=1, gold=50)
+    app.prologue_seen = True
+    app.save_progress = lambda: None
+
+    app.begin_run("noxx", tenth_door=True)
+
+    assert app.progress.gold == 0
+    assert app.run is not None
+    assert type(app.screens[-1]).__name__ == "CreditScreen"
+
+
+def test_the_door_does_not_open_without_its_price(tmp_path, monkeypatch):
+    from neverdeads_revenge.persistence import MetaProgress
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    app = SdlApp(seed=3, no_sound=True)
+    app.progress = MetaProgress(runs_won=1, gold=49)
+    app.prologue_seen = True
+    app.save_progress = lambda: None
+
+    app.begin_run("noxx", tenth_door=True)
+
+    assert app.progress.gold == 49
+    assert app.run is None
+    assert type(app.screens[-1]).__name__ == "InfoScreen"
+
+
+def test_the_daily_door_is_free_because_its_dice_do_not_change(tmp_path, monkeypatch):
+    from neverdeads_revenge.persistence import MetaProgress
+    from neverdeads_revenge.sdl_front.app import SdlApp
+
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    app = SdlApp(seed=3, no_sound=True)
+    app.progress = MetaProgress(runs_won=1, gold=0)
+    app.prologue_seen = True
+    app.save_progress = lambda: None
+
+    app.begin_run("noxx", tenth_door=True, daily_mode=True)
+
+    assert app.run is not None
+    assert app.run.daily
+    assert app.progress.gold == 0
+    assert type(app.screens[-1]).__name__ == "CreditScreen"

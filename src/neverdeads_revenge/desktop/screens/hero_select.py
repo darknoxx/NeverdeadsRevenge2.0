@@ -18,6 +18,7 @@ from __future__ import annotations
 from ..art import Placed, exists
 from neverdeads_revenge.game.actors import HEROES, Hero
 from neverdeads_revenge.game.combat import chance_against
+from neverdeads_revenge.game.state import TENTH_DOOR_ENTRY
 from neverdeads_revenge.game.pace import MAX_ACTIONS_PER_SECOND, actions_per_second
 
 from ..blocks import render_word
@@ -97,9 +98,13 @@ class HeroSelectScreen(Screen):
             width,
             height,
             title=(
-                "TODAY'S DOOR"
+                "TODAY'S DOOR — FREE"
                 if self.daily_mode
-                else ("THE TENTH DOOR" if self.tenth_door else "CHOOSE")
+                else (
+                    f"THE TENTH DOOR — {TENTH_DOOR_ENTRY} COIN"
+                    if self.tenth_door
+                    else "CHOOSE"
+                )
             ),
             border=BLOOD,
             fill=True,
@@ -146,7 +151,16 @@ class HeroSelectScreen(Screen):
             for i, h in enumerate(self.slots)
         )
         self._centre(buffer, y + height - 2, roster, BONE)
-        self._centre(buffer, buffer.rows - 2, "← → choose   enter begin   esc back", ASH)
+        if self.daily_mode:
+            hint = "free daily   ← → choose   enter begin   esc back"
+        elif self.tenth_door:
+            hint = (
+                f"{TENTH_DOOR_ENTRY} coin   purse {app.progress.gold}   "
+                "← → choose   enter begin   esc back"
+            )
+        else:
+            hint = "← → choose   enter begin   esc back"
+        self._centre(buffer, buffer.rows - 2, hint, ASH)
 
     def art(self, app) -> list[Placed]:
         """The hero, as a picture the front end can put on the frame.

@@ -442,7 +442,27 @@ class AppStack:
         from ..game.actors import HEROES
         from ..game.lore import PAGE_COUNT
         from ..game.shop import loadout_from
-        from ..game.state import DOOR_EVERY, start_run
+        from ..game.state import DOOR_EVERY, TENTH_DOOR_ENTRY, start_run
+
+        if tenth_door and not daily_mode:
+            # Paid before the loan is rolled, so leaving at the credit card and
+            # starting again is not a free reroll of the house's dice. The daily
+            # is exempt: its seed -- and so its credit -- is the same all day,
+            # and a restart cannot roll it again.
+            if self.progress.gold < TENTH_DOOR_ENTRY:
+                from ..desktop.screens.dialogs import InfoScreen
+
+                self.push(
+                    InfoScreen(
+                        "THE TENTH DOOR",
+                        "The door asks its price.",
+                        f"{TENTH_DOOR_ENTRY} coin to enter. "
+                        f"You have {self.progress.gold}.",
+                    )
+                )
+                return
+            self.progress.gold -= TENTH_DOOR_ENTRY
+            self.save_progress()
 
         loadout = loadout_from(self.progress)
         day = daily_rules.today() if daily_mode else ""

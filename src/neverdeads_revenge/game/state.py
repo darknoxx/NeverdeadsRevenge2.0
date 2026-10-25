@@ -84,6 +84,7 @@ __all__ = [
     "DOOR_ENEMY_BASE",
     "DOOR_ENEMY_CAP",
     "door_enemy_count",
+    "TENTH_DOOR_ENTRY",
     "CREDIT_GOLD",
     "CREDIT_REROLL",
 ]
@@ -109,6 +110,11 @@ DOOR_EVERY = 10
 #: teeth, not the crowd.
 DOOR_ENEMY_BASE = 10
 DOOR_ENEMY_CAP = 20
+
+#: What the door asks from the permanent purse before it opens. The entry is the
+#: answer to a quiet exploit: without it, a player could leave the credit card,
+#: start again and reroll the house's dice for nothing.
+TENTH_DOOR_ENTRY = 50
 
 #: The house's purse at the door. One reroll is exactly its price; the choice
 #: is whether to spend the loan on another set of pieces or keep the coin.
