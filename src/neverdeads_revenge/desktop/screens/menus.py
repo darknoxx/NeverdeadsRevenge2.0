@@ -387,7 +387,7 @@ class ScoreboardScreen(_Panel):
             return [("Nobody has been down there yet.", ASH)]
         rows = [(f"{'name':<7}{'hero':<10}{'floor':>6}{'score':>9}", ASH)]
         for entry in sorted(scores, key=lambda e: e.score, reverse=True):
-            mark = " ✝" if not entry.won else ""
+            mark = " D" if entry.daily else (" ✝" if not entry.won else "")
             rows.append(
                 (
                     f"{entry.name:<7}{entry.hero:<10}{entry.depth:>6}{entry.score:>9}{mark}",

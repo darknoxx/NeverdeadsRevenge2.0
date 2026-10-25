@@ -58,6 +58,9 @@ class ScoreEntry:
     #: it is the only thing in the dungeon that fights with what *you* had.
     weapon: str = ""
     armour: str = ""
+    #: The date of the daily door this run answered, or empty for an ordinary
+    #: run. The board marks the row, because a daily is a different question.
+    daily: str = ""
 
     @property
     def outcome(self) -> str:
@@ -100,6 +103,8 @@ class MetaProgress:
     #: one thing here that is a *collection* rather than a currency: gold buys,
     #: scores rank, and a page is simply known.
     pages: list[int] = field(default_factory=list)
+    #: The last daily door answered, as ``YYYY-MM-DD``. Empty until one is.
+    daily_date: str = ""
     #: Monsters whose page in the Almanac has been written, by template key.
     #:
     #: Kept sorted, and a list for the same reason ``pages`` is one: the save is
@@ -198,6 +203,7 @@ class MetaProgress:
         hero: str = "",
         weapon: str = "",
         armour: str = "",
+        daily: str = "",
     ) -> None:
         """Fold a finished run into the lifetime totals and the scoreboard.
 
@@ -226,6 +232,7 @@ class MetaProgress:
                 won=won,
                 weapon=weapon,
                 armour=armour,
+                daily=daily,
             )
         )
         self.scores.sort(key=lambda entry: entry.score, reverse=True)
@@ -358,11 +365,13 @@ def load_meta(path: Path | None = None) -> MetaProgress:
                     armour=str(entry.get("armour", "")),
                     hero=str(entry.get("hero", "noxx")),
                     won=bool(entry.get("won", False)),
+                    daily=str(entry.get("daily", "")),
                 )
                 for entry in raw.get("scores", [])
                 if isinstance(entry, dict)
             ],
             last_name=str(raw.get("last_name", "")),
+            daily_date=str(raw.get("daily_date", "")),
             muted=bool(raw.get("muted", False)),
             pending=[str(key) for key in raw.get("pending", [])],
             wilds=[str(key) for key in raw.get("wilds", [])],

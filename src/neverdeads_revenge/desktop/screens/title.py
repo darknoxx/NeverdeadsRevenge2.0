@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import math
 
+from ...game import daily as daily_rules
 from ..art import TITLE_ART, Placed, exists as art_exists, size as art_size
 from ..padmap import TITLE as TITLE_PAD
 from ..blocks import render_word
@@ -99,6 +100,13 @@ class TitleScreen(Screen):
 
         rule(buffer, 2, rule_y, buffer.cols - 4, BLOOD)
         self._menu_line(buffer, menu_y, items, self.index)
+        if getattr(app.progress, "runs_won", 0) >= 1:
+            self._centre(
+                buffer,
+                buffer.rows - 4,
+                daily_rules.label(app.progress),
+                ASH,
+            )
         # A pad has no escape, and B must not quit a game from its title: the
         # pad's line names the button that *does* exist for the menu, Start.
         nav = (
@@ -191,6 +199,9 @@ class TitleScreen(Screen):
         if event.isAutoRepeat():
             return True
         if self._cheat(name, app):
+            return True
+        if name == "y" and daily_rules.available(app.progress):
+            app.open_hero_select(tenth_door=True, daily_mode=True)
             return True
         items = self.items(app)
         # Strictly a line read sideways: left and right move it. Up and down say

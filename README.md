@@ -81,8 +81,13 @@ with the ring's job, 75% more health, +2 damage, +1 armour and a heavier purse.
 
 Endless floors are flatter than the ordinary tenth: **15-20 monsters**, not
 thirty-three, because the ring's rule and the warden are the depth's teeth.
-`tools/door_balance.py` plays the ground fights with the credit and the actual
-ring weather; it is the barometer for tuning the mode, not a rule.
+`tools/door_balance.py` plays the ground fights with the credit, one boon, the
+hero's tricks and the actual ring weather; it is the barometer for tuning the
+mode, not a rule.
+
+After the first escape the title also offers **TODAY'S DOOR** (`y`): the same
+Tenth Door on a seed fixed by the local date, so everyone opens the same door
+that day. One answer a day; the scoreboard marks the row with **D**.
 
 ## What is down there
 

@@ -228,6 +228,8 @@ class GameState:
     #: Set when the player banks. The summary reads it rather than guessing
     #: from the run state, because an escape and a bank are different endings.
     banked: bool = False
+    #: The daily date this run belongs to, or empty for an ordinary door.
+    daily: str = ""
     #: The current ring's weather, by key. Empty on the threshold floor.
     ring_rule: str = ""
     #: The three boons on offer at the door the player is standing before.
@@ -1499,6 +1501,7 @@ def start_run(
     *,
     tenth_door: bool = False,
     start_depth: int = 1,
+    daily: str = "",
 ) -> GameState:
     """Begin a fresh run with ``hero``.
 
@@ -1515,10 +1518,13 @@ def start_run(
         tenth_door: Start the endless mode: the house's credit and a landing on
             the tenth floor instead of a floor-one hero.
         start_depth: The floor to build first. One everywhere except the door.
+        daily: The date of a daily door, or empty. It marks the run so the
+            meta can answer the day once, not so the rules change.
     """
     loadout = loadout or Loadout()
     state = GameState(hero=hero, rng=Rng(seed), seed=seed)
     state.tenth_door = tenth_door
+    state.daily = daily
     state.kill_points = kill_points_for(state.level)
     if ultimate_level is not None:
         state.ultimate_level = ultimate_level

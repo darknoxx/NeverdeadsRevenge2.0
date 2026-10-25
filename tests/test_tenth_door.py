@@ -77,8 +77,8 @@ def test_the_roster_carries_the_mode_into_the_run():
     class FakeApp:
         called = None
 
-        def begin_run(self, key, *, tenth_door=False):
-            self.called = (key, tenth_door)
+        def begin_run(self, key, *, tenth_door=False, daily_mode=False):
+            self.called = (key, tenth_door, daily_mode)
 
     from neverdeads_revenge.desktop.screens.hero_select import HeroSelectScreen
 
@@ -86,7 +86,7 @@ def test_the_roster_carries_the_mode_into_the_run():
     app = FakeApp()
     screen.key("enter", SimpleNamespace(isAutoRepeat=lambda: False), app)
 
-    assert app.called == ("noxx", True)
+    assert app.called == ("noxx", True, False)
 
 
 # -- the credit -------------------------------------------------------------

@@ -182,6 +182,7 @@ def dump(state: GameState) -> dict:
         "rng": _encode(state.rng.state()),
         "depth": state.depth,
         "tenth_door": state.tenth_door,
+        "daily": state.daily,
         "door_ring": state.door_ring,
         "risk_multiplier": state.risk_multiplier,
         "door_pending": state.door_pending,
@@ -271,6 +272,7 @@ def load(payload: dict) -> GameState:
         state.rng.restore(_decode(payload["rng"]))
         state.depth = payload["depth"]
         state.tenth_door = bool(payload.get("tenth_door", False))
+        state.daily = str(payload.get("daily", ""))
         state.door_ring = int(payload.get("door_ring", 1))
         state.risk_multiplier = float(payload.get("risk_multiplier", 1.0))
         state.door_pending = bool(payload.get("door_pending", False))

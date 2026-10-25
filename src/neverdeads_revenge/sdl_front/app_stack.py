@@ -280,7 +280,12 @@ class AppStack:
             # What the run was carrying: the echo wears it.
             weapon=key("weapon"),
             armour=key("armour"),
+            daily=state.daily,
         )
+        if state.daily:
+            # The day is answered when the run is written down, not when it is
+            # started: a player who closes the window has not spent it.
+            self.progress.daily_date = state.daily
         self.progress.reroll_shelves(Rng(random.SystemRandom().randrange(2**32)))
         self.save_progress()
         return self.progress.best_score
@@ -359,10 +364,14 @@ class AppStack:
         self.progress.muted = self.sfx.muted
         self.save_progress()
 
-    def open_hero_select(self, *, tenth_door: bool = False) -> None:
+    def open_hero_select(
+        self, *, tenth_door: bool = False, daily_mode: bool = False
+    ) -> None:
         from ..desktop.screens.hero_select import HeroSelectScreen
 
-        self.push(HeroSelectScreen(tenth_door=tenth_door))
+        self.push(
+            HeroSelectScreen(tenth_door=tenth_door, daily_mode=daily_mode)
+        )
 
     def _a_seed(self) -> int:
         """The seed for the run about to begin.
@@ -377,7 +386,13 @@ class AppStack:
             return self.seed
         return random.SystemRandom().randrange(2**32)
 
-    def begin_run(self, hero_key: str, *, tenth_door: bool = False) -> None:
+    def begin_run(
+        self,
+        hero_key: str,
+        *,
+        tenth_door: bool = False,
+        daily_mode: bool = False,
+    ) -> None:
         from ..desktop.screens.game import GameScreen
 
         if not self.prologue_seen:
@@ -390,21 +405,28 @@ class AppStack:
             self.push(
                 PrologueScreen(
                     on_done=lambda: self.begin_run(
-                        hero_key, tenth_door=tenth_door
+                        hero_key,
+                        tenth_door=tenth_door,
+                        daily_mode=daily_mode,
                     )
                 )
             )
             return
+        from ..game import daily as daily_rules
         from ..game.actors import HEROES
         from ..game.lore import PAGE_COUNT
         from ..game.shop import loadout_from
         from ..game.state import DOOR_EVERY, start_run
 
         loadout = loadout_from(self.progress)
+        day = daily_rules.today() if daily_mode else ""
+        seed = (
+            daily_rules.seed_for(day) if daily_mode else self._a_seed()
+        )
         self.save_progress()
         self.run = start_run(
             HEROES[hero_key],
-            self._a_seed(),
+            seed,
             loadout=loadout,
             # The pages this book is still missing, so a run knows what is out
             # there -- the same tuple the Qt build hands over.
@@ -415,6 +437,7 @@ class AppStack:
             ),
             tenth_door=tenth_door,
             start_depth=DOOR_EVERY if tenth_door else 1,
+            daily=day,
         )
         self.effects.clear()
         self.screens = [GameScreen(self.run)]
