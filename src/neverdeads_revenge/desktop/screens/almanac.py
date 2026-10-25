@@ -26,6 +26,7 @@ from ...game.actors import ENEMIES
 from ...game.armory import WEAPONS, Weapon
 from ...game.armory import stat_lines as weapon_stats
 from ...game.bestiary import ENTRIES, Entry, stat_lines, title_of
+from ...game.feats import FEATS
 from ...game.lore import PAGE_COUNT, TITLE, numeral, page
 from ...game.wardrobe import ARMOURS, Armour
 from ...game.wardrobe import stat_lines as armour_stats
@@ -66,10 +67,11 @@ class AlmanacScreen(Screen):
     PAD = ALMANAC_PAD
     pad_scroll = True
 
-    #: The four, in the order they are read: the story, then what it is about,
-    #: then what you do about it -- the blades and the coats. The other order
-    #: would open the book on a list of things that have not happened yet.
-    TABS = ("CHRONICLE", "BESTIARY", "ARMORY", "WARDROBE")
+    #: The five, in the order they are read: the story, then what it is about,
+    #: what you do about it, what you wear while doing it, and what the run
+    #: proved. The other order would open the book on a list of things that have
+    #: not happened yet.
+    TABS = ("CHRONICLE", "BESTIARY", "ARMORY", "WARDROBE", "FEATS")
 
     #: How wide a collection's index is, in cells -- a third of the page and no
     #: wider, so the page never gets the narrow half. The longest name is
@@ -121,6 +123,7 @@ class AlmanacScreen(Screen):
         #: How long the two scrollable bodies came out last time, for the same
         #: reason: an end key has to stop where the text stops.
         self._chronicle_total = 0
+        self._feats_total = 0
         self._card_total = 0
         if select is not None:
             self.select(select)
@@ -202,6 +205,8 @@ class AlmanacScreen(Screen):
         rule(buffer, x + 1, y + 2, width - 2, ASH)
         if self.tab == 0:
             self._chronicle(buffer, app, x, y, width, body_rows)
+        elif self.tab == 4:
+            self._feats(buffer, app, x, y, width, body_rows)
         else:
             self._collection(buffer, app, x, y, width, body_rows)
         rule(buffer, x + 1, y + height - 2, width - 2, ASH)
@@ -212,7 +217,7 @@ class AlmanacScreen(Screen):
         buffer.text(x + 3, y + height - 1, (hint + more)[: width - 6], parse_style(ASH))
 
     def _tabs(self, buffer, app, x: int, y: int, width: int) -> None:
-        """The four tabs, with the one you are *in* lit.
+        """The five tabs, with the one you are *in* lit.
 
         The bracket says which book is open; the reverse says the keyboard is up
         here choosing. Two different facts, and a player needs both: a tab bar
@@ -237,8 +242,10 @@ class AlmanacScreen(Screen):
             count = f"{len(self.known(app))} of {len(ENTRIES)} written"
         elif self.tab == 2:
             count = f"{len(self.known_weapons(app))} of {len(WEAPONS)} found"
-        else:
+        elif self.tab == 3:
             count = f"{len(self.known_armours(app))} of {len(ARMOURS)} found"
+        else:
+            count = f"{len(app.progress.feats)} of {len(FEATS)} earned"
         buffer.text(x + width - 3 - len(count), y + 1, count, parse_style(ASH))
 
     # -- the chronicle ------------------------------------------------------
@@ -261,6 +268,33 @@ class AlmanacScreen(Screen):
         #: How long the book is, for the key handler: it pages what is drawn,
         #: and a scroll that counted anything else would stop short of the end.
         self._chronicle_total = len(rows)
+        self.offset = max(0, min(self.offset, max(0, len(rows) - body_rows)))
+        self._more = self.offset + body_rows < len(rows)
+        for i, (text, style) in enumerate(rows[self.offset : self.offset + body_rows]):
+            buffer.text(x + 3, y + 3 + i, text[: width - 6], parse_style(style))
+
+    # -- the feats: a list of things a run can prove -------------------------
+    def feats_lines(self, app, width: int) -> list[tuple[str, str]]:
+        rows: list[tuple[str, str]] = []
+        earned = set(getattr(app.progress, "feats", ()))
+        for feat in FEATS:
+            got = feat.key in earned
+            rows.append(
+                (
+                    f"{'[x]' if got else '[ ]'} {feat.name}",
+                    f"bold {BONE}" if got else ASH,
+                )
+            )
+            rows.extend(
+                (f"    {line}", BONE if got else "grey60")
+                for line in _wrap(feat.blurb, width - 12)
+            )
+            rows.append(("", ""))
+        return rows
+
+    def _feats(self, buffer, app, x, y, width, body_rows) -> None:
+        rows = self.feats_lines(app, width)
+        self._feats_total = len(rows)
         self.offset = max(0, min(self.offset, max(0, len(rows) - body_rows)))
         self._more = self.offset + body_rows < len(rows)
         for i, (text, style) in enumerate(rows[self.offset : self.offset + body_rows]):
@@ -484,7 +518,7 @@ class AlmanacScreen(Screen):
         without ever printing over it -- which is the reason it is a column and
         not a band across the top of the page.
         """
-        if self.tab == 0:
+        if self.tab in (0, 4):
             return []
         entry = self._selected()
         if entry.key not in self._known_now(app):
@@ -531,6 +565,8 @@ class AlmanacScreen(Screen):
             )
         if self.tab == 0:
             return "→ bestiary   ↑↓ scroll   ↑ at top: tabs   esc close"
+        if self.tab == 4:
+            return "↑↓ scroll   ← → tabs   esc close"
         if self.focus == "page":
             return "← names   ↑↓ page   pgup/pgdn   esc close"
         previous = self.TABS[self.tab - 1].lower()
@@ -553,10 +589,10 @@ class AlmanacScreen(Screen):
             if self.focus == "page":
                 self.focus = "list"
             return True
-        if name in ("c", "b", "a", "w"):
+        if name in ("c", "b", "a", "w", "f"):
             # Shortcuts, not part of the arrow language: each names a book and
             # lands the keyboard in it.
-            self._open({"c": 0, "b": 1, "a": 2, "w": 3}[name])
+            self._open({"c": 0, "b": 1, "a": 2, "w": 3, "f": 4}[name])
             return True
         if name == "tab":
             self._switch((self.tab + 1) % len(self.TABS))
@@ -569,6 +605,8 @@ class AlmanacScreen(Screen):
             return self._tab_key(name)
         if self.tab == 0:
             return self._chronicle_key(name)
+        if self.tab == 4:
+            return self._feats_key(name)
         return self._collection_key(name)
 
     def _open(self, tab: int) -> None:
@@ -623,6 +661,27 @@ class AlmanacScreen(Screen):
             self.offset = 0
         elif name == "end":
             self.offset = total
+        return True
+
+    # -- the feats' keys -----------------------------------------------------
+    def _feats_key(self, name: str) -> bool:
+        rows = self._body[0]
+        total = max(0, self._feats_total - rows)
+        if name in ("up", "k"):
+            if self.offset == 0:
+                self.focus = "tabs"
+                return True
+            self.offset = max(0, self.offset - 1)
+        elif name in ("down", "j"):
+            self.offset = min(self.offset + 1, total)
+        elif name == "pageup":
+            self.offset = max(0, self.offset - self.PAGE_SCROLL)
+        elif name == "pagedown":
+            self.offset = min(self.offset + self.PAGE_SCROLL, total)
+        elif name == "left":
+            self._switch(max(0, self.tab - 1))
+        elif name == "right":
+            self._switch(min(len(self.TABS) - 1, self.tab + 1))
         return True
 
     # -- a collection: two panes --------------------------------------------

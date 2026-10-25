@@ -332,6 +332,8 @@ def _on_death(state: GameState, enemy: Actor) -> None:
         # monster is the moment it is *known*. What the page says is the book's
         # business; that there is one is the dungeon's.
         state.defeated.append(enemy.key)
+    if enemy.warden:
+        state.wardens_slain += 1
     if enemy.kind is ActorKind.ENEMY and enemy.key and enemy.affixes:
         # The page is the monster's; the aspect is a note in its margin. It is
         # recorded on the kill for the same reason the page is: a variant that

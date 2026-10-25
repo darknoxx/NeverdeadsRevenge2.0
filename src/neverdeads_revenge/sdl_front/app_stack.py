@@ -286,6 +286,9 @@ class AppStack:
             # The day is answered when the run is written down, not when it is
             # started: a player who closes the window has not spent it.
             self.progress.daily_date = state.daily
+        from ..game.feats import award
+
+        award(self.progress, state)
         self.progress.reroll_shelves(Rng(random.SystemRandom().randrange(2**32)))
         self.save_progress()
         return self.progress.best_score
@@ -306,8 +309,27 @@ class AppStack:
         if answer != REWIND:
 
             def done(name: str) -> None:
+                before = set(self.progress.feats)
                 if state is not None:
                     self.record_run(state, name or "???")
+                new = [key for key in self.progress.feats if key not in before]
+                if new:
+                    from ..game.feats import FEAT_BY_KEY
+                    from ..desktop.screens.dialogs import InfoScreen
+
+                    text = "\n\n".join(
+                        f"{FEAT_BY_KEY[key].name}\n{FEAT_BY_KEY[key].blurb}"
+                        for key in new
+                    )
+                    self.push(
+                        InfoScreen(
+                            "A FEAT",
+                            "The house remembers.",
+                            text,
+                            on_done=lambda _value=None: self.return_to_title(),
+                        )
+                    )
+                    return
                 self.return_to_title()
 
             self.push(

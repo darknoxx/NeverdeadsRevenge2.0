@@ -204,6 +204,7 @@ def dump(state: GameState) -> dict:
         "total_turns": state.total_turns,
         "run_state": _encode(state.run_state),
         "kills": state.kills,
+        "wardens_slain": state.wardens_slain,
         "floor_kills": state.floor_kills,
         "defeated": list(state.defeated),
         "found_weapons": list(state.found_weapons),
@@ -307,6 +308,7 @@ def load(payload: dict) -> GameState:
         state.total_turns = payload["total_turns"]
         state.run_state = _decode(payload["run_state"])
         state.kills = payload["kills"]
+        state.wardens_slain = int(payload.get("wardens_slain", 0))
         # ``get`` for the floor's own counters, like the rest: each starts at
         # nothing, so a save written before the field existed resumes with an
         # empty floor rather than refusing to open.

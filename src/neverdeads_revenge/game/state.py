@@ -250,6 +250,8 @@ class GameState:
     total_turns: int = 0
     run_state: RunState = RunState.PLAYING
     kills: int = 0
+    #: Wardens killed, for the feat that asks and for the summary's own count.
+    wardens_slain: int = 0
     #: Kills *on this floor*, which is what THE REAPER'S LEDGER counts. The run's
     #: count never comes back down; this one is emptied every descent, because a
     #: ledger is a page and a page is a floor.
@@ -1372,10 +1374,10 @@ class GameState:
         chosen = self.rng.pick(pool)
         chosen.warden = True
         chosen.name = f"warden {chosen.name}"
-        chosen.stats.max_hp = max(1, round(chosen.stats.max_hp * 1.75))
+        chosen.stats.max_hp = max(1, round(chosen.stats.max_hp * 1.5))
         chosen.stats.hp = chosen.stats.max_hp
         low, high = chosen.stats.damage
-        chosen.stats.damage = (low + 2, high + 2)
+        chosen.stats.damage = (low + 1, high + 1)
         chosen.stats.armor += 1
         low, high = chosen.gold
         chosen.gold = (round(low * 2.5), round(high * 2.5))

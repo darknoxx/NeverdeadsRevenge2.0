@@ -105,6 +105,9 @@ class MetaProgress:
     pages: list[int] = field(default_factory=list)
     #: The last daily door answered, as ``YYYY-MM-DD``. Empty until one is.
     daily_date: str = ""
+    #: Feats proved by finished runs, by key. Sorted, and a collection like the
+    #: books: not bought, not scored, simply known.
+    feats: list[str] = field(default_factory=list)
     #: Monsters whose page in the Almanac has been written, by template key.
     #:
     #: Kept sorted, and a list for the same reason ``pages`` is one: the save is
@@ -372,6 +375,7 @@ def load_meta(path: Path | None = None) -> MetaProgress:
             ],
             last_name=str(raw.get("last_name", "")),
             daily_date=str(raw.get("daily_date", "")),
+            feats=[str(key) for key in raw.get("feats", [])],
             muted=bool(raw.get("muted", False)),
             pending=[str(key) for key in raw.get("pending", [])],
             wilds=[str(key) for key in raw.get("wilds", [])],
@@ -429,6 +433,7 @@ def unlock_everything(progress: MetaProgress) -> None:
     cheat carries is not punished for asking.
     """
     from .game.actors import ENEMIES
+    from .game.feats import FEATS
     from .world.items import ITEMS
 
     progress.gold = max(progress.gold, TEST_GOLD)
@@ -440,6 +445,7 @@ def unlock_everything(progress: MetaProgress) -> None:
     progress.wardrobe = sorted(
         key for key, template in ITEMS.items() if template.slot == "armour"
     )
+    progress.feats = sorted(feat.key for feat in FEATS)
 
 
 def grant_test_save(path: Path | None = None) -> tuple[Path, Path | None]:

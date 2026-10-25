@@ -77,7 +77,7 @@ Every ring has one weather, shown at the door and applied to all ten floors:
 **the Thorn Ring** (every monster gives one damage back). Pushing on also opens
 a shelf of **three boons** from fifteen; one is taken for the rest of the run.
 The middle floor of every ring (15, 25, ...) holds a **warden**: one monster
-with the ring's job, 75% more health, +2 damage, +1 armour and a heavier purse.
+with the ring's job, 50% more health, +1 damage, +1 armour and a heavier purse.
 
 Endless floors are flatter than the ordinary tenth: **15-20 monsters**, not
 thirty-three, because the ring's rule and the warden are the depth's teeth.
@@ -88,6 +88,11 @@ mode, not a rule.
 After the first escape the title also offers **TODAY'S DOOR** (`y`): the same
 Tenth Door on a seed fixed by the local date, so everyone opens the same door
 that day. One answer a day; the scoreboard marks the row with **D**.
+
+The Almanac's fifth tab is **FEATS**: ten things a finished run can prove, from
+the first name on the board to a killed warden, a banked door, twenty floors
+and a thousand coin. Feats are checked when the run is written down, not during
+the fight, and a new one is read on a card before the title comes back.
 
 ## What is down there
 

@@ -3156,8 +3156,9 @@ def test_the_almanac_has_a_wardrobe_tab_for_the_coats():
     app = _app_with_a_run()
     app.open_almanac()
     screen = app.screens[-1]
-    assert len(AlmanacScreen.TABS) == 4
+    assert len(AlmanacScreen.TABS) == 5
     assert AlmanacScreen.TABS[3] == "WARDROBE"
+    assert AlmanacScreen.TABS[4] == "FEATS"
 
     screen.tab = 3
     assert len(ARMOURS) == 10

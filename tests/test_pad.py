@@ -273,9 +273,12 @@ def test_the_shoulders_turn_the_almancs_tab_page():
     assert app.screens[-1].tab == 3, "the wardrobe was not reachable"
     assert app.screens[-1].TABS[3] == "WARDROBE"
     app.key("]")
-    assert app.screens[-1].tab == 3, "the tab page wrapped past the end"
+    assert app.screens[-1].tab == 4, "the feats were not reachable"
+    assert app.screens[-1].TABS[4] == "FEATS"
+    app.key("]")
+    assert app.screens[-1].tab == 4, "the tab page wrapped past the end"
     app.key("[")
-    assert app.screens[-1].tab == 2
+    assert app.screens[-1].tab == 3
 
 
 def test_m_opens_and_closes_the_book_on_the_floor():
