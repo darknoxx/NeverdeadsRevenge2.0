@@ -206,6 +206,17 @@ def test_unlocking_everything_never_takes_gold_away():
     assert poor.gold == 9999
 
 
+def test_unlocking_everything_opens_the_tenth_door():
+    """The cheat is also the playtest door: the endless mode should not need a
+    full ordinary run in front of it."""
+    from neverdeads_revenge.persistence import unlock_everything
+
+    progress = MetaProgress()
+    unlock_everything(progress)
+
+    assert progress.runs_won >= 1
+
+
 def test_a_test_save_merges_rather_than_replaces(tmp_path: Path):
     """A cheat should cost you nothing but the thing it cheats at. The
     scoreboard, the heroes and the name are not what it came for."""

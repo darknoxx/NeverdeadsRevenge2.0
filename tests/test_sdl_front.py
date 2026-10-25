@@ -1400,6 +1400,10 @@ def test_the_word_on_the_title_fills_the_book_and_the_purse():
     assert app.progress.gold == 9999
     assert app.progress.pages == list(range(1, PAGE_COUNT + 1))
     assert app.progress.bestiary == sorted(ENEMIES)
+    assert app.progress.runs_won >= 1, "the cheat left the Tenth Door shut"
+    from neverdeads_revenge.desktop.screens.title import TitleScreen
+
+    assert "t" in [key for key, _label in TitleScreen().items(app)]
     assert "secret_found" in app.played, "the cheat was silent"
     assert app.glass_note is not None, "the cheat said nothing on the frame"
 

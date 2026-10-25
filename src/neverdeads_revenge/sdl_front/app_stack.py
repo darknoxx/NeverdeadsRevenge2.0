@@ -225,7 +225,7 @@ class AppStack:
         unlock_everything(self.progress)
         self.save_progress()
         self.play("secret_found")
-        self._note_glass("CHEAT: 9999 coin, every page")
+        self._note_glass("CHEAT: 9999 coin, every page, the door")
 
     def open_almanac(self, tab: int = 0) -> None:
         """The book, opened at the half the question belongs to.

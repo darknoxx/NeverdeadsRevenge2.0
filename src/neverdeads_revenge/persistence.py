@@ -437,6 +437,10 @@ def unlock_everything(progress: MetaProgress) -> None:
     from .world.items import ITEMS
 
     progress.gold = max(progress.gold, TEST_GOLD)
+    # The Tenth Door opens on the first escape; the cheat opens it too, because
+    # a playtest of the endless mode should not require playing the ordinary
+    # ten floors first.
+    progress.runs_won = max(progress.runs_won, 1)
     progress.pages = list(range(1, PAGE_COUNT + 1))
     progress.bestiary = sorted(ENEMIES)
     progress.armory = sorted(
