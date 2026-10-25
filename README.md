@@ -94,6 +94,11 @@ the first name on the board to a killed warden, a banked door, twenty floors
 and a thousand coin. Feats are checked when the run is written down, not during
 the fight, and a new one is read on a card before the title comes back.
 
+The last floor of every ring (20, 30, ...) holds an **echo**: the best run on the
+board, wearing that run's name, hero and gear, scaled to the floor it is met on.
+It is the same echo the ordinary dungeon occasionally rolls; the door makes it
+a guarantee.
+
 ## What is down there
 
 ### Loot and gear

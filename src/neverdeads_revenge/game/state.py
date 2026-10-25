@@ -1056,6 +1056,8 @@ class GameState:
                 "It is not waiting.",
                 LogKind.BAD,
             )
+        if self.tenth_door and depth > 10 and depth % 10 == 0:
+            self._place_echo()
         self.toughen_enemies()
         self.npcs = [make_npc(NPCS[key], pos) for pos, key in floor.npcs]
         if following:
@@ -1356,6 +1358,22 @@ class GameState:
         self.boon_offers = ()
         self.say(f"You take {boon.name}. {boon.blurb}", LogKind.GOOD)
         return True
+
+    def _place_echo(self) -> None:
+        """Put the run's echo on the last floor of a ring.
+
+        The echo is the best run the chronicle remembers, dressed by the front
+        end with that run's name, face and gear. The floor has to *contain* one
+        for the dressing to have something to dress; it is a role played by a
+        spot in the crowd, not a new kind of monster.
+        """
+        pool = [enemy for enemy in self.enemies if enemy.behaviour != "hunter"]
+        if not pool:
+            return
+        old = self.rng.pick(pool)
+        echo = make_enemy(ENEMIES["echo"], old.position)
+        self.enemies[self.enemies.index(old)] = echo
+        self.say("An echo waits on the landing.", LogKind.GOOD)
 
     def _promote_warden(self) -> None:
         """Make one monster on the floor the keeper of the ring.

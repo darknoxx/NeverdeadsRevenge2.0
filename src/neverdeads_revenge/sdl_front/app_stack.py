@@ -129,7 +129,11 @@ class AppStack:
         # THE ONE WHO DID NOT COME BACK. The chronicle's best run puts its name
         # on the echo and fights with the numbers it got furthest with: a hero's
         # record is the only thing in this dungeon that has ever beaten him.
-        dress_the_echo(enemies, getattr(self.progress, "scores", ()))
+        dress_the_echo(
+            enemies,
+            getattr(self.progress, "scores", ()),
+            depth=self.run.depth if self.run is not None else None,
+        )
         battle = Battle(self.run, enemies)
         self.push(SdlTurning(trigger, battle))
         return True

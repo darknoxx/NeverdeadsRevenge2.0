@@ -34,7 +34,7 @@ class KeyPress:
         return self._text
 
 
-def dress_the_echo(enemies, scores) -> None:
+def dress_the_echo(enemies, scores, depth: int | None = None) -> None:
     """The run that got furthest, worn by the echo.
 
     The chronicle remembers a name, a hero and what that run was carrying, and
@@ -60,7 +60,11 @@ def dress_the_echo(enemies, scores) -> None:
         if enemy.behaviour != "echo":
             continue
         enemy.name = best.name
-        enemy.stats = scale_template(ENEMIES["echo"], max(6, best.depth)).stats
+        # The echo is the best run *at the floor it is met on*: a record from
+        # floor ten should not be a floor-ten pushover on floor thirty.
+        enemy.stats = scale_template(
+            ENEMIES["echo"], max(6, best.depth, depth or 0)
+        ).stats
         hero = HEROES.get(best.hero)
         if hero is not None:
             # The hero's own front, at the size heroes are drawn: it is not a
