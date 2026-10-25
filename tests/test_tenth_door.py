@@ -437,3 +437,45 @@ def test_the_warden_and_the_ring_survive_a_save():
     assert reloaded.ring_rule == "iron"
     assert reloaded.boons == ["whetstone"]
     assert reloaded.boon_offers == ("lantern", "plated", "quickstep")
+
+
+def test_the_door_floor_is_smaller_than_the_ordinary_tenth():
+    from neverdeads_revenge.game.state import door_enemy_count
+
+    state = _begin()
+
+    assert door_enemy_count(10) < 33, "the endless floor kept the boss-sized crowd"
+    assert door_enemy_count(35) == 20
+    assert len(state.enemies) <= 22, "the budget did not hold"
+
+
+def test_the_bitter_ring_poisons_and_the_thorn_ring_bites():
+    state = _begin()
+    state.ring_rule = "bitter"
+    state.build_floor(11)
+
+    assert state.enemies
+    assert all("poison" in enemy.inflicts for enemy in state.enemies)
+
+    state.ring_rule = "thorn"
+    state.build_floor(11)
+
+    assert all(enemy.thorns >= 1 for enemy in state.enemies)
+
+
+def test_the_new_boons_are_real_and_stack():
+    from neverdeads_revenge.game import boons
+
+    state = _begin()
+    state.player.position = state.exit_pos
+    perform_action(state, Action.DESCEND)
+
+    before_lives = state.extra_lives
+    before_armour = state.player.stats.armor
+    boons.apply(state, "second_wind")
+    boons.apply(state, "iron_skin")
+    boons.apply(state, "carrier")
+
+    assert state.extra_lives == before_lives + 1
+    assert state.player.stats.armor == before_armour + 2
+    assert state.pack_capacity >= 4

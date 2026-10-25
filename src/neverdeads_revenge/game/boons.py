@@ -66,6 +66,41 @@ BOONS: dict[str, Boon] = {
         "DEEP PURSE",
         "+1 kill point in the purse's ceiling.",
     ),
+    "second_wind": Boon(
+        "second_wind",
+        "SECOND WIND",
+        "One more death is refused, once.",
+    ),
+    "iron_skin": Boon(
+        "iron_skin",
+        "IRON SKIN",
+        "+2 armour against every hit.",
+    ),
+    "butcher": Boon(
+        "butcher",
+        "BUTCHER",
+        "+2 damage on every blow, low and high.",
+    ),
+    "hawk": Boon(
+        "hawk",
+        "HAWK'S EYE",
+        "+8% critical chance, on every blow.",
+    ),
+    "carrier": Boon(
+        "carrier",
+        "CARRIER",
+        "+2 slots in the pack.",
+    ),
+    "night_eyes": Boon(
+        "night_eyes",
+        "NIGHT EYES",
+        "+2 cells of sight, for the rest of the run.",
+    ),
+    "coin_hand": Boon(
+        "coin_hand",
+        "COIN HAND",
+        "Every coin is worth a quarter more.",
+    ),
 }
 
 
@@ -99,4 +134,19 @@ def apply(state, key: str) -> Boon | None:
         player.stats.crit_chance += 0.05
     elif key == "deep_purse":
         state.kill_points_bonus += 1
+    elif key == "second_wind":
+        state.extra_lives += 1
+    elif key == "iron_skin":
+        player.stats.armor += 2
+    elif key == "butcher":
+        low, high = player.stats.damage
+        player.stats.damage = (low + 2, high + 2)
+    elif key == "hawk":
+        player.stats.crit_chance += 0.08
+    elif key == "carrier":
+        state.pack_capacity += 2
+    elif key == "night_eyes":
+        state.sight_bonus += 2
+    elif key == "coin_hand":
+        state.coin_multiplier *= 1.25
     return boon

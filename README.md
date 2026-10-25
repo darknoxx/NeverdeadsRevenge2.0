@@ -72,11 +72,17 @@ wager -- score and purse both. Banking is the only way to keep the coin.
 
 Every ring has one weather, shown at the door and applied to all ten floors:
 **the Iron Ring** (+1 monster armour), **the Fever Ring** (+0.10 monster speed),
-**the Gloom Ring** (-2 sight), and **the Greed Ring** (monster health +10%,
-coin +30% for the ring). Pushing on also opens a shelf of **three boons**; one
-is taken for the rest of the run. The middle floor of every ring (15, 25, ...)
-holds a **warden**: one monster with the ring's job, 75% more health, +2 damage,
-+1 armour and a heavier purse.
+**the Gloom Ring** (-2 sight), **the Greed Ring** (monster health +10%, coin
++30% for the ring), **the Bitter Ring** (every monster blow leaves poison) and
+**the Thorn Ring** (every monster gives one damage back). Pushing on also opens
+a shelf of **three boons** from fifteen; one is taken for the rest of the run.
+The middle floor of every ring (15, 25, ...) holds a **warden**: one monster
+with the ring's job, 75% more health, +2 damage, +1 armour and a heavier purse.
+
+Endless floors are flatter than the ordinary tenth: **15-20 monsters**, not
+thirty-three, because the ring's rule and the warden are the depth's teeth.
+`tools/door_balance.py` plays the ground fights with the credit and the actual
+ring weather; it is the barometer for tuning the mode, not a rule.
 
 ## What is down there
 

@@ -49,6 +49,16 @@ RING_RULES: tuple[RingRule, ...] = (
         "THE GREED RING",
         "Coin is worth a third more, and so is every monster's health.",
     ),
+    RingRule(
+        "bitter",
+        "THE BITTER RING",
+        "Every blow a monster lands leaves poison behind.",
+    ),
+    RingRule(
+        "thorn",
+        "THE THORN RING",
+        "Every monster gives one point of damage back to the hand that strikes it.",
+    ),
 )
 
 RING_BY_KEY: dict[str, RingRule] = {rule.key: rule for rule in RING_RULES}
@@ -63,7 +73,7 @@ def rule_for(seed: int, ring: int) -> RingRule | None:
     """
     if ring <= 1:
         return None
-    index = (seed // 101 + ring) % len(RING_RULES)
+    index = (seed + ring) % len(RING_RULES)
     return RING_RULES[index]
 
 
@@ -97,5 +107,10 @@ def apply_to_floor(state) -> None:
         elif rule.key == "greed":
             enemy.stats.max_hp = max(1, round(enemy.stats.max_hp * 1.10))
             enemy.stats.hp = enemy.stats.max_hp
+        elif rule.key == "bitter":
+            if "poison" not in enemy.inflicts:
+                enemy.inflicts = (*enemy.inflicts, "poison")
+        elif rule.key == "thorn":
+            enemy.thorns += 1
     if rule.key == "gloom":
         state.sight_penalty += 2

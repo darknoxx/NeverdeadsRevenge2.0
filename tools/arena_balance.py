@@ -55,19 +55,42 @@ def _meet_something(state):
     return None
 
 
-def simulate(hero: str, depth: int, fights: int, seed: int) -> list[tuple[int, int, float]]:
+def simulate(
+    hero: str,
+    depth: int,
+    fights: int,
+    seed: int,
+    *,
+    tenth_door: bool = False,
+    ring_rule: str = "",
+) -> list[tuple[int, int, float]]:
     """Play the fights a run really meets: ``(crowd, rounds, health lost)``.
 
     The hero swings and nothing else -- no items, no tricks -- because this is
     about whether the *ground* is right and not whether a player is clever.
+
+    ``tenth_door`` starts at ``depth`` with the house's credit and, when
+    ``ring_rule`` is given, rebuilds the floor with that ring's weather. The
+    floor is rebuilt rather than patched so the tool measures the same code the
+    run uses.
     """
     from neverdeads_revenge.game.actions import descend
     from neverdeads_revenge.game.battle import open_fight
 
-    state = start_run(HEROES[hero], seed)
-    for _ in range(depth - 1):
-        state.player.stats.hp = state.player.max_hp
-        descend(state)
+    state = start_run(
+        HEROES[hero],
+        seed,
+        tenth_door=tenth_door,
+        start_depth=depth if tenth_door else 1,
+    )
+    if tenth_door:
+        if ring_rule:
+            state.ring_rule = ring_rule
+            state.build_floor(depth)
+    else:
+        for _ in range(depth - 1):
+            state.player.stats.hp = state.player.max_hp
+            descend(state)
     results: list[tuple[int, int, float]] = []
     for _ in range(fights):
         if state.over:

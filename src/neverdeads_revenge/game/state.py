@@ -81,6 +81,9 @@ __all__ = [
     "CREDIT_LEVEL",
     "CREDIT_PACKS",
     "DOOR_EVERY",
+    "DOOR_ENEMY_BASE",
+    "DOOR_ENEMY_CAP",
+    "door_enemy_count",
 ]
 
 VIEW_RADIUS = 9
@@ -96,6 +99,19 @@ CREDIT_PACKS = 3
 
 #: The Tenth Door is every tenth floor: ten, twenty, thirty, and onward.
 DOOR_EVERY = 10
+
+#: How many monsters an endless floor holds. The ordinary dungeon's count grows
+#: by two a floor and reaches thirty-three on the tenth; repeating that ten times
+#: a ring turns a ten-minute ring into an hour of the same fight. The door's own
+#: count is flatter and capped -- the ring's rule and the warden are the depth's
+#: teeth, not the crowd.
+DOOR_ENEMY_BASE = 10
+DOOR_ENEMY_CAP = 20
+
+
+def door_enemy_count(depth: int) -> int:
+    """The enemy budget for a Tenth Door floor."""
+    return min(DOOR_ENEMY_CAP, DOOR_ENEMY_BASE + depth // 2)
 
 #: The health at which THE LAST BREATH turns on: at or below it, the hero's blows
 #: land twice and the enemies' find them harder to reach.
@@ -982,7 +998,12 @@ class GameState:
             # COMPANY. Passed as a budget rather than applied afterwards so the
             # generator can still refuse: a floor with nowhere to put them hands
             # back the floor it has, which is better than monsters in the walls.
-            enemy_budget=enemy_count(depth) + self.extra_enemies,
+            enemy_budget=(
+                door_enemy_count(depth)
+                if self.tenth_door
+                else enemy_count(depth)
+            )
+            + self.extra_enemies,
             # Loot aspects roll on their own dice too, so a floor's layout is
             # bit-for-bit what it was before the dark started naming blades.
             affix_rng=Rng(self.seed * 1013 + depth * 101),
