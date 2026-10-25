@@ -268,6 +268,7 @@ class BattleStage:
                     size=size,
                     cx=cx,
                     affix=enemy.affixes[0] if enemy.affixes else None,
+                    warden=enemy.warden,
                     row=(
                         hero_row - ECHO_STEP
                         if echo

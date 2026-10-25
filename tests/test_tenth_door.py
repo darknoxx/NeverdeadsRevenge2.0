@@ -235,9 +235,13 @@ def test_the_door_screen_banks_or_pushes_on():
     perform_action(state, Action.DESCEND)
     app = FakeApp()
 
-    DoorScreen(state)._choose(1, app)
+    door = DoorScreen(state)
+    door._choose(1, app)  # push on -> the boon shelf
+    assert door.mode == "boons"
+    door._choose(0, app)  # take the first boon and descend
 
     assert state.depth == 11
+    assert len(state.boons) == 1
     assert app.popped is True
     assert "door_creak" in app.played
 
@@ -265,3 +269,171 @@ def test_the_summary_says_banked_and_not_escaped():
 
     assert "Banked at the door" in text
     assert "Out of the dark" not in text
+
+
+# -- the rings --------------------------------------------------------------
+def test_ring_two_gets_a_rule_and_consecutive_rings_do_not_repeat():
+    from neverdeads_revenge.game import rings
+
+    assert rings.rule_for(3, 1) is None
+    first = rings.rule_for(3, 2)
+    second = rings.rule_for(3, 3)
+
+    assert first is not None and second is not None
+    assert first.key != second.key, "a run met the same weather twice in a row"
+
+
+def test_the_gloom_ring_takes_two_cells_of_sight():
+    state = _begin()
+    state.ring_rule = "gloom"
+
+    state.build_floor(11)
+
+    assert state.sight_penalty == 2
+
+
+def test_the_iron_ring_puts_a_plate_on_every_monster():
+    plain = _begin()
+    plain.build_floor(11)
+
+    iron = _begin()
+    iron.ring_rule = "iron"
+    iron.build_floor(11)
+
+    assert iron.enemies and len(iron.enemies) == len(plain.enemies)
+    assert all(
+        ringed.stats.armor == bare.stats.armor + 1
+        for bare, ringed in zip(plain.enemies, iron.enemies, strict=True)
+    )
+
+
+def test_the_fever_ring_is_faster_and_the_greed_ring_pays_more():
+    from neverdeads_revenge.game import rings
+
+    plain = _begin()
+    plain.build_floor(11)
+
+    fever = _begin()
+    fever.ring_rule = "fever"
+    fever.build_floor(11)
+    assert all(
+        ringed.stats.speed > bare.stats.speed
+        for bare, ringed in zip(plain.enemies, fever.enemies, strict=True)
+    )
+
+    greed = _begin()
+    before = greed.coin_multiplier
+    rings.enter_ring(greed, rings.RING_BY_KEY["greed"])
+    assert greed.coin_multiplier > before
+    greed.build_floor(11)
+    assert all(
+        ringed.stats.max_hp > bare.stats.max_hp
+        for bare, ringed in zip(plain.enemies, greed.enemies, strict=True)
+    )
+
+
+def test_pushing_through_sets_the_next_rings_rule():
+    from neverdeads_revenge.game import rings
+
+    state = _begin()
+    state.player.position = state.exit_pos
+    perform_action(state, Action.DESCEND)
+    state.continue_through_the_door()
+
+    assert state.ring_rule == rings.rule_for(state.seed, 2).key
+
+
+# -- the boons --------------------------------------------------------------
+def test_a_door_offers_three_different_boons():
+    from neverdeads_revenge.game import boons
+
+    offered = boons.offers(3, 1)
+
+    assert len(offered) == 3
+    assert len(set(offered)) == 3
+
+
+def test_a_boon_is_taken_once_and_stays_for_the_run():
+
+    state = _begin()
+    state.player.position = state.exit_pos
+    perform_action(state, Action.DESCEND)
+    key = state.boon_offers[0]
+    before = state.player.stats.max_hp if key == "iron_heart" else None
+
+    assert state.take_boon(key)
+    assert state.boons == [key]
+    assert state.boon_offers == ()
+    assert not state.take_boon(key), "a boon was taken twice"
+
+    if key == "iron_heart":
+        assert state.player.stats.max_hp == before + 8
+
+
+def test_the_door_changes_to_the_boon_shelf_before_it_descends():
+    from neverdeads_revenge.desktop.screens.door import DoorScreen
+
+    class FakeApp:
+        def __init__(self):
+            self.popped = False
+            self.redraws = 0
+
+        def play(self, name):
+            pass
+
+        def pop(self):
+            self.popped = True
+
+        def redraw(self):
+            self.redraws += 1
+
+        def show_game_over(self, *, won=False):
+            raise AssertionError("pushing on must not show the summary")
+
+    state = _begin()
+    state.player.position = state.exit_pos
+    perform_action(state, Action.DESCEND)
+    app = FakeApp()
+    screen = DoorScreen(state)
+
+    screen._choose(1, app)
+    assert screen.mode == "boons"
+    assert state.depth == 10 and state.door_pending
+
+    screen._choose(0, app)
+    assert state.depth == 11
+    assert len(state.boons) == 1
+    assert app.popped and app.redraws == 1
+
+
+# -- the wardens ------------------------------------------------------------
+def test_the_middle_of_a_ring_has_one_warden():
+    state = _begin()
+    state.build_floor(15)
+
+    wardens = [enemy for enemy in state.enemies if enemy.warden]
+    assert len(wardens) == 1
+    assert wardens[0].name.startswith("warden ")
+    assert wardens[0].stats.max_hp > 0
+
+
+def test_the_door_floors_do_not_add_a_warden():
+    state = _begin()
+    state.build_floor(20)
+
+    assert not any(enemy.warden for enemy in state.enemies)
+
+
+def test_the_warden_and_the_ring_survive_a_save():
+    state = _begin()
+    state.build_floor(15)
+    state.ring_rule = "iron"
+    state.boons = ["whetstone"]
+    state.boon_offers = ("lantern", "plated", "quickstep")
+
+    reloaded = load(json.loads(json.dumps(dump(state))))
+
+    assert any(enemy.warden for enemy in reloaded.enemies)
+    assert reloaded.ring_rule == "iron"
+    assert reloaded.boons == ["whetstone"]
+    assert reloaded.boon_offers == ("lantern", "plated", "quickstep")

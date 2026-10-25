@@ -59,6 +59,16 @@ def _summary_lines(state) -> list[tuple[str, str]]:
                 "bold green" if state.coin_multiplier > 1 else ASH,
             )
         )
+        from ...game.rings import RING_BY_KEY
+
+        rule = RING_BY_KEY.get(state.ring_rule)
+        if rule is not None:
+            lines.append((f"Ring rule       {rule.name}", "bold #d8b45a"))
+        if state.boons:
+            from ...game.boons import BOONS
+
+            names = ", ".join(BOONS[key].name for key in state.boons if key in BOONS)
+            lines.append((f"Boons           {names}", BONE))
     if state.fame:
         lines.append((f"Fame            {state.fame}  "
                       f"(worth {state.score_multiplier:.2f}x)", "bold green"))

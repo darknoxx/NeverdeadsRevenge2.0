@@ -186,6 +186,9 @@ def dump(state: GameState) -> dict:
         "risk_multiplier": state.risk_multiplier,
         "door_pending": state.door_pending,
         "banked": state.banked,
+        "ring_rule": state.ring_rule,
+        "boon_offers": list(state.boon_offers),
+        "boons": list(state.boons),
         "map": _encode(state.dungeon_map),
         "player": _encode(state.player),
         "enemies": [_encode(enemy) for enemy in state.enemies],
@@ -272,6 +275,11 @@ def load(payload: dict) -> GameState:
         state.risk_multiplier = float(payload.get("risk_multiplier", 1.0))
         state.door_pending = bool(payload.get("door_pending", False))
         state.banked = bool(payload.get("banked", False))
+        state.ring_rule = str(payload.get("ring_rule", ""))
+        state.boon_offers = tuple(
+            str(key) for key in payload.get("boon_offers", [])
+        )
+        state.boons = [str(key) for key in payload.get("boons", [])]
         state.dungeon_map = _decode(payload["map"])
         state.player = _decode(payload["player"])
         state.enemies = [_decode(enemy) for enemy in payload["enemies"]]

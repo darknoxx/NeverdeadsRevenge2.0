@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from neverdeads_revenge.game.actors import ActorKind
 from neverdeads_revenge.game.draughts import draught_by_key
 from neverdeads_revenge.game.npcs import NPC_COLOR, NPC_GLYPH
+from neverdeads_revenge.game.rings import RING_BY_KEY
 from neverdeads_revenge.game.state import GameState, LogKind
 from neverdeads_revenge.world.generator import ESCAPE_DEPTH
 from neverdeads_revenge.world.items import (
@@ -664,6 +665,10 @@ def hud_lines(state: GameState) -> list[tuple[str, str]]:
     if state.fame:
         score += f"  x{state.score_multiplier:.2f}"
     lines.append((score, "bold cyan"))
+    if state.tenth_door and state.ring_rule:
+        rule = RING_BY_KEY.get(state.ring_rule)
+        if rule is not None:
+            lines.append((f"Ring rule: {rule.name}", "bold #d8b45a"))
 
     if state.rewind_ready:
         lines.append(("r take the hour back", "bold green"))

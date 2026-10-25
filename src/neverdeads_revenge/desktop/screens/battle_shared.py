@@ -348,6 +348,7 @@ class Staged:
         "chosen",
         "art",
         "affix",
+        "warden",
         "phase",
     )
 
@@ -363,6 +364,7 @@ class Staged:
         chosen: bool = False,
         art: str | None = None,
         affix: str | None = None,
+        warden: bool = False,
         phase: float = 0.0,
     ) -> None:
         self.actor = actor
@@ -377,6 +379,9 @@ class Staged:
         #: Which aspect the figure wears, if any: the painter gives it an aura
         #: and the name already carries the word.
         self.affix = affix
+        #: The keeper of the ring wears a second, gold light under it. It is a
+        #: job, not an aspect; the name is the other half of the mark.
+        self.warden = warden
         self.glyph = glyph
         self.colour = colour
         self.size = size

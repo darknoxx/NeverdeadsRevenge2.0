@@ -39,6 +39,8 @@ from .actors import (
     pick_enemy_template,
     scale_template,
 )
+from . import boons as boon_rules
+from . import rings as ring_rules
 from .combat import apply_revenge
 from .levels import (
     SACRIFICED_KILL_POINTS,
@@ -210,6 +212,13 @@ class GameState:
     #: Set when the player banks. The summary reads it rather than guessing
     #: from the run state, because an escape and a bank are different endings.
     banked: bool = False
+    #: The current ring's weather, by key. Empty on the threshold floor.
+    ring_rule: str = ""
+    #: The three boons on offer at the door the player is standing before.
+    boon_offers: tuple[str, ...] = ()
+    #: Boons taken, in the order they were taken. They are run-long rules, not
+    #: floor buffs, and the summary reads them back.
+    boons: list[str] = field(default_factory=list)
     dungeon_map: DungeonMap = field(default_factory=lambda: DungeonMap(width=1, height=1))
     player: Actor = None  # type: ignore[assignment]
     enemies: list[Actor] = field(default_factory=list)
@@ -1094,6 +1103,16 @@ class GameState:
         self.fortress_turns_left = 0
         self.sight_penalty = 0
         self.ultimate_available = True
+        if self.tenth_door:
+            ring_rules.apply_to_floor(self)
+            if depth % 10 == 5:
+                # The middle of every ring has a keeper. Not on the door floor:
+                # the question there is the door, and two asks on one landing
+                # would make the answer for the player instead of by them.
+                self._promote_warden()
+            # The FOV was built before the per-floor bookkeeping reset the
+            # sight penalty, and the Gloom Ring writes to it afterwards.
+            self.refresh_vision()
         # The floor's own weather, and its own memory of the dead. Both are the
         # floor's: neither the strange draughts nor the carrion tongue's
         # feeding crosses the stairs.
@@ -1296,8 +1315,56 @@ class GameState:
             self.gold -= paid
             self.say(f"The dark takes its toll: {paid} coins.", LogKind.BAD)
 
+    def open_door(self) -> None:
+        """Stand before the door and lay out what this ring is offering."""
+        self.door_pending = True
+        self.boon_offers = boon_rules.offers(self.seed, self.door_ring)
+
+    def take_boon(self, key: str) -> bool:
+        """Take one of the three. Returns whether it was real and new."""
+        if key not in self.boon_offers:
+            return False
+        boon = boon_rules.apply(self, key)
+        if boon is None:
+            return False
+        self.boons.append(key)
+        self.boon_offers = ()
+        self.say(f"You take {boon.name}. {boon.blurb}", LogKind.GOOD)
+        return True
+
+    def _promote_warden(self) -> None:
+        """Make one monster on the floor the keeper of the ring.
+
+        The name and the numbers are the whole of it: the art sheets do not
+        have a warden, and a new template would need a bestiary page for a
+        thing that is only a ghoul with a harder job.
+        """
+        pool = [
+            enemy
+            for enemy in self.enemies
+            if enemy.alive and enemy.behaviour != "hunter"
+        ]
+        if not pool:
+            return
+        chosen = self.rng.pick(pool)
+        chosen.warden = True
+        chosen.name = f"warden {chosen.name}"
+        chosen.stats.max_hp = max(1, round(chosen.stats.max_hp * 1.75))
+        chosen.stats.hp = chosen.stats.max_hp
+        low, high = chosen.stats.damage
+        chosen.stats.damage = (low + 2, high + 2)
+        chosen.stats.armor += 1
+        low, high = chosen.gold
+        chosen.gold = (round(low * 2.5), round(high * 2.5))
+        self.say(
+            f"A warden holds this ring: {chosen.name}. "
+            "The middle of the ring is its.",
+            LogKind.BAD,
+        )
+
     def continue_through_the_door(self) -> None:
-        """Push on. Both wagers rise and the next ten floors begin.
+        """Push on. Both wagers rise, the next ring's rule is set, and the
+        next ten floors begin.
 
         The purse is a wager too, not just the score: the mode is for the player
         who does not care about the board as much as the coin, and a door that
@@ -1308,7 +1375,11 @@ class GameState:
         if not self.door_pending:
             return
         self.door_pending = False
+        self.boon_offers = ()
         self.door_ring += 1
+        ring_rules.enter_ring(
+            self, ring_rules.rule_for(self.seed, self.door_ring)
+        )
         self.risk_multiplier *= 1.25
         self.coin_multiplier *= 1.25
         self.say(

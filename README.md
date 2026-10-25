@@ -68,8 +68,15 @@ the same dungeon, started on floor 10 with the house's credit -- level 18 and
 three pieces from the deep. Every tenth floor from there is a landing with one
 question. **Bank the run** and take the number it has, or **push on**: the next
 ten floors are worth 1.25x more and pay 1.25x coin, but death takes the whole
-wager -- score and purse both. Banking is the only way to keep the coin. The
-first slice ends at the door; ring rules and boons come after it.
+wager -- score and purse both. Banking is the only way to keep the coin.
+
+Every ring has one weather, shown at the door and applied to all ten floors:
+**the Iron Ring** (+1 monster armour), **the Fever Ring** (+0.10 monster speed),
+**the Gloom Ring** (-2 sight), and **the Greed Ring** (monster health +10%,
+coin +30% for the ring). Pushing on also opens a shelf of **three boons**; one
+is taken for the rest of the run. The middle floor of every ring (15, 25, ...)
+holds a **warden**: one monster with the ring's job, 75% more health, +2 damage,
++1 armour and a heavier purse.
 
 ## What is down there
 

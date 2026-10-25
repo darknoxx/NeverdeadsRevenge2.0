@@ -382,6 +382,17 @@ class SdlArena(Screen):
                 self.arena.clock,
                 app.font.cell_h,
             )
+        if figure.warden:
+            # The keeper's mark is gold and sits under the aspect's own colour;
+            # a warden of a ring can be both, and the two pools read as a rank
+            # rather than as two unrelated auras.
+            self._stage.affix_glow(
+                surface,
+                figure,
+                "#d8b45a",
+                self.arena.clock + 0.7,
+                app.font.cell_h,
+            )
         image = self._stage.figure(figure, scale)
         if image is None:
             return

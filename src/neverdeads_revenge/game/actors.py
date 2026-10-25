@@ -309,6 +309,10 @@ class Actor:
     #: The aspects on it, by key. One is already a sentence; two is a paragraph,
     #: so the rule is one for now and the field leaves room for the second.
     affixes: tuple[str, ...] = ()
+    #: Whether it is the keeper of a Tenth Door ring: a name, a heavier purse
+    #: and a larger body, not a new monster. The bestiary page stays the base
+    #: monster's; this is the job it was given on this floor.
+    warden: bool = False
     #: Cells entered since the run started. A run total, like ``total_turns``,
     #: and a statistic rather than a score input: the score rewards time, and
     #: walking further is the opposite of that.

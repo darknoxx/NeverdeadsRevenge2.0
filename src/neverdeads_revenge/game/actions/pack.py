@@ -344,7 +344,7 @@ def _try_descend(state: GameState) -> ActionResult:
     if state.at_a_door:
         # The stairs are a landing, not a descent. The screen that asks the
         # question is the game's; the state only says that the question is open.
-        state.door_pending = True
+        state.open_door()
         return _outcome(state, consumed_turn=False, acted=False)
 
     state.descend()
