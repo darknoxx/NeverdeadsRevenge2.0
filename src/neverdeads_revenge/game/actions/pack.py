@@ -128,6 +128,8 @@ def _equip(state: GameState, item: GroundItem) -> None:
         # it is lying on the floor: a catalogue of what you walked past is not a
         # catalogue of what you have.
         state.found_weapons.append(item.item_id)
+    if item.slot == "weapon":
+        state.note_weapon_aspect(item)
     if item.slot == "armour" and item.item_id not in state.found_armours:
         # THE WARDROBE. A coat is known the moment it is on -- and taking one up
         # puts it on, so the same act that changes the numbers writes the page.

@@ -292,6 +292,8 @@ class AppStack:
             self.progress.daily_date = state.daily
         from ..game.feats import award
 
+        for key, affix in state.weapon_aspects:
+            self.progress.record_weapon_aspect(key, affix)
         award(self.progress, state)
         self.progress.reroll_shelves(Rng(random.SystemRandom().randrange(2**32)))
         self.save_progress()

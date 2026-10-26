@@ -28,6 +28,7 @@ from .pages import (
     write_the_aspect,
     write_the_page,
     write_the_weapon,
+    write_the_weapon_aspect,
 )
 from .dialogs import (
     KindlyScreen,
@@ -97,6 +98,7 @@ class GameScreen(Screen):
         #: that a page was just written -- one card, not two.
         self._filed_weapons: set[str] = set()
         self._new_weapons: set[str] = set()
+        self._filed_weapon_aspects: set[tuple[str, str]] = set()
         self._filed_armours: set[str] = set()
         self._new_armours: set[str] = set()
 
@@ -501,6 +503,12 @@ class GameScreen(Screen):
             self._filed_weapons.add(key)
             if write_the_weapon(app, key):
                 self._new_weapons.add(key)
+        for key, affix in self.state.weapon_aspects:
+            met = (key, affix)
+            if met in self._filed_weapon_aspects:
+                continue
+            self._filed_weapon_aspects.add(met)
+            write_the_weapon_aspect(app, key, affix)
 
     def _file_armours(self, app) -> None:
         """Write the Wardrobe page of anything just put on.

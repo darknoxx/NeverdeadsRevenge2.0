@@ -20,6 +20,7 @@ from ..art import exists as art_exists
 __all__ = [
     "write_the_page",
     "write_the_weapon",
+    "write_the_weapon_aspect",
     "write_the_armour",
     "write_the_aspect",
     "the_aspect_card",
@@ -64,6 +65,26 @@ def write_the_weapon(app, key: str) -> bool:
 def write_the_armour(app, key: str) -> bool:
     """File one coat's page in the Wardrobe."""
     return _write(app, "record_armour", key)
+
+
+def write_the_weapon_aspect(app, key: str, affix: str) -> bool:
+    """Note one aspect on a blade's page. Returns whether it was new.
+
+    The page is the *base* blade's -- a frostbound hummingbird is a hummingbird
+    with a sentence under it, not a second sword. The note is still saved at
+    once, because what the dark did to the blade is worth as much as the blade.
+    """
+    progress = getattr(app, "progress", None)
+    record = getattr(progress, "record_weapon_aspect", None)
+    if record is None or not record(key, affix):
+        return False
+    play = getattr(app, "play", None)
+    if play is not None:
+        play("rare_item")
+    save = getattr(app, "save_progress", None)
+    if save is not None:
+        save()
+    return True
 
 
 def write_the_aspect(app, key: str, affix: str) -> bool:

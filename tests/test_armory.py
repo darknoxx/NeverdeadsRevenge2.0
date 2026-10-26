@@ -105,3 +105,46 @@ def test_the_armory_outlives_the_run(tmp_path):
     save_meta(progress, path)
 
     assert load_meta(path).armory == ["tooth"]
+
+
+# -- the dark's cuts --------------------------------------------------------
+def test_a_weapon_aspect_is_remembered_on_its_base_blade():
+    state = start_run(HEROES["noxx"], seed=3)
+    blade = make_item(ITEMS["hummingbird"], affixes=("frostbound",))
+
+    state.note_weapon_aspect(blade)
+
+    assert state.weapon_aspects == [("hummingbird", "frostbound")]
+
+
+def test_the_weapon_page_names_the_variants_that_were_met():
+    from types import SimpleNamespace
+
+    from neverdeads_revenge.desktop.screens.almanac import AlmanacScreen
+
+    progress = MetaProgress()
+    progress.record_weapon_aspect("hummingbird", "frostbound")
+    progress.record_weapon_aspect("hummingbird", "darkness_touched")
+    app = SimpleNamespace(progress=progress)
+
+    text = " ".join(
+        line
+        for line, _style in AlmanacScreen().weapon_lines(
+            armory.weapon("hummingbird"), 60, app
+        )
+    )
+
+    assert "ASPECTS MET" in text
+    assert "the frostbound hummingbird" in text
+    assert "the darkness-touched hummingbird" in text
+
+
+def test_a_weapon_aspect_outlives_the_run(tmp_path):
+    path = tmp_path / "meta.json"
+    progress = MetaProgress()
+    progress.record_weapon_aspect("hummingbird", "fire_kissed")
+    save_meta(progress, path)
+
+    assert load_meta(path).weapon_aspects == {
+        "hummingbird": ["fire_kissed"]
+    }

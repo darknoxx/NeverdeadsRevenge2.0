@@ -108,6 +108,10 @@ class MetaProgress:
     #: Feats proved by finished runs, by key. Sorted, and a collection like the
     #: books: not bought, not scored, simply known.
     feats: list[str] = field(default_factory=list)
+    #: Weapon aspects met, by the base blade's key. The variants share a page
+    #: with the blade they were cut from; this is the margin note that says which
+    #: cuts have been seen.
+    weapon_aspects: dict[str, list[str]] = field(default_factory=dict)
     #: Monsters whose page in the Almanac has been written, by template key.
     #:
     #: Kept sorted, and a list for the same reason ``pages`` is one: the save is
@@ -168,6 +172,17 @@ class MetaProgress:
             return False
         self.armory.append(key)
         self.armory.sort()
+        return True
+
+    def record_weapon_aspect(self, key: str, affix: str) -> bool:
+        """Note one aspect met on a blade. Returns whether it was new."""
+        if not key or not affix:
+            return False
+        seen = self.weapon_aspects.setdefault(key, [])
+        if affix in seen:
+            return False
+        seen.append(affix)
+        seen.sort()
         return True
 
     def record_armour(self, key: str) -> bool:
@@ -376,6 +391,15 @@ def load_meta(path: Path | None = None) -> MetaProgress:
             last_name=str(raw.get("last_name", "")),
             daily_date=str(raw.get("daily_date", "")),
             feats=[str(key) for key in raw.get("feats", [])],
+            weapon_aspects={
+                str(key): [str(one) for one in value]
+                for key, value in (
+                    raw.get("weapon_aspects", {})
+                    if isinstance(raw.get("weapon_aspects"), dict)
+                    else {}
+                ).items()
+                if isinstance(value, list)
+            },
             muted=bool(raw.get("muted", False)),
             pending=[str(key) for key in raw.get("pending", [])],
             wilds=[str(key) for key in raw.get("wilds", [])],

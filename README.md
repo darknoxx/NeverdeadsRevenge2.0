@@ -117,6 +117,11 @@ a guarantee.
 - **Twenty-seven weapons** (the rusted tooth, the grey bite, the long hunger, the
   frostbite...) and **ten pieces of armour** (the thin hide, the rune plate,
   the ashfall cloak...), each with its own modifiers.
+- **Three aspects**: fire-kissed, frostbound and darkness-touched. Deep blades
+  can roll one on a find, and aggressive monsters from floor six can carry one.
+  The Armory keeps a blade variant on its *base* blade's page under **ASPECTS
+  MET**; the Bestiary does the same for the monsters. There is no separate page
+  for every possible sword.
 - **Five strange draughts**, none of them medicine: each lays a rule on the
   floor and lasts only until the stairs. THE THIN VEIL (nothing looks at you
   until you strike), THE KINDLED BREATH (every blow you land sets it burning),

@@ -30,7 +30,7 @@ from ...game.feats import FEATS
 from ...game.lore import PAGE_COUNT, TITLE, numeral, page
 from ...game.wardrobe import ARMOURS, Armour
 from ...game.wardrobe import stat_lines as armour_stats
-from ...world.affixes import AFFIXES
+from ...world.affixes import AFFIXES, name_with
 from ...world.items import ITEMS
 from ..art import Placed, exists as art_exists, size as art_size
 from ..chrome import ASH, BONE, BLOOD, PURPLE, box, rule
@@ -433,7 +433,7 @@ class AlmanacScreen(Screen):
         if self.tab == 1:
             return self.monster_lines(entry, room, app)
         if self.tab == 2:
-            return self.weapon_lines(entry, room)
+            return self.weapon_lines(entry, room, app)
         return self.armour_lines(entry, room)
 
     def monster_lines(
@@ -480,7 +480,9 @@ class AlmanacScreen(Screen):
         rows += [(line, "grey60") for line in _wrap(entry.lore, room)]
         return rows
 
-    def weapon_lines(self, entry: Weapon, room: int) -> list[tuple[str, str]]:
+    def weapon_lines(
+        self, entry: Weapon, room: int, app=None
+    ) -> list[tuple[str, str]]:
         """One blade's page: its numbers first, because that is what it is for."""
         colour = ITEMS[entry.key].color
         stats, where = weapon_stats(entry)
@@ -491,6 +493,27 @@ class AlmanacScreen(Screen):
         rows.append(("", ""))
         rows.append(("WHAT IT IS", f"bold {PURPLE}"))
         rows += [(line, BONE) for line in _wrap(entry.what, room)]
+        seen = (
+            getattr(getattr(app, "progress", None), "weapon_aspects", {})
+            if app is not None
+            else {}
+        ).get(entry.key, ())
+        variants = [
+            (name_with(entry.name, (key,)), AFFIXES.get(key))
+            for key in seen
+            if AFFIXES.get(key) is not None
+        ]
+        variants = [
+            (name, aspect)
+            for name, aspect in variants
+            if name.lower() != entry.name.lower()
+        ]
+        if variants:
+            rows.append(("", ""))
+            rows.append(("ASPECTS MET", f"bold {PURPLE}"))
+            for name, aspect in variants:
+                line = f"{name} — {aspect.blurb}"
+                rows += [(piece, ASH) for piece in _wrap(line, room)]
         rows.append(("", ""))
         rows += [(line, "grey60") for line in _wrap(entry.lore, room)]
         return rows

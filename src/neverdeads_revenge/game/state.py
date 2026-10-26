@@ -294,6 +294,9 @@ class GameState:
     #: dict because this is the run's log, not the book: the Almanac decides what
     #: is new and writes it down.
     aspects_met: list[tuple[str, str]] = field(default_factory=list)
+    #: Aspects met on blades, by base item and aspect key. Same shape and same
+    #: reason: the page belongs to the base blade, the margin note is the variant.
+    weapon_aspects: list[tuple[str, str]] = field(default_factory=list)
     #: Whether the weapon's *first blow* rule has been paid this fight. A fact
     #: about the fight and not about each monster, which is what the blade says.
     first_blow_spent: bool = False
@@ -1391,6 +1394,15 @@ class GameState:
         )
         return "The house rolls again."
 
+    def note_weapon_aspect(self, item: GroundItem) -> None:
+        """Remember the cut a blade carries, for the Armory's margin."""
+        if item.slot != "weapon" or not item.affixes:
+            return
+        for affix in item.affixes:
+            met = (item.item_id, affix)
+            if met not in self.weapon_aspects:
+                self.weapon_aspects.append(met)
+
     def open_door(self) -> None:
         """Stand before the door and lay out what this ring is offering."""
         self.door_pending = True
@@ -1730,6 +1742,8 @@ def _receive(state: GameState, template) -> GroundItem:
     # piece that was bought, not only for one that was picked up off the floor.
     if template.slot == "weapon" and item.item_id not in state.found_weapons:
         state.found_weapons.append(item.item_id)
+    if template.slot == "weapon":
+        state.note_weapon_aspect(item)
     if template.slot == "armour" and item.item_id not in state.found_armours:
         state.found_armours.append(item.item_id)
     if previous is not None:

@@ -213,6 +213,7 @@ def dump(state: GameState) -> dict:
         "found_weapons": list(state.found_weapons),
         "found_armours": list(state.found_armours),
         "aspects_met": [list(met) for met in state.aspects_met],
+        "weapon_aspects": [list(met) for met in state.weapon_aspects],
         "level": state.level,
         "kill_points": state.kill_points,
         "kill_points_bonus": state.kill_points_bonus,
@@ -331,6 +332,11 @@ def load(payload: dict) -> GameState:
         state.aspects_met = [
             (str(met[0]), str(met[1]))
             for met in payload.get("aspects_met", [])
+            if isinstance(met, (list, tuple)) and len(met) == 2
+        ]
+        state.weapon_aspects = [
+            (str(met[0]), str(met[1]))
+            for met in payload.get("weapon_aspects", [])
             if isinstance(met, (list, tuple)) and len(met) == 2
         ]
         state.level = payload["level"]
