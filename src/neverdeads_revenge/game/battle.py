@@ -28,7 +28,6 @@ from dataclasses import dataclass
 from neverdeads_revenge.core.direction import chebyshev
 
 from .actions import (
-    STACK_LIMIT,
     Action,
     _advance_atritas,
     inflict,
@@ -289,6 +288,9 @@ SIPHON = 0.5
 #: cut, and a trick that cost a whole turn and a whole fight to hand out the same
 #: wound would be a trick nobody spends twice.
 DEEP_BLEED = "maul"
+#: Paint the Walls Red opens the deep wound three stacks deep. The *ceiling* is
+#: five; the trick does not spend the whole ceiling for the player.
+PAINT_BLEED_STACKS = 3
 
 #: How far from the hero the room reaches. A fight takes whoever is standing in
 #: the same room, and "the same room" is a distance rather than a graph of walls:
@@ -1108,10 +1110,11 @@ class Battle:
     def _special_paint_the_walls_red(self, target: Actor | None, events: list[Event]) -> None:
         """Atritas comes, and he does not come alone.
 
-        On *every* one of them, and at the wound ceiling: the vein's own cut is a
-        single stack, and this is the deepest a wound goes -- four a turn for
-        four turns, times the ceiling. A room of three opened at once is a room
-        that is over before the floor runs dry.
+        On *every* one of them, and three wounds deep: the vein's own cut is a
+        single stack, and this is the deepest a wound goes *from this trick* --
+        four a turn for four turns, times three. A room of three opened at once
+        is a room that is over before the floor runs dry. The fifth stack is
+        something a crit can add, not something Paint gives away.
         """
         before = len(self.state.log)
         self.state.say("Atritas comes, and he does not come alone.", LogKind.SYSTEM)
@@ -1124,7 +1127,7 @@ class Battle:
                 self.state,
                 enemy,
                 (DEEP_BLEED,),
-                stacks=STACK_LIMIT,
+                stacks=PAINT_BLEED_STACKS,
                 source=self.hero,
             )
             self._splice(before, events)

@@ -200,7 +200,7 @@ SPECIALS: tuple[Special, ...] = (
     Special(
         key=PAINT_THE_WALLS_RED,
         cost=8,
-        effect="all of them: the deepest wound, five stacks",
+        effect="all of them: the deepest wound, three stacks",
         needs_target=False,
         look="shadow",
         name="PAINT THE WALLS RED",

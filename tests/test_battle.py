@@ -817,11 +817,12 @@ def test_the_roundhouse_takes_the_whole_room():
     ), "one of them was out of the spin"
 
 
-def test_paint_the_walls_red_cuts_at_the_ceiling():
+def test_paint_the_walls_red_cuts_three_deep():
     """Atritas brings company, and the company is the deepest wound there is.
 
-    Every monster in the room gets the deep bleeding at the full ceiling, which
-    on three of them is the room ending before the floor runs dry.
+    The trick gives three stacks, not the whole new ceiling: the fourth and fifth
+    are what a crit can add afterwards. Three monsters opened at once is already
+    the room ending before the floor runs dry.
     """
     from neverdeads_revenge.game.specials import PAINT_THE_WALLS_RED
 
@@ -836,9 +837,9 @@ def test_paint_the_walls_red_cuts_at_the_ceiling():
         "something in the room was not opened"
     )
     assert all(
-        enemy.status_stacks.get("maul") == STACK_LIMIT
+        enemy.status_stacks.get("maul") == 3
         for enemy in battle.enemies
-    ), "the deep wound was not cut at its ceiling"
+    ), "Paint gave the wrong depth"
 
 
 def test_devouring_darkness_keeps_half_of_what_it_bites():
