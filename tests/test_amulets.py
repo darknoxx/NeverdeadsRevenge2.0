@@ -821,11 +821,11 @@ def test_the_mirror_teaches_like_any_other_kill():
 def test_each_status_amulet_deepens_its_own_wound_and_no_other():
     """One status each: red seam bleeds, green kiss poisons, bellows burns, thin ice chills.
 
-    One stack, and the wound's own ceiling of three stops it there. And only what
+    One stack, and the wound's own ceiling of five stops it there. And only what
     the hero leaves in somebody else -- a wound he *takes*, or a monster's own
     self-inflicted one, is not his doing and does not get deeper.
     """
-    from neverdeads_revenge.game.actions import inflict
+    from neverdeads_revenge.game.actions import STACK_LIMIT, inflict
     from neverdeads_revenge.game.actors import ENEMIES, make_enemy
 
     pairs = (
@@ -841,9 +841,11 @@ def test_each_status_amulet_deepens_its_own_wound_and_no_other():
         inflict(state, foe, (status,), source=state.player)
         assert foe.status_stacks[status] == 2, f"{amulet} did not deepen the {status}"
 
-        inflict(state, foe, (status,), source=state.player)
-        inflict(state, foe, (status,), source=state.player)
-        assert foe.status_stacks[status] == 3, f"{amulet} went past the ceiling"
+        for _ in range(4):
+            inflict(state, foe, (status,), source=state.player)
+        assert (
+            foe.status_stacks[status] == STACK_LIMIT
+        ), f"{amulet} went past the ceiling"
 
         # His own wound, and a monster's own: the amulet is not in either.
         inflict(state, state.player, (status,), source=state.player)

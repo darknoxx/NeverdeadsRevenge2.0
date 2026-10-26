@@ -47,6 +47,16 @@ def tick_statuses(state: GameState, actor: Actor) -> None:
     """
     if not actor.statuses:
         return
+    if "maul" in actor.statuses and "bleed" in actor.statuses:
+        # A save or an old battle can still hold both badges. One family now:
+        # the deep wound keeps the better depth and the shallow one is gone.
+        actor.status_stacks["maul"] = min(
+            STACK_LIMIT,
+            actor.status_stacks.get("maul", 1)
+            + actor.status_stacks.get("bleed", 1),
+        )
+        actor.statuses.pop("bleed", None)
+        actor.status_stacks.pop("bleed", None)
 
     for key in list(actor.statuses):
         status = status_by_key(key)
@@ -104,11 +114,13 @@ def inflict(
 ) -> None:
     """Leave something running on whoever was just hit.
 
-    Refreshed, and -- for the two wounds -- *deepened*, to three at most. A
+    Refreshed, and -- for the two wounds -- *deepened*, to five at most. A
     second cut on a bleeding thing makes the bleeding last its own turns again
     and bleed one stack harder, which is the shape a fast cheap blade wants: it
-    builds a wound rather than a damage multiplier, and three is the ceiling
-    that keeps it one.
+    builds a wound rather than a damage multiplier, and five is the ceiling
+    that keeps it one. The deep bleed (``maul``) and the shallow one (``bleed``)
+    are one family: once a thing is bleeding badly, a shallow cut deepens that
+    wound instead of opening a second badge.
 
     ``stacks`` is for the rules that are not a second blow: the bloodline that
     says how deep a crit's wound is, and the trick that opens a vein for two.
@@ -125,6 +137,14 @@ def inflict(
         return
 
     for key in keys:
+        if key == "bleed" and "maul" in target.statuses:
+            # A shallow cut on a deep wound is another turn of the same blade,
+            # not a second bleeding badge.
+            key = "maul"
+        elif key == "maul" and "bleed" in target.statuses:
+            # The deep cut subsumes the shallow one on the way in.
+            target.statuses.pop("bleed", None)
+            target.status_stacks.pop("bleed", None)
         status = status_by_key(key)
         if status is None:
             continue

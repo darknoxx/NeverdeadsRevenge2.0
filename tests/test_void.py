@@ -947,7 +947,7 @@ def test_bleeding_edge_makes_a_crits_wound_as_deep_as_the_bloodline():
 
     It used to make the wound *last* longer, which was the same ladder told in
     the other currency -- and the currency nobody could see, because length is a
-    number in the log. The depth is the number on the badge, and three is the
+    number in the log. The depth is the number on the badge, and five is the
     ceiling the wounds have.
     """
     from neverdeads_revenge.game.actors import HEROES

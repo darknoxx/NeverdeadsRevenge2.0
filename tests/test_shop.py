@@ -816,4 +816,5 @@ def test_bleeding_edge_keeps_the_wound_ceiling_after_the_door_opens():
 
     offer = offer_for(progress, "bleeding_edge")
 
-    assert offer.limit == META_UPGRADES["bleeding_edge"].max_stacks == 3
+    assert offer.limit == 5
+    assert META_UPGRADES["bleeding_edge"].max_stacks == 3

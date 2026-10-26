@@ -171,7 +171,7 @@ def resolve_player_attack(
                 rule(state, target, state.player)
         if outcome.crit and state.bleed_on_crit:
             # BLEEDING EDGE. A lucky blow opens a wound as deep as the bloodline
-            # is: one stack, two, three -- the ceiling the wounds have. It used
+            # is: one stack, two, three, five -- the ceiling the wounds have. It used
             # to make the wound *last* longer, which was the same ladder told in
             # the other currency; the depth is the one a player can see, because
             # it is the number on the badge.

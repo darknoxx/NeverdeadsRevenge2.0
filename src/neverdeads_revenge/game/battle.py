@@ -1108,10 +1108,10 @@ class Battle:
     def _special_paint_the_walls_red(self, target: Actor | None, events: list[Event]) -> None:
         """Atritas comes, and he does not come alone.
 
-        On *every* one of them, and three wounds deep: the vein's own cut is a
+        On *every* one of them, and at the wound ceiling: the vein's own cut is a
         single stack, and this is the deepest a wound goes -- four a turn for
-        four turns, times three. A room of three opened at once is a room that is
-        over before the floor runs dry.
+        four turns, times the ceiling. A room of three opened at once is a room
+        that is over before the floor runs dry.
         """
         before = len(self.state.log)
         self.state.say("Atritas comes, and he does not come alone.", LogKind.SYSTEM)

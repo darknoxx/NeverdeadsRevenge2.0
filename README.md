@@ -98,8 +98,10 @@ Tenth Door on a seed fixed by the local date, so everyone opens the same door
 that day. One answer a day; the scoreboard marks the row with **D**.
 
 Opening the door also widens the shop: the permanent upgrades gain a second
-shelf of caps (Vigour, Whetstone, Focus and the rest), and the title's **?**
-reference lists the new rules. A first-escape card says all of it once.
+shelf of caps (Vigour, Whetstone, Focus, the bloodlines and the rest; the pack
+stays at seven), and wounds now cap at **five stacks**, so Bleeding Edge can
+reach five with the endless shelf. The title's **?** reference lists the new
+rules; a first-escape card says all of it once.
 
 The Almanac's fifth tab is **FEATS**: ten things a finished run can prove, from
 the first name on the board to a killed warden, a banked door, twenty floors
@@ -217,7 +219,8 @@ whole permanent shelf bought so far -- the bloodlines included, wild offers not,
 because those are a run's bargain. And every permanent row carries its own
 **(3/5)**: the Vigour you hold against the Vigour there is.
 
-**Permanent upgrades** buy things that survive the run:
+**Permanent upgrades** buy things that survive the run. The caps below are the
+base shelf; opening the Tenth Door adds the second wing (the pack stays at 7).
 
 | upgrade | price | what it does | stacks |
 | --- | --- | --- | --- |
@@ -234,7 +237,7 @@ is shared, the gift is not. They are the reason to play all three:
 
 | bloodline | hero | what it does | stacks |
 | --- | --- | --- | --- |
-| Bleeding Edge | Noxx | a crit leaves a wound that bleeds longer (+2 turns per stack) | up to 3 |
+| Bleeding Edge | Noxx | a crit opens the wound one stack deeper per stack; five is the wound ceiling | up to 5 with the door |
 | Hoarfrost | Yeti | 15% chance per stack to freeze whoever strikes you | up to 3 |
 | Ring of the Bell | Walkyrion | 20% chance per stack to throw what you hit | up to 3 |
 

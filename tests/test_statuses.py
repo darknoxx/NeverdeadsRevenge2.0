@@ -57,12 +57,12 @@ def test_a_status_runs_out_after_the_turns_it_promises():
 
 
 def test_a_second_wound_deepens_the_bleeding():
-    """Two cuts open a deeper wound, three is the ceiling, and four does nothing.
+    """Two cuts open a deeper wound, five is the ceiling, and a sixth does nothing.
 
     It used to be the other way round -- a second wound only refreshed the same
     shallow cut, which made a fast cheap blade a way to keep a wound *alive*
     rather than a way to open one. The ceiling is what keeps the other reading
-    from happening: three stacks is a wound that is a problem, and a fourth is
+    from happening: five stacks is a wound that is a problem, and a sixth is
     not a sentence.
     """
     state = start_run(NOXX, seed=3)
@@ -80,9 +80,21 @@ def test_a_second_wound_deepens_the_bleeding():
     tick_statuses(state, enemy)
     assert enemy.hp == before - 2 * STATUSES["bleed"].damage, "it bled once, not twice"
 
-    for _ in range(4):
+    for _ in range(6):
         inflict(state, enemy, ("bleed",))
-    assert enemy.status_stacks["bleed"] == 3, "the wound went past its ceiling"
+    assert enemy.status_stacks["bleed"] == 5, "the wound went past its ceiling"
+
+
+def test_a_shallow_cut_on_a_deep_wound_keeps_one_badge():
+    """Paint the walls red, then crit: one bleeding, not two."""
+    state = start_run(NOXX, seed=3)
+    enemy = _enemy(state)
+
+    inflict(state, enemy, ("maul",), stacks=5)
+    inflict(state, enemy, ("bleed",), stacks=3)
+
+    assert "bleed" not in enemy.statuses
+    assert enemy.status_stacks.get("maul") == 5
 
 
 def test_a_poison_refreshes_and_never_deepens():

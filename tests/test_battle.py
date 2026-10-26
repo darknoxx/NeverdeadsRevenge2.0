@@ -817,12 +817,11 @@ def test_the_roundhouse_takes_the_whole_room():
     ), "one of them was out of the spin"
 
 
-def test_paint_the_walls_red_cuts_three_deep():
+def test_paint_the_walls_red_cuts_at_the_ceiling():
     """Atritas brings company, and the company is the deepest wound there is.
 
-    The trick is the one that says *three* out loud: every monster in the room
-    gets the deep bleeding at the full ceiling, which on three of them is the
-    room ending before the floor runs dry.
+    Every monster in the room gets the deep bleeding at the full ceiling, which
+    on three of them is the room ending before the floor runs dry.
     """
     from neverdeads_revenge.game.specials import PAINT_THE_WALLS_RED
 
@@ -836,9 +835,10 @@ def test_paint_the_walls_red_cuts_three_deep():
     assert all("maul" in enemy.statuses for enemy in battle.enemies), (
         "something in the room was not opened"
     )
-    assert all(enemy.status_stacks.get("maul") == 3 for enemy in battle.enemies), (
-        "the deep wound was not cut at its ceiling"
-    )
+    assert all(
+        enemy.status_stacks.get("maul") == STACK_LIMIT
+        for enemy in battle.enemies
+    ), "the deep wound was not cut at its ceiling"
 
 
 def test_devouring_darkness_keeps_half_of_what_it_bites():
@@ -1076,10 +1076,11 @@ def test_a_vein_opened_on_a_bleeding_monster_deepens_the_wound_to_the_cap():
     assert enemy.status_stacks["bleed"] == 2
 
     battle.choose(SPECIAL, enemy, special=OPEN_VEIN)
-    assert enemy.status_stacks["bleed"] == STACK_LIMIT, "the second vein did not add"
+    assert enemy.status_stacks["bleed"] == 4, "the second vein did not add"
 
+    battle.state.kill_points = 10
     battle.choose(SPECIAL, enemy, special=OPEN_VEIN)
-    assert enemy.status_stacks["bleed"] == STACK_LIMIT, "the ceiling was passed"
+    assert enemy.status_stacks["bleed"] == STACK_LIMIT, "the ceiling was not reached"
 
 
 def test_the_kill_lines_wait_for_the_killing_blow():
