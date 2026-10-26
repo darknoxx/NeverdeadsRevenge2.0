@@ -84,29 +84,23 @@ class CreditScreen(Screen):
         for number, item in enumerate(state.credit_gear):
             centre = left + column * number + column / 2
             self._slots.append((centre, y + 10))
+            def centred(
+                row: int, text: str, style: str, number=number
+            ) -> None:
+                # The sprite is centred over the column; the name and its
+                # numbers have to stand under the same centre or the card reads
+                # as a list that happens to have pictures above it.
+                spot = left + column * number + max(0, (column - len(text)) // 2)
+                buffer.text(spot, row, text, parse_style(style))
+
             name = item.name[: column - 1]
-            buffer.text(
-                left + column * number,
-                y + 11,
-                name,
-                parse_style(f"bold {BONE}"),
-            )
-            buffer.text(
-                left + column * number,
-                y + 12,
-                item.kind[: column - 1],
-                parse_style(PURPLE),
-            )
+            centred(y + 11, name, f"bold {BONE}")
+            centred(y + 12, item.kind[: column - 1], PURPLE)
             detail = ", ".join(item.modifiers.describe())
             for line_number, text in enumerate(
                 wrap(detail, column - 1)[:2]
             ):
-                buffer.text(
-                    left + column * number,
-                    y + 13 + line_number,
-                    text,
-                    parse_style(ASH),
-                )
+                centred(y + 13 + line_number, text, ASH)
 
         rerolled = state.credit_rerolled
         options = [
