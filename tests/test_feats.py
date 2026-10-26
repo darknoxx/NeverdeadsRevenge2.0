@@ -98,3 +98,45 @@ def test_the_almanac_marks_what_is_earned_and_leaves_the_rest_open():
     assert "[x] FIRST BLOOD" in text
     assert "[ ] OUT OF THE DARK" in text
     assert "Finish a run" in text
+
+
+def test_the_unlock_card_says_what_the_door_opened():
+    from neverdeads_revenge.desktop.screens.pages import the_door_unlocked_card
+
+    card = the_door_unlocked_card()
+
+    assert card._name == "The house opens another door."
+    assert "higher" in card._text
+    assert "TENTH DOOR" in card._text
+
+
+def test_the_title_question_mark_opens_the_reference():
+    from types import SimpleNamespace
+
+    from neverdeads_revenge.desktop.screens.title import TitleScreen
+
+    class FakeApp:
+        def __init__(self):
+            self.progress = MetaProgress(runs_won=1)
+            self.pushed = None
+
+        def push(self, screen):
+            self.pushed = screen
+
+    app = FakeApp()
+    event = SimpleNamespace(isAutoRepeat=lambda: False)
+
+    assert TitleScreen().key("?", event, app)
+    assert type(app.pushed).__name__ == "HelpScreen"
+
+
+def test_the_reference_mentions_the_door_and_the_wider_shop():
+    from types import SimpleNamespace
+
+    from neverdeads_revenge.desktop.screens.menus import HelpScreen
+
+    app = SimpleNamespace(progress=MetaProgress(runs_won=1))
+    text = " ".join(line for line, _style in HelpScreen().lines(app))
+
+    assert "THE TENTH DOOR" in text
+    assert "higher permanent upgrade caps" in text

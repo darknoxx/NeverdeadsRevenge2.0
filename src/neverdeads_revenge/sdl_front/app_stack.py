@@ -299,6 +299,27 @@ class AppStack:
         self.save_progress()
         return self.progress.best_score
 
+    def _feat_card(self, new: list[str]) -> None:
+        """One card for the feats a run just proved, then home."""
+        if not new:
+            self.return_to_title()
+            return
+        from ..desktop.screens.dialogs import InfoScreen
+        from ..game.feats import FEAT_BY_KEY
+
+        text = "\n\n".join(
+            f"{FEAT_BY_KEY[key].name}\n{FEAT_BY_KEY[key].blurb}"
+            for key in new
+        )
+        self.push(
+            InfoScreen(
+                "A FEAT",
+                "The house remembers.",
+                text,
+                on_done=lambda _value=None: self.return_to_title(),
+            )
+        )
+
     def after_summary(self, answer) -> None:
         """The summary is answered: a name for the board, or the hour back.
 

@@ -167,3 +167,26 @@ def test_a_deep_floor_can_hand_over_a_named_blade():
     marked = [item for item in floor.items.values() if item.affixes]
     assert marked, "the deep floor had no marked blade"
     assert all(item.kind == "weapon" for item in marked)
+
+
+def test_the_marked_light_breathes_instead_of_standing_still():
+    import math
+
+    import pygame
+
+    from neverdeads_revenge.sdl_front.stage import Stage
+
+    class Figure:
+        size = 64
+        cx = 100
+        row = 6
+        phase = 0.0
+
+    stage = Stage()
+    surface = pygame.Surface((240, 200), pygame.SRCALPHA)
+    stage.affix_glow(surface, Figure(), "#ff7a2a", 0.0, 16)
+    first = set(stage._auras)
+
+    stage.affix_glow(surface, Figure(), "#ff7a2a", math.pi / 2, 16)
+
+    assert len(stage._auras) > len(first), "the aura reused one still frame"

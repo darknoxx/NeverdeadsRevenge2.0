@@ -112,7 +112,7 @@ class TitleScreen(Screen):
         nav = (
             "←→ choose   A take   Start settings"
             if getattr(app, "pad_active", False)
-            else "←→ choose   enter take   esc quit"
+            else "←→ choose   enter take   ? help   esc quit"
         )
         self._centre(buffer, nav_y, nav, ASH)
 
@@ -202,6 +202,11 @@ class TitleScreen(Screen):
             return True
         if name == "y" and daily_rules.available(app.progress):
             app.open_hero_select(tenth_door=True, daily_mode=True)
+            return True
+        if name in ("?", "f1"):
+            from .menus import HelpScreen
+
+            app.push(HelpScreen())
             return True
         items = self.items(app)
         # Strictly a line read sideways: left and right move it. Up and down say

@@ -58,6 +58,8 @@ __all__ = [
     "roll_amulet_stock",
     "roll_wild_stock",
     "loadout_from",
+    "ENDLESS_CAP_BONUS",
+    "max_stacks_for",
 ]
 
 
@@ -283,6 +285,30 @@ META_UPGRADES: dict[str, MetaUpgrade] = {
         wild=True,
     ),
 }
+
+
+#: The extra shelf the Tenth Door opens. The caps are not doubled: each one is
+#: a deliberate second wing, and the price ladder keeps walking up.
+ENDLESS_CAP_BONUS: dict[str, int] = {
+    "vigour": 5,
+    "haste": 1,
+    "whetstone": 3,
+    "edge": 2,
+    "cellar": 2,
+    "lantern": 1,
+    "focus": 3,
+    "bleeding_edge": 1,
+    "hoarfrost": 1,
+    "bell_ring": 1,
+    "emberheart": 1,
+}
+
+
+def max_stacks_for(upgrade: MetaUpgrade, endless: bool = False) -> int:
+    """How many stacks of ``upgrade`` may be owned now."""
+    if not endless:
+        return upgrade.max_stacks
+    return upgrade.max_stacks + ENDLESS_CAP_BONUS.get(upgrade.key, 0)
 
 
 @dataclass(frozen=True, slots=True)
@@ -574,12 +600,14 @@ def permanent_tally(progress) -> tuple[int, int]:
     offers are *not* counted: they are bargains for one run, and a total that
     moved with them would be a total about a different thing.
     """
+    endless = getattr(progress, "runs_won", 0) >= 1
     owned = total = 0
     for key, upgrade in META_UPGRADES.items():
         if upgrade.wild:
             continue
-        total += upgrade.max_stacks
-        owned += min(progress.upgrades.get(key, 0), upgrade.max_stacks)
+        cap = max_stacks_for(upgrade, endless)
+        total += cap
+        owned += min(progress.upgrades.get(key, 0), cap)
     return owned, total
 
 
@@ -645,9 +673,12 @@ def build_stock(progress) -> list[Offer]:
             continue
         owned = progress.upgrades.get(key, 0)
         price = upgrade.price_at(owned)
+        cap = max_stacks_for(
+            upgrade, getattr(progress, "runs_won", 0) >= 1
+        )
         detail = (
             upgrade.effect(owned + 1)
-            if not owned >= upgrade.max_stacks
+            if not owned >= cap
             else upgrade.effect(owned)
         )
         if upgrade.hero:
@@ -665,7 +696,7 @@ def build_stock(progress) -> list[Offer]:
                 detail=detail,
                 price=price,
                 owned=owned,
-                limit=upgrade.max_stacks,
+                limit=cap,
                 affordable=gold >= price,
             )
         )
@@ -679,7 +710,9 @@ def build_stock(progress) -> list[Offer]:
         if offer.permanent is not None:
             upgrade = META_UPGRADES[offer.permanent]
             owned = progress.upgrades.get(offer.permanent, 0)
-            limit = upgrade.max_stacks
+            limit = max_stacks_for(
+                upgrade, getattr(progress, "runs_won", 0) >= 1
+            )
         offers.append(
             Offer(
                 key=key,

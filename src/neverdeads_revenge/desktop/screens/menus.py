@@ -152,6 +152,20 @@ class HelpScreen(_Panel):
             ("", ""),
             ("THE GLASS", f"bold {PURPLE}"),
             ("F11 fullscreen   F2 scanlines   F3 bloom   F4 curve", ASH),
+        ]
+        if getattr(app.progress, "runs_won", 0) >= 1:
+            rows += [
+                ("", ""),
+                ("THE TENTH DOOR", f"bold {PURPLE}"),
+                ("TITLE   t opens the door; y opens the free daily", BONE),
+                ("ENTRY   50 coin from the permanent purse", BONE),
+                ("CREDIT  level 18, two pieces, one 50-coin reroll", BONE),
+                ("DOOR    bank the run, or push for x1.25 score and coin", BONE),
+                ("RINGS   one rule; three boons at each door; warden at 15/25", BONE),
+                ("ECHO    the best run waits on the last floor of a ring", BONE),
+                ("SHOP    higher permanent upgrade caps are open", BONE),
+            ]
+        rows += [
             ("", ""),
             ("THE DUNGEON", f"bold {PURPLE}"),
         ]

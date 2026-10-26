@@ -57,7 +57,7 @@ AFFIXES: dict[str, Affix] = {
     "darkness_touched": Affix(
         key="darkness_touched",
         adjective="darkness-touched",
-        colour="#8b5cf6",
+        colour="#0f7a7a",
         particle="smoke",
         tags=frozenset({"dark"}),
         threat=1.2,

@@ -767,3 +767,44 @@ def test_focus_widens_the_purse_one_point_at_a_time():
     wider = start_run(HEROES["noxx"], 5, upgrades={"focus": 5})
 
     assert wider.kill_points_max == plain.kill_points_max + 5
+
+
+def test_the_tenth_door_widens_the_permanent_shelf():
+    from neverdeads_revenge.game.shop import max_stacks_for
+
+    progress = shop(gold=100_000)
+    progress.runs_won = 0
+    base = offer_for(progress, "whetstone").limit
+
+    progress.runs_won = 1
+    opened = offer_for(progress, "whetstone").limit
+
+    assert base == META_UPGRADES["whetstone"].max_stacks
+    assert opened == max_stacks_for(META_UPGRADES["whetstone"], True)
+    assert opened > base
+
+
+def test_a_wide_shelf_can_sell_past_the_old_ceiling():
+    from neverdeads_revenge.game.shop import buy
+
+    progress = shop(gold=100_000)
+    progress.runs_won = 1
+    key = "whetstone"
+    base = META_UPGRADES[key].max_stacks
+    progress.upgrades[key] = base
+
+    offer = offer_for(progress, key)
+    assert not offer.maxed, "the old ceiling was still treated as the ceiling"
+    buy(progress, offer)
+
+    assert progress.upgrades[key] == base + 1
+    assert offer_for(progress, key).owned == base + 1
+
+
+def test_the_wide_shelf_counts_the_extra_stacks_in_the_total():
+    progress = MetaProgress()
+    _owned, closed_total = permanent_tally(progress)
+    progress.runs_won = 1
+    _owned, open_total = permanent_tally(progress)
+
+    assert open_total > closed_total

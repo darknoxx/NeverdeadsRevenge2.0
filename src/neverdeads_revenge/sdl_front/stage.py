@@ -546,9 +546,17 @@ class Stage:
         """
         import pygame
 
-        width = max(32, round(figure.size * 1.35))
-        height = max(10, round(width / 4.0))
-        breath = int((0.5 + 0.5 * math.sin(clock * 3.0 + figure.phase)) * 3.0)
+        base_width = max(32, round(figure.size * 1.35))
+        base_height = max(10, round(base_width / 4.0))
+        # The breath has to *change* the light, not merely choose a different
+        # cache key: the old code varied the key and drew the same disc. Size and
+        # brightness now move together, so a marked thing visibly pulses in its
+        # own colour.
+        pulse = 0.5 + 0.5 * math.sin(clock * 3.0 + figure.phase)
+        breath = int(pulse * 4.0)
+        width = base_width + breath * 3
+        height = base_height + breath
+        brightness = 0.65 + 0.35 * (breath / 4.0)
         key = (colour, width, height, breath)
         glow = self._auras.get(key)
         if glow is None:
@@ -557,7 +565,10 @@ class Stage:
             for factor, strength in ((1.0, 0.30), (0.72, 0.50), (0.44, 0.75)):
                 inner_w = max(2, round(width * factor))
                 inner_h = max(2, round(height * factor))
-                lit = tuple(round(channel * strength) for channel in (rgb.r, rgb.g, rgb.b))
+                lit = tuple(
+                    round(channel * strength * brightness)
+                    for channel in (rgb.r, rgb.g, rgb.b)
+                )
                 layer = pygame.Surface((inner_w, inner_h), pygame.SRCALPHA)
                 pygame.draw.ellipse(layer, (*lit, 255), layer.get_rect())
                 glow.blit(layer, ((width - inner_w) // 2, (height - inner_h) // 2))

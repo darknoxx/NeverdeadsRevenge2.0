@@ -24,6 +24,7 @@ __all__ = [
     "write_the_armour",
     "write_the_aspect",
     "the_aspect_card",
+    "the_door_unlocked_card",
     "the_page",
     "the_weapon_page",
 ]
@@ -112,6 +113,28 @@ def write_the_aspect(app, key: str, affix: str) -> bool:
     if save is not None:
         save()
     return True
+
+
+def the_door_unlocked_card(on_done=None):
+    """The card that explains what the first escape has opened."""
+    from .dialogs import InfoScreen
+
+    return InfoScreen(
+        "THE TENTH DOOR",
+        "The house opens another door.",
+        "The rift let you out. What waits below is not the same run.\n\n"
+        "TENTH DOOR (t): floor 10, level 18, two pieces and a 50-coin purse.\n"
+        "Entry: 50 coin from the permanent purse.\n"
+        "BANK: keep the score and the purse. PUSH ON: x1.25 score and coin, "
+        "and death takes the wager.\n"
+        "Each ring has one rule, three boons at its door and a warden in the "
+        "middle.\n"
+        "The best run waits as an echo at the end of each ring.\n"
+        "The shop's permanent upgrade caps are higher now.\n"
+        "TODAY'S DOOR (y): the same free daily for everyone.\n\n"
+        "Press ? on the title for the full reference.",
+        on_done=on_done,
+    )
 
 
 def the_aspect_card(key: str, affix: str, on_done=None):

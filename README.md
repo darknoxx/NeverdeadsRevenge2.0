@@ -97,6 +97,10 @@ After the first escape the title also offers **TODAY'S DOOR** (`y`): the same
 Tenth Door on a seed fixed by the local date, so everyone opens the same door
 that day. One answer a day; the scoreboard marks the row with **D**.
 
+Opening the door also widens the shop: the permanent upgrades gain a second
+shelf of caps (Vigour, Whetstone, Focus and the rest), and the title's **?**
+reference lists the new rules. A first-escape card says all of it once.
+
 The Almanac's fifth tab is **FEATS**: ten things a finished run can prove, from
 the first name on the board to a killed warden, a banked door, twenty floors
 and a thousand coin. Feats are checked when the run is written down, not during
