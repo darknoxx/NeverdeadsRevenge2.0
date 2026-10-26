@@ -1,4 +1,4 @@
-"""The house's credit: three pieces, shown by name, with one paid reroll."""
+"""The house's credit: two slots, shown by name, with one paid reroll."""
 
 from __future__ import annotations
 
@@ -19,15 +19,18 @@ def _begin(seed: int = 3):
     )
 
 
-def test_the_loan_is_three_named_pieces_and_a_purse():
+def test_the_loan_is_two_named_pieces_in_two_slots_and_a_purse():
     state = _begin()
 
-    assert len(state.credit_gear) == 3
-    assert {item.kind for item in state.credit_gear} == {
+    assert len(state.credit_gear) == 2
+    assert len({item.kind for item in state.credit_gear}) == 2, (
+        "the house lent two of one kind instead of filling two slots"
+    )
+    assert {item.kind for item in state.credit_gear} <= {
         "weapon",
         "armour",
         "amulet",
-    }, "the house lent two of one kind and none of another"
+    }
     assert all(item.name for item in state.credit_gear)
     assert state.gold == CREDIT_GOLD
     assert state.credit_rerolled is False
@@ -43,12 +46,8 @@ def test_one_reroll_costs_fifty_and_takes_the_old_pieces_back():
     assert state.gold == CREDIT_GOLD - CREDIT_REROLL
     assert state.credit_rerolled is True
     assert state.credit_roll == 1
-    assert len(state.credit_gear) == 3
-    assert {item.kind for item in state.credit_gear} == {
-        "weapon",
-        "armour",
-        "amulet",
-    }
+    assert len(state.credit_gear) == 2
+    assert len({item.kind for item in state.credit_gear}) == 2
     for old in before:
         assert old not in state.inventory
         assert all(
@@ -187,5 +186,5 @@ def test_the_card_paints_the_coat_as_well_as_the_blade():
     expected = {
         item_icon(ITEMS[item.item_id]) for item in state.credit_gear
     }
-    assert len(placed) == 3
+    assert len(placed) == 2
     assert {one.art for one in placed} == expected

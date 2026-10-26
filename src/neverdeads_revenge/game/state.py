@@ -98,7 +98,7 @@ VIEW_RADIUS = 9
 CREDIT_LEVEL = 18
 
 #: How many pieces of deep gear the house hands over with the credit.
-CREDIT_PACKS = 3
+CREDIT_PACKS = 2
 
 #: The Tenth Door is every tenth floor: ten, twenty, thirty, and onward.
 DOOR_EVERY = 10
@@ -1368,7 +1368,7 @@ class GameState:
             self.say(f"The dark takes its toll: {paid} coins.", LogKind.BAD)
 
     def reroll_credit(self) -> str:
-        """Pay the house and take back the three pieces for three others.
+        """Pay the house and take back the two pieces for two others.
 
         One paid roll per run. The pieces are removed by identity, not by item
         key, because a shop blade can share a key with a piece of the loan and
@@ -1631,7 +1631,7 @@ def start_run(
 
 
 def _grant_credit(state: GameState, seed: int) -> None:
-    """The house's loan: a level-eighteen guest and three deep pieces.
+    """The house's loan: a level-eighteen guest and two deep pieces.
 
     Rolled on its own dice so the floor the loan is spent on is the same floor
     the seed would have built anyway. The gear is chest-tier on purpose: the
@@ -1648,14 +1648,14 @@ def _grant_credit(state: GameState, seed: int) -> None:
     _roll_credit(state, seed)
     state.say(
         "The house lends you a name it has already spent: "
-        f"level {CREDIT_LEVEL}, three pieces from the deep, "
+        f"level {CREDIT_LEVEL}, two pieces from the deep, "
         f"and {CREDIT_GOLD} coin.",
         LogKind.GOOD,
     )
 
 
 def _roll_credit(state: GameState, seed: int) -> None:
-    """Take exactly the three pieces the house is offering this roll."""
+    """Take exactly the two pieces the house is offering this roll."""
     credit = Rng(seed * 1019 + 883 + state.credit_roll * 17)
     deep = {
         kind: [
@@ -1666,12 +1666,11 @@ def _roll_credit(state: GameState, seed: int) -> None:
         for kind in ("weapon", "armour", "amulet")
     }
     every = [key for keys in deep.values() for key in keys]
-    # One of each, always. Three weapons and no coat is not a loan a player can
-    # wear; the house is buying a body, not a dice cup.
-    chosen = [
-        credit.pick(deep[kind] or every)
-        for kind in ("weapon", "armour", "amulet")
-    ]
+    # Two *different* slots, never two swords and no body to wear them. The
+    # third slot is deliberately left for a chest: the loan is a start, not a
+    # full kit.
+    chosen_kinds = credit.shuffled(list(deep))[:CREDIT_PACKS]
+    chosen = [credit.pick(deep[kind] or every) for kind in chosen_kinds]
     state.credit_gear = [_receive(state, ITEMS[key]) for key in chosen]
 
 

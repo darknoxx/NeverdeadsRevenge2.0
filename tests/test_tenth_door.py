@@ -97,13 +97,9 @@ def test_the_run_starts_at_the_door_with_the_house_credit():
     assert state.tenth_door is True
     assert state.level == CREDIT_LEVEL
     assert state.at_a_door
-    # Three pieces, worn or carried; the loan is not a single sword.
-    gear = [
-        item
-        for slot in ("weapon", "armour", "amulet")
-        if (item := state.player.equipment.get(slot)) is not None
-    ]
-    assert len(gear) + len(state.inventory) >= 3
+    # Two pieces in two different slots; the third slot is left for a chest.
+    assert len(state.credit_gear) == 2
+    assert len({item.kind for item in state.credit_gear}) == 2
 
 
 def test_the_tenth_floor_has_stairs_and_not_the_rift():

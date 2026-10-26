@@ -1,4 +1,4 @@
-"""The house's credit: three pieces from the deep, shown before the door starts.
+"""The house's credit: two pieces from the deep, shown before the door starts.
 
 The pieces are rolled when the run is made, not when this card opens; the card
 is the place the player is allowed to look at the loan before it becomes the
@@ -23,7 +23,7 @@ __all__ = ["CreditScreen"]
 
 #: How many pieces the card promises. Kept beside the screen because the screen
 #: is where the promise is read.
-PIECES = 3
+PIECES = 2
 
 
 class CreditScreen(Screen):
@@ -75,10 +75,10 @@ class CreditScreen(Screen):
         ):
             buffer.text(x + 3, y + 2 + i, text[: width - 6], parse_style(BONE))
 
-        # Three columns, each with its own sprite above its name. The sprite
-        # band is five rows; the name and its numbers sit under the feet.
+        # Two columns, each with its own sprite above its name. The third slot
+        # is left empty on purpose: the loan is a start, not a full kit.
         inside = width - 6
-        column = max(18, inside // 3)
+        column = max(24, inside // 2)
         left = x + 3
         self._slots = []
         for number, item in enumerate(state.credit_gear):
@@ -144,10 +144,10 @@ class CreditScreen(Screen):
             )
 
     def art(self, app) -> list[Placed]:
-        """The three pieces, by their own drawings.
+        """The two pieces, by their own drawings.
 
         The card is the first time the player sees what the house is lending;
-        three names are a list, three pictures are a set of equipment. A weapon
+        two names are a list, two pictures are a set of equipment. A weapon
         has its own sheet, a coat and an amulet share the kind's drawing until
         they are painted one apiece.
         """
