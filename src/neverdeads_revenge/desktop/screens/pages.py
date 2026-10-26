@@ -58,7 +58,14 @@ def write_the_page(app, key: str) -> bool:
 
 
 def write_the_weapon(app, key: str) -> bool:
-    """File one blade's page in the Armory."""
+    """File one blade's page in the Armory.
+
+    A variant with its own template key (the curated darkness-touched depthless)
+    is still a blade in the game, but it is not a vanilla page: the Armory only
+    collects the base weapons. It therefore writes nothing.
+    """
+    if armory_weapon(key) is None:
+        return False
     return _write(app, "record_weapon", key)
 
 

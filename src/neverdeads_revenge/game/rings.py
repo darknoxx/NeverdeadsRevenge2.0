@@ -57,7 +57,7 @@ RING_RULES: tuple[RingRule, ...] = (
     RingRule(
         "thorn",
         "THE THORN RING",
-        "Every monster gives one point of damage back to the hand that strikes it.",
+        "Every monster bites back once: the first cut draws one point of damage.",
     ),
 )
 
@@ -111,6 +111,6 @@ def apply_to_floor(state) -> None:
             if "poison" not in enemy.inflicts:
                 enemy.inflicts = (*enemy.inflicts, "poison")
         elif rule.key == "thorn":
-            enemy.thorns += 1
+            enemy.ring_thorns += 1
     if rule.key == "gloom":
         state.sight_penalty += 2

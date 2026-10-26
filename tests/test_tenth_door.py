@@ -460,7 +460,7 @@ def test_the_bitter_ring_poisons_and_the_thorn_ring_bites():
     state.ring_rule = "thorn"
     state.build_floor(11)
 
-    assert all(enemy.thorns >= 1 for enemy in state.enemies)
+    assert all(enemy.ring_thorns >= 1 for enemy in state.enemies)
 
 
 def test_the_new_boons_are_real_and_stack():

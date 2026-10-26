@@ -205,16 +205,18 @@ def resolve_player_attack(
     if outcome.killed:
         _remove_corpse(state, target)
         return outcome
-    if target.thorns:
+    if target.thorns or target.ring_thorns:
         # THE BRIAR: what it grows, you take -- straight, because a thorn is not
-        # a blow and armour has nothing to do with it.
-        back = state.player.stats.reflect(target.thorns)
+        # a blow and armour has nothing to do with it. The ring's thorn is a
+        # single bite: the first cut breaks it, so a player can spend it down.
+        back = state.player.stats.reflect(target.thorns + target.ring_thorns)
         if back:
             state.say(
                 f"The {target.name} gives {back} of it back.", LogKind.BAD
             )
             if state.player.hp <= 0:
                 state.die("The briar had the last of it.")
+        target.ring_thorns = 0
 
     if state.has_passive("dead_weight"):
         _knock_back(state, target)

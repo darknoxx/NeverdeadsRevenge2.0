@@ -313,6 +313,9 @@ class Actor:
     #: and a larger body, not a new monster. The bestiary page stays the base
     #: monster's; this is the job it was given on this floor.
     warden: bool = False
+    #: One thorn that breaks on the first cut. The Thorn Ring gives every monster
+    #: one; the briar's permanent thorns live in ``thorns`` and stay permanent.
+    ring_thorns: int = 0
     #: Cells entered since the run started. A run total, like ``total_turns``,
     #: and a statistic rather than a score input: the score rewards time, and
     #: walking further is the opposite of that.

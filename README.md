@@ -80,7 +80,7 @@ Every ring has one weather, shown at the door and applied to all ten floors:
 **the Iron Ring** (+1 monster armour), **the Fever Ring** (+0.10 monster speed),
 **the Gloom Ring** (-2 sight), **the Greed Ring** (monster health +10%, coin
 +30% for the ring), **the Bitter Ring** (every monster blow leaves poison) and
-**the Thorn Ring** (every monster gives one damage back). Pushing on also opens
+**the Thorn Ring** (every monster bites back once, for one damage). Pushing on also opens
 a shelf of **three boons** from fifteen; one is taken for the rest of the run.
 The middle floor of every ring (15, 25, ...) holds a **warden**: one monster
 with the ring's job, 50% more health, +1 damage, +1 armour and a heavier purse.
@@ -120,8 +120,9 @@ a guarantee.
 - **Three aspects**: fire-kissed, frostbound and darkness-touched. Deep blades
   can roll one on a find, and aggressive monsters from floor six can carry one.
   The Armory keeps a blade variant on its *base* blade's page under **ASPECTS
-  MET**; the Bestiary does the same for the monsters. There is no separate page
-  for every possible sword.
+  MET**; the Bestiary does the same for the monsters. The Armory collects the
+  **vanilla blades only** -- the curated darkness-touched depthless is a find,
+  not a page, and has no separate Armory entry.
 - **Five strange draughts**, none of them medicine: each lays a rule on the
   floor and lasts only until the stairs. THE THIN VEIL (nothing looks at you
   until you strike), THE KINDLED BREATH (every blow you land sets it burning),

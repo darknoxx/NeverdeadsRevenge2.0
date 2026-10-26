@@ -15,7 +15,13 @@ from neverdeads_revenge.game.state import start_run
 from neverdeads_revenge.persistence import MetaProgress, load_meta, save_meta
 from neverdeads_revenge.world.items import ITEMS, make_item
 
-WEAPON_KEYS = {key for key, one in ITEMS.items() if one.slot == "weapon"}
+#: The Armory collects the vanilla blades only. A curated variant with its own
+#: template key is still in the game, but it is not a page of its own.
+WEAPON_KEYS = {
+    key
+    for key, one in ITEMS.items()
+    if one.slot == "weapon" and key != "depthless_dark"
+}
 
 
 # -- the book ---------------------------------------------------------------
@@ -148,3 +154,18 @@ def test_a_weapon_aspect_outlives_the_run(tmp_path):
     assert load_meta(path).weapon_aspects == {
         "hummingbird": ["fire_kissed"]
     }
+
+
+def test_weapon_aspects_travel_with_the_run():
+    import json
+
+    from neverdeads_revenge.game.savegame import dump, load
+
+    state = start_run(HEROES["noxx"], seed=3)
+    state.note_weapon_aspect(
+        make_item(ITEMS["hummingbird"], affixes=("frostbound",))
+    )
+
+    reloaded = load(json.loads(json.dumps(dump(state))))
+
+    assert reloaded.weapon_aspects == [("hummingbird", "frostbound")]

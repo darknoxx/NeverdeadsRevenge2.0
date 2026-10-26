@@ -80,11 +80,6 @@ _PAGES: dict[str, tuple[str, str, str]] = {
         "The wound build's endgame: three damage a turn from the wounds alone, and more every time the cut deepens.",
         "The blade with no reflection. It opens two wounds at once — one that bleeds fast and one that rots slow — and the thing it cuts never quite knows which is worse.",
     ),
-    "depthless_dark": (
-        "the darkness-touched depthless",
-        "The depthless's two wounds and the dark's one rule: the bleeding it opens is a stack deeper, and does not close.",
-        "The same blade with no reflection, and something else looking back out of it. It bleeds and it rots, and the wound it leaves keeps working after the fight has stopped — the house does not write down what the dark added, only that the guest took it up.",
-    ),
     "first_blow": (
         "the first blow",
         "Seven damage, once a fight, and nothing after. The opening of a fight is where it lives — and the blade knows what a blow is: a trick does not carry it.",
