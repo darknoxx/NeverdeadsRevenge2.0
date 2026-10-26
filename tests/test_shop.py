@@ -808,3 +808,12 @@ def test_the_wide_shelf_counts_the_extra_stacks_in_the_total():
     _owned, open_total = permanent_tally(progress)
 
     assert open_total > closed_total
+
+
+def test_bleeding_edge_keeps_the_wound_ceiling_after_the_door_opens():
+    progress = shop(gold=100_000)
+    progress.runs_won = 1
+
+    offer = offer_for(progress, "bleeding_edge")
+
+    assert offer.limit == META_UPGRADES["bleeding_edge"].max_stacks == 3

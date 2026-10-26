@@ -297,7 +297,8 @@ ENDLESS_CAP_BONUS: dict[str, int] = {
     "cellar": 2,
     "lantern": 1,
     "focus": 3,
-    "bleeding_edge": 1,
+    # Bleeding Edge stays at three: STACK_LIMIT is the ceiling every wound has,
+    # and a fourth stack would be a purchase that can never be seen.
     "hoarfrost": 1,
     "bell_ring": 1,
     "emberheart": 1,
